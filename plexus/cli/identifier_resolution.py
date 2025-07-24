@@ -304,3 +304,60 @@ async def resolve_data_source(client, identifier: str):
 
     logging.error(f"Could not resolve DataSource identifier: {identifier}")
     return None 
+
+@lru_cache(maxsize=100)
+def resolve_item_identifier(client, identifier: str, account_id: str = None):
+    """Resolve an item identifier to its ID.
+    
+    Args:
+        client: The API client
+        identifier: The identifier to resolve (ID or any identifier value)
+        account_id: Optional account ID to limit search scope
+        
+    Returns:
+        The item ID if found, None otherwise
+    """
+    # First try direct ID lookup
+    try:
+        from plexus.dashboard.api.models.item import Item
+        item = Item.get_by_id(identifier, client)
+        if item:
+            console.print(f"[dim]Found item by ID: {identifier}[/dim]")
+            return identifier
+    except ValueError:
+        # Not found by ID, continue to identifier search
+        pass
+    except Exception as e:
+        console.print(f"[dim]Error looking up item by ID: {str(e)}[/dim]")
+    
+    # If account_id is provided, try identifier value search
+    if account_id:
+        try:
+            from plexus.utils.identifier_search import find_item_by_identifier
+            item = find_item_by_identifier(identifier, account_id, client)
+            if item:
+                console.print(f"[dim]Found item by identifier value: {item.id} (value: {identifier})[/dim]")
+                return item.id
+        except Exception as e:
+            console.print(f"[dim]Error looking up item by identifier value: {str(e)}[/dim]")
+    
+    # If no account_id provided, we can't do identifier search
+    # Try to get account_id from environment or recent activity
+    if not account_id:
+        import os
+        account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+        if account_key:
+            # Try to resolve account_key to account_id
+            try:
+                from plexus.cli.reports.utils import resolve_account_id_for_command
+                account_id = resolve_account_id_for_command(client, account_key)
+                if account_id:
+                    from plexus.utils.identifier_search import find_item_by_identifier
+                    item = find_item_by_identifier(identifier, account_id, client)
+                    if item:
+                        console.print(f"[dim]Found item by identifier value (using env account): {item.id} (value: {identifier})[/dim]")
+                        return item.id
+            except Exception as e:
+                console.print(f"[dim]Error resolving account from environment: {str(e)}[/dim]")
+    
+    return None 

@@ -30,7 +30,7 @@ type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "code" | "type";
+    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "code" | "type" | "feedbackItemId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -39,8 +39,8 @@ type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
-type ReportBlockIndexFields = "reportId" | "name" | "position";
-type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId"; // UPDATED: Renamed externalId to cacheKey and added itemId
+type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
+type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "editedAt";
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
 type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
 type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
@@ -426,6 +426,8 @@ const schema = a.schema({
             code: a.string(), // HTTP response code (e.g., "200", "404", "500")
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
+            feedbackItemId: a.string(),
+            feedbackItem: a.belongsTo('FeedbackItem', 'feedbackItemId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -442,8 +444,7 @@ const schema = a.schema({
             index("scoreId"),
             index("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
             index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
-            index("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated"),
-            index("accountId").sortKeys(["code", "updatedAt"]).name("byAccountCodeAndUpdatedAt")
+            index("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated")
         ]),
 
     BatchJobScoringJob: a
@@ -479,6 +480,9 @@ const schema = a.schema({
             errorDetails: a.json(),
             stdout: a.string(),
             stderr: a.string(),
+            output: a.string(), // Universal Code YAML output
+            error: a.string(), // Structured error message
+            attachedFiles: a.string().array(), // Array of S3 file keys for attachments
             currentStageId: a.string(),
             scorecardId: a.string(),
             account: a.belongsTo('Account', 'accountId'),
@@ -632,11 +636,13 @@ const schema = a.schema({
             name: a.string(), // Optional name for the block
             position: a.integer().required(), // Required position for ordering
             type: a.string().required(), // Required type for the block
-            output: a.json().required(), // JSON output from the block's execution
+            output: a.string(), // Corrected type to string, and made it optional
             log: a.string(), // Optional log output from the block
             warning: a.string(), // Optional warning message (styled as 'false' alert)
             error: a.string(), // Optional error message (styled as red 'danger' alert)
             attachedFiles: a.string().array(), // This is the corrected field name and type
+            dataSetId: a.string(), // Optional dataset association
+            dataSet: a.belongsTo('DataSet', 'dataSetId'),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
@@ -647,7 +653,8 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ReportBlockIndexFields) => any) => [
             idx("reportId").sortKeys(["name"]).name("byReportAndName"),
-            idx("reportId").sortKeys(["position"]).name("byReportAndPosition")
+            idx("reportId").sortKeys(["position"]).name("byReportAndPosition"),
+            idx("dataSetId").sortKeys(["position"]).name("byDataSetAndPosition")
         ]),
 
     FeedbackItem: a
@@ -671,6 +678,7 @@ const schema = a.schema({
             isAgreement: a.boolean(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
+            scoreResults: a.hasMany('ScoreResult', 'feedbackItemId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -681,7 +689,8 @@ const schema = a.schema({
             idx("accountId").sortKeys(["editedAt"]),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt"),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "editedAt"]).name("byAccountScorecardScoreEditedAt"),
-            idx("itemId")
+            idx("cacheKey").name("byCacheKey"), // GSI for FeedbackItem deduplication
+            idx("itemId"),
         ]),
 
     ScorecardExampleItem: a
@@ -840,6 +849,7 @@ const schema = a.schema({
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             dataSourceVersionId: a.string().required(),
             dataSourceVersion: a.belongsTo('DataSourceVersion', 'dataSourceVersionId'),
+            reportBlocks: a.hasMany('ReportBlock', 'dataSetId'),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })

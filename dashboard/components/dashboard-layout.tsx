@@ -98,13 +98,13 @@ type Account = Schema['Account']['type']
 
 export const menuItems = [
   { name: "Items", icon: StickyNote, path: "/lab/items" },
-  { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
+  { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
+  { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
   { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
   { name: "Activity", icon: Activity, path: "/lab/activity" },
-  { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
   { name: "Alerts", icon: Siren, path: "/lab/alerts" },
   { name: "Help", icon: CircleHelp, path: "/documentation" },
 ]
@@ -241,7 +241,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           </Link>
         </div>
 
-        <ScrollArea className="flex-grow overflow-y-auto">
+        <div className="flex-grow">
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {visibleMenuItems.map((item) => {
               const isCurrentPage = (pathname === item.path ||
@@ -283,9 +283,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   {isLeftSidebarOpen && (
                     <span className={`ml-3 transition-all duration-200 ${isLoading ? 'opacity-75' : ''}`}>
                       {item.name}
-                      {isLoading && (
-                        <span className="ml-2 text-xs opacity-50">Loading...</span>
-                      )}
                     </span>
                   )}
                   {/* Loading progress bar */}
@@ -298,7 +295,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               )
             })}
           </div>
-        </ScrollArea>
+        </div>
 
         <div className="mt-auto pl-2 space-y-2 py-2">
           <DropdownMenu>
@@ -682,11 +679,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           `}
         >
           <div className={`flex-1 flex flex-col bg-background min-h-0 overflow-visible relative ${isMobile ? 'mobile-compact' : 'rounded-lg'}`}>
-            {/* Secret dashboard activation button - invisible, center third of content area */}
+            {/* Dashboard activation button - bottom center, height of 4 (1rem) */}
             {pathname.startsWith('/lab/') && (
               <button
                 onClick={toggleDashboardDrawer}
-                className="absolute top-0 bottom-0 left-1/3 right-1/3 z-10 bg-transparent border-none cursor-default opacity-0 hover:opacity-0 focus:outline-none"
+                className="absolute bottom-0 left-1/3 right-1/3 h-4 z-10 bg-transparent border-none cursor-default opacity-0 hover:opacity-0 focus:outline-none"
                 aria-label="Activate dashboard"
                 tabIndex={-1}
               />

@@ -264,51 +264,55 @@ class Evaluation:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        mlflow.end_run()
+        # mlflow.end_run()
+        pass
 
     def start_mlflow_run(self):
-        logging.getLogger('mlflow').setLevel(logging.WARNING)
+        # MLFlow functionality disabled
+        # logging.getLogger('mlflow').setLevel(logging.WARNING)
 
-        # First, make sure any existing run is ended
-        try:
-            mlflow.end_run()
-        except Exception:
-            pass  # Ignore any errors from ending non-existent runs
+        # # First, make sure any existing run is ended
+        # try:
+        #     mlflow.end_run()
+        # except Exception:
+        #     pass  # Ignore any errors from ending non-existent runs
 
-        mlflow_tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
-        if mlflow_tracking_uri:
-            logging.info(f"Using MLFlow tracking URL: {mlflow_tracking_uri}")
-            mlflow.set_tracking_uri(mlflow_tracking_uri)
-        else:
-            mlflow.set_tracking_uri(f'file:///{os.path.abspath("./mlruns")}')
+        # mlflow_tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
+        # if mlflow_tracking_uri:
+        #     logging.info(f"Using MLFlow tracking URL: {mlflow_tracking_uri}")
+        #     mlflow.set_tracking_uri(mlflow_tracking_uri)
+        # else:
+        #     mlflow.set_tracking_uri(f'file:///{os.path.abspath("./mlruns")}')
 
-        experiment_name = self.scorecard.__class__.name
-        if os.getenv('MLFLOW_EXPERIMENT_NAME'):
-            experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
-        if self.experiment_label:
-            experiment_name = experiment_name + " - " + self.experiment_label
-        mlflow.set_experiment(experiment_name)
+        # experiment_name = self.scorecard.__class__.name
+        # if os.getenv('MLFLOW_EXPERIMENT_NAME'):
+        #     experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
+        # if self.experiment_label:
+        #     experiment_name = experiment_name + " - " + self.experiment_label
+        # mlflow.set_experiment(experiment_name)
 
-        # Now start the new run
-        try:
-            mlflow.start_run()
-        except Exception as e:
-            print("Error: ", e)
-            print("Attempting to end the previous run and start a new one.")
-            mlflow.end_run()
-            mlflow.start_run()
+        # # Now start the new run
+        # try:
+        #     mlflow.start_run()
+        # except Exception as e:
+        #     print("Error: ", e)
+        #     print("Attempting to end the previous run and start a new one.")
+        #     mlflow.end_run()
+        #     mlflow.start_run()
 
-        # Add notes about the run
-        mlflow.set_tag("scorecard", self.scorecard.name)
-        mlflow.set_tag("experiment_type", self.__class__.__name__)
-        if self.task_id:  # Add task_id as a tag if available
-            mlflow.set_tag("task_id", self.task_id)
+        # # Add notes about the run
+        # mlflow.set_tag("scorecard", self.scorecard.name)
+        # mlflow.set_tag("experiment_type", self.__class__.__name__)
+        # if self.task_id:  # Add task_id as a tag if available
+        #     mlflow.set_tag("task_id", self.task_id)
 
-        self.log_parameters()
+        # self.log_parameters()
+        pass
     
     def log_parameters(self):
-        mlflow.log_param("sampling_method", self.sampling_method)
-        mlflow.log_param("number_of_texts_to_sample", self.number_of_texts_to_sample)
+        # mlflow.log_param("sampling_method", self.sampling_method)
+        # mlflow.log_param("number_of_texts_to_sample", self.number_of_texts_to_sample)
+        pass
 
     def score_names(self):
         return self.subset_of_score_names if self.subset_of_score_names is not None else self.scorecard.score_names()
@@ -327,8 +331,8 @@ class Evaluation:
             end_time = time.time()
             execution_time = end_time - start_time
             time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
-            mlflow.log_metric("execution_time", execution_time)
-            mlflow.log_metric("time_per_text", time_per_text)
+            # mlflow.log_metric("execution_time", execution_time)
+            # mlflow.log_metric("time_per_text", time_per_text)
             print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
             logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
             return result
@@ -339,8 +343,8 @@ class Evaluation:
             end_time = time.time()
             execution_time = end_time - start_time
             time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
-            mlflow.log_metric("execution_time", execution_time)
-            mlflow.log_metric("time_per_text", time_per_text)
+            # mlflow.log_metric("execution_time", execution_time)
+            # mlflow.log_metric("time_per_text", time_per_text)
             print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
             logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
             return result
@@ -532,9 +536,22 @@ class Evaluation:
                 "alignment": 0,  # Changed from sensitivity to alignment
                 "precision": 0,
                 "recall": 0,      # Changed from specificity to recall
-                "predicted_distribution": [],
-                "actual_distribution": [],
-                "confusion_matrices": []
+                "confusionMatrix": {
+                    "matrix": [[0, 0], [0, 0]],
+                    "labels": ['yes', 'no']
+                },
+                "predictedClassDistribution": [{
+                    "score": "no_data",
+                    "label": "no_data",
+                    "count": 0,
+                    "percentage": 0
+                }],
+                "datasetClassDistribution": [{
+                    "score": "no_data", 
+                    "label": "no_data",
+                    "count": 0,
+                    "percentage": 0
+                }]
             }
         # --- END NEW LOGGING ---
 
@@ -963,12 +980,19 @@ class Evaluation:
 
         # Determine the correct report folder
         if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
-            score_instance = Score.from_name(self.scorecard_name, self.subset_of_score_names[0])
-            report_folder_path = score_instance.report_directory_path()
-            report_folder_path = report_folder_path.rstrip('/')
+            try:
+                score_instance = self.get_score_instance(self.subset_of_score_names[0])
+                report_folder_path = score_instance.report_directory_path()
+                report_folder_path = report_folder_path.rstrip('/')
+            except ValueError as e:
+                self.logging.info(f"Could not get score instance for report folder: {e}")
+                # Fallback to default report folder structure
+                scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
+                score_name = self.subset_of_score_names[0].replace(' ', '_')
+                report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
         else:
             scorecard_name = self.scorecard.name.replace(' ', '_')
-            report_folder_path = f"./reports/{scorecard_name}/combined"
+            report_folder_path = f"./score_results/{scorecard_name}/combined"
 
         # Ensure the report folder exists
         os.makedirs(report_folder_path, exist_ok=True)
@@ -989,8 +1013,12 @@ class Evaluation:
         is_dataset_balanced = True  # Track overall dataset balance
         
         for score_name in self.score_names():
-            score_instance = Score.from_name(self.scorecard_name, score_name)
-            label_score_name = score_instance.get_label_score_name()
+            try:
+                score_instance = self.get_score_instance(score_name)
+                label_score_name = score_instance.get_label_score_name()
+            except ValueError as e:
+                self.logging.info(f"Could not get score instance for label distribution: {e}, skipping {score_name}")
+                continue
             
             # Try both possible column names for labels
             label_column = label_score_name + '_label'
@@ -1053,6 +1081,12 @@ class Evaluation:
             logging.warning("'Session ID' column not found. Using content_id as Session ID.")
             df['Session ID'] = df['content_id']
 
+        # Optional: 'feedback_item_id' column can be included to link score results to existing feedback items
+        if 'feedback_item_id' in df.columns:
+            logging.info("Found 'feedback_item_id' column - will link score results to existing feedback items")
+        else:
+            logging.info("No 'feedback_item_id' column found - score results will be created without feedback item links")
+
         fine_tuning_ids = set()
         fine_tuning_ids_file = f"tuning/{self.scorecard_name}/{self.subset_of_score_names[0]}/training_ids.txt"
         original_shape = df.shape
@@ -1110,8 +1144,6 @@ class Evaluation:
             except ValueError as e:
                 logging.error(f"Sampling error: {e}")
                 selected_sample_rows = df
-        elif self.sampling_method == 'all':
-            selected_sample_rows = df
         elif self.sampling_method == 'sequential':
             logging.info(f"DataFrame shape before sampling: {df.shape}")
             logging.info(f"First few DataFrame indices: {df.index[:5].tolist()}")
@@ -1123,6 +1155,10 @@ class Evaluation:
             logging.info(f"Sampled DataFrame shape: {selected_sample_rows.shape}")
             logging.info(f"First few sampled indices: {selected_sample_rows.index[:5].tolist()}")
             logging.info(f"First few sampled session IDs: {selected_sample_rows['Session ID'].head(5).tolist()}")
+        elif self.sampling_method == 'provided':
+            # Samples are already provided and pre-processed, use them as-is
+            selected_sample_rows = df
+            self.logging.info(f"Using {len(df)} provided samples without additional sampling")
         else:
             logging.warning(f"Unknown sampling method '{self.sampling_method}'. Defaulting to random.")
             selected_sample_rows = df.sample(
@@ -1148,12 +1184,12 @@ class Evaluation:
         if not os.path.exists(report_folder_path):
             os.makedirs(report_folder_path)
 
-        logging.info("Logging scorecard results as an artifact in MLFlow.")
+        # logging.info("Logging scorecard results as an artifact in MLFlow.")
         scorecard_results = ScorecardResults(self.all_results)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         results_filename = f"scorecard_results_{timestamp}.json"
         scorecard_results.save_to_file(f"{report_folder_path}/{results_filename}")
-        mlflow.log_artifact(f"{report_folder_path}/{results_filename}")
+        # mlflow.log_artifact(f"{report_folder_path}/{results_filename}")
 
         logging.info("Scoring completed.")
 
@@ -1189,7 +1225,7 @@ class Evaluation:
         def log_accuracy_heatmap():
             try:
                 analysis.plot_accuracy_heatmap()
-                mlflow.log_artifact(f"{report_folder_path}/accuracy_heatmap.png")
+                # mlflow.log_artifact(f"{report_folder_path}/accuracy_heatmap.png")
             except Exception as e:
                 logging.error(f"Failed to log accuracy heatmap: {e}")
 
@@ -1200,7 +1236,7 @@ class Evaluation:
                 report_filename = f"scorecard_report_{timestamp}.html"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
+                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log HTML report: {e}")
 
@@ -1211,7 +1247,7 @@ class Evaluation:
                 report_filename = f"scorecard_report_incorrect_scores_{timestamp}.html"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
+                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log incorrect scores report: {e}")
 
@@ -1222,7 +1258,7 @@ class Evaluation:
                 report_filename = f"scorecard_report_no_costs_{timestamp}.html"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
+                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log no costs report: {e}")
 
@@ -1230,11 +1266,11 @@ class Evaluation:
             try:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 analysis.plot_scorecard_costs(results=self.all_results)
-                mlflow.log_artifact(f"{report_folder_path}/scorecard_input_output_costs_{timestamp}.png")
-                mlflow.log_artifact(f"{report_folder_path}/histogram_of_total_costs_{timestamp}.png")
-                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_{timestamp}.png")
-                mlflow.log_artifact(f"{report_folder_path}/total_llm_calls_by_score_{timestamp}.png")
-                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_by_element_type_{timestamp}.png")
+                # mlflow.log_artifact(f"{report_folder_path}/scorecard_input_output_costs_{timestamp}.png")
+                # mlflow.log_artifact(f"{report_folder_path}/histogram_of_total_costs_{timestamp}.png")
+                # mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_{timestamp}.png")
+                # mlflow.log_artifact(f"{report_folder_path}/total_llm_calls_by_score_{timestamp}.png")
+                # mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_by_element_type_{timestamp}.png")
             except Exception as e:
                 logging.error(f"Failed to log scorecard costs: {e}")
 
@@ -1244,7 +1280,7 @@ class Evaluation:
                 report_filename = f"scorecard_report_for_incorrect_results_{timestamp}.csv"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(analysis.generate_csv_scorecard_report(results=self.all_results))
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
+                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log CSV report: {e}")
 
@@ -1253,7 +1289,7 @@ class Evaluation:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 report_filename = f"question_accuracy_report_{timestamp}.csv"
                 analysis.generate_question_accuracy_csv(output_file=f"{report_folder_path}/{report_filename}")
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
+                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log question accuracy CSV: {e}")
 
@@ -1277,13 +1313,13 @@ class Evaluation:
 
         # Calculate overall accuracy
         overall_accuracy = (self.total_correct / self.total_questions) * 100 if self.total_questions > 0 else 0
-        mlflow.log_metric("overall_accuracy", overall_accuracy)
+        # mlflow.log_metric("overall_accuracy", overall_accuracy)
 
-        # Log the results to MLflow
-        mlflow.log_metric("number_of_texts", len(selected_sample_rows))
-        mlflow.log_metric("number_of_scores", len(self.score_names()))
-        mlflow.log_metric("total_cost", expenses['total_cost'])
-        mlflow.log_metric("cost_per_text", expenses['cost_per_text'])
+        # # Log the results to MLflow
+        # mlflow.log_metric("number_of_texts", len(selected_sample_rows))
+        # mlflow.log_metric("number_of_scores", len(self.score_names()))
+        # mlflow.log_metric("total_cost", expenses['total_cost'])
+        # mlflow.log_metric("cost_per_text", expenses['cost_per_text'])
 
         # Generate the Excel report
         self.generate_excel_report(report_folder_path, self.all_results, selected_sample_rows)
@@ -1715,9 +1751,16 @@ class Evaluation:
                     })
 
         df_records = pd.DataFrame(records)
-        excel_file_path = f"{report_folder_path}/Evaluation Report for {filename_safe_score_names}.xlsx"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        excel_file_path = f"{report_folder_path}/Evaluation Report for {filename_safe_score_names}_{timestamp}.xlsx"
         df_records.to_excel(excel_file_path, index=False)
-        mlflow.log_artifact(excel_file_path)
+        
+        # # Only log to MLFlow if there's an active run
+        # try:
+        #     if mlflow.active_run():
+        #         mlflow.log_artifact(excel_file_path)
+        # except Exception as e:
+        #     logging.warning(f"Could not log artifact to MLFlow: {e}")
 
         logging.info(f"Excel report generated at {excel_file_path}")
 
@@ -1766,7 +1809,7 @@ class Evaluation:
             plt.savefig(cm_path, bbox_inches='tight', dpi=600)
             plt.close()
 
-            mlflow.log_artifact(cm_path)
+            # mlflow.log_artifact(cm_path)
 
     def create_performance_visualization(self, results, question, report_folder_path):
         # Sanitize the question name for use in filename
@@ -1822,7 +1865,7 @@ class Evaluation:
         plt.savefig(f"{report_folder_path}/performance_{safe_question}.png", bbox_inches='tight', dpi=600)
         plt.close()
         
-        mlflow.log_artifact(f"{report_folder_path}/performance_{safe_question}.png")
+        # mlflow.log_artifact(f"{report_folder_path}/performance_{safe_question}.png")
         
     def generate_metrics_json(self, report_folder_path, sample_size, expenses):
         overall_accuracy = None if self.total_questions == 0 else (self.total_correct / self.total_questions) * 100
@@ -1849,14 +1892,14 @@ class Evaluation:
         with open(metrics_file_path, 'w') as f:
             json.dump(metrics, f, indent=2)
 
-        mlflow.log_artifact(metrics_file_path)
+        # mlflow.log_artifact(metrics_file_path)
         logging.info(f"Metrics JSON file generated at {metrics_file_path}")
 
-        for key, value in metrics.items():
-            if key in ["overall_accuracy", "cost_per_call", "total_cost"]:
-                mlflow.log_metric(key, float(value))
-            else:
-                mlflow.log_metric(key, value)
+        # for key, value in metrics.items():
+        #     if key in ["overall_accuracy", "cost_per_call", "total_cost"]:
+        #         mlflow.log_metric(key, float(value))
+        #     else:
+        #         mlflow.log_metric(key, value)
 
     def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
         score_config = score_instance.parameters
@@ -1912,6 +1955,15 @@ Total cost:       ${expenses['total_cost']:.6f}
                 form_id = columns.get('form_id', '')
                 metadata_string = columns.get('metadata', {})
                 
+                # Get feedback_item_id from the dataset if available
+                feedback_item_id = row.get('feedback_item_id', None)
+                
+                # Debug logging for feedback_item_id
+                if feedback_item_id:
+                    logging.info(f"Found feedback_item_id in dataset: {feedback_item_id}")
+                else:
+                    logging.debug(f"No feedback_item_id found in row. Available columns: {list(row.index) if hasattr(row, 'index') else 'N/A'}")
+                
                 # Initialize human_labels dictionary
                 human_labels = {}
                 
@@ -1939,13 +1991,16 @@ Total cost:       ${expenses['total_cost']:.6f}
                             {}
                         )
                         if score_config.get('class') == 'LangGraphScore':
-                            score_instance = Score.from_name(self.scorecard_name, score_to_process)
-                            if isinstance(score_instance, LangGraphScore):
-                                await score_instance.async_setup()  # Ensure the graph is built
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
-                                score_instance.generate_graph_visualization(output_path)
-                                logging.info(f"Generated graph visualization at {output_path}")
+                            try:
+                                score_instance = self.get_score_instance(score_to_process)
+                                if isinstance(score_instance, LangGraphScore):
+                                    await score_instance.async_setup()  # Ensure the graph is built
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
+                                    score_instance.generate_graph_visualization(output_path)
+                                    logging.info(f"Generated graph visualization at {output_path}")
+                            except ValueError as e:
+                                self.logging.info(f"Could not get score instance for visualization: {e}, skipping {score_to_process}")
                 
                 scorecard_results = await self.scorecard.score_entire_text(
                     text=text,
@@ -2050,7 +2105,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                                 await self._create_score_result(
                                     score_result=score_result,
                                     content_id=content_id,
-                                    result=result
+                                    result=result,
+                                    feedback_item_id=feedback_item_id
                                 )
                                 self.scoreresult_creation_successes = getattr(self, 'scoreresult_creation_successes', 0) + 1
                                 self.logging.info(f"Successfully created ScoreResult for {score_name} (success #{self.scoreresult_creation_successes})")
@@ -2110,28 +2166,6 @@ Total cost:       ${expenses['total_cost']:.6f}
                 logging.info(f"Attempt {attempt + 1} failed for content_id {row.get('content_id')} with error: {e}. Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
 
-            except Exception as e: # Catch any other unexpected errors during scoring
-                logging.error(f"Unexpected error scoring content_id {row.get('content_id')} on attempt {attempt + 1}: {e}", exc_info=True)
-                if attempt == max_attempts - 1:
-                    # Return an error result on the last attempt
-                    return {
-                        'content_id': row.get('content_id', ''),
-                        'session_id': row.get('Session ID', row.get('content_id', '')),
-                        'form_id': row.get('columns', {}).get('form_id', ''),
-                        'results': {
-                            score_name or 'processing_error': Score.Result(
-                                value="Error",
-                                error=f"Unexpected error after {max_attempts} attempts: {e}",
-                                parameters=Score.Parameters(name=score_name or 'processing_error', scorecard=self.scorecard_name)
-                           )
-                        },
-                        'human_labels': {}
-                    }
-                # Wait before retrying for unexpected errors too
-                delay = min(base_delay * (2 ** attempt), max_delay)
-                logging.info(f"Retrying in {delay} seconds...")
-                await asyncio.sleep(delay)
-        
         # If loop completes without returning (e.g., all attempts failed but didn't hit max_attempts check correctly)
         logging.error(f"Scoring loop completed for content_id {row.get('content_id')} without returning a result or error after {max_attempts} attempts.")
         return {
@@ -2148,15 +2182,16 @@ Total cost:       ${expenses['total_cost']:.6f}
             'human_labels': {}
         }
 
-    async def _create_score_result(self, *, score_result, content_id, result):
+    async def _create_score_result(self, *, score_result, content_id, result, feedback_item_id=None):
         """Create a score result in the dashboard."""
         try:
             # Log the raw inputs
-            self.logging.info("=== Creating ScoreResult in Dashboard ===")
-            self.logging.info(f"score_result value: {score_result.value}")
-            self.logging.info(f"score_result metadata keys: {list(score_result.metadata.keys()) if score_result.metadata else 'None'}")
-            self.logging.info(f"content_id: {content_id}")
-            self.logging.info(f"result form_id: {result.get('form_id', 'N/A')}")
+            logging.info("Creating score result with raw inputs:")
+            logging.info(f"score_result value: {score_result.value}")
+            logging.info(f"score_result metadata: {truncate_dict_strings_inner(score_result.metadata)}")
+            logging.info(f"content_id: {content_id}")
+            logging.info(f"result dict: {truncate_dict_strings_inner(result)}")
+            logging.info(f"feedback_item_id: {feedback_item_id}")
 
             # Validate required attributes are available
             self.logging.info(f"Validating required attributes...")
@@ -2173,6 +2208,9 @@ Total cost:       ${expenses['total_cost']:.6f}
 
             # Ensure we have a valid string value
             value = str(score_result.value) if score_result.value is not None else "N/A"
+            
+            # Extract feedback_item_id if available
+            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
             
             # Ensure we have valid metadata
             metadata_dict = {
@@ -2192,8 +2230,12 @@ Total cost:       ${expenses['total_cost']:.6f}
                 }
             }
             
-            # First, create or upsert the Item record and get the database ID
-            # We'll use the content_id as the externalId but need the database ID for the ScoreResult
+            # Add feedback_item_id to metadata if available
+            if feedback_item_id:
+                metadata_dict['feedback_item_id'] = feedback_item_id
+            
+            # First, create or upsert the Item record
+            # We'll use the content_id as the externalId
             item_database_id = await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
             
             # Create data dictionary with all required fields
@@ -2202,21 +2244,35 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'itemId': item_database_id or content_id,  # Use database ID if available, fallback to content_id
                 'accountId': self.account_id,
                 'scorecardId': self.scorecard_id,
+                'metadata': json.dumps(metadata_dict),  # Add the metadata that was created earlier
+                'value': value,  # Add the score result value
+                'code': '200',  # Add success code
             }
             
-            # Add score_id if available and has valid format
-            if hasattr(self, 'score_id') and self.score_id:
-                # Validate score_id format - should be a UUID with hyphens
-                if not (isinstance(self.score_id, str) and '-' in self.score_id):
-                    self.logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {self.score_id}")
-                    self.logging.warning(f"Will not add this Score ID to the ScoreResult record.")
-                else:
-                    data['scoreId'] = self.score_id
-                    
-            data['value'] = value
-            data['metadata'] = json.dumps(metadata_dict)  # Ensure metadata is a JSON string
-            data['code'] = '200'  # HTTP response code for successful evaluation
-            data['type'] = 'evaluation'  # Mark this as an evaluation score result
+            # Add scoreId - try multiple sources
+            score_id = None
+            if hasattr(score_result, 'parameters') and hasattr(score_result.parameters, 'id'):
+                score_id = score_result.parameters.id
+                self.logging.info(f"Using score ID from score_result.parameters.id: {score_id}")
+            elif hasattr(self, 'score_id') and self.score_id:
+                score_id = self.score_id
+                self.logging.info(f"Using score ID from self.score_id: {score_id}")
+            else:
+                self.logging.warning("No score ID found - this will cause GraphQL error")
+                self.logging.info(f"score_result.parameters: {getattr(score_result, 'parameters', 'NOT FOUND')}")
+                self.logging.info(f"self.score_id: {getattr(self, 'score_id', 'NOT FOUND')}")
+            
+            if score_id:
+                data['scoreId'] = score_id
+            
+            # Add feedback item ID if provided from the dataset
+            if feedback_item_id:
+                data['feedbackItemId'] = feedback_item_id
+                logging.info(f"Linking score result to feedback item from dataset: {feedback_item_id}")
+
+            # Add feedbackItemId as a direct field if available
+            if feedback_item_id:
+                data['feedbackItemId'] = feedback_item_id
 
             # Add trace data if available
             logging.info("Checking for trace data to add to score result...")            
@@ -2231,6 +2287,29 @@ Total cost:       ${expenses['total_cost']:.6f}
             self.logging.info("Preparing to create score result with data:")
             for key, value in data.items():
                 self.logging.info(f"{key}: {truncate_dict_strings_inner(value)}")
+
+            # Check for and log feedback_item_id if present
+            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
+            if feedback_item_id:
+                self.logging.info(f"feedback_item_id: {feedback_item_id}")
+                # Check if it was included in final metadata
+                final_metadata = json.loads(data['metadata'])
+                if 'feedback_item_id' in final_metadata:
+                    self.logging.info(f"feedback_item_id included in final metadata: {final_metadata['feedback_item_id']}")
+                else:
+                    self.logging.info("feedback_item_id NOT included in final metadata")
+                # Check if it was set as direct field
+                if 'feedbackItemId' in data:
+                    self.logging.info(f"feedbackItemId set as direct field: {data['feedbackItemId']}")
+                else:
+                    self.logging.info("feedbackItemId NOT set as direct field")
+            else:
+                self.logging.info("feedback_item_id: None (not found in score_result.metadata)")
+                # Also log what keys are actually in metadata for debugging
+                if score_result.metadata:
+                    self.logging.info(f"Available metadata keys: {list(score_result.metadata.keys())}")
+                else:
+                    self.logging.info("score_result.metadata is None/empty")
 
             # Validate all required fields are present and not None
             required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code']
@@ -2253,6 +2332,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     trace
                     code
                     type
+                    feedbackItemId
                 }
             }
             """
@@ -2430,6 +2510,51 @@ Total cost:       ${expenses['total_cost']:.6f}
             self.logging.warning("Continuing with ScoreResult creation despite Item creation failure")
             return None  # Return None if item creation fails
 
+    # DEPRECATED: This method is no longer used. feedback_item_id now comes directly from the dataset.
+    async def _find_feedback_item(self, *, content_id: str, score_name: str) -> str | None:
+        """Find the feedback item associated with this content_id and score."""
+        try:
+            # Query for feedback items that match the item and score
+            query = """
+            query FindFeedbackItem($accountId: String!, $scorecardId: String!, $scoreId: String!, $itemId: String!) {
+                listFeedbackItems(
+                    filter: {
+                        accountId: { eq: $accountId }
+                        scorecardId: { eq: $scorecardId }
+                        scoreId: { eq: $scoreId }
+                        itemId: { eq: $itemId }
+                    }
+                    limit: 1
+                ) {
+                    items {
+                        id
+                        editCommentValue
+                    }
+                }
+            }
+            """
+            
+            variables = {
+                "accountId": self.account_id,
+                "scorecardId": self.scorecard_id,
+                "scoreId": self.score_id,
+                "itemId": content_id
+            }
+            
+            response = await asyncio.to_thread(self.dashboard_client.execute, query, variables)
+            
+            if response.get('listFeedbackItems', {}).get('items'):
+                feedback_item = response['listFeedbackItems']['items'][0]
+                logging.info(f"Found feedback item for content_id {content_id}: {feedback_item['id']}")
+                return feedback_item['id']
+            else:
+                logging.debug(f"No feedback item found for content_id {content_id} and score {score_name}")
+                return None
+                
+        except Exception as e:
+            logging.warning(f"Error finding feedback item for content_id {content_id}: {e}")
+            return None
+
     async def cleanup(self):
         """Clean up all resources"""
         try:
@@ -2490,7 +2615,7 @@ class ConsistencyEvaluation(Evaluation):
     
     def log_parameters(self):
         super().log_parameters()
-        mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
+        # mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
 
 class AccuracyEvaluation(Evaluation):
     def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):
@@ -2701,8 +2826,32 @@ class AccuracyEvaluation(Evaluation):
             import pandas as pd
             if self.labeled_samples:
                 df = pd.DataFrame(self.labeled_samples)
-            else:
+            elif self.labeled_samples_filename:
                 df = pd.read_csv(self.labeled_samples_filename)
+            else:
+                # Handle the case where labeled_samples is empty/None and no filename provided
+                if self.labeled_samples is not None:
+                    # labeled_samples was provided but is empty
+                    error_msg = f"No labeled samples data available. The labeled_samples list is empty ({len(self.labeled_samples)} items). This usually indicates a data loading issue."
+                else:
+                    # Neither labeled_samples nor filename provided
+                    error_msg = "No labeled samples data available. Both labeled_samples and labeled_samples_filename are None."
+                
+                self.logging.error(error_msg)
+                self.logging.error("This error typically occurs when:")
+                self.logging.error("1. The --fresh flag causes data cache issues")
+                self.logging.error("2. The score configuration doesn't have proper data sources")
+                self.logging.error("3. Database connectivity issues prevent data loading")
+                self.logging.error("4. No matching data is found for the specified criteria")
+                
+                # Provide troubleshooting suggestions
+                self.logging.error("Troubleshooting suggestions:")
+                self.logging.error("- Try running without the --fresh flag to use cached data")
+                self.logging.error("- Verify the scorecard configuration has proper data sources")
+                self.logging.error("- Check database connectivity and credentials")
+                self.logging.error("- Verify that data exists for the specified score criteria")
+                
+                raise ValueError(error_msg)
 
             # Adjust the sample size if necessary
             self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
@@ -2713,6 +2862,10 @@ class AccuracyEvaluation(Evaluation):
                 selected_sample_rows = df.sample(n=self.number_of_texts_to_sample, random_state=self.random_seed)
             elif self.sampling_method == 'sequential':
                 selected_sample_rows = df.head(self.number_of_texts_to_sample)
+            elif self.sampling_method == 'provided':
+                # Samples are already provided and pre-processed, use them as-is
+                selected_sample_rows = df
+                self.logging.info(f"Using {len(df)} provided samples without additional sampling")
             else:
                 selected_sample_rows = df
 
@@ -2802,7 +2955,7 @@ class AccuracyEvaluation(Evaluation):
                 # Try to get score instance for report generation, but skip if not found in registry
                 # (This can happen with API-loaded scorecards that aren't registered)
                 try:
-                    score_instance = Score.from_name(self.scorecard_name, primary_score_name)
+                    score_instance = self.get_score_instance(primary_score_name)
                     
                     # Calculate overall_accuracy from the counters we just updated
                     overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
@@ -2818,10 +2971,103 @@ class AccuracyEvaluation(Evaluation):
                     else:
                         raise
 
+                # Generate reports - determine the correct report folder
+                if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+                    try:
+                        score_instance = self.get_score_instance(self.subset_of_score_names[0])
+                        report_folder_path = score_instance.report_directory_path()
+                        report_folder_path = report_folder_path.rstrip('/')
+                    except ValueError as e:
+                        if "not found" in str(e):
+                            self.logging.info(f"Scorecard not found in registry, using default report folder: {e}")
+                            # Use default report folder when scorecard not found in registry
+                            scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
+                            score_name = self.subset_of_score_names[0].replace(' ', '_')
+                            report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
+                        else:
+                            raise
+                else:
+                    scorecard_name = self.scorecard.name.replace(' ', '_')
+                    report_folder_path = f"./score_results/{scorecard_name}/combined"
+
+                # Ensure the report folder exists
+                os.makedirs(report_folder_path, exist_ok=True)
+                self.logging.info(f"Report folder set to: {report_folder_path}")
+
+                # Generate Excel report
+                self.generate_excel_report(report_folder_path, self.all_results, selected_sample_rows)
+
+                # Generate CSV reports
+                analysis = ScorecardResultsAnalysis(scorecard_results=ScorecardResults(self.all_results))
+                
+                # Generate CSV report for incorrect results
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                csv_report_filename = f"scorecard_report_for_incorrect_results_{timestamp}.csv"
+                with open(f"{report_folder_path}/{csv_report_filename}", "w") as file:
+                    file.write(analysis.generate_csv_scorecard_report(results=self.all_results))
+                self.logging.info(f"CSV report generated at {report_folder_path}/{csv_report_filename}")
+
+                # Generate question accuracy CSV
+                question_accuracy_filename = f"question_accuracy_report_{timestamp}.csv"
+                analysis.generate_question_accuracy_csv(output_file=f"{report_folder_path}/{question_accuracy_filename}")
+                self.logging.info(f"Question accuracy CSV generated at {report_folder_path}/{question_accuracy_filename}")
+
+                # Generate confusion matrices and performance visualizations
+                self.generate_and_log_confusion_matrix(self.all_results, report_folder_path)
+                for question in self.score_names():
+                    self.create_performance_visualization(self.all_results, question, report_folder_path)
+
+                # Generate metrics JSON
+                self.generate_metrics_json(report_folder_path, self.number_of_texts_to_sample, expenses)
+
             return metrics
         except Exception as e:
             self.logging.error(f"Error in _run_evaluation: {e}", exc_info=True)
             raise e
         finally:
             pass
+
+    def get_score_instance(self, score_name: str):
+        """
+        Safely get a Score instance that works with both YAML-loaded and API-loaded scorecards.
+        
+        For YAML-loaded scorecards: Uses Score.from_name() with global scorecard_registry
+        For API-loaded scorecards: Uses the scorecard instance's own score_registry
+        """
+        try:
+            # First try the traditional Score.from_name() approach (for YAML-loaded scorecards)
+            return Score.from_name(self.scorecard_name, score_name)
+        except ValueError as e:
+            if "not found" in str(e):
+                # Scorecard not found in global registry - try instance registry (for API-loaded scorecards)
+                self.logging.info(f"Scorecard '{self.scorecard_name}' not found in global registry, trying instance registry")
+                
+                # Get the score from the scorecard instance's registry
+                if hasattr(self.scorecard, 'score_registry'):
+                    score_class = self.scorecard.score_registry.get(score_name)
+                    if score_class:
+                        score_properties = self.scorecard.score_registry.get_properties(score_name)
+                        if score_properties:
+                            # Ensure scorecard_name is set in properties
+                            score_properties = score_properties.copy()
+                            if 'scorecard_name' not in score_properties:
+                                # Use the actual scorecard name from the instance
+                                actual_scorecard_name = None
+                                if hasattr(self.scorecard, 'name') and callable(self.scorecard.name):
+                                    actual_scorecard_name = self.scorecard.name()
+                                elif hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
+                                    actual_scorecard_name = self.scorecard.properties.get('name')
+                                
+                                score_properties['scorecard_name'] = actual_scorecard_name or str(self.scorecard_name)
+                            
+                            return score_class(**score_properties)
+                        else:
+                            raise ValueError(f"Score properties for '{score_name}' not found in scorecard instance registry")
+                    else:
+                        raise ValueError(f"Score '{score_name}' not found in scorecard instance registry")
+                else:
+                    raise ValueError(f"Scorecard instance has no score_registry attribute")
+            else:
+                # Re-raise if it's a different error
+                raise
 

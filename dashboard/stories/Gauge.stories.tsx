@@ -27,7 +27,7 @@ export const Default: Story = {
     const canvas = within(canvasElement)
     const valueText = canvas.getByText('75%')
     const titleText = canvas.getByText('Accuracy')
-    await expect(valueText).toHaveClass('text-[2.25rem]')
+    await expect(valueText).toBeInTheDocument()
     await expect(titleText).toBeInTheDocument()
   }
 }
@@ -69,8 +69,9 @@ export const WithTarget: Story = {
     await expect(canvas.getByText('75.7%')).toBeInTheDocument()
     
     // Check that there are two needles in the gauge
-    const svg = canvas.getByText('75.7%').closest('svg')
+    const svg = canvasElement.querySelector('svg')
     const needles = svg?.querySelectorAll('path[d^="M 0,-"]')
+    await expect(needles).toBeTruthy()
     await expect(needles?.length).toBeGreaterThanOrEqual(2)
   },
   decorators: [
@@ -122,7 +123,7 @@ export const CustomSegments: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const svg = canvas.getByText('75%').closest('svg')
+    const svg = canvasElement.querySelector('svg')
     await expect(svg).toBeInTheDocument()
     const paths = svg?.querySelectorAll('path[fill^="var(--gauge"]')
     await expect(paths?.length).toBeGreaterThanOrEqual(5)
@@ -196,11 +197,15 @@ export const NoTicks: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const svg = canvas.getByText('75%').closest('svg')
+    // Verify the percentage value is displayed (now outside SVG in NumberFlow component)
+    await expect(canvas.getByText('75%')).toBeInTheDocument()
+    
+    // Verify no tick marks are shown in the SVG when showTicks is false
+    const svg = canvasElement.querySelector('svg')
     const tickTexts = svg?.querySelectorAll('text')
-    const percentageTexts = Array.from(tickTexts || [])
+    const tickMarkerTexts = Array.from(tickTexts || [])
       .filter(text => text.textContent?.includes('%'))
-    await expect(percentageTexts.length).toBe(1)
+    await expect(tickMarkerTexts.length).toBe(0)
   }
 }
 

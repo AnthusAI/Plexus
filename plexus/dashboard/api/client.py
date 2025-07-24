@@ -202,7 +202,7 @@ class _BaseAPIClient:
 
     def flush(self) -> None:
         """Flush any pending log items immediately."""
-        if not self._stop_logging:
+        if not hasattr(self, '_stop_logging') or self._stop_logging is None or self._stop_logging.is_set():
             return
             
         # Signal thread to stop

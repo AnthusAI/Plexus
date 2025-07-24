@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube, MessageCircleMore } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -13,6 +13,7 @@ import type { Schema } from '@/amplify/data/resource'
 import { ScoreComponent } from '@/components/ui/score-component'
 import { toast } from "sonner"
 import { EditableHeader } from '@/components/ui/editable-header'
+import { createTask } from '@/utils/data-operations'
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -60,6 +61,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   score: ScorecardData
   onEdit?: () => void
   onViewData?: () => void
+  onFeedbackAnalysis?: () => void
   isSelected?: boolean
   onClick?: () => void
   isFullWidth?: boolean
@@ -73,6 +75,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onEditItem?: (itemId: string) => void
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
+  onTaskCreated?: (task: any) => void
 }
 
 const GridContent = React.memo(({ 
@@ -95,8 +98,11 @@ const GridContent = React.memo(({
         </div>
         <div className="text-sm text-muted-foreground">{scoreCount} {scoreText}</div>
       </div>
-      <div className="text-muted-foreground">
-        {score.icon || <ListChecks className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />}
+      <div className="flex flex-col items-center gap-1">
+        <div className="text-muted-foreground">
+          {score.icon || <ListChecks className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />}
+        </div>
+        <div className="text-xs text-muted-foreground text-center">Scorecard</div>
       </div>
     </div>
   )
@@ -108,6 +114,7 @@ interface DetailContentProps {
   onToggleFullWidth?: () => void
   onClose?: () => void
   onViewData?: () => void
+  onFeedbackAnalysis?: () => void
   onEdit?: () => void
   onEditChange?: (changes: Partial<ScorecardData>) => void
   onAddSection?: () => void
@@ -122,6 +129,7 @@ interface DetailContentProps {
   onEditItem?: (itemId: string) => void
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
+  onTaskCreated?: (task: any) => void
 }
 
 export const DetailContent = React.memo(function DetailContent({
@@ -130,6 +138,7 @@ export const DetailContent = React.memo(function DetailContent({
   onToggleFullWidth,
   onClose,
   onViewData,
+  onFeedbackAnalysis,
   onEditChange,
   onAddSection,
   onMoveSection,
@@ -142,7 +151,8 @@ export const DetailContent = React.memo(function DetailContent({
   onCreateItem,
   onEditItem,
   shouldExpandExamples,
-  onExamplesExpanded
+  onExamplesExpanded,
+  onTaskCreated
 }: DetailContentProps) {
   const { selectedAccount } = useAccount()
   const [sectionNameChanges, setSectionNameChanges] = React.useState<Record<string, string>>({})
@@ -415,10 +425,55 @@ export const DetailContent = React.memo(function DetailContent({
     });
   };
 
-  const handleTestItemWithScore = (scoreId: string) => {
+  const handleTestItemWithScore = async (scoreId: string) => {
     console.log('Testing item with score:', { itemId: testItemDialog.itemId, scoreId });
-    // TODO: Implement actual test logic
-    toast.success(`Testing item "${testItemDialog.displayValue}" with selected score`);
+    
+    try {
+      // Find the selected score details
+      const selectedScore = availableScores.find(s => s.id === scoreId);
+      if (!selectedScore) {
+        toast.error("Selected score not found");
+        return;
+      }
+
+      // Create the prediction command using correct CLI parameter names
+      const command = `predict --scorecard "${score.name}" --score "${selectedScore.name}" --item "${testItemDialog.itemId}" --format json`;
+      
+      // Create the task
+      const task = await createTask({
+        type: 'Prediction Test',
+        target: 'prediction',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING',
+        scorecardId: score.id,
+        scoreId: scoreId
+      });
+
+      // If task was created successfully, update the command to include the task-id
+      if (task) {
+        const commandWithTaskId = `predict --scorecard "${score.name}" --score "${selectedScore.name}" --item "${testItemDialog.itemId}" --format json --task-id "${task.id}"`;
+        
+        // Update the task with the command that includes task-id for progress tracking
+        // Note: This would require an updateTask call, but for now we'll use the original command
+        // The backend can handle task tracking via the task-id parameter when implemented
+      }
+
+      if (task) {
+        toast.success("Prediction test task created", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+        
+        // Notify parent component about task creation
+        onTaskCreated?.(task);
+      } else {
+        toast.error("Failed to create prediction test task");
+      }
+    } catch (error) {
+      console.error('Error creating prediction test task:', error);
+      toast.error("Error creating prediction test task");
+    }
   };
 
   const closeTestItemDialog = () => {
@@ -442,6 +497,10 @@ export const DetailContent = React.memo(function DetailContent({
     <div className="w-full flex flex-col min-h-0">
       <div className="flex justify-between items-start w-full">
         <div className="space-y-2 flex-1">
+          <div className="flex items-center gap-2 mb-3">
+            <ListChecks className="h-5 w-5 text-foreground" />
+            <span className="text-lg font-semibold">Scorecard</span>
+          </div>
           <Input
             value={score.name}
             onChange={(e) => onEditChange?.({ name: e.target.value })}
@@ -473,21 +532,40 @@ export const DetailContent = React.memo(function DetailContent({
         <div className="flex gap-2 ml-4">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <CardButton
-                icon={MoreHorizontal}
-                onClick={() => {}}
-                aria-label="More options"
-              />
+              <div onClick={(e) => e.stopPropagation()}>
+                <CardButton
+                  icon={MoreHorizontal}
+                  onClick={() => {}}
+                  aria-label="More options"
+                />
+              </div>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+              <DropdownMenu.Content 
+                align="end" 
+                className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md z-50"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {onViewData && (
                   <DropdownMenu.Item 
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                    onSelect={onViewData}
+                    onSelect={() => {
+                      onViewData();
+                    }}
                   >
                     <Database className="mr-2 h-4 w-4" />
                     View Data
+                  </DropdownMenu.Item>
+                )}
+                {onFeedbackAnalysis && (
+                  <DropdownMenu.Item 
+                    className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    onSelect={() => {
+                      onFeedbackAnalysis();
+                    }}
+                  >
+                    <MessageCircleMore className="mr-2 h-4 w-4" />
+                    Analyze Feedback
                   </DropdownMenu.Item>
                 )}
               </DropdownMenu.Content>
@@ -548,7 +626,7 @@ export const DetailContent = React.memo(function DetailContent({
                   </div>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
-                  <DropdownMenu.Content align="end" className="min-w-[300px] overflow-hidden rounded-md border bg-popover p-2 text-popover-foreground shadow-md">
+                  <DropdownMenu.Content align="end" className="min-w-[300px] overflow-hidden rounded-md border bg-popover p-2 text-popover-foreground shadow-md z-50">
                     <DropdownMenu.Item 
                       className="relative flex cursor-default select-none items-center rounded-sm px-3 py-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                       onSelect={() => {
@@ -803,6 +881,8 @@ export const DetailContent = React.memo(function DetailContent({
                               displayValue
                             };
                           }) || []}
+                          scorecardName={score.name}
+                          onTaskCreated={onTaskCreated}
                         />
                       ))}
                     </div>
@@ -859,6 +939,7 @@ export default function ScorecardComponent({
   score, 
   onEdit, 
   onViewData, 
+  onFeedbackAnalysis,
   variant = 'grid', 
   isSelected,
   onClick,
@@ -872,6 +953,7 @@ export default function ScorecardComponent({
   onEditItem,
   shouldExpandExamples,
   onExamplesExpanded,
+  onTaskCreated,
   className, 
   ...props 
 }: ScorecardComponentProps) {
@@ -1014,6 +1096,7 @@ export default function ScorecardComponent({
               onToggleFullWidth={onToggleFullWidth}
               onClose={onClose}
               onViewData={onViewData}
+              onFeedbackAnalysis={onFeedbackAnalysis}
               onEditChange={handleEditChange}
               onAddSection={handleAddSection}
               onMoveSection={handleMoveSection}
@@ -1027,6 +1110,7 @@ export default function ScorecardComponent({
               onEditItem={onEditItem}
               shouldExpandExamples={shouldExpandExamples}
               onExamplesExpanded={onExamplesExpanded}
+              onTaskCreated={onTaskCreated}
             />
           )}
         </div>

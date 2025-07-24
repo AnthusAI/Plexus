@@ -7,6 +7,7 @@ import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { cn } from '@/lib/utils'
 import { Timestamp } from './ui/timestamp'
+import { TaskOutputDisplay } from './TaskOutputDisplay'
 
 export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   variant: 'grid' | 'detail' | 'nested' | 'bare'
@@ -19,6 +20,10 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
     score: string
     time: string
     command?: string
+    output?: string // Universal Code YAML output
+    attachedFiles?: string[] // Array of S3 file keys for attachments
+    stdout?: string // Task stdout output
+    stderr?: string // Task stderr output
     data?: TData
     stages?: TaskStageConfig[]
     currentStageName?: string
@@ -166,7 +171,10 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       <div className="flex-none p-3 w-full max-w-full overflow-hidden relative z-10">
         {renderHeader(childProps)}
       </div>
-      <div className="flex-1 min-h-0 relative z-10">
+      <div className={cn(
+        "flex-1 min-h-0 relative z-10",
+        variant === 'detail' && "overflow-y-auto"
+      )}>
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <div className="text-destructive mb-2">{error}</div>
@@ -216,13 +224,14 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
     )}>
       <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
         <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+          {variant === 'detail' && (
+            <div className="flex items-center gap-2 mb-3">
+              <Activity className="h-5 w-5 text-muted-foreground" />
+              <span className="text-lg font-semibold text-muted-foreground">Task</span>
+            </div>
+          )}
           {task.name && (
             <div className="font-semibold text-sm truncate">{task.name}</div>
-          )}
-          {task.description && (
-            <div className={`text-sm text-muted-foreground ${variant === 'detail' ? '' : 'truncate'}`}>
-              {task.description}
-            </div>
           )}
           {task.scorecard && task.scorecard.trim() !== '' && (
             <div className="font-semibold text-sm truncate">{task.scorecard}</div>
@@ -230,15 +239,13 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
           {task.score && task.score.trim() !== '' && (
             <div className="font-semibold text-sm truncate">{task.score}</div>
           )}
-          {variant !== 'grid' && (
-            <div className="text-sm text-muted-foreground">{task.type}</div>
-          )}
           <Timestamp time={task.time} variant="relative" />
         </div>
         <div className="flex flex-col items-end flex-shrink-0">
           {variant === 'grid' ? (
-            <div className="flex items-start gap-2">
-              <div className="text-sm text-muted-foreground text-right">
+            <div className="flex flex-col items-center gap-1">
+              <div className="text-muted-foreground">{taskIcon}</div>
+              <div className="text-xs text-muted-foreground text-center">
                 {(() => {
                   const [firstWord, ...restWords] = task.type.split(/\s+/);
                   return (
@@ -249,7 +256,6 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
                   );
                 })()}
               </div>
-              <div className="text-muted-foreground mt-[0.15rem]">{taskIcon}</div>
             </div>
           ) : (
             <>
@@ -329,13 +335,14 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   return (
     <CardContent className={cn(
       "h-full p-0 flex flex-col flex-1",
-      variant === 'grid' ? 'px-3 pb-2' : ''
+      variant === 'grid' ? 'px-3 pb-3' : ''
     )}>
       {!hideTaskStatus && (
-        <div>
+        <div className={variant === 'detail' ? 'px-3' : ''}>
           <TaskStatus
             showStages={showProgress}
             stages={task.stages || []}
+            stageConfigs={task.stages || []}
             currentStageName={task.currentStageName}
             processedItems={task.processedItems}
             totalItems={task.totalItems}
@@ -360,6 +367,18 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
         </div>
       )}
       {children}
+      {/* Task Output Display */}
+      <div className="px-3 pb-3">
+        <TaskOutputDisplay
+          output={task.output}
+          attachedFiles={task.attachedFiles}
+          stdout={task.stdout}
+          stderr={task.stderr}
+          command={task.command}
+          taskType={task.type}
+          variant={variant === 'nested' || variant === 'bare' ? 'detail' : variant}
+        />
+      </div>
     </CardContent>
   )
 }

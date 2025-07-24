@@ -1,0 +1,86 @@
+# Plexus Configuration Example
+# This file demonstrates the YAML configuration structure for Plexus.
+# Copy this file to `.plexus/config.yaml` in your project directory or to `~/.plexus/config.yaml`
+# and modify the values as needed.
+
+# Environment and Debug Settings
+environment: development  # development, staging, production
+debug: false
+
+# Core Plexus Configuration
+plexus:
+  api_url: https://your-plexus-instance.appsync-api.us-west-2.amazonaws.com/graphql
+  api_key: da2-your-api-key-here
+  app_url: https://plexus.anth.us
+  account_key: your-account-key
+  default_account_id: your-account-id
+  enable_batching: true
+  
+  # Optional: Change working directory when loading config
+  # working_directory: /path/to/your/project
+  
+  # LangGraph PostgreSQL checkpointing
+  langgraph_checkpointer_postgres_uri: postgresql://user:password@your-db-host:5432/postgres
+
+# AWS Configuration
+aws:
+  access_key_id: AKIA-YOUR-ACCESS-KEY
+  secret_access_key: your-secret-access-key
+  region_name: us-west-2
+  
+  # Storage Buckets (Amplify-generated bucket names)
+  storage:
+    report_block_details_bucket: "amplify-your-app-reportblockdetailsbucket-uniqueid"
+    score_result_attachments_bucket: "amplify-your-app-scoreresultattachmentsbucket-uniqueid"
+    datasets_bucket: "amplify-your-app-datasourcesbucket-uniqueid"
+    task_attachments_bucket: "amplify-your-app-taskattachmentsbucket-uniqueid"
+  
+  # Data Lake Configuration
+  data_lake:
+    database_name: plexus_training_data_lake
+    athena_results_bucket: plexus-training-data-lake-query-results
+    bucket_name: plexus-training-data-lake
+
+# Celery Task Queue Configuration
+celery:
+  queue_name: plexus-celery-development
+  result_backend_template: "dynamodb://{aws_access_key}:{aws_secret_key}@{aws_region_name}/plexus-action-development"
+
+# AI/ML Service APIs
+openai:
+  api_key: sk-your-openai-api-key
+  # organization: org-your-organization-id  # Optional
+
+anthropic:
+  api_key: sk-ant-api03-your-anthropic-api-key
+
+# Azure OpenAI Configuration
+azure:
+  api_key: your-azure-openai-key
+  api_base: https://your-instance.openai.azure.com
+  api_version: "2024-02-01"
+  tenant_id: your-azure-tenant-id
+  client_id: your-azure-client-id
+  client_secret: your-azure-client-secret
+
+# LangChain/LangSmith Configuration
+langchain:
+  api_key: lsv2_pt_your-langsmith-api-key
+  endpoint: https://api.smith.langchain.com
+  project: your-project-name
+  debug: false
+  tracing_v2: true
+
+# MLflow Configuration
+mlflow:
+  tracking_uri: azureml://your-region.api.azureml.ms/mlflow/v1.0/subscriptions/your-subscription/resourceGroups/your-rg/providers/Microsoft.MachineLearningServices/workspaces/your-workspace
+  experiment_name: your-experiment-name
+
+# TensorFlow Configuration (optional)
+tensorflow:
+  force_gpu_allow_growth: true
+  gpu_allocator: cuda_malloc_async
+
+# Dashboard Configuration (optional)
+dashboard:
+  minimal_branding: true

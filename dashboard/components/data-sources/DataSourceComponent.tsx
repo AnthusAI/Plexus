@@ -20,7 +20,10 @@ import Editor, { Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
+import { useYamlLinter, useLintMessageHandler } from '@/hooks/use-yaml-linter'
+import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { amplifyClient } from "@/utils/amplify-client"
+import { useAccount } from "../../app/contexts/AccountContext"
 import { FileAttachments } from "@/components/items/FileAttachments"
 import { DataSourceVersionSelector } from "./DataSourceVersionSelector"
 import { CollapsibleFileAttachments } from "./CollapsibleFileAttachments"
@@ -85,8 +88,11 @@ const GridContent = React.memo(function GridContent({
           />
         )}
       </div>
-      <div className="text-muted-foreground ml-4">
-        <HardDriveDownload className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+      <div className="flex flex-col items-center gap-1 ml-4">
+        <div className="text-muted-foreground">
+          <HardDriveDownload className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+        </div>
+        <div className="text-xs text-muted-foreground text-center">Source</div>
       </div>
     </div>
   )
@@ -134,6 +140,51 @@ const DetailContent = React.memo(function DetailContent({
   
   // Add state to detect if we're on an iPad/mobile device
   const [isMobileDevice, setIsMobileDevice] = useState(false)
+  
+  // Add state for component-specific datasets
+  const [componentDataSets, setComponentDataSets] = useState<Schema['DataSet']['type'][]>([])
+  const { selectedAccount } = useAccount()
+  
+  // YAML Linting integration
+  const { lintResult, setupMonacoIntegration, jumpToLine } = useYamlLinter({
+    context: 'data-source',
+    debounceMs: 500,
+    showMonacoMarkers: true
+  })
+  const handleLintMessageClick = useLintMessageHandler(jumpToLine)
+  
+  // Fetch datasets specific to this data source
+  const fetchComponentDataSets = async () => {
+    try {
+      // If the data source doesn't have a current version, show no datasets
+      if (!dataSource.currentVersionId || !selectedAccount?.id) {
+        setComponentDataSets([])
+        return
+      }
+
+      // Fetch datasets that belong to this specific data source version
+      const result = await amplifyClient.DataSet.list({
+        filter: { 
+          dataSourceVersionId: { eq: dataSource.currentVersionId },
+          accountId: { eq: selectedAccount.id }
+        }
+      })
+
+      // Sort by createdAt descending
+      const sortedDataSets = result.data
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+      setComponentDataSets(sortedDataSets)
+    } catch (error) {
+      console.error('Error fetching component datasets:', error)
+      setComponentDataSets([])
+    }
+  }
+  
+  // Fetch datasets when data source changes
+  useEffect(() => {
+    fetchComponentDataSets()
+  }, [dataSource.id, dataSource.currentVersionId, selectedAccount?.id])
 
   // File upload handler
   const handleFileUpload = async (file: File): Promise<string> => {
@@ -227,34 +278,12 @@ const DetailContent = React.memo(function DetailContent({
   return (
     <div className="w-full flex flex-col min-h-0 h-full overflow-hidden">
       {/* Header section - fixed size */}
-      <div className="flex justify-between items-start w-full flex-shrink-0">
+      <div className="flex justify-between items-start w-full flex-shrink-0 mb-3">
         <div className="space-y-2 flex-1">
-          <Input
-            value={dataSource.name}
-            onChange={(e) => onEditChange?.({ name: e.target.value })}
-            className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
-                     placeholder:text-muted-foreground rounded-md"
-            placeholder="Data Source Name"
-          />
-          <div className="flex gap-4 w-full">
-            <Input
-              value={dataSource.key || ''}
-              onChange={(e) => onEditChange?.({ key: e.target.value })}
-              className="font-mono bg-background border-0 px-2 h-auto flex-1
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
-              placeholder="data-source-key"
-            />
+          <div className="flex items-center gap-2">
+            <HardDriveDownload className="h-5 w-5 text-foreground" />
+            <span className="text-lg font-semibold">Source</span>
           </div>
-          <Input
-            value={dataSource.description || ''}
-            onChange={(e) => onEditChange?.({ description: e.target.value })}
-            className="bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
-                     placeholder:text-muted-foreground rounded-md"
-            placeholder="Description"
-          />
         </div>
         <div className="flex gap-2 ml-4">
           <DropdownMenu>
@@ -291,6 +320,36 @@ const DetailContent = React.memo(function DetailContent({
             />
           )}
         </div>
+      </div>
+
+      {/* Form fields section - fixed size */}
+      <div className="space-y-2 flex-shrink-0">
+        <Input
+          value={dataSource.name}
+          onChange={(e) => onEditChange?.({ name: e.target.value })}
+          className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
+                   focus-visible:ring-0 focus-visible:ring-offset-0 
+                   placeholder:text-muted-foreground rounded-md"
+          placeholder="Data Source Name"
+        />
+        <div className="flex gap-4 w-full">
+          <Input
+            value={dataSource.key || ''}
+            onChange={(e) => onEditChange?.({ key: e.target.value })}
+            className="font-mono bg-background border-0 px-2 h-auto flex-1
+                     focus-visible:ring-0 focus-visible:ring-offset-0 
+                     placeholder:text-muted-foreground rounded-md"
+            placeholder="data-source-key"
+          />
+        </div>
+        <Input
+          value={dataSource.description || ''}
+          onChange={(e) => onEditChange?.({ description: e.target.value })}
+          className="bg-background border-0 px-2 h-auto w-full
+                   focus-visible:ring-0 focus-visible:ring-offset-0 
+                   placeholder:text-muted-foreground rounded-md"
+          placeholder="Description"
+        />
       </div>
 
       {/* Configuration Label with Full Width Toggle - fixed size */}
@@ -332,6 +391,9 @@ const DetailContent = React.memo(function DetailContent({
               defineCustomMonacoThemes(monaco)
               applyMonacoTheme(monaco)
               
+              // Set up YAML linting integration
+              setupMonacoIntegration(editor, monaco)
+              
               // Force immediate layout to ensure correct sizing
               editor.layout()
               
@@ -365,6 +427,17 @@ const DetailContent = React.memo(function DetailContent({
           />
         </div>
 
+        {/* YAML Linter Panel - show linting results */}
+        {lintResult && (
+          <div className="mt-3 flex-shrink-0">
+            <YamlLinterPanel
+              result={lintResult}
+              onMessageClick={handleLintMessageClick}
+              className="text-sm"
+            />
+          </div>
+        )}
+
         {/* Save/Cancel buttons - fixed size */}
         {hasChanges && (
           <div className="flex justify-end gap-2 mt-4 flex-shrink-0">
@@ -397,14 +470,14 @@ const DetailContent = React.memo(function DetailContent({
         />
 
         {/* Datasets Section - fixed size, only when they exist */}
-        {dataSets && dataSets.length > 0 && (
+        {componentDataSets && componentDataSets.length > 0 && (
           <div className="flex-shrink-0 mt-4">
             <div className="flex items-center gap-2 mb-4">
               <Table className="h-4 w-4 text-foreground" />
-              <span className="text-sm font-medium">Datasets ({dataSets.length})</span>
+              <span className="text-sm font-medium">Datasets ({componentDataSets.length})</span>
             </div>
             <div className="space-y-3">
-              {dataSets.map((dataSet) => (
+              {componentDataSets.map((dataSet) => (
                 <div
                   key={dataSet.id}
                   className={cn(
@@ -434,7 +507,10 @@ const DetailContent = React.memo(function DetailContent({
                         />
                       </div>
                     </div>
-                    <Table className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
+                    <div className="flex flex-col items-center gap-0.5 ml-2 flex-shrink-0">
+                      <Table className="h-4 w-4 text-muted-foreground" />
+                      <div className="text-[10px] text-muted-foreground text-center">Dataset</div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -532,6 +608,11 @@ export default function DataSourceComponent({
         const result = await amplifyClient.DataSource.create(createData)
         
         if (result.data) {
+          // For new data sources, create an initial version if yamlConfiguration exists
+          if (result.data.yamlConfiguration && result.data.yamlConfiguration.trim()) {
+            await createInitialVersion(result.data)
+          }
+          
           // Update the component state with the new data source
           setEditedDataSource(result.data)
           setHasChanges(false)
@@ -540,25 +621,66 @@ export default function DataSourceComponent({
           return // Early return for successful creation
         }
       } else {
-        // Update existing data source
-        console.log('Updating data source with attachedFiles:', editedDataSource.attachedFiles)
-        const result = await amplifyClient.DataSource.update({
-          id: editedDataSource.id,
-          name: editedDataSource.name,
-          key: editedDataSource.key || undefined,
-          description: editedDataSource.description || undefined,
-          yamlConfiguration: editedDataSource.yamlConfiguration || undefined,
-          attachedFiles: editedDataSource.attachedFiles?.filter((file): file is string => file !== null) || undefined,
-          scorecardId: editedDataSource.scorecardId || undefined,
-          scoreId: editedDataSource.scoreId || undefined,
-          currentVersionId: editedDataSource.currentVersionId || undefined
-        })
+        // Update existing data source - check if yamlConfiguration changed
+        const yamlChanged = dataSource.yamlConfiguration !== editedDataSource.yamlConfiguration
         
-        if (result.data) {
-          setHasChanges(false)
-          // Pass the updated data source back to the parent
-          onSave?.(result.data)
-          return // Early return for successful update
+        if (yamlChanged && editedDataSource.yamlConfiguration && editedDataSource.yamlConfiguration.trim()) {
+          console.log('YAML configuration changed, creating new version')
+          
+          // Create new DataSourceVersion
+          const versionResult = await amplifyClient.DataSourceVersion.create({
+            dataSourceId: editedDataSource.id,
+            yamlConfiguration: editedDataSource.yamlConfiguration.trim(),
+            isFeatured: true,
+            note: `Configuration updated at ${new Date().toLocaleString()}`
+          })
+          
+          if (versionResult.data) {
+            console.log('Created new DataSourceVersion:', versionResult.data.id)
+            
+            // Update the data source with new version as currentVersionId and other changes
+            const updateResult = await amplifyClient.DataSource.update({
+              id: editedDataSource.id,
+              name: editedDataSource.name,
+              key: editedDataSource.key || undefined,
+              description: editedDataSource.description || undefined,
+              yamlConfiguration: editedDataSource.yamlConfiguration || undefined,
+              attachedFiles: editedDataSource.attachedFiles?.filter((file): file is string => file !== null) || undefined,
+              scorecardId: editedDataSource.scorecardId || undefined,
+              scoreId: editedDataSource.scoreId || undefined,
+              currentVersionId: versionResult.data.id
+            })
+            
+            if (updateResult.data) {
+              console.log('Updated DataSource with new currentVersionId:', versionResult.data.id)
+              setHasChanges(false)
+              onSave?.(updateResult.data)
+              return
+            }
+          } else {
+            console.error('Failed to create DataSourceVersion')
+            return
+          }
+        } else {
+          // No YAML change, just update other fields normally
+          console.log('No YAML configuration change, updating normally')
+          const result = await amplifyClient.DataSource.update({
+            id: editedDataSource.id,
+            name: editedDataSource.name,
+            key: editedDataSource.key || undefined,
+            description: editedDataSource.description || undefined,
+            yamlConfiguration: editedDataSource.yamlConfiguration || undefined,
+            attachedFiles: editedDataSource.attachedFiles?.filter((file): file is string => file !== null) || undefined,
+            scorecardId: editedDataSource.scorecardId || undefined,
+            scoreId: editedDataSource.scoreId || undefined,
+            currentVersionId: editedDataSource.currentVersionId || undefined
+          })
+          
+          if (result.data) {
+            setHasChanges(false)
+            onSave?.(result.data)
+            return
+          }
         }
       }
       
@@ -568,6 +690,34 @@ export default function DataSourceComponent({
     } catch (error) {
       console.error('Error saving data source:', error)
       console.error('Error details:', JSON.stringify(error, null, 2))
+    }
+  }
+
+  // Helper function to create initial version for new data sources
+  const createInitialVersion = async (dataSource: Schema['DataSource']['type']) => {
+    try {
+      console.log('Creating initial version for new data source:', dataSource.id)
+      
+      const versionResult = await amplifyClient.DataSourceVersion.create({
+        dataSourceId: dataSource.id,
+        yamlConfiguration: dataSource.yamlConfiguration || '',
+        isFeatured: true,
+        note: 'Initial version created automatically'
+      })
+      
+      if (versionResult.data) {
+        console.log('Created initial DataSourceVersion:', versionResult.data.id)
+        
+        // Update the data source to point to this version
+        await amplifyClient.DataSource.update({
+          id: dataSource.id,
+          currentVersionId: versionResult.data.id
+        })
+        
+        console.log('Updated new DataSource with currentVersionId:', versionResult.data.id)
+      }
+    } catch (error) {
+      console.error('Error creating initial version:', error)
     }
   }
 

@@ -30,6 +30,7 @@ const config: StorybookConfig = {
       config.resolve.alias = {
         ...config.resolve.alias,
         '@': path.resolve(currentDir, '../'),
+        '@number-flow/react': path.resolve(currentDir, '../components/ui/number-flow-dev.tsx'),
       };
     }
     return config;

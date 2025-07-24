@@ -236,8 +236,23 @@ This represents a major milestone as the first working mutation operation in the
 
 ## Configuration
 
-### Client Setup
-To use with MCP clients (e.g., Cursor), configure `mcp.json`:
+### Claude Code Installation
+To install the Plexus MCP server for use with Claude Code for all projects for the current user, use the following command:
+
+```bash
+claude mcp add -s user plexus-mcp-service: /opt/anaconda3/envs/py311/bin/python /Users/username/Projects/MCP/plexus_fastmcp_wrapper.py
+```
+
+Replace `/Users/username/Projects/Plexus` with the actual path to your Plexus project directory.
+
+This command will:
+1. Add the MCP server to Claude Code's configuration
+2. Set the correct transport mode (`stdio`) 
+3. Configure the necessary environment variables
+4. Enable access to all Plexus tools within Claude Code conversations
+
+### Client Setup (Other MCP Clients)
+To use with other MCP clients (e.g., Cursor), configure `mcp.json`:
 ```json
 {
   "mcpServers": {

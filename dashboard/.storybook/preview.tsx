@@ -7,6 +7,32 @@ import { withThemeByClassName } from "@storybook/addon-themes";
 // Import the block registry setup for side effects (registers blocks globally for Storybook)
 import "@/components/blocks/registrySetup";
 
+// Mock Amplify generateClient for Storybook
+const mockGenerateClient = () => ({
+  models: {
+    Account: {
+      list: async () => ({
+        data: [
+          {
+            id: 'mock-account-1',
+            key: 'call-criteria',
+            name: 'Mock Account',
+            settings: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+        ]
+      })
+    }
+  }
+});
+
+// Mock the generateClient function globally for Storybook
+(global as any).generateClient = mockGenerateClient;
+
+// Import AccountProvider after setting up mocks
+import { AccountProvider } from '../app/contexts/AccountContext';
+
 // Add Google Font
 const GoogleFontDecorator = (Story: React.ComponentType) => {
   React.useEffect(() => {
@@ -98,16 +124,18 @@ const preview: Preview = {
       defaultTheme: "light" 
     }),
     (Story) => (
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <div className="min-h-screen bg-background p-4">
-          <Story />
-        </div>
-      </ThemeProvider>
+      <AccountProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <div className="min-h-screen bg-background p-4">
+            <Story />
+          </div>
+        </ThemeProvider>
+      </AccountProvider>
     ),
   ],
 };

@@ -159,8 +159,18 @@ def load(source_identifier: str, fresh: bool):
             # Check if this is a direct dataset configuration (recommended format)
             if 'class' in config:
                 logging.info("Detected direct dataset configuration format")
+                
+                # Handle built-in Plexus classes vs client-specific extensions
+                class_name = config['class']
+                if class_name in ['FeedbackItems']:
+                    # Built-in Plexus classes (single file modules)
+                    class_path = f"plexus.data.{class_name}"
+                else:
+                    # Client-specific extensions (existing behavior)
+                    class_path = f"plexus_extensions.{class_name}.{class_name}"
+                
                 data_config = {
-                    'class': f"plexus_extensions.{config['class']}.{config['class']}",
+                    'class': class_path,
                     'parameters': {k: v for k, v in config.items() if k != 'class'}
                 }
             else:

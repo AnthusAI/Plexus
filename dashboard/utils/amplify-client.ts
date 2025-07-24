@@ -23,7 +23,7 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
     });
     
     // Check if response is a subscription result
-    if ('subscribe' in response) {
+    if (response && typeof response === 'object' && 'subscribe' in response) {
       throw new Error('Subscription responses should be handled by observeGraphQL');
     }
     
@@ -167,6 +167,7 @@ export const amplifyClient = {
       version?: string
       aiProvider?: string
       aiModel?: string
+      isDisabled?: boolean
     }) => {
       const response = await graphqlRequest<{ updateScore: Schema['Score']['type'] }>(`
         mutation UpdateScore($input: UpdateScoreInput!) {
@@ -182,6 +183,7 @@ export const amplifyClient = {
             version
             aiProvider
             aiModel
+            isDisabled
             createdAt
             updatedAt
           }

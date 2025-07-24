@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { toast } from '@/components/ui/use-toast'
@@ -18,6 +18,8 @@ import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBa
 import isEqual from 'lodash/isEqual'
 import { standardizeScoreResults } from '@/utils/data-operations'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
+import { cn } from '@/lib/utils'
+import { Timestamp } from '@/components/ui/timestamp'
 
 export interface EvaluationMetric {
   name: string
@@ -40,9 +42,14 @@ interface ScoreResult {
   metadata: {
     human_label: string | null
     correct: boolean
+    human_explanation: string | null
+    text: string | null
   }
   trace: any | null
   itemId: string | null
+  feedbackItem: {
+    editCommentValue: string | null
+  } | null
 }
 
 interface TaskStage {
@@ -118,6 +125,7 @@ export interface EvaluationTaskData extends BaseTaskData {
 
 export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
   variant?: 'grid' | 'detail'
+  // Added task output display support
   task: {
     id: string
     type: string
@@ -126,6 +134,11 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     time: string
     summary?: string
     description?: string
+    command?: string
+    output?: string // Universal Code YAML output
+    attachedFiles?: string[] // Array of S3 file keys for attachments
+    stdout?: string // Task stdout output
+    stderr?: string // Task stderr output
     data: EvaluationTaskData
     stages?: TaskStageConfig[]
     currentStageName?: string
@@ -146,6 +159,8 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
   extra?: boolean
   isSelected?: boolean
   commandDisplay?: 'hide' | 'show' | 'full'
+  onShare?: () => void
+  onDelete?: (evaluationId: string) => void
 }
 
 function formatDuration(seconds: number): string {
@@ -362,7 +377,7 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   ]);
 
   return (
-    <div className="space-y-2 pb-3">
+    <div className="space-y-2">
       <TaskStatus {...taskStatus} />
       {extra && (
         <EvaluationListAccuracyBar 
@@ -431,7 +446,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
     resultValue: result?.value,
     resultMetadataType: result?.metadata ? typeof result.metadata : 'undefined',
     resultExplanation: result?.explanation,
-    resultTrace: result?.trace ? typeof result.trace : 'undefined'
+    resultTrace: result?.trace ? typeof result.trace : 'undefined',
+    resultFeedbackItem: result?.feedbackItem ? typeof result.feedbackItem : 'undefined'
   });
 
   if (!result) {
@@ -448,7 +464,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
         text: null
       },
       trace: null,
-      itemId: null
+      itemId: null,
+      feedbackItem: null
     };
   }
 
@@ -477,6 +494,18 @@ function parseScoreResult(result: any): ParsedScoreResult {
     }
   }
 
+  // LOG DETAILED METADATA INFORMATION FOR DEBUGGING
+  console.log('parseScoreResult metadata analysis:', {
+    resultId: result?.id,
+    rawMetadata: result.metadata,
+    parsedMetadata: parsedMetadata,
+    feedbackItemId: parsedMetadata?.feedback_item_id,
+    resultFeedbackItemId: result.feedbackItemId,
+    resultFeedbackItem: result.feedbackItem,
+    hasDbRelationship: !!result.feedbackItem,
+    editCommentFromRelationship: result.feedbackItem?.editCommentValue
+  });
+
   // Extract results from nested structure if present
   const firstResultKey = parsedMetadata?.results ? 
     Object.keys(parsedMetadata.results)[0] : null
@@ -495,6 +524,11 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const text = scoreResult?.metadata?.text ?? parsedMetadata.text ?? null;
   const itemId = result.itemId || parsedMetadata.item_id?.toString() || null;
 
+  // Parse feedbackItem data
+  const feedbackItem = result.feedbackItem ? {
+    editCommentValue: result.feedbackItem.editCommentValue || null
+  } : null;
+
   console.log('parseScoreResult processed result:', {
     id,
     value,
@@ -502,7 +536,9 @@ function parseScoreResult(result: any): ParsedScoreResult {
     explanation,
     humanLabel,
     correct,
-    hasTrace: !!trace
+    hasTrace: !!trace,
+    hasFeedbackItem: !!feedbackItem,
+    feedbackEditComment: feedbackItem?.editCommentValue
   });
 
   return {
@@ -517,7 +553,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
       text
     },
     trace,
-    itemId
+    itemId,
+    feedbackItem
   };
 }
 
@@ -917,7 +954,9 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   onSelectScoreResult,
   extra,
   isSelected,
-  commandDisplay: initialCommandDisplay = 'show',
+  commandDisplay: initialCommandDisplay = 'hide',
+  onShare,
+  onDelete,
   ...restProps
 }: EvaluationTaskProps) {
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
@@ -1036,17 +1075,40 @@ evaluation:
     variant === 'detail' ? (
       <div className="flex items-center space-x-2">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+          <DropdownMenuTrigger>
             <CardButton
               icon={MoreHorizontal}
-              onClick={() => {}}
+              onClick={() => {
+                console.log('MoreHorizontal button clicked - dropdown should open');
+              }}
             />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={handleGetCode}>
+            <DropdownMenuItem onSelect={() => {
+              console.log('Get Code menu item selected');
+              handleGetCode();
+            }}>
               <MessageSquareCode className="mr-2 h-4 w-4" />
               Get Code
             </DropdownMenuItem>
+            {onShare && (
+              <DropdownMenuItem onSelect={() => {
+                console.log('Share menu item selected');
+                onShare();
+              }}>
+                <Share className="mr-2 h-4 w-4" />
+                Share
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem onSelect={() => {
+                console.log('Delete menu item selected');
+                onDelete(data.id);
+              }}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         {typeof onToggleFullWidth === 'function' && (
@@ -1072,18 +1134,9 @@ evaluation:
 
   const taskWithDefaults = useMemo(() => ({
     id: task.id,
-    type: (() => {
-      // If we have a task record, use its type directly (just capitalize it)
-      if (taskData?.type) {
-        return taskData.type.split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ')
-      }
-      // Otherwise, this is from an Evaluation record, so append "Evaluation"
-      return `${(task.type || '').split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ')} Evaluation`.trim()
-    })(),
+    type: task.type ? task.type.split(' ').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ') : 'Unknown',
     scorecard: task.scorecard,
     score: task.score,
     time: task.time,
@@ -1189,9 +1242,60 @@ evaluation:
       commandDisplay={commandDisplay}
       {...restProps}
       renderHeader={(props) => (
-        <TaskHeader {...props}>
-          {headerContent}
-        </TaskHeader>
+        <div className={cn(
+          "space-y-1.5 p-0 flex flex-col items-start w-full max-w-full",
+          variant === 'detail' && "px-1"
+        )}>
+          <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+            <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              {variant === 'detail' && (
+                <div className="flex items-center gap-2 mb-3">
+                  <FlaskConical className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-semibold text-muted-foreground">{props.task.type}</span>
+                </div>
+              )}
+              {props.task.name && (
+                <div className="font-semibold text-sm truncate">{props.task.name}</div>
+              )}
+              {props.task.description && (
+                <div className={`text-sm text-muted-foreground ${variant === 'detail' ? '' : 'truncate'}`}>
+                  {props.task.description}
+                </div>
+              )}
+              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                <div className="font-semibold text-sm truncate">{props.task.scorecard}</div>
+              )}
+              {props.task.score && props.task.score.trim() !== '' && (
+                <div className="font-semibold text-sm truncate">{props.task.score}</div>
+              )}
+              <Timestamp time={props.task.time} variant="relative" />
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0">
+              {variant === 'grid' ? (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="text-muted-foreground">
+                    <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                  </div>
+                  <div className="text-xs text-muted-foreground text-center">
+                    {(() => {
+                      const [firstWord, ...restWords] = props.task.type.split(/\s+/);
+                      return (
+                        <>
+                          {firstWord}<br />
+                          {restWords.join(' ')}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {headerContent}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
       renderContent={(props) => {
         // Add logging for content rendering decision

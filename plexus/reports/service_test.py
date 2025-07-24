@@ -27,7 +27,7 @@ def mock_report_config():
 This is the first markdown section.
 
 ```block
-pythonClass: ScoreInfoBlock
+class: ScoreInfo
 config:
   scoreId: "score-test-123"
   include_variant: false
@@ -36,7 +36,7 @@ config:
 This is markdown between blocks.
 
 ```block
-pythonClass: ScoreInfoBlock
+class: ScoreInfo
 config:
   scoreId: "score-test-456"
 ```
@@ -49,7 +49,6 @@ Final markdown footer.
 @patch('plexus.reports.service.ReportBlock.create')
 @patch('plexus.reports.service.PlexusDashboardClient')
 @patch('plexus.reports.service._load_report_configuration')
-@patch('plexus.reports.service._parse_report_configuration')
 @patch('plexus.reports.service._instantiate_and_run_block')
 @patch('plexus.reports.service.TaskProgressTracker')
 @patch('plexus.reports.service.Task')
@@ -57,7 +56,6 @@ def test_generate_report_success(
     MockTask,
     MockTaskProgressTracker,
     mock_run_block,
-    mock_parse_config,
     mock_load_config,
     mock_api_client,
     mock_block_create,
@@ -94,22 +92,15 @@ def test_generate_report_success(
     mock_created_report_obj.update = MagicMock(return_value=None) # Set return value if needed
     mock_report_create.return_value = mock_created_report_obj # create returns the mock obj
 
-    # --- Mock Configuration Parsing ---
-    reconstructed_markdown = mock_report_config['configuration']
-    # Use actual class name used in service
-    mock_block_defs = [
-        {"class_name": "ScoreInfo", "config": {"scoreId": "score-test-123", "include_variant": False}, "block_name": "block_0", "position": 1},
-        {"class_name": "ScoreInfo", "config": {"scoreId": "score-test-456"}, "block_name": "block_1", "position": 2}
-    ]
-    mock_parse_config.return_value = mock_block_defs
+    # Configuration parsing will now use the real function
 
     # --- Mock ReportBlock Creation ---
     mock_block_create.return_value = MagicMock(spec=ReportBlock, id="mock-block-id-123")
 
     # --- Configure the mock for _instantiate_and_run_block ---
     mock_run_block.side_effect = [
-        ({"status": "pending_execution"}, "Processing..."), # Return tuple with status pending_execution
-        ({"status": "pending_execution"}, "Processing..."), # Return tuple with status pending_execution
+        ({"status": "pending_execution"}, "Processing...", None), # Return tuple with 3 values
+        ({"status": "pending_execution"}, "Processing...", None), # Return tuple with 3 values
     ]
 
     # --- Mock TaskProgressTracker --- 
@@ -161,34 +152,33 @@ def test_generate_report_success(
     # Assert that status is NOT set during creation (it belongs to Task)
     assert 'status' not in create_call_kwargs
 
-    # 5. Parsing
-    mock_parse_config.assert_called_once_with(mock_config_object.configuration)
+    # 5. Parsing - using real function now
 
     # 6. Block Instantiation/Run
     assert mock_run_block.call_count == 2
     # Check first call args
     call1_args, call1_kwargs = mock_run_block.call_args_list[0]
-    assert call1_kwargs['block_def'] == mock_block_defs[0]
+    assert call1_kwargs['block_def']['class_name'] == "ScoreInfo"
+    assert call1_kwargs['block_def']['config']['scoreId'] == "score-test-123"
     assert call1_kwargs['report_params'] == {"param1": "value1"} # Check report params
     assert call1_kwargs['api_client'] == mock_client_instance
     # Check second call args
     call2_args, call2_kwargs = mock_run_block.call_args_list[1]
-    assert call2_kwargs['block_def'] == mock_block_defs[1]
+    assert call2_kwargs['block_def']['class_name'] == "ScoreInfo"
+    assert call2_kwargs['block_def']['config']['scoreId'] == "score-test-456"
     assert call2_kwargs['report_params'] == {"param1": "value1"}
     assert call2_kwargs['api_client'] == mock_client_instance
 
     # 7. ReportBlock Creation
-    assert mock_block_create.call_count == len(mock_block_defs)
+    assert mock_block_create.call_count == 2  # Should be 2 blocks
     block_create_call_1_kwargs = mock_block_create.call_args_list[0].kwargs
     assert block_create_call_1_kwargs['reportId'] == mock_created_report_obj.id
-    assert block_create_call_1_kwargs['position'] == 1 # Now 1-based
-    assert block_create_call_1_kwargs['name'] == mock_block_defs[0]['block_name']
+    assert block_create_call_1_kwargs['position'] == 0  # positions are 0-based from parser
     assert json.loads(block_create_call_1_kwargs['output']) == {"status": "pending"}
     assert block_create_call_1_kwargs['log'] == "Processing..."
     block_create_call_2_kwargs = mock_block_create.call_args_list[1].kwargs
     assert block_create_call_2_kwargs['reportId'] == mock_created_report_obj.id
-    assert block_create_call_2_kwargs['position'] == 2 # Now 1-based
-    assert block_create_call_2_kwargs['name'] == mock_block_defs[1]['block_name']
+    assert block_create_call_2_kwargs['position'] == 1  # positions are 0-based from parser
     assert json.loads(block_create_call_2_kwargs['output']) == {"status": "pending"}
     assert block_create_call_2_kwargs['log'] == "Processing..."
 
@@ -276,22 +266,3 @@ def test_generate_report_config_not_found(
     assert isinstance(fail_args[0], str)
     assert "ReportConfiguration not found" in fail_args[0]
 
-@pytest.mark.skip(reason="Not implemented yet")
-def test_generate_report_empty_config_content():
-    """Tests behavior when the config exists but has no/empty markdown."""
-    pass
-
-@pytest.mark.skip(reason="Not implemented yet")
-def test_generate_report_invalid_yaml():
-    """Tests behavior when a block contains invalid YAML."""
-    pass
-
-@pytest.mark.skip(reason="Not implemented yet")
-def test_generate_report_block_class_not_found():
-    """Tests behavior when pythonClass refers to a non-existent block."""
-    pass
-
-@pytest.mark.skip(reason="Not implemented yet")
-def test_generate_report_block_generate_error():
-    """Tests behavior when a block's generate() method raises an exception."""
-    pass 

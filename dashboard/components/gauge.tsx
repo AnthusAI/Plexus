@@ -599,8 +599,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                             maximumFractionDigits: decimalPlaces,
                             useGrouping: false
                           }}
+                          suffix={valueUnit}
                         />
-                        {valueUnit && <span>{valueUnit}</span>}
                       </>
                     )}
                   </span>

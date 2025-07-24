@@ -1,7 +1,7 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
-import { reportBlockDetails, dataSources, scoreResultAttachments } from './storage/resource.js';
+import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { Stack } from 'aws-cdk-lib';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
@@ -13,7 +13,8 @@ const backend = defineBackend({
     data,
     reportBlockDetails,
     dataSources,
-    scoreResultAttachments
+    scoreResultAttachments,
+    taskAttachments
 });
 
 // Get access to the functions

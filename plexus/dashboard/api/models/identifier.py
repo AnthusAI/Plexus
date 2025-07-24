@@ -139,8 +139,16 @@ class Identifier(BaseModel):
                     data[date_field].replace('Z', '+00:00')
                 )
 
+        # Ensure itemId is always a string and handle data corruption
+        raw_item_id = data.get('itemId', '')
+        if not isinstance(raw_item_id, str):
+            # Handle corrupted data where itemId might be False, None, or other types
+            item_id = str(raw_item_id) if raw_item_id is not None else ''
+        else:
+            item_id = raw_item_id
+
         return cls(
-            itemId=data.get('itemId', ''),
+            itemId=item_id,
             name=data.get('name', ''),
             value=data.get('value', ''),
             accountId=data.get('accountId', ''),

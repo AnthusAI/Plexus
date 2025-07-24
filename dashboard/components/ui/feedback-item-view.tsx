@@ -52,7 +52,7 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
   };
 
   return (
-    <div className={cn("p-3 mb-3 bg-muted rounded-md", className)}>
+    <div className={cn("mb-3 bg-muted rounded-md", className)}>
       <div className="grid grid-cols-2 gap-3">
         {/* Answer Values */}
         <div className="py-2">
@@ -237,7 +237,7 @@ export const FeedbackItemsView: React.FC<FeedbackItemsViewProps> = ({
                   <div>
                     {/* Column headers at the top level */}
                     <div className="grid grid-cols-2 gap-3 mb-2">
-                      <div className="font-medium text-sm ml-3">Before</div>
+                      <div className="font-medium text-sm">Before</div>
                       <div className="font-medium text-sm">After</div>
                     </div>
                     

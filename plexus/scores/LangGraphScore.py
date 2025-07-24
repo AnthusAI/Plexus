@@ -13,8 +13,6 @@ from dotenv import load_dotenv
 import json
 import warnings
 from functools import partialmethod
-import inspect  # Ensure inspect is imported at the top
-import uuid # Add this import
 
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.Score import Score
@@ -27,16 +25,18 @@ from langgraph.graph import StateGraph, END
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 from langchain.globals import set_debug, set_verbose
-if os.getenv('DEBUG'):
+# Only enable debug for very specific debugging scenarios
+debug_mode = os.getenv('LANGCHAIN_DEBUG', '').lower() in ['true', '1', 'yes']
+if debug_mode:
     set_debug(True)
+    set_verbose(True)
 else:
     set_debug(False)
     set_verbose(False)
 
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver, CheckpointMetadata
-from langgraph.checkpoint.base import Checkpoint
-import types
-
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from pathlib import Path
+import uuid
 from langgraph.errors import NodeInterrupt
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
@@ -55,163 +55,6 @@ class BatchProcessingPause(Exception):
 # Temporarily suppress the specific Pydantic warning about protected namespaces
 warnings.filterwarnings("ignore", 
     message="Field \"model_.*\" .* has conflict with protected namespace \"model_\".*")
-
-# Custom Checkpointer with detailed logging on serialization error
-class LoggingAsyncPostgresSaver(AsyncPostgresSaver):
-
-    @staticmethod
-    def _find_unserializable(obj, path=""):
-        """Recursively find the first unserializable object (method/function/callable) in a nested structure."""
-        if isinstance(obj, (types.MethodType, types.FunctionType, types.LambdaType)) or callable(obj):
-            try:
-                # Try to get a meaningful name
-                name = getattr(obj, '__qualname__', str(obj))
-                return path, f"<callable: {name}>"
-            except Exception:
-                return path, "<callable: unknown>"
-        elif isinstance(obj, dict):
-            for k, v in obj.items():
-                found_path, found_val = LoggingAsyncPostgresSaver._find_unserializable(v, path=f"{path}['{k}']")
-                if found_path:
-                    return found_path, found_val
-        elif isinstance(obj, (list, tuple)):
-            for i, item in enumerate(obj):
-                found_path, found_val = LoggingAsyncPostgresSaver._find_unserializable(item, path=f"{path}[{i}]")
-                if found_path:
-                    return found_path, found_val
-        # Add checks for other known complex types if necessary
-        return None, None
-
-    async def aput(
-        self, 
-        config: CheckpointMetadata, 
-        checkpoint: Checkpoint, 
-        metadata: CheckpointMetadata, 
-        new_versions: Optional[Dict[str, int]] = None
-    ) -> CheckpointMetadata:
-        """Save checkpoint to DB, logging unserializable data on TypeError."""
-        try:
-            # Log the state *before* attempting serialization
-            logging.debug(f"[Checkpointer] Pre-serialization checkpoint for thread_id: {config['configurable']['thread_id']}")
-            # Use truncate_dict_strings for potentially large state
-            logging.debug(f"[Checkpointer] Checkpoint data (pre-serialization, truncated): {truncate_dict_strings(checkpoint, 150)}")
-            
-            # --- Add safety net: Ensure checkpoint is serializable ---
-            try:
-                logging.debug("[Checkpointer] Applying _ensure_serializable safeguard...")
-                # Use the utility function defined within LangGraphScore scope
-                serializable_checkpoint = _ensure_serializable(checkpoint)
-                logging.debug("[Checkpointer] _ensure_serializable safeguard applied.")
-                logging.debug(f"[Checkpointer] Checkpoint data (post-serialization safeguard, truncated): {truncate_dict_strings(serializable_checkpoint, 150)}")
-            except Exception as e_ensure:
-                logging.error(f"[Checkpointer] Error applying _ensure_serializable: {e_ensure}", exc_info=True)
-                # Fallback to original checkpoint if safeguard fails
-                serializable_checkpoint = checkpoint
-            # --- End safety net ---
-
-            # Directly call the superclass method which handles the internal logic including _dump_blobs
-            logging.debug(f"[Checkpointer] Attempting to save checkpoint for thread_id: {config['configurable']['thread_id']}")
-            # Use the potentially modified checkpoint
-            result = await super().aput(config, serializable_checkpoint, metadata, new_versions)
-            logging.debug(f"[Checkpointer] Successfully saved checkpoint for thread_id: {config['configurable']['thread_id']}")
-            return result
-        except (TypeError, OverflowError) as e:
-            logging.error(f"[Checkpointer] Serialization failed during aput: {e}", exc_info=True)
-            try:
-                # Attempt to find the specific problematic part of the checkpoint
-                problem_path, problem_value = self._find_unserializable(checkpoint)
-                if problem_path:
-                    logging.error(f"[Checkpointer] Found potentially unserializable object at path: {problem_path}")
-                    logging.error(f"[Checkpointer] Value (representation): {problem_value}")
-                else:
-                    logging.error("[Checkpointer] Could not pinpoint the exact unserializable object, but error occurred during serialization.")
-                # Log the full checkpoint structure (truncated) for context
-                logging.error(f"[Checkpointer] Checkpoint structure keys: {list(checkpoint.keys()) if isinstance(checkpoint, dict) else 'N/A'}")
-                logging.error(f"[Checkpointer] Checkpoint data (truncated): {truncate_dict_strings(checkpoint, 150)}")
-
-            except Exception as find_err:
-                logging.error(f"[Checkpointer] Error while trying to find unserializable object: {find_err}")
-            
-            # Re-raise the original serialization error
-            raise e
-        except Exception as e_aput:
-            logging.error(f"[Checkpointer] Unexpected error during aput: {e_aput}", exc_info=True)
-            raise e_aput
-
-# Utility function to ensure an object is serializable
-def _ensure_serializable(obj, _level=0, _current_path="root"):
-    _indent = "  " * _level
-    # Add import inside function if not at module level
-    import inspect
-    import json
-    import logging # Assuming logging is configured
-    from plexus.utils.dict_utils import truncate_dict_strings # Assuming this path is correct
-
-    logging.debug(f"{_indent}ensure_serializable: path='{_current_path}', type='{type(obj)}'")
-
-    if obj is None:
-        logging.debug(f"{_indent} -> None")
-        return None
-    elif isinstance(obj, (str, int, float, bool)):
-        # Truncate long strings in debug logs
-        log_val = str(obj) if not isinstance(obj, str) else obj
-        logging.debug(f"{_indent} -> Basic type: {log_val[:50]}{'...' if len(log_val) > 50 else ''}")
-        return obj
-    elif inspect.ismethod(obj) or inspect.isfunction(obj) or callable(obj):
-        try:
-            name = obj.__qualname__ if hasattr(obj, '__qualname__') else str(obj)
-            logging.warning(f"{_indent} -> Found callable at path '{_current_path}': {name}. Converting to string representation.")
-            return f"<callable: {name}>"
-        except Exception as e:
-            logging.warning(f"{_indent}Error getting callable name at path '{_current_path}': {e}")
-            return "<callable: unknown>"
-    elif isinstance(obj, (list, tuple)):
-        logging.debug(f"{_indent} -> List/Tuple (len={len(obj)}), processing items...")
-        return [_ensure_serializable(item, _level + 1, f"{_current_path}[{i}]") for i, item in enumerate(obj)]
-    elif isinstance(obj, dict):
-        logging.debug(f"{_indent} -> Dict (keys={list(obj.keys())}), processing items...")
-        return {k: _ensure_serializable(v, _level + 1, f"{_current_path}['{k}']") for k, v in obj.items()}
-    elif hasattr(obj, '__dict__'):
-        logging.debug(f"{_indent} -> Custom object: {obj.__class__.__name__}, processing attributes...")
-        try:
-            serializable_dict = {
-                k: _ensure_serializable(v, _level + 1, f"{_current_path}.{k}")
-                for k, v in obj.__dict__.items()
-                # Avoid private/protected attributes and callables
-                if not k.startswith('_') and not callable(v)
-            }
-            serializable_dict['__class__'] = obj.__class__.__name__
-            logging.debug(f"{_indent} -> Serialized custom object: {list(serializable_dict.keys())}")
-            return serializable_dict
-        except (TypeError, AttributeError, RecursionError) as e:
-             logging.warning(f"{_indent}Could not serialize object attribute for {obj.__class__.__name__} at path '{_current_path}': {e}")
-             return f"<object: {obj.__class__.__name__} (serialization error)>"
-    else:
-        # Add specific handling for common unserializable types if needed
-        # E.g., if isinstance(obj, SomeUnserializableType): return repr(obj)
-        logging.debug(f"{_indent} -> Fallback attempt for type: {type(obj)}")
-        try:
-            # Use default=str as a fallback for json.dumps
-            json.dumps(obj, default=str) 
-            logging.debug(f"{_indent} -> Fallback: Directly JSON serializable (or via str)")
-            # If dumps worked with default=str, it might still be problematic for msgpack
-            # Let's try returning the string representation for safety
-            try:
-                s = str(obj)
-                logging.debug(f"{_indent} -> Fallback: Returning string representation: {s[:50]}{'...' if len(s) > 50 else ''}")
-                return s
-            except Exception as e_repr:
-                 logging.warning(f"{_indent}Fallback: Could not get string representation at path '{_current_path}': {e_repr}")
-                 return f"<unserializable: {type(obj).__name__} (repr error)>"
-        except (TypeError, OverflowError) as e_json:
-            logging.debug(f"{_indent} -> Fallback: Not directly JSON serializable, even with str. Error: {e_json}")
-            try:
-                s = str(obj)
-                logging.debug(f"{_indent} -> Fallback: Converting to string: {s[:50]}{'...' if len(s) > 50 else ''}")
-                return s
-            except Exception as e_str:
-                logging.warning(f"{_indent}Fallback: Could not convert object of type {type(obj)} to string at path '{_current_path}': {e_str}")
-                return f"<unserializable: {type(obj).__name__} (str error)>"
 
 class LangGraphScore(Score, LangChainUser):
     """
@@ -311,10 +154,9 @@ class LangGraphScore(Score, LangChainUser):
         """
         Model output containing the validation result.
 
-        :param explanation: Detailed explanation of the validation result.
+        Inherits explanation and confidence fields from Score.Result base class.
         """
-        ...
-        explanation: str
+        pass
 
     class GraphState(BaseModel):
         text: str
@@ -376,9 +218,9 @@ class LangGraphScore(Score, LangChainUser):
                  os.getenv('PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI')
         
         if db_uri:
-            logging.info("Using PostgreSQL checkpoint database with Logging Checkpointer")
-            # Use the custom Logging Checkpointer
-            self._checkpointer_context = LoggingAsyncPostgresSaver.from_conn_string(db_uri)
+            logging.info("Using PostgreSQL checkpoint database")
+            # Create checkpointer and store the context manager
+            self._checkpointer_context = AsyncPostgresSaver.from_conn_string(db_uri)
             # Enter the context and store the checkpointer
             self.checkpointer = await self._checkpointer_context.__aenter__()
             
@@ -404,8 +246,10 @@ class LangGraphScore(Score, LangChainUser):
         )
 
     @staticmethod
-    def add_edges(workflow, node_instances, entry_point, graph_config):
+    def add_edges(workflow, node_instances, entry_point, graph_config, end_node=None):
         """Add edges between nodes in the workflow."""
+        logging.info(f"Building workflow with nodes: {[name for name, _ in node_instances]}")
+        
         for i, (node_name, _) in enumerate(node_instances):
             if i == 0 and entry_point:
                 workflow.add_edge(entry_point, node_name)
@@ -415,38 +259,6 @@ class LangGraphScore(Score, LangChainUser):
                 node_config = next((node for node in graph_config
                                   if node['name'] == previous_node), None)
                 
-                # Add node result storage between nodes
-                storage_node_name = f"{previous_node}_result_storage"
-                def create_storage_function(prev_node_name):
-                    def store_node_result(state):
-                        """Store this node's result under the node name for template access by other nodes."""
-                        logging.info(f"=== Node Result Storage for '{prev_node_name}' ===")
-                        
-                        # Create node result object
-                        node_result = {}
-                        if hasattr(state, 'classification') and state.classification is not None:
-                            node_result['classification'] = state.classification
-                        if hasattr(state, 'explanation') and state.explanation is not None:
-                            node_result['explanation'] = state.explanation
-                        if hasattr(state, 'value') and state.value is not None:
-                            node_result['value'] = state.value
-                        if hasattr(state, 'confidence') and state.confidence is not None:
-                            node_result['confidence'] = state.confidence
-                            
-                        # Create new state with node result stored in node_results container
-                        new_state = state.model_dump()
-                        
-                        # Store in the node_results container
-                        if 'node_results' not in new_state or new_state['node_results'] is None:
-                            new_state['node_results'] = {}
-                        new_state['node_results'][prev_node_name] = node_result
-                        
-                        logging.info(f"Stored node result under '{prev_node_name}': {node_result}")
-                        return state.__class__(**new_state)
-                    return store_node_result
-                
-                workflow.add_node(storage_node_name, create_storage_function(previous_node))
-                
                 if node_config:
                     # Handle output field in node config directly - this is critical for node-level output aliasing
                     if 'output' in node_config:
@@ -454,39 +266,18 @@ class LangGraphScore(Score, LangChainUser):
                         workflow.add_node(
                             value_setter_name,
                             LangGraphScore.create_value_setter_node(
-                                node_config['output']
+                                node_config['output'],
+                                node_name=value_setter_name
                             )
                         )
-                        workflow.add_edge(previous_node, storage_node_name)
-                        workflow.add_edge(storage_node_name, value_setter_name)
+                        workflow.add_edge(previous_node, value_setter_name)
                         workflow.add_edge(value_setter_name, node_name)
+                        logging.info(f"Added output mapping: {previous_node} -> {value_setter_name} -> {node_name}")
                         continue  # Skip other edge processing for this node
                         
-                    # Handle edge clause - direct routing with output aliasing
-                    elif 'edge' in node_config:
-                        edge = node_config['edge']
-                        value_setter_name = f"{previous_node}_value_setter"
-                        # Create value setter node for the edge
-                        workflow.add_node(
-                            value_setter_name,
-                            LangGraphScore.create_value_setter_node(
-                                edge.get('output', {})
-                            )
-                        )
-                        # Add edge from previous node to result storage then to value setter
-                        workflow.add_edge(previous_node, storage_node_name)
-                        workflow.add_edge(storage_node_name, value_setter_name)
-                        # Add edge from value setter to target node
-                        target_node = edge.get('node', node_name)
-                        if target_node == 'END':
-                            workflow.add_edge(value_setter_name, END)
-                        else:
-                            workflow.add_edge(value_setter_name, target_node)
-                    
                     # Handle conditions clause - conditional routing
-                    elif 'conditions' in node_config:
-                        logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
-                        
+                    # Note: Process conditions first - if present, it takes precedence over edge clause
+                    if 'conditions' in node_config:
                         conditions = node_config['conditions']
                         if isinstance(conditions, list):
                             value_setters = {}
@@ -497,48 +288,94 @@ class LangGraphScore(Score, LangChainUser):
                                 workflow.add_node(
                                     value_setter_name, 
                                     LangGraphScore.create_value_setter_node(
-                                        condition.get('output', {})
+                                        condition.get('output', {}),
+                                        node_name=value_setter_name,
+                                        condition_info=condition
                                     )
                                 )
 
-                            def create_routing_function(conditions, value_setters, storage_node, next_node):
+                            # Determine the default fallback target
+                            # If there's an edge clause, use its target; otherwise use next node
+                            if 'edge' in node_config:
+                                edge = node_config['edge']
+                                edge_target = edge.get('node', node_name)
+                                
+                                # If edge has output aliasing, create a value setter for the fallback
+                                if 'output' in edge:
+                                    fallback_value_setter_name = f"{previous_node}_edge_fallback_value_setter"
+                                    workflow.add_node(
+                                        fallback_value_setter_name,
+                                        LangGraphScore.create_value_setter_node(
+                                            edge['output'],
+                                            node_name=fallback_value_setter_name
+                                        )
+                                    )
+                                    # The fallback routes to the value setter, which then routes to the edge target
+                                    workflow.add_edge(fallback_value_setter_name, edge_target if edge_target != 'END' else (end_node or END))
+                                    default_target = fallback_value_setter_name
+                                    logging.info(f"Created edge fallback value setter '{fallback_value_setter_name}' -> '{edge_target}' with output aliasing")
+                                else:
+                                    default_target = edge_target
+                                
+                                logging.info(f"Using edge target '{edge_target}' as fallback for unmatched conditions")
+                            else:
+                                default_target = node_name
+                                logging.info(f"Using next node '{default_target}' as fallback for unmatched conditions")
+
+                            def create_routing_function(conditions, value_setters, fallback_target):
                                 def routing_function(state):
+                                    # Enhanced debugging for classification routing
+                                    logging.info(f"🔍 CONDITIONAL ROUTING DEBUG for {previous_node}:")
+                                    logging.info(f"  - State type: {type(state)}")
+                                    logging.info(f"  - Has classification attr: {hasattr(state, 'classification')}")
+                                    
+                                    if hasattr(state, 'classification'):
+                                        classification_value = getattr(state, 'classification')
+                                        logging.info(f"  - classification value: {classification_value!r} (type: {type(classification_value)})")
+                                    else:
+                                        logging.info(f"  - classification attribute NOT found")
+                                    
+                                    # Log all available state attributes for debugging
+                                    if hasattr(state, 'model_dump'):
+                                        state_dict = state.model_dump()
+                                        logging.info(f"  - Available state fields: {list(state_dict.keys())}")
+                                        
+                                        # Truncate the values before logging
+                                        truncated_state_dict = truncate_dict_strings(state_dict, 100)
+                                        
+                                        for key, value in truncated_state_dict.items():
+                                            if key in ['classification', 'explanation', 'completion', 'value']:
+                                                logging.info(f"    {key}: {value!r}")
+                                    
+                                    # Original routing logic
                                     if hasattr(state, 'classification') and state.classification is not None:
                                         state_value = state.classification.lower()
+                                        logging.info(f"  - Normalized state_value: {state_value!r}")
+                                        logging.info(f"  - Available value_setters: {list(value_setters.keys())}")
+                                        
                                         # Check if we have a value setter for this classification
                                         if state_value in value_setters:
-                                            return storage_node  # Route through storage first
-                                    # Default case - route through storage to next node
-                                    return storage_node
+                                            target = value_setters[state_value]
+                                            logging.info(f"  ✅ CONDITION MATCH: {state_value} -> {target}")
+                                            return target
+                                        else:
+                                            logging.info(f"  ❌ NO CONDITION MATCH for {state_value}")
+                                    else:
+                                        logging.info(f"  ❌ NO CLASSIFICATION FIELD or is None, using fallback")
+                                    
+                                    # Default case - route to fallback target
+                                    logging.info(f"  🔄 FALLBACK from {previous_node}: -> {fallback_target}")
+                                    return fallback_target
                                 return routing_function
 
                             # Create a list of valid targets for conditional edges
-                            valid_targets = [storage_node_name]
+                            valid_targets = list(value_setters.values()) + [default_target]
                             
-                            # Add conditional routing to storage node
+                            # Add conditional routing
                             workflow.add_conditional_edges(
                                 previous_node,
-                                create_routing_function(conditions, value_setters, storage_node_name, node_name),
+                                create_routing_function(conditions, value_setters, default_target),
                                 valid_targets
-                            )
-                            
-                            # Add conditional routing from storage node to value setters or next node
-                            def create_storage_routing_function(conditions, value_setters, next_node):
-                                def storage_routing_function(state):
-                                    if hasattr(state, 'classification') and state.classification is not None:
-                                        state_value = state.classification.lower()
-                                        # Check if we have a value setter for this classification
-                                        if state_value in value_setters:
-                                            return value_setters[state_value]
-                                    # Default case - route to next node
-                                    return next_node
-                                return storage_routing_function
-                            
-                            storage_valid_targets = list(value_setters.values()) + [node_name]
-                            workflow.add_conditional_edges(
-                                storage_node_name,
-                                create_storage_routing_function(conditions, value_setters, node_name),
-                                storage_valid_targets
                             )
 
                             # Add edges from value setters to their target nodes
@@ -546,34 +383,204 @@ class LangGraphScore(Score, LangChainUser):
                                 value_setter_name = value_setters[condition['value'].lower()]
                                 target_node = condition.get('node', node_name)
                                 if target_node == 'END':
-                                    workflow.add_edge(value_setter_name, END)
+                                    final_target = end_node or END
+                                    workflow.add_edge(value_setter_name, final_target)
                                 else:
                                     workflow.add_edge(value_setter_name, target_node)
+                            
+                            logging.info(f"Added conditional routing from {previous_node} with {len(conditions)} conditions and fallback to {default_target}")
                         else:
                             logging.error(f"Conditions is not a list: {conditions}")
-                            workflow.add_edge(previous_node, storage_node_name)
-                            workflow.add_edge(storage_node_name, node_name)
+                            workflow.add_edge(previous_node, node_name)
                     
-                    # No edge or conditions clause - add direct edge through storage to next node
+                    # Handle edge clause - direct routing with output aliasing (only if no conditions)
+                    elif 'edge' in node_config:
+                        edge = node_config['edge']
+                        value_setter_name = f"{previous_node}_value_setter"
+                        # Create value setter node for the edge
+                        workflow.add_node(
+                            value_setter_name,
+                            LangGraphScore.create_value_setter_node(
+                                edge.get('output', {}),
+                                node_name=value_setter_name
+                            )
+                        )
+                        # Add edge from previous node to value setter
+                        workflow.add_edge(previous_node, value_setter_name)
+                        # Add edge from value setter to target node
+                        target_node = edge.get('node', node_name)
+                        if target_node == 'END':
+                            final_target = end_node or END
+                            workflow.add_edge(value_setter_name, final_target)
+                            logging.info(f"Added edge routing: {previous_node} -> {final_target}")
+                        else:
+                            workflow.add_edge(value_setter_name, target_node)
+                            logging.info(f"Added edge routing: {previous_node} -> {target_node}")
+                    
+                    # No edge or conditions clause - add direct edge to next node
                     else:
-                        logging.debug(f"Node '{previous_node}' does not have conditions or edge clause")
-                        workflow.add_edge(previous_node, storage_node_name)
-                        workflow.add_edge(storage_node_name, node_name)
+                        workflow.add_edge(previous_node, node_name)
+                        logging.info(f"Added direct edge: {previous_node} -> {node_name}")
                 else:
-                    # No node config found - add direct edge through storage
-                    workflow.add_edge(previous_node, storage_node_name)
-                    workflow.add_edge(storage_node_name, node_name)
+                    logging.warning(f"No config found for previous_node: {previous_node}")
+        
+        # NEW: Handle edge configurations for the final node that routes to END
+        if node_instances:
+            final_node_name = node_instances[-1][0]
+            final_node_config = next((node for node in graph_config
+                                    if node['name'] == final_node_name), None)
+            
+            # Handle conditional routing for the final node
+            if final_node_config and 'conditions' in final_node_config:
+                conditions = final_node_config['conditions']
+                if isinstance(conditions, list):
+                    value_setters = {}
+                    # Create value setter nodes for each condition
+                    for j, condition in enumerate(conditions):
+                        value_setter_name = f"{final_node_name}_value_setter_{j}"
+                        value_setters[condition['value'].lower()] = value_setter_name
+                        workflow.add_node(
+                            value_setter_name, 
+                            LangGraphScore.create_value_setter_node(
+                                condition.get('output', {}),
+                                node_name=value_setter_name,
+                                condition_info=condition
+                            )
+                        )
+
+                    # For final node conditions, the fallback target should be the end_node or END
+                    # Check if there's also an edge clause for fallback
+                    if 'edge' in final_node_config:
+                        edge = final_node_config['edge']
+                        edge_target = edge.get('node', 'END')
+                        
+                        # If edge has output aliasing, create a value setter for the fallback
+                        if 'output' in edge:
+                            fallback_value_setter_name = f"{final_node_name}_edge_fallback_value_setter"
+                            workflow.add_node(
+                                fallback_value_setter_name,
+                                LangGraphScore.create_value_setter_node(edge['output'])
+                            )
+                            # The fallback routes to the value setter, which then routes to the edge target
+                            workflow.add_edge(fallback_value_setter_name, edge_target if edge_target != 'END' else (end_node or END))
+                            default_target = fallback_value_setter_name
+                            logging.info(f"Created final node edge fallback value setter '{fallback_value_setter_name}' -> '{edge_target}' with output aliasing")
+                        else:
+                            default_target = edge_target if edge_target != 'END' else (end_node or END)
+                        
+                        logging.info(f"Using edge target '{edge_target}' as fallback for final node unmatched conditions")
+                    else:
+                        # No edge clause - default fallback is end_node or END
+                        default_target = end_node or END
+                        logging.info(f"Using end target '{default_target}' as fallback for final node unmatched conditions")
+
+                    def create_final_routing_function(conditions, value_setters, fallback_target):
+                        def routing_function(state):
+                            # Enhanced debugging for final node classification routing
+                            logging.info(f"🔍 FINAL NODE CONDITIONAL ROUTING DEBUG for {final_node_name}:")
+                            logging.info(f"  - State type: {type(state)}")
+                            logging.info(f"  - Has classification attr: {hasattr(state, 'classification')}")
+                            
+                            if hasattr(state, 'classification'):
+                                classification_value = getattr(state, 'classification')
+                                logging.info(f"  - classification value: {classification_value!r} (type: {type(classification_value)})")
+                            else:
+                                logging.info(f"  - classification attribute NOT found")
+                            
+                            # Log all available state attributes for debugging
+                            if hasattr(state, 'model_dump'):
+                                state_dict = state.model_dump()
+                                logging.info(f"  - Available state fields: {list(state_dict.keys())}")
+                                
+                                # Truncate the values before logging
+                                truncated_state_dict = truncate_dict_strings(state_dict, 100)
+                                
+                                for key, value in truncated_state_dict.items():
+                                    if key in ['classification', 'explanation', 'completion', 'value']:
+                                        logging.info(f"    {key}: {value!r}")
+                            
+                            # Original routing logic
+                            if hasattr(state, 'classification') and state.classification is not None:
+                                state_value = state.classification.lower()
+                                logging.info(f"  - Normalized state_value: {state_value!r}")
+                                logging.info(f"  - Available value_setters: {list(value_setters.keys())}")
+                                
+                                # Check if we have a value setter for this classification
+                                if state_value in value_setters:
+                                    target = value_setters[state_value]
+                                    logging.info(f"  ✅ FINAL NODE CONDITION MATCH: {state_value} -> {target}")
+                                    return target
+                                else:
+                                    logging.info(f"  ❌ NO FINAL NODE CONDITION MATCH for {state_value}")
+                            else:
+                                logging.info(f"  ❌ NO CLASSIFICATION FIELD or is None, using fallback")
+                            
+                            # Default case - route to fallback target
+                            logging.info(f"  🔄 FINAL NODE FALLBACK: -> {fallback_target}")
+                            return fallback_target
+                        return routing_function
+
+                    # Create a list of valid targets for conditional edges
+                    valid_targets = list(value_setters.values()) + [default_target]
+                    
+                    # Add conditional routing for final node
+                    workflow.add_conditional_edges(
+                        final_node_name,
+                        create_final_routing_function(conditions, value_setters, default_target),
+                        valid_targets
+                    )
+
+                    # Add edges from value setters to their target nodes
+                    for condition in conditions:
+                        value_setter_name = value_setters[condition['value'].lower()]
+                        target_node = condition.get('node', 'END')
+                        if target_node == 'END':
+                            final_target = end_node or END
+                            workflow.add_edge(value_setter_name, final_target)
+                        else:
+                            workflow.add_edge(value_setter_name, target_node)
+                    
+                    logging.info(f"Added final node conditional routing from {final_node_name} with {len(conditions)} conditions and fallback to {default_target}")
+                    
+                    # Return True to indicate we handled the final node's routing
+                    return True
+            
+            # Handle edge configurations for the final node that routes to END (existing logic)
+            elif final_node_config and 'edge' in final_node_config:
+                edge = final_node_config['edge']
+                target_node = edge.get('node')
+                
+                # Only process if this edge routes to END
+                if target_node == 'END' and 'output' in edge:
+                    value_setter_name = f"{final_node_name}_value_setter"
+                    # Create value setter node for the final edge
+                    workflow.add_node(
+                        value_setter_name,
+                        LangGraphScore.create_value_setter_node(
+                            edge.get('output', {})
+                        )
+                    )
+                    # Add edge from final node to value setter
+                    workflow.add_edge(final_node_name, value_setter_name)
+                    # Add edge from value setter to end target
+                    final_target = end_node or END
+                    workflow.add_edge(value_setter_name, final_target)
+                    logging.info(f"Added final node edge routing: {final_node_name} -> {value_setter_name} -> {final_target}")
+                    
+                    # Return True to indicate we handled the final node's routing
+                    return True
+        
+        logging.info("Workflow edges configured")
+        return False  # Indicate we didn't handle final node routing
 
     async def build_compiled_workflow(self):
         """Build the LangGraph workflow with optional persistence."""
-        logging.info("=== Building Workflow ===")
+        logging.info("Building LangGraph workflow")
         
         # First collect node instances
         node_instances = []
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
             for node_configuration_entry in self.parameters.graph:
-                logging.debug(f"Processing node configuration: {node_configuration_entry}")
-                
                 for attribute in ['model_provider', 'model_name', 'model_region', 
                                 'temperature', 'max_tokens']:
                     if attribute not in node_configuration_entry:
@@ -585,13 +592,13 @@ class LangGraphScore(Score, LangChainUser):
                     node_class_name = node_configuration_entry['class']
                     node_name = node_configuration_entry['name']
                     try:
-                        logging.info(f"Attempting to import class: {node_class_name}")
-                        node_class = self._import_class(node_class_name)
+                        node_class = LangGraphScore._import_class(node_class_name)
                         if node_class is None:
                             raise ValueError(f"Could not import class {node_class_name}")
                         
                         node_instance = node_class(**node_configuration_entry)
                         node_instances.append((node_name, node_instance))
+                        logging.info(f"Added node: {node_name} ({node_class_name})")
                     except Exception as e:
                         logging.error(f"Error creating node instance for {node_class_name}: {str(e)}")
                         logging.error(f"Configuration: {node_configuration_entry}")
@@ -603,8 +610,6 @@ class LangGraphScore(Score, LangChainUser):
         combined_state_class = self.create_combined_graphstate_class(
             [instance for _, instance in node_instances]
         )
-        logging.info(f"Created combined state class: {combined_state_class}")
-        logging.info(f"Combined state fields: {combined_state_class.model_fields.keys()}")
         
         # Store the combined state class
         self.combined_state_class = combined_state_class
@@ -613,46 +618,63 @@ class LangGraphScore(Score, LangChainUser):
             # Use combined state class when creating workflow
             workflow = StateGraph(combined_state_class)
 
-            try:
-                # Process nodes - now using combined_state_class
-                for node_name, node_instance in node_instances:
+            # Add all nodes to the graph
+            for node_name, node_instance in node_instances:
+                workflow.add_node(
+                    node_name, 
+                    node_instance.build_compiled_workflow(
+                        graph_state_class=combined_state_class
+                    )
+                )
+
+            # Set the entry point to the first node
+            if node_instances:
+                workflow.set_entry_point(node_instances[0][0])
+
+            # Add the final output aliasing node if needed
+            output_aliasing_node_name = None
+            if hasattr(self.parameters, 'output') and self.parameters.output:
+                output_aliasing_node_name = 'output_aliasing'
+                output_aliasing_function = self.generate_output_aliasing_function(
+                    self.parameters.output, 
+                    self.parameters.graph
+                )
+                workflow.add_node(output_aliasing_node_name, output_aliasing_function)
+                workflow.add_edge(output_aliasing_node_name, END)
+                logging.info("Added final output aliasing node, which will connect to END.")
+
+            # Add edges between nodes, redirecting any 'END' edges to the output aliasing node
+            final_node_handled = self.add_edges(workflow, node_instances, None, self.parameters.graph, end_node=output_aliasing_node_name)
+
+            # Connect the last sequential node to the appropriate end target
+            if node_instances and not final_node_handled:
+                last_node_name = node_instances[-1][0]
+                last_node_config = next((n for n in self.parameters.graph if n['name'] == last_node_name), None)
+                
+                # Check if the final node has a regular output clause that needs a value setter
+                if last_node_config and 'output' in last_node_config and not ('edge' in last_node_config or 'conditions' in last_node_config):
+                    # Final node has regular output clause - create value setter
+                    value_setter_name = f"{last_node_name}_value_setter"
                     workflow.add_node(
-                        node_name, 
-                        node_instance.build_compiled_workflow(
-                            graph_state_class=combined_state_class
+                        value_setter_name,
+                        LangGraphScore.create_value_setter_node(
+                            last_node_config['output']
                         )
                     )
-            except Exception as e:
-                logging.error(f"Error creating node {node_name}: {str(e)}")
-                logging.error(f"Full traceback: {traceback.format_exc()}")
-                raise
+                    # Connect: final_node -> value_setter -> end_target
+                    workflow.add_edge(last_node_name, value_setter_name)
+                    end_target = output_aliasing_node_name or END
+                    workflow.add_edge(value_setter_name, end_target)
+                    logging.info(f"Connected final node '{last_node_name}' with output aliasing: {last_node_name} -> {value_setter_name} -> {end_target}")
+                
+                # Only add a fall-through edge if the last node doesn't have any explicit routing or output
+                elif not (last_node_config and ('edge' in last_node_config or 'conditions' in last_node_config or 'output' in last_node_config)):
+                    end_target = output_aliasing_node_name or END
+                    workflow.add_edge(last_node_name, end_target)
+                    logging.info(f"Connected final sequential node '{last_node_name}' to '{end_target}'.")
 
-            # Set entry point to first node
-            first_node = node_instances[0][0]
-            workflow.set_entry_point(first_node)
-
-            # Add edges using our add_edges method
-            LangGraphScore.add_edges(workflow, node_instances, None, self.parameters.graph)
-
-            # Add final node and edge from last node to END
-            last_node = node_instances[-1][0]
+            logging.info("Workflow compilation complete.")
             
-            # Add output aliasing if needed
-            if hasattr(self.parameters, 'output') and self.parameters.output is not None:
-                logging.info(f"Adding output aliasing node with mapping: {self.parameters.output}")
-                output_aliasing_function = LangGraphScore.generate_output_aliasing_function(
-                    self.parameters.output
-                )
-                workflow.add_node('output_aliasing', output_aliasing_function)
-                workflow.add_edge(last_node, 'output_aliasing')
-                workflow.add_edge('output_aliasing', END)
-                logging.info("Added output aliasing node to workflow")
-            else:
-                workflow.add_edge(last_node, END)
-                logging.info("No output aliasing needed, connected last node directly to END")
-
-            logging.info("=== Workflow Build Complete ===")
-
             # Compile with checkpointer only if configured
             app = workflow.compile(
                 checkpointer=self.checkpointer if self.checkpointer else None
@@ -661,13 +683,8 @@ class LangGraphScore(Score, LangChainUser):
             # Store node instances for later token usage calculation
             self.node_instances = node_instances
             
-            logging.info(f"Created combined state class with fields: {combined_state_class.__annotations__}")
-            
             # Store the compiled workflow before trying to visualize it
             self.workflow = app
-            
-            # Generate and log the graph visualization
-            # self.generate_graph_visualization("./tmp/workflow_graph.png")
             
             return app
             
@@ -909,12 +926,7 @@ class LangGraphScore(Score, LangChainUser):
         """
         # Start with base annotations
         base_annotations = self.GraphState.__annotations__.copy()
-        logging.info(f"Starting with base annotations: {base_annotations}")
 
-        # Add a special field to store all node results
-        base_annotations['node_results'] = Optional[dict]
-        logging.info(f"Added node_results field to store all node outputs")
-        
         # First collect all attributes from node instances
         for instance in instances:
             # Add fields from the node's GraphState
@@ -926,19 +938,15 @@ class LangGraphScore(Score, LangChainUser):
 
             # Add fields from output mappings
             if hasattr(instance.parameters, 'output') and instance.parameters.output is not None:
-                logging.info(f"Adding output fields from node {instance.__class__.__name__}: {instance.parameters.output}")
                 for alias, original in instance.parameters.output.items():
                     base_annotations[alias] = Optional[str]
-                    logging.info(f"Added node output alias {alias} with type Optional[str]")
                     
             # Check for edge configuration with output mappings
             if hasattr(instance.parameters, 'edge') and instance.parameters.edge is not None:
                 edge_config = instance.parameters.edge
                 if isinstance(edge_config, dict) and 'output' in edge_config:
-                    logging.info(f"Adding edge output fields from node {instance.__class__.__name__}: {edge_config['output']}")
                     for alias, original in edge_config['output'].items():
                         base_annotations[alias] = Optional[str]
-                        logging.info(f"Added edge output alias {alias} with type Optional[str]")
 
             # Check for conditions configuration with output mappings
             if hasattr(instance.parameters, 'conditions') and instance.parameters.conditions is not None:
@@ -946,38 +954,28 @@ class LangGraphScore(Score, LangChainUser):
                 if isinstance(conditions, list):
                     for condition in conditions:
                         if isinstance(condition, dict) and 'output' in condition:
-                            logging.info(f"Adding condition output fields from node {instance.__class__.__name__}: {condition['output']}")
                             for alias, original in condition['output'].items():
                                 base_annotations[alias] = Optional[str]
-                                logging.info(f"Added condition output alias {alias} with type Optional[str]")
 
         # Also check the graph configuration directly from the YAML
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
             for node_config in self.parameters.graph:
                 # Check for edge output mappings
                 if 'edge' in node_config and isinstance(node_config['edge'], dict) and 'output' in node_config['edge']:
-                    node_name = node_config.get('name', 'unknown')
-                    logging.info(f"Adding edge output fields from graph config node {node_name}: {node_config['edge']['output']}")
                     for alias, original in node_config['edge']['output'].items():
                         base_annotations[alias] = Optional[str]
-                        logging.info(f"Added edge output alias {alias} from graph config")
                 
                 # Check for conditions output mappings
                 if 'conditions' in node_config and isinstance(node_config['conditions'], list):
-                    node_name = node_config.get('name', 'unknown')
                     for condition in node_config['conditions']:
                         if isinstance(condition, dict) and 'output' in condition:
-                            logging.info(f"Adding condition output fields from graph config node {node_name}: {condition['output']}")
                             for alias, original in condition['output'].items():
                                 base_annotations[alias] = Optional[str]
-                                logging.info(f"Added condition output alias {alias} from graph config")
 
         # Handle output aliases from main parameters
         if hasattr(self.parameters, 'output') and self.parameters.output is not None:
-            logging.info(f"Adding score output fields: {self.parameters.output}")
             for alias, original in self.parameters.output.items():
                 base_annotations[alias] = Optional[str]
-                logging.info(f"Added score output alias {alias} with type Optional[str]")
 
         # Create new class with updated configuration
         class CombinedGraphState(self.GraphState):
@@ -989,9 +987,6 @@ class LangGraphScore(Score, LangChainUser):
                 validate_assignment=False,  # Don't validate on assignment
                 populate_by_name=True,  # Allow population by field name
                 use_enum_values=True,  # Use enum values instead of enum objects
-                # Allow fields to be set dynamically
-                protected_namespaces=(),  # Don't protect any namespaces
-                validate_call=False,  # Don't validate function calls
             )
 
             def __init__(self, **data):
@@ -1003,16 +998,12 @@ class LangGraphScore(Score, LangChainUser):
                 # Override defaults with provided data
                 defaults.update(data)
                 super().__init__(**defaults)
-
-        logging.info(f"Base GraphState fields: {self.GraphState.__annotations__}")
-        logging.info(f"Final combined state fields: {CombinedGraphState.__annotations__}")
         
         return CombinedGraphState
 
     @staticmethod
     def generate_input_aliasing_function(input_mapping: dict) -> FunctionType:
         def input_aliasing(state):
-            logging.info(f"Input aliasing: {input_mapping}")
             for alias, original in input_mapping.items():
                 if hasattr(state, original):
                     setattr(state, alias, getattr(state, original))
@@ -1020,40 +1011,206 @@ class LangGraphScore(Score, LangChainUser):
         return input_aliasing
 
     @staticmethod
-    def generate_output_aliasing_function(output_mapping: dict) -> FunctionType:
+    def generate_output_aliasing_function(output_mapping: dict, graph_config: list = None) -> FunctionType:
         def output_aliasing(state):
-            logging.debug("=== Output Aliasing Node Start ===")
-            logging.debug(f"Input state type: {type(state)}")
-            logging.debug(f"Input state fields: {state.model_fields.keys()}")
-            logging.debug(f"Input state values: {truncate_dict_strings(state.model_dump(), max_length=80)}")
-            
+                        
             # Create a new dict with all current state values
             new_state = state.model_dump()
             
-            # Add aliased values
+            # Apply aliased values, but preserve conditional outputs that actually fired
             for alias, original in output_mapping.items():
+                
+                # Check if this field was set by a condition that actually fired
+                skip_alias = False
+                if graph_config:
+                    for node_config in graph_config:
+                        if 'conditions' in node_config:
+                            node_name = node_config.get('name', 'unknown_node')
+                            
+                            # Get node classification for future use if needed
+                            # node_classification = None
+                            # if hasattr(state, 'classification'):
+                            #     node_classification = getattr(state, 'classification')
+                            
+                            for condition in node_config['conditions']:
+                                if 'output' in condition and alias in condition['output']:
+                                    # condition_value = condition.get('value', '').lower()  # Not used currently
+                                    current_alias_value = getattr(state, alias, None)
+                                    expected_output_value = condition['output'].get(alias)
+                                    
+                                    # Only preserve if this condition actually fired:
+                                    # The sophisticated approach: check if this specific condition 
+                                    # actually executed by examining the trace/metadata.
+                                    # 
+                                    # For now, we implement a simple heuristic:
+                                    # - A condition fired if the workflow actually went to END from this node
+                                    # - We can detect this by checking if the trace shows this node 
+                                    #   completed its execution early (routed to END)
+                                    
+                                    routes_to_end = condition.get('node') == 'END'
+                                    values_match = current_alias_value == expected_output_value
+                                    has_value = current_alias_value is not None and current_alias_value != ""
+                                    
+                                    # Check if this node actually routed to END by examining metadata
+                                    node_routed_to_end = False
+                                    trace_available = False
+                                    
+                                    if hasattr(state, 'metadata') and state.metadata:
+                                        trace = state.metadata.get('trace', {})
+                                        node_results = trace.get('node_results', [])
+                                        
+                                        if node_results:  # Trace information is available
+                                            trace_available = True
+                                            
+                                            # Look for this specific node in the trace
+                                            for node_result in node_results:
+                                                if node_result.get('node_name') == node_name:
+                                                    # If the node's output matches the condition trigger, 
+                                                    # and the condition routes to END, then it fired
+                                                    node_output = node_result.get('output', {})
+                                                    node_classification = node_output.get('classification', '').lower()
+                                                    condition_trigger = condition.get('value', '').lower()
+                                                    
+                                                    if node_classification == condition_trigger and routes_to_end:
+                                                        node_routed_to_end = True
+                                                    break
+                                    
+                                    # FIXED: Trace-based conditional output detection logic
+                                    # Sophisticated approach: Use trace metadata when available to determine
+                                    # if conditions actually fired, with fallback for backward compatibility
+                                    
+                                    condition_fired = False
+                                    
+                                    # Try trace-based detection first (more accurate)
+                                    if hasattr(state, 'metadata') and state.metadata and 'trace' in state.metadata:
+                                        trace = state.metadata.get('trace', {})
+                                        node_results = trace.get('node_results', [])
+                                        
+                                        if node_results:  # Trace information is available
+                                            # Look for value setter nodes that correspond to this condition
+                                            for node_result in node_results:
+                                                result_node_name = node_result.get('node_name', '')
+                                                
+                                                # Check if this is a value setter for the current node's condition
+                                                if result_node_name.startswith(f"{node_name}_value_setter"):
+                                                    # Check if this value setter is for the condition we're evaluating
+                                                    result_condition = node_result.get('condition', {})
+                                                    result_trigger = result_condition.get('trigger_value', '').lower()
+                                                    condition_trigger = condition.get('value', '').lower()
+                                                    
+                                                    if result_trigger == condition_trigger:
+                                                        # Check if this value setter set the output field we're checking
+                                                        node_output = node_result.get('output', {})
+                                                        if alias in node_output:
+                                                            condition_fired = True
+                                                            logging.info(f"Trace-based detection: Condition fired for {alias} from {result_node_name} (set {alias}={node_output[alias]})")
+                                                            break
+                                                        else:
+                                                            logging.debug(f"Trace-based detection: Value setter {result_node_name} executed but didn't set {alias}")
+                                                
+                                                # Also check the original node for backward compatibility
+                                                elif result_node_name == node_name:
+                                                    # Check if this node's output matches the condition trigger
+                                                    node_output = node_result.get('output', {})
+                                                    node_classification = node_output.get('classification', '').lower()
+                                                    condition_trigger = condition.get('value', '').lower()
+                                                    
+                                                    # Condition fired if node classification matches trigger and routes to END
+                                                    if node_classification == condition_trigger and routes_to_end:
+                                                        condition_fired = True
+                                                        logging.info(f"Trace-based detection: Condition fired for {alias} from {node_name}")
+                                                        break
+                                                    else:
+                                                        logging.debug(f"Trace-based detection: Condition did NOT fire for {alias} from {node_name} (classification={node_classification}, trigger={condition_trigger})")
+                                    
+                                    # Fallback: Pattern matching + legacy preservation (backward compatibility)
+                                    if not condition_fired and not (hasattr(state, 'metadata') and state.metadata and 'trace' in state.metadata):
+                                        # When no trace metadata is available, use fallback logic:
+                                        # 1. If current state would trigger this condition, preserve intended output
+                                        # 2. If current value matches conditional output, preserve it (legacy behavior)
+                                        
+                                        current_classification = getattr(state, 'classification', '').lower() if hasattr(state, 'classification') else ''
+                                        condition_trigger = condition.get('value', '').lower()
+                                        condition_state_field = condition.get('state', 'classification')
+                                        
+                                        # Get the value from the condition's state field
+                                        condition_state_value = getattr(state, condition_state_field, '').lower() if hasattr(state, condition_state_field) else ''
+                                        
+                                        # Check if this condition should fire based on current state
+                                        condition_should_fire = (
+                                            routes_to_end and
+                                            condition_state_value == condition_trigger
+                                        )
+                                        
+                                        # Check if the current value matches what this condition would output (legacy preservation)
+                                        legacy_preservation = (
+                                            routes_to_end and
+                                            values_match and 
+                                            has_value
+                                        )
+                                        
+                                        if condition_should_fire:
+                                            # If the condition should fire, preserve the intended output value
+                                            condition_fired = True
+                                            # Override the current value with the intended conditional output
+                                            setattr(state, alias, expected_output_value)
+                                            logging.info(f"Fallback detection: Condition should fire, setting {alias} = {expected_output_value!r} from {node_name} (condition: {condition_state_field}={condition_state_value} == {condition_trigger})")
+                                        elif legacy_preservation:
+                                            # Legacy behavior: if current value matches conditional output, preserve it
+                                            # This handles cases where a condition fired earlier but state changed later
+                                            condition_fired = True
+                                            logging.info(f"Fallback detection: Preserving existing {alias} = {current_alias_value!r} from {node_name} (legacy pattern match)")
+                                        else:
+                                            logging.debug(f"Fallback detection: No preservation for {alias} from {node_name} (should_fire={condition_should_fire}, legacy_match={legacy_preservation})")
+                                    
+                                    # Additional logging for debugging
+                                    logging.debug(f"Conditional detection for {alias} from {node_name}:")
+                                    logging.debug(f"  - routes_to_end: {routes_to_end}")
+                                    logging.debug(f"  - values_match: {values_match} (current={current_alias_value}, expected={expected_output_value})")
+                                    logging.debug(f"  - has_value: {has_value}")
+                                    logging.debug(f"  - condition_fired: {condition_fired}")
+                                    
+                                    if condition_fired:
+                                        logging.info(f"Preserving conditional output {alias} = {current_alias_value!r} from node {node_name} (condition fired)")
+                                        skip_alias = True
+                                        break
+                                    else:
+                                        logging.debug(f"Not preserving {alias} from node {node_name}: condition did not fire (current={current_alias_value}, expected={expected_output_value}, routes_to_end={routes_to_end})")
+                            
+                            if skip_alias:
+                                break
+                
+                if skip_alias:
+                    continue  # Skip this alias - preserve the conditional output that actually fired
+                
                 if hasattr(state, original):
                     original_value = getattr(state, original)
+                    
+                    # Defensive check: never set a field to None, provide sensible defaults
+                    if original_value is None:
+                        if alias == 'value':
+                            original_value = "No"  # Default classification value
+                        elif alias in ['explanation', 'criteria_met']:
+                            original_value = ""  # Default empty string for text fields
+                        else:
+                            original_value = ""  # General fallback
+                        logging.warning(f"Output aliasing: {original} was None, defaulting {alias} to '{original_value}'")
+                    
                     new_state[alias] = original_value
+                    logging.info(f"Output aliasing: {original} = {original_value!r} -> {alias}")
+
                     # Also directly set on the state object to ensure it's accessible
                     setattr(state, alias, original_value)
-                    value = str(original_value)
-                    if len(value) > 80:
-                        value = value[:77] + "..."
-                    logging.info(f"Added alias {alias}={value} from {original}")
                 else:
+                    logging.info(f"DEBUG: {original} not found as attribute, treating as literal")
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
                     # Also directly set on the state object
                     setattr(state, alias, original)
-                    logging.info(f"Added literal value {alias}={original}")
             
             # Create new state with extra fields allowed
             combined_state = state.__class__(**new_state)
-            logging.info(f"Output state type: {type(combined_state)}")
-            logging.info(f"Output state fields: {combined_state.model_fields.keys()}")
-            logging.info(f"Output state values: {truncate_dict_strings(combined_state.model_dump(), max_length=80)}")
-            logging.info("=== Output Aliasing Node End ===")
+            
             return combined_state
             
         return output_aliasing
@@ -1062,32 +1219,16 @@ class LangGraphScore(Score, LangChainUser):
     def _import_class(class_name):
         """Import a class from the nodes module."""
         try:
-            # Import from the nodes package
-            module = importlib.import_module('plexus.scores.nodes')
-            logging.debug(f"Attempting to get class {class_name} from nodes module")
-            logging.debug(f"Module contents: {dir(module)}")
-            
-            # List all modules in plexus.scores.nodes
-            import pkgutil
-            package = importlib.import_module('plexus.scores.nodes')
-            modules = [name for _, name, _ in pkgutil.iter_modules(package.__path__)]
-            logging.debug(f"Available modules in plexus.scores.nodes: {modules}")
-            
             # Try to import specific module
             specific_module_path = f'plexus.scores.nodes.{class_name}'
-            logging.debug(f"Attempting to import from specific path: {specific_module_path}")
             specific_module = importlib.import_module(specific_module_path)
-            logging.debug(f"Specific module contents: {dir(specific_module)}")
             
             # Check what's actually in the module
             for item_name in dir(specific_module):
                 item = getattr(specific_module, item_name)
                 if not item_name.startswith('_'):  # Skip private attributes
-                    logging.debug(f"Item '{item_name}' is of type: {type(item)}")
                     if isinstance(item, type):
-                        logging.debug(f"Found class: {item_name}")
                         if item_name == class_name:
-                            logging.debug(f"Found matching class {class_name}")
                             return item
             
             raise ImportError(
@@ -1097,7 +1238,6 @@ class LangGraphScore(Score, LangChainUser):
             
         except Exception as e:
             logging.error(f"Error importing class {class_name}: {str(e)}")
-            logging.error(f"Stack trace: {traceback.format_exc()}")
             raise
 
     def get_prompt_templates(self):
@@ -1118,7 +1258,6 @@ class LangGraphScore(Score, LangChainUser):
                     node_class_name = node_configuration_entry['class']
                     node_name = node_configuration_entry['name']
                     node_class = LangGraphScore._import_class(node_class_name)
-                    logging.info(f"Node class: {node_class}")
                     node_instance = node_class(**node_configuration_entry)
                     node_instances.append((node_name, node_instance))
                     node_templates.append(node_instance.get_prompt_templates())
@@ -1145,7 +1284,6 @@ class LangGraphScore(Score, LangChainUser):
                     node_class_name = node_configuration_entry['class']
                     node_name = node_configuration_entry['name']
                     node_class = LangGraphScore._import_class(node_class_name)
-                    logging.info(f"Node class: {node_class}")
                     node_instance = node_class(**node_configuration_entry)
                     node_instances.append((node_name, node_instance))
                     example_refinement_templates.append(node_instance.get_example_refinement_template())
@@ -1155,40 +1293,71 @@ class LangGraphScore(Score, LangChainUser):
         return example_refinement_templates
 
     @staticmethod
-    def create_value_setter_node(output_mapping: dict) -> FunctionType:
+    def create_value_setter_node(output_mapping: dict, node_name: str = "value_setter", condition_info: dict = None) -> FunctionType:
         def value_setter(state):
-            logging.info("=== Value Setter Node Start ===")
-            logging.info(f"Input state type: {type(state)}")
-            logging.info(f"Input state fields: {state.model_fields.keys()}")
-            logging.info(f"Input state values: {truncate_dict_strings(state.model_dump(), max_length=80)}")
+            logging.debug(f"Value setter '{node_name}' processing aliases: {list(output_mapping.keys())}")
+            logging.debug(f"Input state dump: {state.model_dump()}")
             
             # Create a new dict with all current state values
             new_state = state.model_dump()
+            
+            # Track what was set for trace logging
+            output_state = {}
             
             # Add aliased values
             for alias, original in output_mapping.items():
                 if hasattr(state, original):
                     original_value = getattr(state, original)
+                    logging.debug(f"Aliasing {original} = {original_value!r} -> {alias}")
                     new_state[alias] = original_value
+                    output_state[alias] = original_value
                     # Also directly set on the state object to ensure it's accessible
                     setattr(state, alias, original_value)
-                    value = str(original_value)
-                    if len(value) > 80:
-                        value = value[:77] + "..."
-                    logging.info(f"Added alias {alias}={value} from {original}")
                 else:
+                    logging.debug(f"Original field '{original}' not found in state, treating as literal")
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
+                    output_state[alias] = original
                     # Also directly set on the state object
                     setattr(state, alias, original)
-                    logging.info(f"Added literal value {alias}={original}")
             
             # Create new state with extra fields allowed
             combined_state = state.__class__(**new_state)
-            logging.info(f"Output state type: {type(combined_state)}")
-            logging.info(f"Output state fields: {combined_state.model_fields.keys()}")
-            logging.info(f"Output state values: {truncate_dict_strings(combined_state.model_dump(), max_length=80)}")
-            logging.info("=== Value Setter Node End ===")
+            
+            # Add trace logging for conditional output setting
+            if condition_info:
+                logging.info(f"🎯 CONDITIONAL OUTPUT SET by '{node_name}': {output_state}")
+                logging.info(f"   Condition: {condition_info.get('state', 'classification')} = '{condition_info.get('value')}' -> {condition_info.get('node', 'END')}")
+                
+                # Add trace metadata to record that this condition fired
+                if not hasattr(combined_state, 'metadata') or combined_state.metadata is None:
+                    new_state['metadata'] = {}
+                    setattr(combined_state, 'metadata', {})
+                    
+                if 'trace' not in combined_state.metadata:
+                    combined_state.metadata['trace'] = {'node_results': []}
+                    new_state['metadata']['trace'] = {'node_results': []}
+                
+                # Record the conditional execution in trace
+                trace_entry = {
+                    "node_name": node_name,
+                    "input": {"condition_triggered": True},
+                    "output": output_state.copy()
+                }
+                
+                # Add condition trigger info to the trace
+                if condition_info:
+                    trace_entry["condition"] = {
+                        "state_field": condition_info.get('state', 'classification'),
+                        "trigger_value": condition_info.get('value'),
+                        "target_node": condition_info.get('node', 'END')
+                    }
+                
+                combined_state.metadata['trace']['node_results'].append(trace_entry)
+                new_state['metadata']['trace']['node_results'].append(trace_entry)
+                
+                logging.info(f"   Added trace entry for conditional execution: {trace_entry}")
+            
             return combined_state
             
         return value_setter
@@ -1198,7 +1367,7 @@ class LangGraphScore(Score, LangChainUser):
         model_input: Score.Input,
         thread_id: Optional[str] = None,
         batch_data: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **_kwargs: Any
     ) -> Score.Result:
         """
         Make predictions using the LangGraph workflow.
@@ -1238,87 +1407,47 @@ class LangGraphScore(Score, LangChainUser):
             for result in model_input.results:
                 if not isinstance(result, Score.Result):
                     raise TypeError(f"Expected Score.Result object but got {type(result)}")
-                initial_results[result.parameters.name] = result.value
+                initial_results[result.parameters.name] = result
 
-        # --- Logging Input Metadata ---
-        logging.debug("=== Inspecting model_input.metadata before state creation ===")
-        if model_input.metadata:
-            logging.debug(f"model_input.metadata type: {type(model_input.metadata)}")
-            logging.debug(f"model_input.metadata keys: {list(model_input.metadata.keys()) if isinstance(model_input.metadata, dict) else 'N/A'}")
-            logging.debug(f"model_input.metadata content (truncated): {truncate_dict_strings(model_input.metadata, 150)}")
-            if isinstance(model_input.metadata, dict) and 'scorecard_name' in model_input.metadata:
-                logging.debug(f"model_input.metadata['scorecard_name'] type: {type(model_input.metadata['scorecard_name'])}")
-                logging.debug(f"model_input.metadata['scorecard_name'] value: {str(model_input.metadata['scorecard_name'])[:100]}")
-        else:
-            logging.debug("model_input.metadata is None or empty.")
-        # --- End Logging ---
-
-        # --- Sanitize metadata BEFORE adding to state ---
-        sanitized_metadata = _ensure_serializable(model_input.metadata)
-        logging.debug("=== Sanitized metadata before state creation ===")
-        logging.debug(f"sanitized_metadata type: {type(sanitized_metadata)}")
-        logging.debug(f"sanitized_metadata content (truncated): {truncate_dict_strings(sanitized_metadata, 150)}")
-        # --- End Sanitization ---
-
-        initial_state_dict = {
-            'text': self.preprocess_text(model_input.text),
-            'metadata': sanitized_metadata, # Use sanitized version
-            'results': initial_results,
-            'retry_count': 0,
-            'at_llm_breakpoint': False,
-        }
+        initial_state = self.combined_state_class(
+            text=self.preprocess_text(model_input.text),
+            metadata=model_input.metadata,
+            results=initial_results,
+            retry_count=0,
+            at_llm_breakpoint=False,
+        ).model_dump()
 
         if batch_data:
-            initial_state_dict.update(batch_data)
-
-        # Create the state object using the combined class
-        try:
-            initial_state_obj = self.combined_state_class(**initial_state_dict)
-            initial_state = initial_state_obj.model_dump()
-        except Exception as e_state_create:
-            logging.error(f"Error creating combined_state_class instance: {e_state_create}", exc_info=True)
-            logging.error(f"Initial data provided: {initial_state_dict}")
-            raise
-
-        # --- Logging Initial State ---
-        logging.debug("=== Inspecting initial_state before workflow invocation ===")
-        logging.debug(f"initial_state type: {type(initial_state)}")
-        logging.debug(f"initial_state keys: {list(initial_state.keys()) if isinstance(initial_state, dict) else 'N/A'}")
-        if isinstance(initial_state, dict) and 'metadata' in initial_state and initial_state['metadata']:
-             logging.debug(f"initial_state['metadata'] type: {type(initial_state['metadata'])}")
-             logging.debug(f"initial_state['metadata'] keys: {list(initial_state['metadata'].keys()) if isinstance(initial_state['metadata'], dict) else 'N/A'}")
-             logging.debug(f"initial_state['metadata'] content (truncated): {truncate_dict_strings(initial_state['metadata'], 150)}")
-             if isinstance(initial_state['metadata'], dict) and 'scorecard_name' in initial_state['metadata']:
-                 logging.debug(f"initial_state['metadata']['scorecard_name'] type: {type(initial_state['metadata']['scorecard_name'])}")
-                 logging.debug(f"initial_state['metadata']['scorecard_name'] value: {str(initial_state['metadata']['scorecard_name'])[:100]}")
-        else:
-             logging.debug("initial_state['metadata'] is missing, None, or empty.")
-        # --- End Logging ---
+            initial_state.update(batch_data)
 
         try:
-            logging.info("=== Pre-invoke State Inspection ===")
-            logging.info(f"Initial state type: {type(initial_state)}")
-            logging.info(f"Initial state keys: {list(initial_state.keys())}") # Log keys as list
-            logging.debug(f"Initial state values (truncated): {truncate_dict_strings(initial_state, max_length=100)}")
-            logging.info(f"Workflow type: {type(self.workflow)}")
-
-            graph_result = await self.workflow.ainvoke(
-                initial_state,
-                config=thread
+            logging.info(f"Starting workflow execution with thread_id: {thread_id}")
+            
+            # Add timeout protection to prevent infinite hangs
+            timeout_seconds = int(os.getenv('LANGGRAPH_TIMEOUT', '300'))  # Default 5 minutes
+            
+            graph_result = await asyncio.wait_for(
+                self.workflow.ainvoke(
+                    initial_state,
+                    config=thread
+                ),
+                timeout=timeout_seconds
             )
-
-            logging.info("=== Post-invoke Graph Result ===")
-            logging.info(f"Graph result type: {type(graph_result)}")
-            if isinstance(graph_result, dict):
-                 logging.info(f"Graph result keys: {list(graph_result.keys())}") # Log keys as list
-                 logging.debug(f"Graph result values (truncated): {truncate_dict_strings(graph_result, max_length=100)}")
-            else:
-                 logging.debug(f"Graph result value (truncated): {str(graph_result)[:100]}")
-
+            
+            # DEBUG: Log the graph_result before converting to Score.Result
+            logging.debug(f"graph_result keys: {list(graph_result.keys())}")
+            logging.debug(f"graph_result['value'] = {graph_result.get('value')!r} (type: {type(graph_result.get('value'))})")
+            logging.debug(f"Full graph_result: {truncate_dict_strings(graph_result, 200)}")
+            
             # Convert graph result to Score.Result
+            value_for_result = graph_result.get('value', 'Error')
+            if value_for_result is None:
+                logging.warning("DEBUG: graph_result['value'] is None, defaulting to 'No'")
+                value_for_result = 'No'
+            
             result = Score.Result(
                 parameters=self.parameters,
-                value=graph_result.get('value', 'Error'),
+                value=value_for_result,
                 metadata={
                     'explanation': graph_result.get('explanation'),
                     'good_call': graph_result.get('good_call'),
@@ -1338,55 +1467,38 @@ class LangGraphScore(Score, LangChainUser):
             
             # If metadata with trace exists in graph_result, add it to the result metadata
             if 'metadata' in graph_result and graph_result['metadata'] is not None:
-                logging.info("=== Processing graph_result['metadata'] ===")
-                logging.debug(f"Original graph_result['metadata'] type: {type(graph_result['metadata'])}")
-                logging.debug(f"Original graph_result['metadata'] (truncated): {truncate_dict_strings(graph_result['metadata'], 100) if isinstance(graph_result['metadata'], dict) else str(graph_result['metadata'])[:100]}")
-
-                # Ensure the incoming metadata is serializable BEFORE merging
-                serializable_graph_metadata = _ensure_serializable(graph_result['metadata'])
-                logging.debug(f"Serialized graph_result['metadata'] type: {type(serializable_graph_metadata)}")
-                logging.debug(f"Serialized graph_result['metadata'] (truncated): {truncate_dict_strings(serializable_graph_metadata, 100) if isinstance(serializable_graph_metadata, dict) else str(serializable_graph_metadata)[:100]}")
-
-                if isinstance(serializable_graph_metadata, dict):
-                    result.metadata.update(serializable_graph_metadata)
-                    logging.info("Successfully merged serializable graph_result['metadata'] (dict) into result.metadata")
-                else:
-                    logging.warning(f"graph_result['metadata'] was not a dict after serialization attempt, type: {type(serializable_graph_metadata)}. Adding as extra key.")
-                    result.metadata['additional_graph_metadata'] = serializable_graph_metadata
-            else:
-                logging.info("No 'metadata' key found in graph_result or it is None.")
-
-
-            # Apply serialization safety to the final result dict's metadata before returning
-            logging.info("=== Final Serialization Pass for result.metadata ===")
-            try:
-                if result.metadata and isinstance(result.metadata, dict):
-                    logging.debug(f"Pre-final serialization result.metadata type: {type(result.metadata)}")
-                    logging.debug(f"Pre-final serialization result.metadata (truncated): {truncate_dict_strings(result.metadata, 100)}")
-                    result.metadata = _ensure_serializable(result.metadata)
-                    logging.debug(f"Post-final serialization result.metadata type: {type(result.metadata)}")
-                    logging.debug(f"Post-final serialization result.metadata (truncated): {truncate_dict_strings(result.metadata, 100)}")
-                    logging.info("Final serialization pass on result.metadata completed.")
-                elif not result.metadata:
-                     logging.info("result.metadata is None or empty, skipping final serialization.")
-                else:
-                     logging.warning(f"result.metadata is not a dict (type: {type(result.metadata)}), skipping final serialization.")
-
-            except Exception as e:
-                logging.error(f"Error during final serialization of result.metadata: {e}")
-                # Provide a fallback result if serialization fails
-                result.metadata = {"value": "Error", "explanation": f"Final serialization error: {str(e)}"}
-
-            logging.info("=== Predict Method Complete ===")
-            logging.debug(f"Final Score.Result value: {result.value}")
-            logging.debug(f"Final Score.Result metadata (truncated): {truncate_dict_strings(result.metadata, 100) if isinstance(result.metadata, dict) else str(result.metadata)[:100]}")
+                # Merge the existing metadata with the graph_result metadata
+                result.metadata.update(graph_result['metadata'])
+            
             return result
         except BatchProcessingPause:
             # Let BatchProcessingPause propagate up
-            logging.info("BatchProcessingPause encountered, propagating.")
             raise
+        except TimeoutError as e:
+            # Handle timeout errors - distinguish between asyncio.wait_for() and other timeouts
+            timeout_seconds = int(os.getenv('LANGGRAPH_TIMEOUT', '300'))
+            
+            # If this looks like our asyncio.wait_for() timeout (no custom message)
+            if str(e) == '' or 'asyncio' in str(e).lower():
+                logging.error(f"Workflow execution timed out after {timeout_seconds} seconds for thread_id {thread_id}")
+                return Score.Result(
+                    parameters=self.parameters,
+                    value="ERROR",
+                    error=f"Workflow execution timed out after {timeout_seconds} seconds",
+                    explanation="The workflow took too long to complete and was terminated to prevent system hangs"
+                )
+            else:
+                # This is likely a timeout from within the workflow (network, etc.) - preserve message
+                logging.error(f"Timeout error in workflow execution for thread_id {thread_id}: {e}")
+                return Score.Result(
+                    parameters=self.parameters,
+                    value="ERROR",
+                    error=str(e),
+                    explanation="A timeout occurred during workflow execution"
+                )
         except Exception as e:
-            logging.error(f"Error in predict: {e}", exc_info=True) # Add exc_info for traceback
+            logging.error(f"Error in predict for thread_id {thread_id}: {e}")
+            logging.error(traceback.format_exc())
             return Score.Result(
                 parameters=self.parameters,
                 value="ERROR",
@@ -1435,7 +1547,7 @@ class LangGraphScore(Score, LangChainUser):
         await self.async_setup()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any):
         """Async context manager exit."""
         await self.cleanup()
 

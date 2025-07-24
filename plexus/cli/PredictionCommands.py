@@ -8,6 +8,9 @@ from openpyxl.styles import Font
 import asyncio
 import sys
 import traceback
+import socket
+from datetime import datetime, timezone
+from typing import Optional
 
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
@@ -17,37 +20,71 @@ from plexus.Scorecard import Scorecard
 from plexus.scores.Score import Score
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.shared import get_scoring_jobs_for_batch
+from plexus.cli.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier, resolve_item_identifier
+from plexus.cli.memoized_resolvers import memoized_resolve_scorecard_identifier, memoized_resolve_item_identifier
+from plexus.cli.command_output import write_json_output, should_write_json_output
+from plexus.cli.stage_configurations import get_prediction_stage_configs
+from plexus.cli.task_progress_tracker import TaskProgressTracker
+from plexus.dashboard.api.models.account import Account
+from plexus.dashboard.api.models.task import Task
+from plexus.dashboard.api.models.feedback_item import FeedbackItem
 
 
 @click.command(help="Predict a scorecard or specific score(s) within a scorecard.")
-@click.option('--scorecard-name', required=True, help='The name of the scorecard.')
-@click.option('--score-name', '--score-names', help='The name(s) of the score(s) to predict, separated by commas.')
-@click.option('--item-id', help='The ID of a specific item to use from the Plexus API, or an identifier value to search for.')
+@click.option('--scorecard', required=True, help='The scorecard to use (accepts ID, name, key, or external ID).')
+@click.option('--score', '--scores', help='The score(s) to predict (accepts ID, name, key, or external ID), separated by commas.')
+@click.option('--item', help='The item to use (accepts ID or any identifier value).')
+@click.option('--items', help='Comma-separated list of item identifiers (accepts IDs or any identifier values).')
 @click.option('--number', type=int, default=1, help='Number of times to iterate over the list of scores.')
 @click.option('--excel', is_flag=True, help='Output results to an Excel file.')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangChain components')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
-@click.option('--format', type=click.Choice(['fixed', 'json']), default='fixed', help='Output format: fixed (human-readable) or json (parseable JSON)')
-def predict(scorecard_name, score_name, item_id, number, excel, use_langsmith_trace, fresh, task_id, format):
+@click.option('--format', type=click.Choice(['fixed', 'json', 'yaml']), default='fixed', help='Output format: fixed (human-readable), json (parseable JSON), or yaml (token-efficient YAML)')
+@click.option('--input', is_flag=True, help='Include input text and metadata in YAML output (only for --format=yaml)')
+@click.option('--trace', is_flag=True, help='Include full execution trace in YAML output (only for --format=yaml)')
+@click.option('--compare-to-feedback', is_flag=True, help='Compare current prediction to historical feedback corrections for this item and score')
+def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, fresh, task_id, format, input, trace, compare_to_feedback):
     """Predict scores for a scorecard"""
     try:
         # Configure event loop with custom exception handler
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.set_exception_handler(
-            lambda l, c: handle_exception(l, c, scorecard_name, score_name)
+            lambda l, c: handle_exception(l, c, scorecard, score)
         )
 
+        # Validate that only one of --item or --items is provided
+        if item and items:
+            raise click.BadParameter("Cannot specify both --item and --items. Use --items for multiple items.")
+        
         # Create and run coroutine
-        if score_name:
-            score_names = [name.strip() for name in score_name.split(',')]
+        if score:
+            score_names = [name.strip() for name in score.split(',')]
         else:
             score_names = []
         
+        # Handle item identifiers
+        if items:
+            item_identifiers = [item_id.strip() for item_id in items.split(',')]
+        elif item:
+            item_identifiers = [item]
+        else:
+            item_identifiers = [None]  # Single None for random sampling
+        
         coro = predict_impl(
-            scorecard_name, score_names, item_id, excel, 
-            use_langsmith_trace, fresh, task_id, format
+            scorecard_identifier=scorecard, 
+            score_names=score_names, 
+            item_identifiers=item_identifiers, 
+            number_of_times=number,
+            excel=excel, 
+            use_langsmith_trace=use_langsmith_trace, 
+            fresh=fresh, 
+            task_id=task_id, 
+            format=format,
+            include_input=input,
+            include_trace=trace,
+            compare_to_feedback=compare_to_feedback
         )
         try:
             loop.run_until_complete(coro)
@@ -75,104 +112,574 @@ def predict(scorecard_name, score_name, item_id, number, excel, use_langsmith_tr
         sys.exit(1)
 
 async def predict_impl(
-    scorecard_name: str,
+    scorecard_identifier: str,
     score_names: list,
-    item_id: str = None,
+    item_identifiers: list = None,
+    number_of_times: int = 1,
     excel: bool = False,
     use_langsmith_trace: bool = False,
     fresh: bool = False,
     task_id: str = None,
-    format: str = 'fixed'
+    format: str = 'fixed',
+    include_input: bool = False,
+    include_trace: bool = False,
+    compare_to_feedback: bool = False
 ):
     """Implementation of predict command"""
+    tracker: Optional[TaskProgressTracker] = None
+    task: Optional[Task] = None
+    client: Optional[PlexusDashboardClient] = None
+    
     try:
-        results = []
-        scorecard_class = get_scorecard_class(scorecard_name)
-        
-        for score_name in score_names:
-            sample_row, used_item_id = select_sample(
-                scorecard_class, score_name, item_id, fresh
-            )
-            
-            row_result = {'item_id': used_item_id}
-            if sample_row is not None:
-                row_result['text'] = sample_row.iloc[0].get('text', '')
-            
+        # Initialize task progress tracking if task_id is provided
+        if task_id:
             try:
-                transcript, predictions, costs = await predict_score(
-                    score_name, scorecard_class, sample_row, used_item_id
+                client = PlexusDashboardClient()
+                
+                # Get the account ID
+                logging.info("Looking up call-criteria account...")
+                account = Account.list_by_key(key="call-criteria", client=client)
+                if not account:
+                    raise Exception("Could not find account with key: call-criteria")
+                logging.info(f"Found account: {account.name} ({account.id})")
+                
+                # Get existing task if task_id provided
+                task = Task.get_by_id(task_id, client)
+                if not task:
+                    logging.error(f"Failed to get existing task {task_id}")
+                    raise Exception(f"Could not find task with ID: {task_id}")
+                logging.info(f"Using existing task: {task_id}")
+                
+                # Calculate total items for progress tracking
+                # Total = (number of items) × (number of scores) × (number of iterations)
+                item_count = len(item_identifiers) if item_identifiers else 1
+                total_predictions = item_count * len(score_names) * number_of_times
+                
+                # Initialize TaskProgressTracker with prediction-specific stages
+                stage_configs = get_prediction_stage_configs(total_items=total_predictions)
+                
+                tracker = TaskProgressTracker(
+                    total_items=total_predictions,
+                    stage_configs=stage_configs,
+                    task_id=task.id,
+                    target=f"prediction/{scorecard_identifier}",
+                    command=f"predict --scorecard {scorecard_identifier}",
+                    description=f"Prediction for {scorecard_identifier}",
+                    dispatch_status="DISPATCHED",
+                    prevent_new_task=True,
+                    metadata={
+                        "type": "Prediction",
+                        "scorecard": scorecard_identifier,
+                        "task_type": "Prediction"
+                    },
+                    account_id=account.id,
+                    client=client
                 )
                 
-                if predictions:
-                    if isinstance(predictions, list):
-                        # Handle list of results
-                        prediction = predictions[0] if predictions else None
-                        if prediction:
-                            row_result[f'{score_name}_value'] = prediction.value
-                            row_result[f'{score_name}_explanation'] = prediction.explanation
-                            row_result[f'{score_name}_cost'] = costs
-                            # Extract trace information
-                            if hasattr(prediction, 'trace'):
-                                row_result[f'{score_name}_trace'] = prediction.trace
-                            elif hasattr(prediction, 'metadata') and prediction.metadata:
-                                row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
-                            else:
-                                row_result[f'{score_name}_trace'] = None
-                            logging.info(f"Got predictions: {predictions}")
-                    else:
-                        # Handle Score.Result object
-                        if hasattr(predictions, 'value') and predictions.value is not None:
-                            row_result[f'{score_name}_value'] = predictions.value
-                            # Try to get explanation from the result object
-                            explanation = None
-                            if hasattr(predictions, 'explanation'):
-                                explanation = predictions.explanation
-                            elif hasattr(predictions, 'metadata') and predictions.metadata:
-                                explanation = predictions.metadata.get('explanation')
-                            row_result[f'{score_name}_explanation'] = explanation
-                            row_result[f'{score_name}_cost'] = costs
-                            # Extract trace information
-                            trace = None
-                            if hasattr(predictions, 'trace'):
-                                trace = predictions.trace
-                            elif hasattr(predictions, 'metadata') and predictions.metadata:
-                                trace = predictions.metadata.get('trace')
-                            row_result[f'{score_name}_trace'] = trace
-                            logging.info(f"Got predictions: {predictions}")
-                else:
-                    row_result[f'{score_name}_value'] = None
-                    row_result[f'{score_name}_explanation'] = None
-                    row_result[f'{score_name}_cost'] = None
-                    row_result[f'{score_name}_trace'] = None
+                # Set worker ID immediately to show task as claimed
+                worker_id = f"{socket.gethostname()}-{os.getpid()}"
+                task.update(
+                    accountId=task.accountId,
+                    type=task.type,
+                    status='RUNNING',
+                    target=task.target,
+                    command=task.command,
+                    workerNodeId=worker_id,
+                    startedAt=datetime.now(timezone.utc).isoformat(),
+                    updatedAt=datetime.now(timezone.utc).isoformat()
+                )
+                logging.info(f"Successfully claimed task {task.id} with worker ID {worker_id}")
                 
-            except BatchProcessingPause:
-                raise
+                # Start with Querying stage
+                tracker.current_stage.status_message = "Starting prediction setup..."
+                tracker.update(current_items=0)
+                logging.info("Entered Querying stage: Starting prediction setup")
+                
+                # Log all configured stages for debugging
+                all_stages = tracker.get_all_stages()
+                logging.info(f"TaskProgressTracker configured with stages: {list(all_stages.keys())}")
+                logging.info(f"Current stage: {tracker.current_stage.name if tracker.current_stage else 'None'}")
+                
             except Exception as e:
-                logging.error(f"Error processing score {score_name}: {e}")
+                logging.error(f"Failed to initialize task progress tracking: {str(e)}")
                 logging.error(f"Full traceback: {traceback.format_exc()}")
-                raise
+                # Continue without tracking if setup fails
+                tracker = None
+                task = None
+        
+        # Querying stage: Looking up scorecard configuration
+        if tracker:
+            tracker.current_stage.status_message = "Looking up scorecard configuration..."
+            tracker.update(current_items=0)
+        
+        scorecard_class = get_scorecard_class(scorecard_identifier)
+        
+        # Querying stage: Scorecard configuration loaded
+        if tracker:
+            tracker.current_stage.status_message = "Scorecard configuration loaded successfully"
+            tracker.update(current_items=0)
             
-            if any(row_result.get(f'{name}_value') is not None for name in score_names):
-                results.append(row_result)
+            # Complete the Querying stage
+            tracker.current_stage.status_message = "Querying completed - scorecard configuration ready"
+            tracker.update(current_items=0)
+            logging.info("Querying stage completed")
+            
+            # Advance to Predicting stage
+            tracker.advance_stage()
+            tracker.current_stage.status_message = "Starting predictions..."
+            tracker.update(current_items=0)
+            logging.info(f"Entered Predicting stage (current stage: {tracker.current_stage.name})")
+        
+        # Initialize feedback comparison variables
+        scorecard_id = None
+        score_ids = {}
+        
+        # If compare_to_feedback is enabled, we need to resolve scorecard and score IDs
+        if compare_to_feedback:
+            # Ensure we have a client for feedback comparison
+            if client is None:
+                from plexus.cli.client_utils import create_client
+                client = create_client()
+            
+            # Resolve scorecard ID
+            scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+            if scorecard_id:
+                logging.info(f"Resolved scorecard ID: {scorecard_id}")
+            
+            # Resolve score IDs for each score
+            for score_name in score_names:
+                score_id = resolve_score_identifier(client, scorecard_id, score_name)
+                if score_id:
+                    score_ids[score_name] = score_id
+                    logging.info(f"Resolved score ID for {score_name}: {score_id}")
+                else:
+                    logging.warning(f"Could not resolve score ID for {score_name}")
+            
+            if not scorecard_id:
+                logging.warning(f"Could not resolve scorecard ID for {scorecard_identifier}")
+                logging.warning("Feedback comparison will be disabled for this run")
+        
+        # Track current prediction for progress
+        current_prediction = 0
+        results = []
+        
+        # Calculate total predictions and set up item identifiers
+        item_count = len(item_identifiers) if item_identifiers else 1
+        total_predictions = item_count * len(score_names) * number_of_times
+        
+        # Default to [None] if no item identifiers specified (for random sampling)
+        if not item_identifiers:
+            item_identifiers = [None]
+        
+        # If we have multiple items, process them in parallel
+        if len(item_identifiers) > 1:
+            # Create async tasks for each item-score combination
+            async def process_single_prediction(iteration, item_idx, item_identifier, score_idx, score_name, prediction_num):
+                """Process a single prediction asynchronously"""
+                nonlocal current_prediction
+                
+                # Update progress for current prediction
+                if tracker:
+                    tracker.current_stage.status_message = f"Processing prediction {prediction_num}/{total_predictions} for item {item_identifier or 'random'}, score: {score_name}"
+                    # Note: We don't update current_items here since it's handled by the parallel coordinator
+                
+                # Step 1: Look up item text and metadata
+                if tracker:
+                    tracker.current_stage.status_message = f"Looking up item text and metadata for prediction {prediction_num}/{total_predictions}"
+                
+                sample_row, used_item_id = select_sample(
+                    scorecard_class, score_name, item_identifier, fresh, compare_to_feedback=compare_to_feedback, scorecard_id=scorecard_id, score_id=score_ids.get(score_name)
+                )
+                
+                # Step 2: Item lookup completed
+                if tracker:
+                    tracker.current_stage.status_message = f"Item data loaded - running prediction {prediction_num}/{total_predictions} for score: {score_name}"
+                
+                row_result = {'item_id': used_item_id}
+                if sample_row is not None:
+                    row_result['text'] = sample_row.iloc[0].get('text', '')
+                
+                try:
+                    # Update progress: Running prediction
+                    if tracker:
+                        tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
+                    
+                    transcript, predictions, costs = await predict_score(
+                        score_name, scorecard_class, sample_row, used_item_id
+                    )
+                    
+                    if predictions:
+                        if isinstance(predictions, list):
+                            # Handle list of results
+                            prediction = predictions[0] if predictions else None
+                            if prediction:
+                                row_result[f'{score_name}_value'] = prediction.value
+                                row_result[f'{score_name}_explanation'] = prediction.explanation
+                                row_result[f'{score_name}_cost'] = costs
+                                # Extract trace information
+                                if hasattr(prediction, 'trace'):
+                                    row_result[f'{score_name}_trace'] = prediction.trace
+                                elif hasattr(prediction, 'metadata') and prediction.metadata:
+                                    row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
+                                else:
+                                    row_result[f'{score_name}_trace'] = None
+                                logging.info(f"Got predictions: {predictions}")
+                        else:
+                            # Handle Score.Result object
+                            if hasattr(predictions, 'value') and predictions.value is not None:
+                                row_result[f'{score_name}_value'] = predictions.value
+                                # ✅ ENHANCED: Get explanation from direct field first, then metadata
+                                explanation = (
+                                    getattr(predictions, 'explanation', None) or
+                                    predictions.metadata.get('explanation', '') if hasattr(predictions, 'metadata') and predictions.metadata else
+                                    ''
+                                )
+                                row_result[f'{score_name}_explanation'] = explanation
+                                row_result[f'{score_name}_cost'] = costs
+                                # Extract trace information
+                                trace = None
+                                logging.info(f"🔍 TRACE EXTRACTION DEBUG for {score_name}:")
+                                logging.info(f"  - predictions type: {type(predictions)}")
+                                logging.info(f"  - predictions attributes: {dir(predictions)}")
+                                logging.info(f"  - has trace attr: {hasattr(predictions, 'trace')}")
+                                logging.info(f"  - has metadata attr: {hasattr(predictions, 'metadata')}")
+                                
+                                if hasattr(predictions, 'trace'):
+                                    trace = predictions.trace
+                                    logging.info(f"  ✅ Found trace in direct attribute: {type(trace)}")
+                                elif hasattr(predictions, 'metadata') and predictions.metadata:
+                                    logging.info(f"  - metadata type: {type(predictions.metadata)}")
+                                    logging.info(f"  - metadata keys: {list(predictions.metadata.keys()) if isinstance(predictions.metadata, dict) else 'not a dict'}")
+                                    trace = predictions.metadata.get('trace')
+                                    if trace:
+                                        logging.info(f"  ✅ Found trace in metadata: {type(trace)}")
+                                        logging.info(f"  - trace keys: {list(trace.keys()) if isinstance(trace, dict) else 'not a dict'}")
+                                        if isinstance(trace, dict) and 'node_results' in trace:
+                                            logging.info(f"  - node_results count: {len(trace['node_results'])}")
+                                            
+                                            # Add text and metadata to trace for debugging/analysis
+                                            if isinstance(trace, dict):
+                                                import json
+                                                # Get text and metadata from sample_row
+                                                input_text = sample_row.iloc[0].get('text', '') if sample_row is not None else ''
+                                                input_metadata_str = sample_row.iloc[0].get('metadata', '{}') if sample_row is not None else '{}'
+                                                try:
+                                                    input_metadata = json.loads(input_metadata_str) if input_metadata_str else {}
+                                                except json.JSONDecodeError:
+                                                    input_metadata = {}
+                                                
+                                                trace['input_text'] = input_text
+                                                trace['input_metadata'] = input_metadata
+                                                logging.info(f"  ✅ Added input text ({len(input_text)} chars) and metadata ({len(input_metadata)} keys) to trace")
+                                            
+                                            # Test JSON serialization
+                                            try:
+                                                import json
+                                                json_trace = json.dumps(trace, default=str)
+                                                logging.info(f"  ✅ Trace is JSON serializable (length: {len(json_trace)})")
+                                            except Exception as json_error:
+                                                logging.error(f"  ❌ Trace is NOT JSON serializable: {json_error}")
+                                                # Try to make a JSON-safe version
+                                                try:
+                                                    safe_trace = json.loads(json.dumps(trace, default=str))
+                                                    trace = safe_trace
+                                                    logging.info(f"  ✅ Created JSON-safe trace version")
+                                                except Exception as safe_error:
+                                                    logging.error(f"  ❌ Could not create JSON-safe trace: {safe_error}")
+                                                    trace = {"error": "Trace data could not be serialized", "original_error": str(json_error)}
+                                    else:
+                                        logging.info(f"  ❌ No trace found in metadata")
+                                        # Check for nested metadata structures
+                                        if isinstance(predictions.metadata, dict):
+                                            for key, value in predictions.metadata.items():
+                                                if isinstance(value, dict) and 'trace' in value:
+                                                    logging.info(f"  🔍 Found nested trace in metadata['{key}']['trace']")
+                                                    trace = value['trace']
+                                                    break
+                                else:
+                                    logging.info(f"  ❌ No metadata attribute found")
+                                
+                                if not trace:
+                                    logging.warning(f"  ⚠️ No trace data found anywhere in predictions object")
+                                
+                                row_result[f'{score_name}_trace'] = trace
+                                logging.info(f"Got predictions: {predictions}")
+                    else:
+                        row_result[f'{score_name}_value'] = None
+                        row_result[f'{score_name}_explanation'] = None
+                        row_result[f'{score_name}_cost'] = None
+                        row_result[f'{score_name}_trace'] = None
+                    
+                    # Add feedback comparison if requested and available
+                    if compare_to_feedback and sample_row is not None:
+                        feedback_item = sample_row.iloc[0].get('feedback_item')
+                        if feedback_item:
+                            feedback_comparison = create_feedback_comparison(row_result, feedback_item, score_name)
+                            row_result[f'{score_name}_feedback_comparison'] = feedback_comparison
+                            logging.info(f"Added feedback comparison for {score_name}")
+                        else:
+                            logging.info(f"No feedback available for item {used_item_id}, score {score_name}")
+                    
+                except BatchProcessingPause:
+                    raise
+                except Exception as e:
+                    logging.error(f"Error processing score {score_name}: {e}")
+                    logging.error(f"Full traceback: {traceback.format_exc()}")
+                    raise
+                
+                return row_result
+            
+            # Create all prediction tasks
+            tasks = []
+            for iteration in range(number_of_times):
+                for item_idx, item_identifier in enumerate(item_identifiers):
+                    for score_idx, score_name in enumerate(score_names):
+                        prediction_num = iteration * len(item_identifiers) * len(score_names) + item_idx * len(score_names) + score_idx + 1
+                        task = process_single_prediction(iteration, item_idx, item_identifier, score_idx, score_name, prediction_num)
+                        tasks.append(task)
+            
+            # Run all predictions in parallel
+            logging.info(f"Running {len(tasks)} predictions in parallel for {len(item_identifiers)} items")
+            if tracker:
+                tracker.current_stage.status_message = f"Running {len(tasks)} predictions in parallel..."
+                tracker.update(current_items=0)
+            
+            # Execute all tasks concurrently
+            prediction_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results and handle any exceptions
+            for i, result in enumerate(prediction_results):
+                if isinstance(result, Exception):
+                    logging.error(f"Prediction task {i+1} failed: {result}")
+                    if isinstance(result, BatchProcessingPause):
+                        raise result  # Re-raise BatchProcessingPause
+                    # For other exceptions, we could either fail completely or continue with other results
+                    # For now, let's continue but log the error
+                    continue
+                
+                # Add successful results
+                if any(result.get(f'{name}_value') is not None for name in score_names):
+                    results.append(result)
+                
+                # Update progress
+                current_prediction += 1
+                if tracker:
+                    tracker.current_stage.status_message = f"Completed prediction {current_prediction}/{total_predictions}"
+                    tracker.update(current_items=current_prediction)
+        
+        else:
+            # Single item or no specific item - use original sequential processing
+            for iteration in range(number_of_times):
+                for item_idx, item_identifier in enumerate(item_identifiers):
+                    for score_idx, score_name in enumerate(score_names):
+                        # Update progress for current prediction
+                        if tracker:
+                            prediction_num = iteration * len(item_identifiers) * len(score_names) + item_idx * len(score_names) + score_idx + 1
+                            tracker.current_stage.status_message = f"Processing prediction {prediction_num}/{total_predictions} for item {item_identifier or 'random'}, score: {score_name}"
+                            tracker.update(current_items=current_prediction)
+                        
+                        # Step 1: Look up item text and metadata
+                        if tracker:
+                            tracker.current_stage.status_message = f"Looking up item text and metadata for prediction {prediction_num}/{total_predictions}"
+                            tracker.update(current_items=current_prediction)
+                        
+                        sample_row, used_item_id = select_sample(
+                            scorecard_class, score_name, item_identifier, fresh, compare_to_feedback=compare_to_feedback, scorecard_id=scorecard_id, score_id=score_ids.get(score_name)
+                        )
+                        
+                        # Step 2: Item lookup completed
+                        if tracker:
+                            tracker.current_stage.status_message = f"Item data loaded - running prediction {prediction_num}/{total_predictions} for score: {score_name}"
+                            tracker.update(current_items=current_prediction)
+                        
+                        row_result = {'item_id': used_item_id}
+                        if sample_row is not None:
+                            row_result['text'] = sample_row.iloc[0].get('text', '')
+                        
+                        try:
+                            # Update progress: Running prediction
+                            if tracker:
+                                tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
+                                tracker.update(current_items=current_prediction)
+                            
+                            transcript, predictions, costs = await predict_score(
+                                score_name, scorecard_class, sample_row, used_item_id
+                            )
+                            
+                            if predictions:
+                                if isinstance(predictions, list):
+                                    # Handle list of results
+                                    prediction = predictions[0] if predictions else None
+                                    if prediction:
+                                        row_result[f'{score_name}_value'] = prediction.value
+                                        row_result[f'{score_name}_explanation'] = prediction.explanation
+                                        row_result[f'{score_name}_cost'] = costs
+                                        # Extract trace information
+                                        if hasattr(prediction, 'trace'):
+                                            row_result[f'{score_name}_trace'] = prediction.trace
+                                        elif hasattr(prediction, 'metadata') and prediction.metadata:
+                                            row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
+                                        else:
+                                            row_result[f'{score_name}_trace'] = None
+                                        logging.info(f"Got predictions: {predictions}")
+                                else:
+                                    # Handle Score.Result object
+                                    if hasattr(predictions, 'value') and predictions.value is not None:
+                                        row_result[f'{score_name}_value'] = predictions.value
+                                        # ✅ ENHANCED: Get explanation from direct field first, then metadata
+                                        explanation = (
+                                            getattr(predictions, 'explanation', None) or
+                                            predictions.metadata.get('explanation', '') if hasattr(predictions, 'metadata') and predictions.metadata else
+                                            ''
+                                        )
+                                        row_result[f'{score_name}_explanation'] = explanation
+                                        row_result[f'{score_name}_cost'] = costs
+                                        # Extract trace information
+                                        trace = None
+                                        logging.info(f"🔍 TRACE EXTRACTION DEBUG for {score_name}:")
+                                        logging.info(f"  - predictions type: {type(predictions)}")
+                                        logging.info(f"  - predictions attributes: {dir(predictions)}")
+                                        logging.info(f"  - has trace attr: {hasattr(predictions, 'trace')}")
+                                        logging.info(f"  - has metadata attr: {hasattr(predictions, 'metadata')}")
+                                        
+                                        if hasattr(predictions, 'trace'):
+                                            trace = predictions.trace
+                                            logging.info(f"  ✅ Found trace in direct attribute: {type(trace)}")
+                                        elif hasattr(predictions, 'metadata') and predictions.metadata:
+                                            logging.info(f"  - metadata type: {type(predictions.metadata)}")
+                                            logging.info(f"  - metadata keys: {list(predictions.metadata.keys()) if isinstance(predictions.metadata, dict) else 'not a dict'}")
+                                            trace = predictions.metadata.get('trace')
+                                            if trace:
+                                                logging.info(f"  ✅ Found trace in metadata: {type(trace)}")
+                                                logging.info(f"  - trace keys: {list(trace.keys()) if isinstance(trace, dict) else 'not a dict'}")
+                                                if isinstance(trace, dict) and 'node_results' in trace:
+                                                    logging.info(f"  - node_results count: {len(trace['node_results'])}")
+                                                    
+                                                    # Add text and metadata to trace for debugging/analysis
+                                                    if isinstance(trace, dict):
+                                                        import json
+                                                        # Get text and metadata from sample_row
+                                                        input_text = sample_row.iloc[0].get('text', '') if sample_row is not None else ''
+                                                        input_metadata_str = sample_row.iloc[0].get('metadata', '{}') if sample_row is not None else '{}'
+                                                        try:
+                                                            input_metadata = json.loads(input_metadata_str) if input_metadata_str else {}
+                                                        except json.JSONDecodeError:
+                                                            input_metadata = {}
+                                                        
+                                                        trace['input_text'] = input_text
+                                                        trace['input_metadata'] = input_metadata
+                                                        logging.info(f"  ✅ Added input text ({len(input_text)} chars) and metadata ({len(input_metadata)} keys) to trace")
+                                                    
+                                                    # Test JSON serialization
+                                                    try:
+                                                        import json
+                                                        json_trace = json.dumps(trace, default=str)
+                                                        logging.info(f"  ✅ Trace is JSON serializable (length: {len(json_trace)})")
+                                                    except Exception as json_error:
+                                                        logging.error(f"  ❌ Trace is NOT JSON serializable: {json_error}")
+                                                        # Try to make a JSON-safe version
+                                                        try:
+                                                            safe_trace = json.loads(json.dumps(trace, default=str))
+                                                            trace = safe_trace
+                                                            logging.info(f"  ✅ Created JSON-safe trace version")
+                                                        except Exception as safe_error:
+                                                            logging.error(f"  ❌ Could not create JSON-safe trace: {safe_error}")
+                                                            trace = {"error": "Trace data could not be serialized", "original_error": str(json_error)}
+                                            else:
+                                                logging.info(f"  ❌ No trace found in metadata")
+                                                # Check for nested metadata structures
+                                                if isinstance(predictions.metadata, dict):
+                                                    for key, value in predictions.metadata.items():
+                                                        if isinstance(value, dict) and 'trace' in value:
+                                                            logging.info(f"  🔍 Found nested trace in metadata['{key}']['trace']")
+                                                            trace = value['trace']
+                                                            break
+                                        else:
+                                            logging.info(f"  ❌ No metadata attribute found")
+                                        
+                                        if not trace:
+                                            logging.warning(f"  ⚠️ No trace data found anywhere in predictions object")
+                                        
+                                        row_result[f'{score_name}_trace'] = trace
+                                        logging.info(f"Got predictions: {predictions}")
+                            else:
+                                row_result[f'{score_name}_value'] = None
+                                row_result[f'{score_name}_explanation'] = None
+                                row_result[f'{score_name}_cost'] = None
+                                row_result[f'{score_name}_trace'] = None
+                            
+                        except BatchProcessingPause:
+                            raise
+                        except Exception as e:
+                            logging.error(f"Error processing score {score_name}: {e}")
+                            logging.error(f"Full traceback: {traceback.format_exc()}")
+                            raise
+                        
+                        # Add feedback comparison if requested and available
+                        if compare_to_feedback and sample_row is not None:
+                            feedback_item = sample_row.iloc[0].get('feedback_item')
+                            if feedback_item:
+                                feedback_comparison = create_feedback_comparison(row_result, feedback_item, score_name)
+                                row_result[f'{score_name}_feedback_comparison'] = feedback_comparison
+                                logging.info(f"Added feedback comparison for {score_name}")
+                            else:
+                                logging.info(f"No feedback available for item {used_item_id}, score {score_name}")
+                        
+                        if any(row_result.get(f'{name}_value') is not None for name in score_names):
+                            results.append(row_result)
+                        
+                        # Update progress: Prediction completed
+                        current_prediction += 1
+                        if tracker:
+                            tracker.current_stage.status_message = f"Completed prediction {current_prediction}/{total_predictions}"
+                            tracker.update(current_items=current_prediction)
 
+        # Complete the Predicting stage
+        if tracker:
+            tracker.current_stage.status_message = "All predictions completed successfully"
+            tracker.update(current_items=total_predictions)
+            logging.info("Predicting stage completed")
+            
+            # Advance to Archiving stage
+            tracker.advance_stage()
+            tracker.current_stage.status_message = "Starting result archiving..."
+            tracker.update(current_items=total_predictions)
+            logging.info(f"Entered Archiving stage (current stage: {tracker.current_stage.name})")
+        
         if excel and results:
-            output_excel(results, score_names, scorecard_name)
+            if tracker:
+                tracker.current_stage.status_message = "Generating Excel output file..."
+                tracker.update(current_items=total_predictions)
+            output_excel(results, score_names, scorecard_identifier)
+            if tracker:
+                tracker.current_stage.status_message = "Excel file generated successfully"
+                tracker.update(current_items=total_predictions)
         elif results:
             if format == 'json':
                 # JSON format: only output parseable JSON
                 json_results = []
                 for result in results:
                     json_result = {
-                        'item_id': result.get('item_id')
+                        'item_id': result.get('item_id'),
+                        'scores': []
                     }
                     for name in score_names:
-                        json_result[name] = {
+                        score_data = {
+                            'name': name,
                             'value': result.get(f'{name}_value'),
                             'explanation': result.get(f'{name}_explanation'),
                             'cost': result.get(f'{name}_cost'),
                             'trace': result.get(f'{name}_trace')
                         }
+                        # Add feedback comparison if available
+                        feedback_comparison = result.get(f'{name}_feedback_comparison')
+                        if feedback_comparison:
+                            score_data['feedback_comparison'] = feedback_comparison
+                        json_result['scores'].append(score_data)
+                    
                     json_results.append(json_result)
+                
+
                 
                 import json
                 from decimal import Decimal
@@ -184,7 +691,39 @@ async def predict_impl(
                             return float(obj)
                         return super(DecimalEncoder, self).default(obj)
                 
-                print(json.dumps(json_results, indent=2, cls=DecimalEncoder))
+                # Output JSON to stdout (for backward compatibility)
+                json_output = json.dumps(json_results, indent=2, cls=DecimalEncoder)
+                print(json_output)
+                
+                # Also write to output file if we're in task dispatch mode
+                if should_write_json_output():
+                    if tracker:
+                        tracker.current_stage.status_message = "Writing structured results to output file..."
+                        tracker.update(current_items=total_predictions)
+                    write_json_output(json_results, "output.json")
+                    logging.info("Written structured prediction results to output.json")
+                    if tracker:
+                        tracker.current_stage.status_message = "Output file written successfully"
+                        tracker.update(current_items=total_predictions)
+                
+                if tracker:
+                    tracker.current_stage.status_message = "JSON results processed successfully"
+                    tracker.update(current_items=total_predictions)
+            elif format == 'yaml':
+                # YAML format: token-efficient YAML output
+                output_yaml_prediction_results(
+                    results=results, 
+                    score_names=score_names, 
+                    scorecard_identifier=scorecard_identifier,
+                    score_identifier=','.join(score_names) if score_names else None,
+                    item_identifiers=item_identifiers,
+                    include_input=include_input,
+                    include_trace=include_trace
+                )
+                
+                if tracker:
+                    tracker.current_stage.status_message = "YAML results processed successfully"
+                    tracker.update(current_items=total_predictions)
             else:
                 # Fixed format: human-readable output
                 rich.print("\n[bold green]Prediction Results:[/bold green]")
@@ -221,12 +760,60 @@ async def predict_impl(
                 rich.print("[yellow]No prediction results to display.[/yellow]")
             else:
                 print("[]")  # Empty JSON array for no results
+                
+        # Complete the Archiving stage
+        if tracker:
+            tracker.current_stage.status_message = "Archiving completed successfully"
+            tracker.update(current_items=total_predictions)
+            logging.info("Archiving stage completed")
+            
+            # Mark task as completed
+            if task:
+                task.update(
+                    accountId=task.accountId,
+                    type=task.type,
+                    status='COMPLETED',
+                    target=task.target,
+                    command=task.command,
+                    completedAt=datetime.now(timezone.utc).isoformat(),
+                    updatedAt=datetime.now(timezone.utc).isoformat()
+                )
+                logging.info(f"Successfully marked task {task.id} as completed")
+            
+            # Complete all tracking
+            tracker.complete()
+            logging.info("All stages completed - prediction task finished successfully")
     except BatchProcessingPause:
         # Let it propagate up to be handled by the event loop handler
         raise
     except Exception as e:
-        logging.error(f"Unexpected error: {e}")
+        error_msg = f"Prediction failed: {str(e)}"
+        logging.error(error_msg)
         logging.error(f"Full traceback: {traceback.format_exc()}")
+        
+        # Update task and tracker with error information
+        if tracker:
+            tracker.current_stage.status_message = error_msg
+            tracker.update(current_items=tracker.current_items)
+            tracker.fail(str(e))
+        
+        if task:
+            try:
+                task.update(
+                    accountId=task.accountId,
+                    type=task.type,
+                    status='FAILED',
+                    target=task.target,
+                    command=task.command,
+                    errorMessage=error_msg,
+                    errorDetails=traceback.format_exc(),
+                    completedAt=datetime.now(timezone.utc).isoformat(),
+                    updatedAt=datetime.now(timezone.utc).isoformat()
+                )
+                logging.info(f"Updated task {task.id} with error information")
+            except Exception as task_update_error:
+                logging.error(f"Failed to update task with error information: {str(task_update_error)}")
+        
         raise
     finally:
         # Final cleanup of any remaining tasks
@@ -234,7 +821,7 @@ async def predict_impl(
             if not task.done() and task != asyncio.current_task():
                 task.cancel()
 
-def output_excel(results, score_names, scorecard_name):
+def output_excel(results, score_names, scorecard_identifier):
     df = pd.DataFrame(results)
     
     logging.info(f"Available DataFrame columns: {df.columns.tolist()}")
@@ -256,7 +843,7 @@ def output_excel(results, score_names, scorecard_name):
     
     df = df[existing_columns]
     
-    filename = f"{scorecard_name}_predictions.xlsx"
+    filename = f"{scorecard_identifier}_predictions.xlsx"
     with pd.ExcelWriter(filename, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Predictions')
         workbook = writer.book
@@ -279,32 +866,139 @@ def output_excel(results, score_names, scorecard_name):
 
     logging.info(f"Excel file '{filename}' has been created with the prediction results.")
 
-def select_sample(scorecard_class, score_name, item_id, fresh):
-    """Select an item from the Plexus API instead of from score datasets."""
+def select_sample(scorecard_class, score_name, item_identifier, fresh, compare_to_feedback=False, scorecard_id=None, score_id=None):
+    """Select an item from the Plexus API using flexible identifier resolution."""
     from plexus.cli.client_utils import create_client
     from plexus.dashboard.api.models.item import Item
+    from plexus.dashboard.api.models.feedback_item import FeedbackItem
     from plexus.cli.reports.utils import resolve_account_id_for_command
     
     # Create API client
     client = create_client()
     account_id = resolve_account_id_for_command(client, None)
     
-    if item_id:
-        # First try to fetch specific item by ID
+    if item_identifier:
+        # Use the flexible item identifier resolution
+        item_id = memoized_resolve_item_identifier(client, item_identifier, account_id)
+        if not item_id:
+            raise ValueError(f"No item found matching identifier: {item_identifier}")
+        
+        # Get the item using the standard model method
         try:
             item = Item.get_by_id(item_id, client)
-            logging.info(f"Fetched item {item_id} from API by direct ID lookup")
+            feedback_item = None
+            
+            # If feedback comparison is requested, fetch feedback separately
+            if compare_to_feedback and scorecard_id and score_id:
+                try:
+                    # Use the Item's feedbackItems relationship instead of complex filtering
+                    # This is more reliable and matches the working GraphQL query
+                    query = """
+                    query GetItemWithFeedback($id: ID!) {
+                        getItem(id: $id) {
+                            feedbackItems {
+                                items {
+                                    id
+                                    scorecardId
+                                    scoreId
+                                    initialAnswerValue
+                                    finalAnswerValue
+                                    initialCommentValue
+                                    finalCommentValue
+                                    editCommentValue
+                                    editedAt
+                                    editorName
+                                    isAgreement
+                                    createdAt
+                                    updatedAt
+                                }
+                            }
+                        }
+                    }
+                    """
+                    
+                    variables = {"id": item_id}
+                    response = client.execute(query=query, variables=variables)
+                    
+                    if response and 'getItem' in response and response['getItem']:
+                        feedback_data = response['getItem'].get('feedbackItems', {})
+                        feedback_items = feedback_data.get('items', [])
+                        
+                        # Filter for the specific scorecard and score
+                        matching_feedback = None
+                        for feedback_data in feedback_items:
+                            if (feedback_data.get('scorecardId') == scorecard_id and 
+                                feedback_data.get('scoreId') == score_id):
+                                # Create a FeedbackItem object from the data
+                                feedback_item = FeedbackItem.from_dict(feedback_data, client=client)
+                                matching_feedback = feedback_item
+                                break
+                        
+                        if matching_feedback:
+                            feedback_item = matching_feedback
+                            logging.info(f"Found feedback for item {item_id}, score {score_name}: initial_value={feedback_item.initialAnswerValue}, final_value={feedback_item.finalAnswerValue}")
+                        else:
+                            logging.info(f"No feedback available for item {item_id}, score {score_name} (scorecard: {scorecard_id}, score_id: {score_id})")
+                    else:
+                        logging.info(f"No feedback available for item {item_id}, score {score_name}")
+                        
+                except Exception as e:
+                    logging.warning(f"Failed to fetch feedback for item {item_id}: {e}")
+                    feedback_item = None
+            
+            logging.info(f"Found item {item_id} from identifier '{item_identifier}'")
             
             # Create a pandas-like row structure for compatibility
+            text_content = item.text or ''
+            logging.info(f"Item text length: {len(text_content)}")
+            logging.info(f"Item text preview: {text_content[:200] if text_content else 'EMPTY TEXT'}")
+            
+            # Prepare metadata by combining Item metadata with required CLI metadata
+            base_metadata = {
+                "item_id": item.id,
+                "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
+                "scorecard_key": scorecard_class.properties.get('key'),
+                "score_name": score_name
+            }
+            
+            # Merge with Item's metadata if it exists
+            if item.metadata:
+                logging.info(f"Item has metadata: {type(item.metadata)}")
+                
+                # Parse metadata if it's a JSON string
+                parsed_metadata = None
+                if isinstance(item.metadata, str):
+                    try:
+                        parsed_metadata = json.loads(item.metadata)
+                        logging.info(f"Successfully parsed JSON metadata with keys: {list(parsed_metadata.keys())}")
+                    except json.JSONDecodeError as e:
+                        logging.warning(f"Failed to parse metadata JSON: {e}")
+                        parsed_metadata = None
+                elif isinstance(item.metadata, dict):
+                    parsed_metadata = item.metadata
+                    logging.info(f"Metadata is already a dict with keys: {list(parsed_metadata.keys())}")
+                else:
+                    logging.warning(f"Metadata is unexpected type: {type(item.metadata)}")
+                
+                if parsed_metadata and isinstance(parsed_metadata, dict):
+                    # Merge Item metadata with base metadata (base metadata takes precedence)
+                    merged_metadata = {**parsed_metadata, **base_metadata}
+                    logging.info(f"Merged metadata keys: {list(merged_metadata.keys())}")
+                    logging.info(f"Original Item metadata: {json.dumps(parsed_metadata, indent=2)}")
+                else:
+                    merged_metadata = base_metadata
+                    logging.warning(f"Could not parse Item metadata, using base metadata only")
+            else:
+                merged_metadata = base_metadata
+                logging.info("Item has no metadata, using base metadata only")
+            
+            logging.info(f"Final metadata for scoring: {json.dumps(merged_metadata, indent=2)}")
+            
             sample_data = {
-                'text': item.text or '',
+                'text': text_content,
                 'item_id': item.id,
-                'metadata': json.dumps({
-                    "item_id": item.id,
-                    "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
-                    "scorecard_key": scorecard_class.properties.get('key'),
-                    "score_name": score_name
-                })
+                'metadata': json.dumps(merged_metadata),
+                'feedback_item': feedback_item  # Add feedback data to the sample
             }
             
             # Convert to DataFrame-like structure for compatibility
@@ -313,60 +1007,22 @@ def select_sample(scorecard_class, score_name, item_id, fresh):
             
             return sample_row, item.id
             
-        except ValueError as e:
-            logging.info(f"Item {item_id} not found by direct ID lookup, trying identifier search: {e}")
-            
-            # Fallback: try to find by identifier value
-            try:
-                from plexus.utils.identifier_search import find_item_by_identifier
-                
-                item = find_item_by_identifier(item_id, account_id, client)
-                if item:
-                    logging.info(f"Found item {item.id} by identifier value '{item_id}'")
-                    
-                    # Create a pandas-like row structure for compatibility
-                    sample_data = {
-                        'text': item.text or '',
-                        'item_id': item.id,
-                        'metadata': json.dumps({
-                            "item_id": item.id,
-                            "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
-                            "scorecard_key": scorecard_class.properties.get('key'),
-                            "score_name": score_name
-                        })
-                    }
-                    
-                    # Convert to DataFrame-like structure for compatibility
-                    import pandas as pd
-                    sample_row = pd.DataFrame([sample_data])
-                    
-                    return sample_row, item.id
-                else:
-                    raise ValueError(f"No item found with ID '{item_id}' or identifier value '{item_id}'")
-                    
-            except Exception as identifier_error:
-                logging.error(f"Identifier search also failed: {identifier_error}")
-                raise ValueError(f"No item found with ID '{item_id}' or identifier value '{item_id}'")
+        except Exception as e:
+            logging.error(f"Error retrieving item {item_id}: {e}")
+            raise ValueError(f"Could not retrieve item {item_id}: {e}")
     else:
-        # Get the most recent item for the account
-        query = f"""
-        query ListItemByAccountIdAndCreatedAt($accountId: String!) {{
-            listItemByAccountIdAndCreatedAt(accountId: $accountId, sortDirection: DESC, limit: 1) {{
-                items {{
-                    {Item.fields()}
-                }}
-            }}
-        }}
-        """
-        
-        response = client.execute(query, {'accountId': account_id})
-        items = response.get('listItemByAccountIdAndCreatedAt', {}).get('items', [])
+        # Get the most recent item for the account (no feedback comparison for random items)
+        items = Item.list(
+            client=client,
+            filter={'accountId': {'eq': account_id}},
+            sort={'createdAt': 'DESC'},
+            limit=1
+        )
         
         if not items:
             raise ValueError("No items found in the account")
         
-        item_data = items[0]
-        item = Item.from_dict(item_data, client)
+        item = items[0]
         
         logging.info(f"Selected most recent item {item.id} from API")
         
@@ -379,7 +1035,8 @@ def select_sample(scorecard_class, score_name, item_id, fresh):
                 "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
                 "scorecard_key": scorecard_class.properties.get('key'),
                 "score_name": score_name
-            })
+            }),
+            'feedback_item': None  # No feedback for random items
         }
         
         # Convert to DataFrame-like structure for compatibility
@@ -387,8 +1044,6 @@ def select_sample(scorecard_class, score_name, item_id, fresh):
         sample_row = pd.DataFrame([sample_data])
         
         return sample_row, item.id
-
-
 
 async def predict_score(score_name, scorecard_class, sample_row, used_item_id):
     """Predict a single score."""
@@ -465,7 +1120,7 @@ async def predict_score_impl(
         await score_instance.cleanup()
         raise
 
-def handle_exception(loop, context, scorecard_name=None, score_name=None):
+def handle_exception(loop, context, scorecard_identifier=None, score_identifier=None):
     """Custom exception handler for the event loop"""
     exception = context.get('exception')
     message = context.get('message', '')
@@ -485,12 +1140,12 @@ def handle_exception(loop, context, scorecard_name=None, score_name=None):
         print("2. Either:")
         print("   a. Set PLEXUS_ENABLE_LLM_BREAKPOINTS=false to run without stopping")
         print("   b. Keep PLEXUS_ENABLE_LLM_BREAKPOINTS=true to continue stopping at breakpoints")
-        print(f"3. Run the same command with --item-id {exception.thread_id}")
+        print(f"3. Run the same command with --item {exception.thread_id}")
         print("\nExample:")
-        print(f"  plexus predict --scorecard-name {scorecard_name}", end="")
-        if score_name:
-            print(f" --score-name {score_name}", end="")
-        print(f" --item-id {exception.thread_id}")
+        print(f"  plexus predict --scorecard {scorecard_identifier}", end="")
+        if score_identifier:
+            print(f" --score {score_identifier}", end="")
+        print(f" --item {exception.thread_id}")
         print("=" * 80 + "\n")
         
         # Stop the event loop gracefully
@@ -501,14 +1156,54 @@ def handle_exception(loop, context, scorecard_name=None, score_name=None):
         loop.default_exception_handler(context)
         loop.stop()
 
-def get_scorecard_class(scorecard_name: str):
-    """Get the scorecard class from the registry."""
-    Scorecard.load_and_register_scorecards('scorecards/')
-    scorecard_class = scorecard_registry.get(scorecard_name)
+def get_scorecard_class(scorecard_identifier: str):
+    """Get scorecard class by identifier"""
+    def load_scorecards_if_needed():
+        # Check if registry has any items by checking if items() returns anything
+        if not list(scorecard_registry.items()):
+            Scorecard.load_and_register_scorecards('scorecards/')
+    
+    load_scorecards_if_needed()
+    
+    # Try to get the scorecard class directly from the registry using the identifier
+    scorecard_class = scorecard_registry.get(scorecard_identifier)
     if scorecard_class is None:
-        logging.error(f"Scorecard with name '{scorecard_name}' not found.")
-        raise ValueError(f"Scorecard with name '{scorecard_name}' not found.")
+        raise Exception(f"Scorecard class not found for: {scorecard_identifier}")
+    
     return scorecard_class
+
+
+def create_feedback_comparison(
+    current_prediction: dict,
+    feedback_item: FeedbackItem,
+    score_name: str
+) -> dict:
+    """
+    Create a comparison between current prediction and historical feedback.
+    
+    Args:
+        current_prediction: Current prediction result dict
+        feedback_item: FeedbackItem object from GraphQL
+        score_name: Name of the score being compared
+        
+    Returns:
+        Dictionary with comparison data
+    """
+    current_value = current_prediction.get(f'{score_name}_value')
+    final_value = feedback_item.finalAnswerValue
+    
+    # Compute isAgreement: true if current prediction matches the final corrected value
+    is_agreement = str(current_value).lower() == str(final_value).lower() if current_value and final_value else False
+    
+    return {
+        "current_prediction": {
+            "value": current_value,
+            "explanation": current_prediction.get(f'{score_name}_explanation'),
+        },
+        "ground_truth": final_value,
+        "isAgreement": is_agreement
+    }
+
 
 def create_score_input(sample_row, item_id, scorecard_class, score_name):
     """Create a Score.Input object from sample data."""
@@ -526,7 +1221,134 @@ def create_score_input(sample_row, item_id, scorecard_class, score_name):
         metadata = json.loads(metadata_str)
         if 'item_id' not in metadata:
             metadata['item_id'] = str(item_id)
+        
+        logging.info(f"Creating score input with text length: {len(text)}")
+        logging.info(f"Score input text preview: {text[:200] if text else 'NO TEXT IN SCORE INPUT'}")
+        logging.info(f"Score input metadata keys: {list(metadata.keys())}")
+        logging.info(f"Complete score input metadata: {json.dumps(metadata, indent=2)}")
+        
         return score_input_class(text=text, metadata=metadata)
     else:
         metadata = {"item_id": str(item_id)}
         return score_input_class(text="", metadata=metadata)
+
+def output_yaml_prediction_results(
+    results: list,
+    score_names: list,
+    scorecard_identifier: str,
+    score_identifier: str = None,
+    item_identifiers: list = None,
+    include_input: bool = False,
+    include_trace: bool = False
+):
+    """Output prediction results in token-efficient YAML format."""
+    import yaml
+    from decimal import Decimal
+    import json
+    
+    # Build the command that was used
+    command_parts = ['plexus predict', f'--scorecard "{scorecard_identifier}"']
+    if score_identifier:
+        command_parts.append(f'--score "{score_identifier}"')
+    if item_identifiers:
+        if len(item_identifiers) == 1 and item_identifiers[0] is not None:
+            command_parts.append(f'--item "{item_identifiers[0]}"')
+        elif len(item_identifiers) > 1:
+            command_parts.append(f'--items "{",".join(str(i) for i in item_identifiers if i is not None)}"')
+    command_parts.append('--format yaml')
+    if include_input:
+        command_parts.append('--input')
+    if include_trace:
+        command_parts.append('--trace')
+    
+    command_string = ' '.join(command_parts)
+    
+    # Custom YAML representer for Decimal objects
+    def decimal_representer(dumper, data):
+        return dumper.represent_float(float(data))
+    
+    yaml.add_representer(Decimal, decimal_representer)
+    
+    # Build the output structure
+    output_data = {}
+    
+    # Add context with just command information
+    output_data['context'] = {
+        'command': command_string
+    }
+    
+    # Process each result
+    predictions = []
+    for result in results:
+        prediction_data = {
+            'item_id': result.get('item_id')
+        }
+        
+        # Include input data if requested
+        if include_input:
+            input_data = {}
+            if result.get('text'):
+                input_data['text'] = result['text']
+            if result.get('metadata'):
+                try:
+                    # Parse metadata if it's a string
+                    if isinstance(result['metadata'], str):
+                        input_data['metadata'] = json.loads(result['metadata'])
+                    else:
+                        input_data['metadata'] = result['metadata']
+                except (json.JSONDecodeError, TypeError):
+                    input_data['metadata'] = result['metadata']
+            
+            if input_data:
+                prediction_data['input'] = input_data
+        
+        # Add score results
+        scores = []
+        for score_name in score_names:
+            score_data = {
+                'name': score_name
+            }
+            
+            # Always include value and explanation (core data)
+            value = result.get(f'{score_name}_value')
+            explanation = result.get(f'{score_name}_explanation')
+            
+            if value is not None:
+                score_data['value'] = value
+            if explanation:
+                score_data['explanation'] = explanation
+            
+            # Include trace if requested and available
+            if include_trace:
+                trace_data = result.get(f'{score_name}_trace')
+                if trace_data is not None:
+                    score_data['trace'] = trace_data
+            
+            # Include feedback comparison if available
+            feedback_comparison = result.get(f'{score_name}_feedback_comparison')
+            if feedback_comparison:
+                score_data['feedback_comparison'] = feedback_comparison
+            
+            # Only add if we have data beyond just the name
+            if len(score_data) > 1:  # More than just 'name'
+                scores.append(score_data)
+        
+        if scores:
+            prediction_data['scores'] = scores
+        
+        predictions.append(prediction_data)
+    
+    output_data['predictions'] = predictions
+    
+    # Output the YAML with a clean format
+    yaml_output = yaml.dump(
+        output_data,
+        default_flow_style=False,
+        allow_unicode=True,
+        sort_keys=False,
+        indent=2
+    )
+    
+    # Print with a simple comment header
+    print("# Plexus prediction results")
+    print(yaml_output)
