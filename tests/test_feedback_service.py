@@ -531,7 +531,7 @@ class TestFeedbackServiceTimeWindow:
             # Verify proper filtering was applied
             mock_list.assert_called_once()
             call_kwargs = mock_list.call_args[1]
-            assert 'updatedAt' in call_kwargs['filter']['and'][3]  # Time filter should be present
+            assert 'editedAt' in call_kwargs['filter']['and'][3]  # Time filter should be present
 
     @pytest.mark.asyncio
     async def test_time_calculation_includes_buffer(self):
@@ -566,7 +566,7 @@ class TestFeedbackServiceTimeWindow:
             assert 'filter' in call_kwargs
             assert 'and' in call_kwargs['filter']
             
-            # Check that a time filter (updatedAt) was applied
+            # Check that a time filter (editedAt) was applied
             filter_conditions = call_kwargs['filter']['and']
-            time_filter_found = any('updatedAt' in condition for condition in filter_conditions)
+            time_filter_found = any('editedAt' in condition for condition in filter_conditions)
             assert time_filter_found, "Time filter should be present in query" 
