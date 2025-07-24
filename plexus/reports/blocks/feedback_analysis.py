@@ -514,7 +514,7 @@ class FeedbackAnalysis(BaseReportBlock):
                     schema_response = await asyncio.to_thread(self.api_client.execute, schema_query, {})
                     if schema_response and '__schema' in schema_response:
                         query_fields = schema_response['__schema']['queryType']['fields']
-                        gsi_field = next((f for f in query_fields if f['name'] == 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt'), None)
+                        gsi_field = next((f for f in query_fields if f['name'] == 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt'), None)
                         if gsi_field:
                             self._log(f"GSI arguments: {gsi_field['args']}", level="INFO")
                         else:
@@ -523,7 +523,7 @@ class FeedbackAnalysis(BaseReportBlock):
                     self._log(f"Error querying schema: {e}", level="WARNING")
                 
                 # Construct a direct GraphQL query using the new GSI
-                # The GSI query field name is listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt
+                # The GSI query field name is listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt
                 # It takes `accountId` and a composite sort key argument.
                 # The composite sort key is formed from scorecardId, scoreId, and updatedAt.
                 # We'll name the GraphQL variable for this composite key `composite_sk_condition`
@@ -537,7 +537,7 @@ class FeedbackAnalysis(BaseReportBlock):
                     $nextToken: String,
                     $sortDirection: ModelSortDirection
                 ) {
-                    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
                         accountId: $accountId,
                         scorecardIdScoreIdUpdatedAt: $composite_sk_condition, # This is the argument for the composite sort key
                         limit: $limit,
@@ -619,7 +619,7 @@ class FeedbackAnalysis(BaseReportBlock):
                             self._log("Trying a simplified fallback query...", level="INFO")
                             simplified_query = """
                             query SimplifiedFeedbackQuery {
-                              listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                              listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
                                 accountId: "%s"
                                 limit: 1
                               ) {
@@ -649,8 +649,8 @@ class FeedbackAnalysis(BaseReportBlock):
                             except Exception as e:
                                 self._log(f"Even simplified query failed: {e}", level="ERROR")
                         
-                        if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt' in response:
-                            result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt']
+                        if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt' in response:
+                            result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt']
                             item_dicts = result.get('items', [])
                             
                             # Log the first few items to verify we're getting identifiers
