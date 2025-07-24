@@ -2236,7 +2236,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             
             # First, create or upsert the Item record
             # We'll use the content_id as the externalId
-            await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
+            item_database_id = await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
             
             # Create data dictionary with all required fields
             data = {
@@ -2244,7 +2244,26 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'itemId': item_database_id or content_id,  # Use database ID if available, fallback to content_id
                 'accountId': self.account_id,
                 'scorecardId': self.scorecard_id,
+                'metadata': json.dumps(metadata_dict),  # Add the metadata that was created earlier
+                'value': value,  # Add the score result value
+                'code': '200',  # Add success code
             }
+            
+            # Add scoreId - try multiple sources
+            score_id = None
+            if hasattr(score_result, 'parameters') and hasattr(score_result.parameters, 'id'):
+                score_id = score_result.parameters.id
+                self.logging.info(f"Using score ID from score_result.parameters.id: {score_id}")
+            elif hasattr(self, 'score_id') and self.score_id:
+                score_id = self.score_id
+                self.logging.info(f"Using score ID from self.score_id: {score_id}")
+            else:
+                self.logging.warning("No score ID found - this will cause GraphQL error")
+                self.logging.info(f"score_result.parameters: {getattr(score_result, 'parameters', 'NOT FOUND')}")
+                self.logging.info(f"self.score_id: {getattr(self, 'score_id', 'NOT FOUND')}")
+            
+            if score_id:
+                data['scoreId'] = score_id
             
             # Add feedback item ID if provided from the dataset
             if feedback_item_id:
