@@ -47,6 +47,7 @@ interface ScoreState {
   section?: Schema['ScorecardSection']['type']
   createdAt?: string
   updatedAt?: string
+  isDisabled?: boolean
 }
 
 type ScorecardSectionRecord = Schema['ScorecardSection']['type']
@@ -103,6 +104,7 @@ const updateScore = async (scoreData: {
   aiModel: string
   distribution: any[]
   versionHistory: any[]
+  isDisabled?: boolean
 }) => {
   const response = await (client.models.Score as any).update(scoreData)
   return response.data as Schema['Score']['type']
@@ -260,7 +262,8 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           metadata: {} as ScoreMetadata,
           section: scoreData.section as unknown as Schema['ScorecardSection']['type'],
           createdAt: scoreData.createdAt,
-          updatedAt: scoreData.updatedAt
+          updatedAt: scoreData.updatedAt,
+          isDisabled: scoreData.isDisabled ?? false
         })
         
         const sectionData = await getSection(scoreData.sectionId)
@@ -304,7 +307,8 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           aiProvider: score.aiProvider,
           aiModel: score.aiModel,
           distribution: score.metadata.distribution,
-          versionHistory: score.metadata.versionHistory
+          versionHistory: score.metadata.versionHistory,
+          isDisabled: score.isDisabled
         })
         console.log('Updated score:', result)
       }

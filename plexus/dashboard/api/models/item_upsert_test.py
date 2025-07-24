@@ -280,6 +280,159 @@ class TestItemUpsertIntegration:
                 mock_item.update.assert_called_once()
 
 
+class TestItemRelationshipValidation:
+    """Test suite for Item relationship validation to prevent cross-contamination."""
+
+    def test_validate_item_relationship_matching_report_id(self):
+        """Test that items with matching reportId pass validation."""
+        from plexus.dashboard.api.models.item import Item
+        
+        # Create mock item with existing identifiers
+        mock_item = type('MockItem', (), {
+            'id': 'test-item-123',
+            'identifiers': '[{"name": "report ID", "id": "277307013"}, {"name": "form ID", "id": "12345"}]'
+        })()
+        
+        # New identifiers with same reportId but different formId
+        new_identifiers = {
+            'reportId': '277307013',  # Matches existing
+            'formId': '67890'        # Different form, same report
+        }
+        
+        # Should pass validation (same report, different form is OK)
+        result = Item._validate_item_relationship(mock_item, new_identifiers, debug=True)
+        assert result is True
+
+    def test_validate_item_relationship_mismatched_report_id(self):
+        """Test that items with different reportId fail validation."""
+        from plexus.dashboard.api.models.item import Item
+        
+        # Create mock item with existing identifiers
+        mock_item = type('MockItem', (), {
+            'id': 'test-item-123', 
+            'identifiers': '[{"name": "report ID", "id": "277307013"}, {"name": "form ID", "id": "12345"}]'
+        })()
+        
+        # New identifiers with different reportId
+        new_identifiers = {
+            'reportId': '999999999',  # Different report
+            'formId': '67890'
+        }
+        
+        # Should fail validation (different reports = cross-contamination)
+        result = Item._validate_item_relationship(mock_item, new_identifiers, debug=True)
+        assert result is False
+
+    def test_validate_item_relationship_matching_session_id(self):
+        """Test that items with matching sessionId pass validation."""
+        from plexus.dashboard.api.models.item import Item
+        
+        # Create mock item with sessionId
+        mock_item = type('MockItem', (), {
+            'id': 'test-item-123',
+            'identifiers': '[{"name": "session ID", "id": "session-abc-123"}]'
+        })()
+        
+        new_identifiers = {
+            'sessionId': 'session-abc-123',  # Matches existing
+            'formId': 'new-form-456'
+        }
+        
+        result = Item._validate_item_relationship(mock_item, new_identifiers, debug=True)
+        assert result is True
+
+    def test_validate_item_relationship_dict_format_identifiers(self):
+        """Test validation with modern dict format identifiers."""
+        from plexus.dashboard.api.models.item import Item
+        
+        # Mock item with dict format identifiers  
+        mock_item = type('MockItem', (), {
+            'id': 'test-item-123',
+            'identifiers': {'reportId': '277307013', 'formId': '12345'}
+        })()
+        
+        new_identifiers = {
+            'reportId': '277307013',  # Matches
+            'formId': '99999'        # Different form, same report
+        }
+        
+        result = Item._validate_item_relationship(mock_item, new_identifiers, debug=True)
+        assert result is True
+
+    def test_validate_item_relationship_no_critical_identifiers(self):
+        """Test validation when no critical identifiers (reportId/sessionId) are present."""
+        from plexus.dashboard.api.models.item import Item
+        
+        mock_item = type('MockItem', (), {
+            'id': 'test-item-123',
+            'identifiers': '[{"name": "form ID", "id": "12345"}]'  # Only formId, no reportId
+        })()
+        
+        new_identifiers = {
+            'formId': '67890',  # Different form
+            'ccId': 'some-cc-id'
+        }
+        
+        # Should pass validation since no critical identifiers to conflict
+        result = Item._validate_item_relationship(mock_item, new_identifiers, debug=True)
+        assert result is True
+
+    def test_validate_item_relationship_malformed_identifiers(self):
+        """Test validation with malformed identifier data."""
+        from plexus.dashboard.api.models.item import Item
+        
+        mock_item = type('MockItem', (), {
+            'id': 'test-item-123',
+            'identifiers': 'invalid-json-string'  # Malformed JSON
+        })()
+        
+        new_identifiers = {
+            'reportId': '277307013',
+            'formId': '12345'
+        }
+        
+        # Should pass validation (err on side of caution but allow operation)
+        result = Item._validate_item_relationship(mock_item, new_identifiers, debug=True)
+        assert result is True
+
+    def test_hierarchical_identifier_lookup_form_id_priority(self):
+        """Test that formId lookup takes priority in hierarchical search."""
+        from plexus.dashboard.api.models.item import Item
+        from unittest.mock import MagicMock, patch
+        
+        mock_client = MagicMock()
+        
+        # Mock _lookup_item_by_identifiers directly to return the expected dictionary
+        with patch.object(Item, '_lookup_item_by_identifiers') as mock_lookup:
+            mock_lookup.return_value = {
+                'id': 'item-found-by-form',
+                'externalId': 'form-12345',
+                'description': 'Found by form ID',
+                'accountId': 'test-account',
+                'identifiers': {'formId': '12345'},
+                'text': 'Test content'
+            }
+            
+            result = Item._lookup_item_by_identifiers(
+                client=mock_client,
+                account_id='test-account',
+                identifiers={'formId': '12345', 'reportId': '67890'},
+                debug=True
+            )
+            
+            # Should find item by formId (first priority)
+            assert result is not None
+            assert result['id'] == 'item-found-by-form'
+            
+            # Verify method was called with correct parameters
+            mock_lookup.assert_called_once_with(
+                client=mock_client,
+                account_id='test-account',
+                identifiers={'formId': '12345', 'reportId': '67890'},
+                debug=True
+            )
+
+
 if __name__ == "__main__":
     # Run the tests
     pytest.main([__file__, "-v"])

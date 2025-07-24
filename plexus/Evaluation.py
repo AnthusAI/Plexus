@@ -1081,6 +1081,12 @@ class Evaluation:
             logging.warning("'Session ID' column not found. Using content_id as Session ID.")
             df['Session ID'] = df['content_id']
 
+        # Optional: 'feedback_item_id' column can be included to link score results to existing feedback items
+        if 'feedback_item_id' in df.columns:
+            logging.info("Found 'feedback_item_id' column - will link score results to existing feedback items")
+        else:
+            logging.info("No 'feedback_item_id' column found - score results will be created without feedback item links")
+
         fine_tuning_ids = set()
         fine_tuning_ids_file = f"tuning/{self.scorecard_name}/{self.subset_of_score_names[0]}/training_ids.txt"
         original_shape = df.shape
@@ -1949,6 +1955,15 @@ Total cost:       ${expenses['total_cost']:.6f}
                 form_id = columns.get('form_id', '')
                 metadata_string = columns.get('metadata', {})
                 
+                # Get feedback_item_id from the dataset if available
+                feedback_item_id = row.get('feedback_item_id', None)
+                
+                # Debug logging for feedback_item_id
+                if feedback_item_id:
+                    logging.info(f"Found feedback_item_id in dataset: {feedback_item_id}")
+                else:
+                    logging.debug(f"No feedback_item_id found in row. Available columns: {list(row.index) if hasattr(row, 'index') else 'N/A'}")
+                
                 # Initialize human_labels dictionary
                 human_labels = {}
                 
@@ -2090,7 +2105,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                                 await self._create_score_result(
                                     score_result=score_result,
                                     content_id=content_id,
-                                    result=result
+                                    result=result,
+                                    feedback_item_id=feedback_item_id
                                 )
                                 self.scoreresult_creation_successes = getattr(self, 'scoreresult_creation_successes', 0) + 1
                                 self.logging.info(f"Successfully created ScoreResult for {score_name} (success #{self.scoreresult_creation_successes})")
@@ -2150,28 +2166,6 @@ Total cost:       ${expenses['total_cost']:.6f}
                 logging.info(f"Attempt {attempt + 1} failed for content_id {row.get('content_id')} with error: {e}. Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
 
-            except Exception as e: # Catch any other unexpected errors during scoring
-                logging.error(f"Unexpected error scoring content_id {row.get('content_id')} on attempt {attempt + 1}: {e}", exc_info=True)
-                if attempt == max_attempts - 1:
-                    # Return an error result on the last attempt
-                    return {
-                        'content_id': row.get('content_id', ''),
-                        'session_id': row.get('Session ID', row.get('content_id', '')),
-                        'form_id': row.get('columns', {}).get('form_id', ''),
-                        'results': {
-                            score_name or 'processing_error': Score.Result(
-                                value="Error",
-                                error=f"Unexpected error after {max_attempts} attempts: {e}",
-                                parameters=Score.Parameters(name=score_name or 'processing_error', scorecard=self.scorecard_name)
-                           )
-                        },
-                        'human_labels': {}
-                    }
-                # Wait before retrying for unexpected errors too
-                delay = min(base_delay * (2 ** attempt), max_delay)
-                logging.info(f"Retrying in {delay} seconds...")
-                await asyncio.sleep(delay)
-        
         # If loop completes without returning (e.g., all attempts failed but didn't hit max_attempts check correctly)
         logging.error(f"Scoring loop completed for content_id {row.get('content_id')} without returning a result or error after {max_attempts} attempts.")
         return {
@@ -2188,15 +2182,16 @@ Total cost:       ${expenses['total_cost']:.6f}
             'human_labels': {}
         }
 
-    async def _create_score_result(self, *, score_result, content_id, result):
+    async def _create_score_result(self, *, score_result, content_id, result, feedback_item_id=None):
         """Create a score result in the dashboard."""
         try:
             # Log the raw inputs
-            self.logging.info("=== Creating ScoreResult in Dashboard ===")
-            self.logging.info(f"score_result value: {score_result.value}")
-            self.logging.info(f"score_result metadata keys: {list(score_result.metadata.keys()) if score_result.metadata else 'None'}")
-            self.logging.info(f"content_id: {content_id}")
-            self.logging.info(f"result form_id: {result.get('form_id', 'N/A')}")
+            logging.info("Creating score result with raw inputs:")
+            logging.info(f"score_result value: {score_result.value}")
+            logging.info(f"score_result metadata: {truncate_dict_strings_inner(score_result.metadata)}")
+            logging.info(f"content_id: {content_id}")
+            logging.info(f"result dict: {truncate_dict_strings_inner(result)}")
+            logging.info(f"feedback_item_id: {feedback_item_id}")
 
             # Validate required attributes are available
             self.logging.info(f"Validating required attributes...")
@@ -2213,6 +2208,9 @@ Total cost:       ${expenses['total_cost']:.6f}
 
             # Ensure we have a valid string value
             value = str(score_result.value) if score_result.value is not None else "N/A"
+            
+            # Extract feedback_item_id if available
+            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
             
             # Ensure we have valid metadata
             metadata_dict = {
@@ -2232,9 +2230,13 @@ Total cost:       ${expenses['total_cost']:.6f}
                 }
             }
             
-            # First, create or upsert the Item record and get the database ID
-            # We'll use the content_id as the externalId but need the database ID for the ScoreResult
-            item_database_id = await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
+            # Add feedback_item_id to metadata if available
+            if feedback_item_id:
+                metadata_dict['feedback_item_id'] = feedback_item_id
+            
+            # First, create or upsert the Item record
+            # We'll use the content_id as the externalId
+            await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
             
             # Create data dictionary with all required fields
             data = {
@@ -2244,19 +2246,14 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'scorecardId': self.scorecard_id,
             }
             
-            # Add score_id if available and has valid format
-            if hasattr(self, 'score_id') and self.score_id:
-                # Validate score_id format - should be a UUID with hyphens
-                if not (isinstance(self.score_id, str) and '-' in self.score_id):
-                    self.logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {self.score_id}")
-                    self.logging.warning(f"Will not add this Score ID to the ScoreResult record.")
-                else:
-                    data['scoreId'] = self.score_id
-                    
-            data['value'] = value
-            data['metadata'] = json.dumps(metadata_dict)  # Ensure metadata is a JSON string
-            data['code'] = '200'  # HTTP response code for successful evaluation
-            data['type'] = 'evaluation'  # Mark this as an evaluation score result
+            # Add feedback item ID if provided from the dataset
+            if feedback_item_id:
+                data['feedbackItemId'] = feedback_item_id
+                logging.info(f"Linking score result to feedback item from dataset: {feedback_item_id}")
+
+            # Add feedbackItemId as a direct field if available
+            if feedback_item_id:
+                data['feedbackItemId'] = feedback_item_id
 
             # Add trace data if available
             logging.info("Checking for trace data to add to score result...")            
@@ -2271,6 +2268,29 @@ Total cost:       ${expenses['total_cost']:.6f}
             self.logging.info("Preparing to create score result with data:")
             for key, value in data.items():
                 self.logging.info(f"{key}: {truncate_dict_strings_inner(value)}")
+
+            # Check for and log feedback_item_id if present
+            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
+            if feedback_item_id:
+                self.logging.info(f"feedback_item_id: {feedback_item_id}")
+                # Check if it was included in final metadata
+                final_metadata = json.loads(data['metadata'])
+                if 'feedback_item_id' in final_metadata:
+                    self.logging.info(f"feedback_item_id included in final metadata: {final_metadata['feedback_item_id']}")
+                else:
+                    self.logging.info("feedback_item_id NOT included in final metadata")
+                # Check if it was set as direct field
+                if 'feedbackItemId' in data:
+                    self.logging.info(f"feedbackItemId set as direct field: {data['feedbackItemId']}")
+                else:
+                    self.logging.info("feedbackItemId NOT set as direct field")
+            else:
+                self.logging.info("feedback_item_id: None (not found in score_result.metadata)")
+                # Also log what keys are actually in metadata for debugging
+                if score_result.metadata:
+                    self.logging.info(f"Available metadata keys: {list(score_result.metadata.keys())}")
+                else:
+                    self.logging.info("score_result.metadata is None/empty")
 
             # Validate all required fields are present and not None
             required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code']
@@ -2293,6 +2313,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     trace
                     code
                     type
+                    feedbackItemId
                 }
             }
             """
@@ -2469,6 +2490,51 @@ Total cost:       ${expenses['total_cost']:.6f}
             # We'll continue with score result creation even if item creation fails
             self.logging.warning("Continuing with ScoreResult creation despite Item creation failure")
             return None  # Return None if item creation fails
+
+    # DEPRECATED: This method is no longer used. feedback_item_id now comes directly from the dataset.
+    async def _find_feedback_item(self, *, content_id: str, score_name: str) -> str | None:
+        """Find the feedback item associated with this content_id and score."""
+        try:
+            # Query for feedback items that match the item and score
+            query = """
+            query FindFeedbackItem($accountId: String!, $scorecardId: String!, $scoreId: String!, $itemId: String!) {
+                listFeedbackItems(
+                    filter: {
+                        accountId: { eq: $accountId }
+                        scorecardId: { eq: $scorecardId }
+                        scoreId: { eq: $scoreId }
+                        itemId: { eq: $itemId }
+                    }
+                    limit: 1
+                ) {
+                    items {
+                        id
+                        editCommentValue
+                    }
+                }
+            }
+            """
+            
+            variables = {
+                "accountId": self.account_id,
+                "scorecardId": self.scorecard_id,
+                "scoreId": self.score_id,
+                "itemId": content_id
+            }
+            
+            response = await asyncio.to_thread(self.dashboard_client.execute, query, variables)
+            
+            if response.get('listFeedbackItems', {}).get('items'):
+                feedback_item = response['listFeedbackItems']['items'][0]
+                logging.info(f"Found feedback item for content_id {content_id}: {feedback_item['id']}")
+                return feedback_item['id']
+            else:
+                logging.debug(f"No feedback item found for content_id {content_id} and score {score_name}")
+                return None
+                
+        except Exception as e:
+            logging.warning(f"Error finding feedback item for content_id {content_id}: {e}")
+            return None
 
     async def cleanup(self):
         """Clean up all resources"""

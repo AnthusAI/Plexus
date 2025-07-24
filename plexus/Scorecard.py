@@ -365,6 +365,17 @@ class Scorecard:
         if (score_class is not None):
             logging.info(f"Found score class for: {score}")
 
+            # Check if score is disabled - if isDisabled is True, return 403
+            is_disabled = score_configuration.get('isDisabled')
+            if is_disabled is True:
+                logging.info(f"Score '{score}' is disabled")
+                return [Score.Result(
+                    parameters=Score.Parameters(name=score),
+                    value="DISABLED",
+                    error=f"Score '{score}' is disabled",
+                    code="403"
+                )]
+
             # Calculate content item length in tokens using a general-purpose encoding
             encoding = tiktoken.get_encoding("cl100k_base")
             item_tokens = len(encoding.encode(text))

@@ -90,6 +90,7 @@ def info(scorecard: str, score: str):
                             type
                             order
                             externalId
+                            isDisabled
                         }}
                     }}
                 }}
@@ -127,11 +128,15 @@ def info(scorecard: str, score: str):
             return
         
         # Display the score information
+        is_disabled = found_score.get('isDisabled', False)
+        status_text = "[red]Disabled[/red]" if is_disabled else "[green]Enabled[/green]"
+        
         panel = Panel.fit(
             f"[bold]Score ID:[/bold] {found_score['id']}\n"
             f"[bold]Name:[/bold] {found_score['name']}\n"
             f"[bold]Key:[/bold] {found_score['key']}\n"
             f"[bold]Type:[/bold] {found_score['type']}\n"
+            f"[bold]Status:[/bold] {status_text}\n"
             f"[bold]Order:[/bold] {found_score['order']}\n"
             f"[bold]External ID:[/bold] {found_score.get('externalId', 'None')}\n"
             f"[bold]Section:[/bold] {section_name}\n"
@@ -183,6 +188,7 @@ def list(scorecard: str, limit: int):
                             type
                             order
                             externalId
+                            isDisabled
                         }}
                     }}
                 }}

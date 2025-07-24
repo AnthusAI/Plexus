@@ -236,7 +236,9 @@ class Item(BaseModel):
         if text is not None:
             input_data['text'] = text
         if metadata is not None:
-            input_data['metadata'] = metadata
+            # Convert metadata to JSON string like other SDK models
+            import json
+            input_data['metadata'] = json.dumps(metadata)
         
         mutation = """
         mutation CreateItem($input: CreateItemInput!) {
@@ -278,6 +280,11 @@ class Item(BaseModel):
     def update(self, **kwargs) -> 'Item':
         if 'createdAt' in kwargs:
             raise ValueError("createdAt cannot be modified after creation")
+        
+        # Convert metadata to JSON string like other SDK models
+        if 'metadata' in kwargs and kwargs['metadata'] is not None:
+            import json
+            kwargs['metadata'] = json.dumps(kwargs['metadata'])
             
         update_data = {
             'updatedAt': datetime.now(timezone.utc).isoformat().replace(
@@ -472,6 +479,11 @@ class Item(BaseModel):
         """
         Look up an Item by its identifiers using the Identifier table's GSI.
         
+        This uses a hierarchical lookup strategy:
+        1. Try formId first (most specific)
+        2. If formId not found, try reportId/sessionId (for multi-form reports)
+        3. Prevent cross-contamination by validating the relationship
+        
         Args:
             client: PlexusDashboardClient instance
             account_id: The account ID
@@ -487,30 +499,40 @@ class Item(BaseModel):
         # Import here to avoid circular import
         from .identifier import Identifier
         
-        # Try different identifier values in priority order (reportId first as most unique)
-        identifier_values_to_try = []
+        # Extract identifier values for the lookup strategy
+        form_id_value = None
+        report_id_value = None
+        session_id_value = None
+        
         if isinstance(identifiers, dict):
-            for key in ['reportId', 'formId', 'sessionId', 'ccId']:
-                if key in identifiers and identifiers[key]:
-                    identifier_values_to_try.append(str(identifiers[key]))
+            # Extract formId
+            if 'formId' in identifiers and identifiers['formId']:
+                form_id_value = str(identifiers['formId'])
+            elif 'form ID' in identifiers and identifiers['form ID']:
+                form_id_value = str(identifiers['form ID'])
+            
+            # Extract reportId  
+            if 'reportId' in identifiers and identifiers['reportId']:
+                report_id_value = str(identifiers['reportId'])
+            elif 'report ID' in identifiers and identifiers['report ID']:
+                report_id_value = str(identifiers['report ID'])
+            
+            # Extract sessionId
+            if 'sessionId' in identifiers and identifiers['sessionId']:
+                session_id_value = str(identifiers['sessionId'])
+            elif 'session ID' in identifiers and identifiers['session ID']:
+                session_id_value = str(identifiers['session ID'])
         
-        if not identifier_values_to_try:
-            return None
-        
-        try:
-            # Use the Identifier model's GSI-based lookup
-            for identifier_value in identifier_values_to_try:
-                if debug:
-                    logger = logging.getLogger(__name__)
-                    logger.debug(f"[IDENTIFIER LOOKUP] Searching for: {identifier_value}")
+        # STEP 1: Try formId first (most specific identifier)
+        if form_id_value:
+            identifier = Identifier.find_by_value(form_id_value, account_id, client)
+            if identifier:
                 
-                identifier = Identifier.find_by_value(identifier_value, account_id, client)
-                if identifier:
-                    # Found identifier, now get the associated Item
-                    item = cls.get_by_id(identifier.itemId, client)
+                # Validate and get the associated Item
+                item_id = identifier.itemId
+                if isinstance(item_id, str) and item_id.strip():
+                    item = cls.get_by_id(item_id, client)
                     if item:
-                        if debug:
-                            logger.debug(f"[IDENTIFIER LOOKUP] Found Item via identifier: {item.id}")
                         return {
                             'id': item.id,
                             'externalId': item.externalId,
@@ -519,17 +541,147 @@ class Item(BaseModel):
                             'identifiers': item.identifiers,
                             'text': item.text
                         }
+                
+        
+        # STEP 2: Try reportId/sessionId lookup (for multi-form reports)
+        # This handles the case where one report has multiple forms that should share the same Item
+        if report_id_value or session_id_value:
+            fallback_values_to_try = []
+            
+            # Prioritize reportId as it's more specific than sessionId
+            if report_id_value:
+                fallback_values_to_try.append(report_id_value)
+            if session_id_value:
+                fallback_values_to_try.append(session_id_value)
+            
+            for identifier_value in fallback_values_to_try:
+                
+                identifier = Identifier.find_by_value(identifier_value, account_id, client)
+                if identifier:
+                    
+                    # Validate and get the associated Item
+                    item_id = identifier.itemId
+                    if isinstance(item_id, str) and item_id.strip():
+                        item = cls.get_by_id(item_id, client)
+                        if item:
+                            # CRITICAL: Validate that this Item should accept the new formId
+                            # Check if the reportId/sessionId actually matches
+                            if cls._validate_item_relationship(item, identifiers, debug):
+                                return {
+                                    'id': item.id,
+                                    'externalId': item.externalId,
+                                    'description': item.description,
+                                    'accountId': item.accountId,
+                                    'identifiers': item.identifiers,
+                                    'text': item.text
+                                }
+                            else:
+                                continue
+        
+        # STEP 3: Try other identifiers as final fallback (for backward compatibility)
+        other_values_to_try = []
+        if isinstance(identifiers, dict):
+            for key in ['ccId']:
+                if key in identifiers and identifiers[key]:
+                    other_values_to_try.append(str(identifiers[key]))
+            
+            # Also try direct stored name lookups for backwards compatibility
+            for stored_name in ['call criteria ID']:
+                if stored_name in identifiers and identifiers[stored_name]:
+                    other_values_to_try.append(str(identifiers[stored_name]))
+        
+        if other_values_to_try:
+            for identifier_value in other_values_to_try:
+                
+                identifier = Identifier.find_by_value(identifier_value, account_id, client)
+                if identifier:
+                    
+                    item_id = identifier.itemId
+                    if isinstance(item_id, str) and item_id.strip():
+                        item = cls.get_by_id(item_id, client)
+                        if item:
+                            return {
+                                'id': item.id,
+                                'externalId': item.externalId,
+                                'description': item.description,
+                                'accountId': item.accountId,
+                                'identifiers': item.identifiers,
+                                'text': item.text
+                            }
+        return None
+    
+    @classmethod
+    def _validate_item_relationship(
+        cls,
+        item: 'Item',
+        new_identifiers: Dict[str, Any],
+        debug: bool = False
+    ) -> bool:
+        """
+        Validate that an Item should accept new identifiers (prevent cross-contamination).
+        
+        This method checks if the new identifiers are compatible with the existing Item
+        by comparing reportId/sessionId values to ensure they belong to the same report.
+        
+        Args:
+            item: The existing Item to validate against
+            new_identifiers: The new identifiers trying to be associated
+            debug: Enable debug logging
+            
+        Returns:
+            True if the identifiers are compatible, False if they would cause cross-contamination
+        """
+        if debug:
+            logger = logging.getLogger(__name__)
+            logger.info(f"[RELATIONSHIP VALIDATION] Validating new identifiers against Item {item.id}")
+        
+        try:
+            # Parse existing identifiers from the Item
+            existing_identifiers = {}
+            if item.identifiers:
+                try:
+                    # Handle both JSON string and dict formats
+                    if isinstance(item.identifiers, str):
+                        parsed = json.loads(item.identifiers)
+                        # Convert legacy format to modern format
+                        for identifier_obj in parsed:
+                            if identifier_obj.get('name') == 'report ID':
+                                existing_identifiers['reportId'] = identifier_obj.get('id')
+                            elif identifier_obj.get('name') == 'session ID':
+                                existing_identifiers['sessionId'] = identifier_obj.get('id')
+                            elif identifier_obj.get('name') == 'form ID':
+                                existing_identifiers['formId'] = identifier_obj.get('id')
+                    elif isinstance(item.identifiers, dict):
+                        existing_identifiers = item.identifiers
+                except Exception as parse_error:
+                    if debug:
+                        logger.warning(f"[RELATIONSHIP VALIDATION] Could not parse existing identifiers: {parse_error}")
+            
+            # Compare critical identifiers that should match for the same report
+            critical_identifiers = ['reportId', 'sessionId']
+            
+            for key in critical_identifiers:
+                existing_value = existing_identifiers.get(key)
+                new_value = new_identifiers.get(key)
+                
+                # If both exist, they must match
+                if existing_value and new_value:
+                    if str(existing_value) != str(new_value):
+                        if debug:
+                            logger.warning(f"[RELATIONSHIP VALIDATION] Mismatch in {key}: existing={existing_value}, new={new_value}")
+                        return False
+                    elif debug:
+                        logger.info(f"[RELATIONSHIP VALIDATION] {key} matches: {existing_value}")
             
             if debug:
-                logger = logging.getLogger(__name__)
-                logger.debug(f"[IDENTIFIER LOOKUP] No Item found for identifier values: {identifier_values_to_try}")
-            return None
+                logger.info(f"[RELATIONSHIP VALIDATION] Validation passed - identifiers are compatible")
+            return True
             
         except Exception as e:
             if debug:
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error in identifier lookup: {e}")
-            return None
+                logger.error(f"[RELATIONSHIP VALIDATION] Error during validation: {e}")
+            # Err on the side of caution - reject if we can't validate
+            return False
     
     @classmethod
     def _lookup_item_by_external_id(
@@ -704,4 +856,70 @@ class Item(BaseModel):
             
             return json.dumps(legacy_identifiers) if legacy_identifiers else None
         except Exception:
+            return None
+    
+    @classmethod
+    def find_by_identifier(
+        cls,
+        client: _BaseAPIClient,
+        account_id: str,
+        identifier_key: str,
+        identifier_value: str,
+        debug: bool = False
+    ) -> Optional['Item']:
+        """
+        Find an Item using a specific identifier (reportId, formId, sessionId, etc.).
+        
+        This method provides a general-purpose way to find Items by any identifier type,
+        not limited to cache-specific use cases.
+        
+        Args:
+            client: API client for database operations
+            account_id: Account ID to scope the search
+            identifier_key: The type of identifier (e.g., 'reportId', 'formId', 'sessionId')
+            identifier_value: The value to search for
+            debug: Enable debug logging
+            
+        Returns:
+            Item object if found, None otherwise
+            
+        Example:
+            # Find item by report ID
+            item = Item.find_by_identifier(client, account_id, 'reportId', '277307013')
+            
+            # Find item by form ID  
+            item = Item.find_by_identifier(client, account_id, 'formId', '12345')
+        """
+        if debug:
+            logger = logging.getLogger(__name__)
+            logger.debug(f"[FIND BY IDENTIFIER] Searching for {identifier_key}={identifier_value} in account {account_id}")
+        
+        try:
+            # Use the existing identifier lookup mechanism from upsert_by_identifiers
+            item_dict = cls._lookup_item_by_identifiers(
+                client=client,
+                account_id=account_id,
+                identifiers={identifier_key: identifier_value},
+                debug=debug
+            )
+            
+            if item_dict:
+                if debug:
+                    logger.info(f"[FIND BY IDENTIFIER] Found item dict: {item_dict}")
+                
+                # Extract the item ID from the returned dictionary
+                item_id = item_dict['id']
+                
+                # Get the full Item object
+                item = cls.get_by_id(item_id, client)
+                return item
+            else:
+                if debug:
+                    logger.info(f"[FIND BY IDENTIFIER] No item found for {identifier_key}={identifier_value}")
+                return None
+                
+        except Exception as e:
+            if debug:
+                logger = logging.getLogger(__name__)
+                logger.error(f"[FIND BY IDENTIFIER] Error searching for {identifier_key}={identifier_value}: {e}")
             return None 
