@@ -101,14 +101,14 @@ async def fetch_feedback_items_with_gsi(client, account_id: str, scorecard_id: s
         query = """
         query ListFeedbackItemsByGSI(
             $accountId: String!,
-            $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput,
+            $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
             $limit: Int,
             $nextToken: String,
             $sortDirection: ModelSortDirection
         ) {
             listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
                 accountId: $accountId,
-                scorecardIdScoreIdUpdatedAt: $composite_sk_condition,
+                scorecardIdScoreIdEditedAt: $composite_sk_condition,
                 limit: $limit,
                 nextToken: $nextToken,
                 sortDirection: $sortDirection
@@ -150,12 +150,12 @@ async def fetch_feedback_items_with_gsi(client, account_id: str, scorecard_id: s
                     {
                         "scorecardId": str(scorecard_id),
                         "scoreId": str(score_id),
-                        "updatedAt": start_date.isoformat()
+                        "editedAt": start_date.isoformat()
                     },
                     {
                         "scorecardId": str(scorecard_id),
                         "scoreId": str(score_id),
-                        "updatedAt": end_date.isoformat()
+                        "editedAt": end_date.isoformat()
                     }
                 ]
             },
@@ -220,8 +220,8 @@ async def fetch_feedback_items_fallback(client, account_id: str, scorecard_id: s
             {"accountId": {"eq": account_id}},
             {"scorecardId": {"eq": scorecard_id}},
             {"scoreId": {"eq": score_id}},
-            {"updatedAt": {"ge": start_date.isoformat()}},
-            {"updatedAt": {"le": end_date.isoformat()}}
+            {"editedAt": {"ge": start_date.isoformat()}},
+            {"editedAt": {"le": end_date.isoformat()}}
         ]
     }
     
