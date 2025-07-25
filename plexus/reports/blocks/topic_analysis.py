@@ -1286,8 +1286,11 @@ class TopicAnalysis(BaseReportBlock):
             stats_summary += f"\n"
             
             # 2. Detailed Topic Information (include ALL topics, not just top 10)
+            # Sort topics by document count (descending) to ensure consistent ordering
+            sorted_topics = sorted(topics_list, key=lambda t: t.get('count', 0), reverse=True)
+            
             topic_summaries = []
-            for i, topic in enumerate(topics_list):
+            for i, topic in enumerate(sorted_topics):
                 topic_summary = f"Topic {topic['id']}: {topic['name']}\n"
                 topic_summary += f"  • Keywords: {', '.join(topic.get('keywords', [])[:8])}\n"
                 topic_summary += f"  • Document count: {topic.get('count', 0):,}\n"
@@ -1297,45 +1300,208 @@ class TopicAnalysis(BaseReportBlock):
                     percentage = (topic.get('count', 0) / total_documents) * 100
                     topic_summary += f"  • Percentage of total: {percentage:.1f}%\n"
                 
-                # Add sample text (truncated for token efficiency)
+                # Add multiple examples (10-20) for better context, full text not truncated
                 examples = topic.get('examples', [])
                 if examples:
-                    topic_summary += f"  • Sample text: {examples[0].get('text', '')[:100]}...\n"
-                    
+                    # Include up to 20 examples per topic for comprehensive analysis
+                    num_examples_to_include = min(20, len(examples))
+                    topic_summary += f"  • Sample conversations ({num_examples_to_include} examples):\n"
+                    for j, example in enumerate(examples[:num_examples_to_include]):
+                        example_text = example.get('text', '').strip()
+                        if example_text:
+                            # Include full example text, not truncated
+                            topic_summary += f"    [{j+1}] {example_text}\n"
+                
                 topic_summaries.append(topic_summary)
             
             # Combine all information
             topics_text = stats_summary + "\n=== TOPIC DETAILS ===\n\n" + "\n".join(topic_summaries)
             
+            # === EXTRACT KEY STATISTICS FOR TEMPLATE VARIABLES ===
+            # These variables provide specific metrics for the final summary template
+            
+            # Original transcript/call count
+            original_transcript_count = preprocessing.get('sample_size', 'unknown')
+            
+            # Extracted document count (quotes/examples from transcripts)
+            extracted_document_count = hit_rate_stats.get('successful_extractions', 0)
+            
+            # Total documents analyzed by topic modeling (sum of all topic counts)
+            total_documents_analyzed = total_documents
+            
+            # Extraction success rate
+            extraction_success_rate = hit_rate_stats.get('hit_rate_percentage', 0)
+            
+            # Number of topics discovered
+            topics_discovered = len(topics_list)
+            
+            # Create summary statistics for template interpolation
+            stats_variables = {
+                'original_transcript_count': original_transcript_count,
+                'extracted_document_count': extracted_document_count, 
+                'total_documents_analyzed': total_documents_analyzed,
+                'extraction_success_rate': extraction_success_rate,
+                'topics_discovered': topics_discovered
+            }
+            
+            self._log(f"📊 STATISTICS VARIABLES FOR TEMPLATE:")
+            self._log(f"   • Original transcripts processed: {original_transcript_count}")
+            self._log(f"   • Documents extracted from transcripts: {extracted_document_count}")
+            self._log(f"   • Total documents analyzed by topic modeling: {total_documents_analyzed}")
+            self._log(f"   • Extraction success rate: {extraction_success_rate}%")
+            self._log(f"   • Topics discovered: {topics_discovered}")
+            
+            # === FINAL TOPIC FORMATTING VERIFICATION ===
+            self._log(f"🔍 FINAL TOPIC FORMATTING VERIFICATION:")
+            
+            # Verify that topics_text contains all critical information
+            topics_text_checks = []
+            
+            # Check 1: Are all topic names present?
+            for topic in sorted_topics:
+                topic_name = topic.get('name', '')
+                if topic_name and topic_name in topics_text:
+                    topics_text_checks.append(f"✅ Topic '{topic_name}' found in final text")
+                else:
+                    topics_text_checks.append(f"❌ Topic '{topic_name}' missing from final text")
+            
+            # Check 2: Are example conversations included?
+            total_examples_in_text = 0
+            for topic in sorted_topics:
+                examples = topic.get('examples', [])
+                for example in examples[:5]:  # Check first 5 examples
+                    example_text = example.get('text', '').strip()
+                    if example_text and example_text in topics_text:
+                        total_examples_in_text += 1
+            
+            # Check 3: Are keywords included?
+            keywords_in_text = 0
+            for topic in sorted_topics:
+                keywords = topic.get('keywords', [])
+                for keyword in keywords[:3]:  # Check first 3 keywords
+                    if keyword and keyword in topics_text:
+                        keywords_in_text += 1
+            
+            # Log the checks
+            for check in topics_text_checks[:5]:  # Show first 5 topic checks
+                self._log(f"   {check}")
+            
+            self._log(f"   • Examples included in final text: {total_examples_in_text}")
+            self._log(f"   • Keywords included in final text: {keywords_in_text}")
+            self._log(f"   • Final topics_text length: {len(topics_text):,} characters")
+            
+            # Verify structure
+            has_stats_section = "=== ANALYSIS OVERVIEW ===" in topics_text
+            has_topic_section = "=== TOPIC DETAILS ===" in topics_text
+            self._log(f"   • Analysis overview section present: {has_stats_section}")
+            self._log(f"   • Topic details section present: {has_topic_section}")
+            
+            if not has_stats_section or not has_topic_section:
+                self._log("   ⚠️  WARNING: Missing required sections in topics_text")
+            
             # Get final summarization configuration
             config = final_summarization_config or {}
             model = config.get("model", "gpt-4o-mini")
             provider = config.get("provider", "openai")
-            temperature = config.get("temperature", 0.1)
+            # Use lower temperature for more factual, data-driven responses
+            temperature = config.get("temperature", 0.05)  # Lower default for factual analysis
             custom_prompt = config.get("prompt")
             
             # Default user prompt if none provided
-            default_user_prompt = """Based on the comprehensive topic analysis results below, provide a detailed summary that addresses the task context above.
+            default_user_prompt = """CRITICAL: You MUST analyze ONLY the actual topic analysis results provided below. DO NOT generate generic content, make up categories, or create fictional data. Your analysis must be based EXCLUSIVELY on the specific topics, their exact names, document counts, percentages, and example conversations shown in the data.
 
 Analysis Results:
-{topics_text}
+{{topics_text}}
 
-Please provide a final summary that:
-1. **Statistical Overview**: Summarize the key statistics (total documents, extraction success rates, topic distribution)
-2. **Topic Synthesis**: Identify the most significant themes and patterns across all topics
-3. **Data Quality Assessment**: Comment on the extraction hit rate and data quality implications
-4. **Key Insights**: Highlight the most important findings relative to the task context
-5. **Actionable Recommendations**: Provide specific, actionable conclusions
+MANDATORY REQUIREMENTS for your final summary:
+
+1. **Statistical Overview**: Report the EXACT statistics provided:
+   - **Original transcripts processed**: {{original_transcript_count}} call center conversations
+   - **Documents extracted**: {{extracted_document_count}} individual quotes/statements extracted from those transcripts
+   - **Total documents analyzed**: {{total_documents_analyzed}} documents processed by topic modeling
+   - **Extraction success rate**: {{extraction_success_rate}}%
+   - **Topics discovered**: {{topics_discovered}} distinct topics identified
+   
+   IMPORTANT: Explain that the "documents" in topic analysis are individual quotes/statements extracted from the original transcripts, not the full transcripts themselves. Multiple documents can come from a single transcript.
+
+2. **Top Topics Analysis**: List the top 5-7 most significant topics by document count:
+   - Use their EXACT names as shown in the data (do not paraphrase or rename)
+   - Use their ACTUAL percentages from the data (do not estimate)
+   - Reference specific example conversations from each topic
+   - Quote directly from the sample conversations provided
+
+3. **Data Quality Assessment**: 
+   - Comment on the extraction hit rate using the exact percentage shown
+   - Assess data reliability based on the actual numbers provided
+
+4. **Key Insights**: 
+   - Analyze what the ACTUAL topic distribution reveals
+   - Reference specific topic names exactly as they appear in the data
+   - Use the actual document counts and percentages
+   - Quote from the example conversations to support your insights
+
+5. **Actionable Recommendations**: 
+   - Base recommendations on the ACTUAL topics discovered
+   - Reference specific topic names and their relative importance
+   - Use the actual data to support your recommendations
+
+VERIFICATION CHECKLIST:
+- Are you using the exact topic names from the data? ✓
+- Are you using the exact percentages from the data? ✓
+- Are you referencing actual example conversations? ✓
+- Are you avoiding generic or made-up content? ✓
 
 Final Summary:"""
             
-            user_prompt = custom_prompt or default_user_prompt
+            # Handle custom prompt - ensure it includes topics_text placeholder
+            # Note: We use Jinja2 template format ({{topics_text}}) for consistency with the codebase
+            if custom_prompt:
+                if '{{topics_text}}' not in custom_prompt:
+                    self._log("⚠️  WARNING: Custom prompt does not contain {{topics_text}} placeholder!")
+                    self._log("⚠️  Adding topic data to custom prompt to ensure LLM receives actual analysis results")
+                    # Prepend topic data to custom prompt using Jinja2 syntax
+                    user_prompt = "Analysis Results:\n{{topics_text}}\n\n" + custom_prompt
+                else:
+                    user_prompt = custom_prompt
+                    
+                # Log available statistical variables for user reference
+                self._log("📊 AVAILABLE STATISTICAL VARIABLES FOR CUSTOM PROMPTS:")
+                self._log("   • {{original_transcript_count}} - Number of original transcripts/calls processed")
+                self._log("   • {{extracted_document_count}} - Number of documents extracted from transcripts")
+                self._log("   • {{total_documents_analyzed}} - Total documents processed by topic modeling")
+                self._log("   • {{extraction_success_rate}} - Extraction success rate percentage")
+                self._log("   • {{topics_discovered}} - Number of topics discovered")
+                self._log("   • {{topics_text}} - Complete topic analysis results (required)")
+            else:
+                user_prompt = default_user_prompt
             
-            # Create the prompt template
+            # Create the prompt template - Use Jinja2 format for consistency with codebase
             prompt_template = ChatPromptTemplate.from_messages([
                 ("system", task_context),
                 ("user", user_prompt)
-            ])
+            ], template_format="jinja2")
+            
+            # Verify the prompt template recognizes the required variables
+            expected_variables = prompt_template.input_variables
+            required_vars = ['topics_text']  # Core required variable
+            available_vars = list(stats_variables.keys())  # Statistical variables
+            
+            missing_required = [var for var in required_vars if var not in expected_variables]
+            if missing_required:
+                self._log(f"❌ ERROR: LangChain template does not recognize required variables: {missing_required}")
+                self._log(f"   Expected variables: {expected_variables}")
+                self._log(f"   User prompt preview: {user_prompt[:200]}...")
+                raise ValueError(f"Template configuration error: required variables not recognized: {missing_required}")
+            else:
+                self._log(f"✅ LangChain template correctly recognizes required variables")
+                self._log(f"   All template variables: {expected_variables}")
+                
+                # Log which statistical variables are available for use
+                available_in_template = [var for var in available_vars if var in expected_variables]
+                if available_in_template:
+                    self._log(f"   Statistical variables used in template: {available_in_template}")
+                else:
+                    self._log(f"   No statistical variables used in template (available: {available_vars})")
             
             # Initialize the LLM based on provider
             if provider == "openai":
@@ -1365,12 +1531,165 @@ Final Summary:"""
             self._log(f"   • Total analysis data: {len(topics_text)} characters")
             self._log(f"   • Including aggregate stats: {'Yes' if analysis_stats else 'No'}")
             
-            response = await chain.ainvoke({"topics_text": topics_text})
+            # === COMPREHENSIVE LLM DATA VERIFICATION LOGGING ===
+            self._log("🔍 LLM DATA VERIFICATION - START")
+            self._log("=" * 50)
             
+            # 1. Log raw topics_list data structure
+            self._log(f"📊 Raw topics_list contains {len(topics_list)} topics:")
+            for i, topic in enumerate(topics_list[:3]):
+                self._log(f"   [{i}] Topic {topic['id']}: '{topic['name']}' - {topic['count']} docs")
+                self._log(f"       Keywords: {topic.get('keywords', [])[:5]}")
+                examples = topic.get('examples', [])
+                self._log(f"       Examples available: {len(examples)}")
+                if examples:
+                    self._log(f"       First example: {examples[0].get('text', '')[:100]}...")
+            
+            # 1.5. Log topic data structure verification
+            self._log(f"🔍 TOPIC DATA STRUCTURE VERIFICATION:")
+            total_examples_count = sum(len(topic.get('examples', [])) for topic in topics_list)
+            self._log(f"   • Total examples across all topics: {total_examples_count}")
+            topics_with_examples = sum(1 for topic in topics_list if topic.get('examples'))
+            self._log(f"   • Topics with examples: {topics_with_examples}/{len(topics_list)}")
+            
+            # Verify that all topics have proper structure
+            for i, topic in enumerate(topics_list):
+                has_name = bool(topic.get('name'))
+                has_keywords = bool(topic.get('keywords'))
+                has_examples = bool(topic.get('examples'))
+                example_count = len(topic.get('examples', []))
+                
+                if not has_name or not has_keywords or not has_examples:
+                    self._log(f"   ⚠️  Topic {topic['id']} missing data: name={has_name}, keywords={has_keywords}, examples={has_examples}")
+                elif example_count < 5:
+                    self._log(f"   ⚠️  Topic {topic['id']} has only {example_count} examples")
+                else:
+                    self._log(f"   ✅ Topic {topic['id']} complete: {example_count} examples")
+            
+            # 2. Log constructed topics_text that will be sent to LLM
+            self._log(f"📝 Constructed topics_text ({len(topics_text)} chars):")
+            self._log(f"--- BEGIN TOPICS_TEXT ---")
+            self._log(topics_text[:2000] + "..." if len(topics_text) > 2000 else topics_text)
+            self._log(f"--- END TOPICS_TEXT ---")
+            
+            # 3. Log the exact prompt template being used
+            self._log(f"📋 User prompt template:")
+            self._log(f"--- BEGIN USER PROMPT ---")
+            self._log(user_prompt[:1000] + "..." if len(user_prompt) > 1000 else user_prompt)
+            self._log(f"--- END USER PROMPT ---")
+            
+            # 4. Log the filled prompt (with data interpolated) - using Jinja2 format
+            import jinja2
+            template = jinja2.Template(user_prompt)
+            # Combine topics_text with statistical variables for template rendering
+            template_vars = {
+                'topics_text': topics_text,
+                **stats_variables
+            }
+            filled_prompt = template.render(**template_vars)
+            self._log(f"📨 Final filled prompt ({len(filled_prompt)} chars):")
+            self._log(f"--- BEGIN FILLED PROMPT ---")
+            self._log(filled_prompt[:2000] + "..." if len(filled_prompt) > 2000 else filled_prompt)
+            self._log(f"--- END FILLED PROMPT ---")
+            
+            # 4.5. Verify topics are properly included in the filled prompt
+            self._log(f"🔍 PROMPT CONTENT VERIFICATION:")
+            topic_names_in_prompt = 0
+            for topic in sorted_topics[:5]:  # Check top 5 topics
+                topic_name = topic.get('name', '')
+                if topic_name and topic_name in filled_prompt:
+                    topic_names_in_prompt += 1
+                    self._log(f"   ✅ Found topic '{topic_name}' in prompt")
+                else:
+                    self._log(f"   ❌ Topic '{topic_name}' NOT found in prompt")
+            
+            self._log(f"   • Topics found in prompt: {topic_names_in_prompt}/{min(5, len(sorted_topics))}")
+            
+            # Check if example text is included
+            example_texts_found = 0
+            for topic in sorted_topics[:3]:  # Check top 3 topics
+                examples = topic.get('examples', [])
+                if examples:
+                    first_example = examples[0].get('text', '')[:50]  # Check first 50 chars
+                    if first_example and first_example in filled_prompt:
+                        example_texts_found += 1
+                        self._log(f"   ✅ Found example text from topic {topic['id']} in prompt")
+                    else:
+                        self._log(f"   ❌ Example text from topic {topic['id']} NOT found in prompt")
+            
+            self._log(f"   • Example texts found in prompt: {example_texts_found}/{min(3, len(sorted_topics))}")
+            
+            # 5. Log system prompt
+            self._log(f"⚙️ System prompt: {task_context[:500]}...")
+            
+            self._log("🔍 LLM DATA VERIFICATION - END")
+            self._log("=" * 50)
+            
+            # === DEBUG: TEST THE ACTUAL CHAIN INVOCATION ===
+            self._log("🔧 CHAIN INVOCATION DEBUG:")
+            try:
+                # Test what happens when we invoke the chain
+                self._log(f"   • About to invoke chain with topics_text length: {len(topics_text)}")
+                self._log(f"   • Chain input keys expected: {prompt_template.input_variables}")
+                
+                # Try to format the prompt manually to see what LangChain will actually send
+                if hasattr(prompt_template, 'format_messages'):
+                    try:
+                        formatted_messages = prompt_template.format_messages(**template_vars)
+                        self._log(f"   • Successfully formatted {len(formatted_messages)} messages")
+                        for i, msg in enumerate(formatted_messages):
+                            content = msg.content if hasattr(msg, 'content') else str(msg)
+                            self._log(f"     Message {i}: {content[:200]}...")
+                    except Exception as format_error:
+                        self._log(f"   • Error formatting messages: {format_error}")
+                        self._log(f"   • This suggests the template variable is not properly configured")
+                
+                response = await chain.ainvoke(template_vars)
+                self._log(f"   • Chain invocation successful")
+                
+            except Exception as chain_error:
+                self._log(f"   • Chain invocation failed: {chain_error}")
+                self._log(f"   • This suggests a template variable mismatch")
+                raise
+            
+            # === LOG LLM RESPONSE ===
             if hasattr(response, 'content'):
-                return response.content.strip()
+                response_text = response.content.strip()
             else:
-                return str(response).strip()
+                response_text = str(response).strip()
+            
+            self._log("🤖 LLM RESPONSE RECEIVED")
+            self._log("=" * 50)
+            self._log(f"💬 Response length: {len(response_text)} characters")
+            self._log(f"--- BEGIN LLM RESPONSE ---")
+            self._log(response_text[:1000] + "..." if len(response_text) > 1000 else response_text)
+            self._log(f"--- END LLM RESPONSE ---")
+            
+            # === VALIDATE RESPONSE AGAINST ACTUAL DATA ===
+            self._log("🔍 RESPONSE VALIDATION:")
+            sorted_topics = sorted(topics_list, key=lambda t: t.get('count', 0), reverse=True)
+            self._log(f"Expected top 3 topics by count:")
+            for i, topic in enumerate(sorted_topics[:3]):
+                self._log(f"   {i+1}. Topic {topic['id']}: '{topic['name']}' ({topic['count']} docs)")
+            
+            # Check if any of the top topic names appear in the response
+            top_3_names = [topic['name'] for topic in sorted_topics[:3]]
+            matches_found = []
+            for name in top_3_names:
+                if name.lower() in response_text.lower():
+                    matches_found.append(name)
+            
+            self._log(f"Top topic names found in response: {len(matches_found)}/{len(top_3_names)}")
+            for match in matches_found:
+                self._log(f"   ✓ Found: '{match}'")
+            
+            if not matches_found:
+                self._log("⚠️  WARNING: None of the top 3 topic names appear in the LLM response!")
+                self._log("⚠️  This suggests the LLM may not be analyzing the actual data provided.")
+            
+            self._log("=" * 50)
+            
+            return response_text
                 
         except Exception as e:
             self._log(f"Error in final summary generation: {e}", level="ERROR")
