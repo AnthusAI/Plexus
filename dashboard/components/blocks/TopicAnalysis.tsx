@@ -332,26 +332,6 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
           fetchCompleteTopicsData={fetchCompleteTopicsData}
         />
 
-        {/* Pipeline Setup */}
-        <div className="w-full">
-          <div className="text-lg font-medium mb-4">
-            <div className="flex items-center gap-2">
-              <PocketKnife className="h-5 w-5" />
-              Pipeline Setup
-            </div>
-          </div>
-          <Card>
-            <CardContent className="p-0">
-              <TopicAnalysisViewer 
-                variables={getDiagramVariables()}
-                className="rounded-lg"
-                viewModeEnabled={true}
-                height={600}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Analysis Details Section */}
         <div className="w-full">
           <div className="text-lg font-medium mb-6">
@@ -361,6 +341,33 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
             </div>
           </div>
           <div className="space-y-6 [&>*:last-child]:border-b-0">
+            {/* Data Pipeline Section - First collapsible section */}
+            <Accordion type="multiple" defaultValue={[]} className="w-full">
+              <AccordionItem value="pipeline">
+                <AccordionTrigger className="text-base font-medium">
+                  <div className="flex items-center gap-2">
+                    <PocketKnife className="h-4 w-4" />
+                    Data Pipeline
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="pt-2">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Visual representation of the complete topic analysis pipeline from data preprocessing through final topic discovery.
+                    </p>
+                    <div className="w-full">
+                      <TopicAnalysisViewer 
+                        variables={getDiagramVariables()}
+                        className="rounded-lg border"
+                        viewModeEnabled={true}
+                        height={600}
+                      />
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+
             {/* Pre-processing Section */}
             <Accordion type="multiple" defaultValue={[]} className="w-full">
               <AccordionItem value="preprocessing">
