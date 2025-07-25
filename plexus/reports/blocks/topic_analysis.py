@@ -1291,7 +1291,9 @@ class TopicAnalysis(BaseReportBlock):
             
             topic_summaries = []
             for i, topic in enumerate(sorted_topics):
-                topic_summary = f"Topic {topic['id']}: {topic['name']}\n"
+                # Use 1-indexed numbering for human-readable output (i+1 instead of topic['id'])
+                human_topic_number = i + 1
+                topic_summary = f"Topic {human_topic_number}: {topic['name']}\n"
                 topic_summary += f"  • Keywords: {', '.join(topic.get('keywords', [])[:8])}\n"
                 topic_summary += f"  • Document count: {topic.get('count', 0):,}\n"
                 
