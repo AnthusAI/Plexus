@@ -346,7 +346,6 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
               <AccordionItem value="pipeline">
                 <AccordionTrigger className="text-base font-medium">
                   <div className="flex items-center gap-2">
-                    <PocketKnife className="h-4 w-4" />
                     Data Pipeline
                   </div>
                 </AccordionTrigger>
