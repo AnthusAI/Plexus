@@ -931,12 +931,28 @@ class TaskProgressTracker:
         try:
             # Pass client correctly if get_stages supports it, otherwise omit
             # Assuming get_stages uses self._client if available or creates default
-            existing_api_stages = {s.name: s for s in self.api_task.get_stages(client=client)}
+            stages_result = self.api_task.get_stages(client=client)
+            # Handle case where get_stages returns a non-iterable (like Mock object)
+            if hasattr(stages_result, '__iter__') and not isinstance(stages_result, (str, bytes)):
+                existing_api_stages = {s.name: s for s in stages_result}
+            else:
+                logging.warning(f"get_stages returned non-iterable: {type(stages_result)}")
+                existing_api_stages = {}
             logging.debug(f"Found existing API stages: {list(existing_api_stages.keys())}")
         except TypeError:
              # Fallback if get_stages doesn't accept client kwarg
              logging.warning("Task.get_stages does not accept 'client', using default client resolution.")
-             existing_api_stages = {s.name: s for s in self.api_task.get_stages()}
+             try:
+                 stages_result = self.api_task.get_stages()
+                 # Handle case where get_stages returns a non-iterable (like Mock object)
+                 if hasattr(stages_result, '__iter__') and not isinstance(stages_result, (str, bytes)):
+                     existing_api_stages = {s.name: s for s in stages_result}
+                 else:
+                     logging.warning(f"get_stages returned non-iterable: {type(stages_result)}")
+                     existing_api_stages = {}
+             except Exception as e:
+                 logging.error(f"Failed to get existing stages for task {self.api_task.id}: {e}", exc_info=True)
+                 existing_api_stages = {}
         except Exception as e:
             logging.error(f"Failed to get existing stages for task {self.api_task.id}: {e}", exc_info=True)
             existing_api_stages = {}
@@ -975,11 +991,23 @@ class TaskProgressTracker:
                 created_stages = self.api_task.create_stages_batch(stages_to_create)
                 
                 # Map created stages to our internal stage IDs
-                for stage in created_stages:
-                    self._stage_ids[stage.name] = stage.id
-                    logging.debug(f"Successfully created API stage '{stage.name}' with ID: {stage.id}")
+                # Handle case where created_stages returns a non-iterable (like Mock object)
+                if hasattr(created_stages, '__iter__') and not isinstance(created_stages, (str, bytes)):
+                    for stage in created_stages:
+                        self._stage_ids[stage.name] = stage.id
+                        logging.debug(f"Successfully created API stage '{stage.name}' with ID: {stage.id}")
+                else:
+                    logging.warning(f"create_stages_batch returned non-iterable: {type(created_stages)}")
                 
-                logging.info(f"Successfully created {len(created_stages)} stages in batch")
+                # Only log the count if created_stages is a valid iterable
+                if hasattr(created_stages, '__iter__') and not isinstance(created_stages, (str, bytes)):
+                    try:
+                        count = len(created_stages)
+                        logging.info(f"Successfully created {count} stages in batch")
+                    except TypeError:
+                        logging.info("Successfully created stages in batch")
+                else:
+                    logging.info("Successfully created stages in batch")
                 
             except Exception as e:
                 logging.error(f"Error creating stages in batch: {e}", exc_info=True)

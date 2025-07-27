@@ -27,10 +27,21 @@ def get_score_yaml_path(scorecard_name: str, score_name: str) -> Path:
     """
     # Create the scorecards directory if it doesn't exist
     scorecards_dir = Path('scorecards')
+    
+    # Handle case where 'scorecards' exists as a file instead of directory
+    if scorecards_dir.exists() and not scorecards_dir.is_dir():
+        # Remove the file if it exists
+        scorecards_dir.unlink()
+    
     scorecards_dir.mkdir(exist_ok=True)
     
     # Create sanitized directory names
     scorecard_dir = scorecards_dir / sanitize_path_name(scorecard_name)
+    
+    # Handle case where scorecard dir exists as a file instead of directory  
+    if scorecard_dir.exists() and not scorecard_dir.is_dir():
+        scorecard_dir.unlink()
+    
     scorecard_dir.mkdir(exist_ok=True)
     
     # Create the YAML file path
