@@ -3953,7 +3953,7 @@ def get_plexus_url(path: str) -> str:
     Returns:
     - Full URL string
     """
-    base_url = os.environ.get('PLEXUS_APP_URL', 'https://plexus.anth.us')
+    base_url = os.environ.get('PLEXUS_APP_URL', 'https://capacity-plexus.anth.us')
     # Ensure base URL ends with a slash for urljoin to work correctly
     if not base_url.endswith('/'):
         base_url += '/'
