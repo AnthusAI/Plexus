@@ -18,7 +18,7 @@ from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, ValidationError
 from langchain.output_parsers.retry import RetryWithErrorOutputParser
 from langchain.globals import set_llm_cache
-from langchain.cache import SQLiteCache
+from langchain_community.cache import SQLiteCache
 
 # Load environment variables from .env file
 try:
