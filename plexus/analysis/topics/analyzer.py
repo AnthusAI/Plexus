@@ -44,7 +44,7 @@ from langchain.chains import LLMChain
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import ChatOpenAI
 from langchain.globals import set_llm_cache
-from langchain.cache import SQLiteCache
+from langchain_community.cache import SQLiteCache
 
 # Initialize LLM cache for representation model (fine-tuning) - same cache as transformer
 cache_dir_path = Path("tmp/langchain.db")
