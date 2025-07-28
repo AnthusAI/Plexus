@@ -12,3 +12,4 @@ tmp/
 /scorecards/
 .plexus/
 node_modules/*
+plexus/scores/reports/Test_scorecard/None/configuration.json
