@@ -442,3 +442,102 @@ class TestTopicAnalysis:
         
         # Should process the skip_analysis configuration
         assert result[0] is not None
+        
+    def test_task_configuration_parsing(self, mock_api_client, test_params):
+        """Test that task configuration is properly parsed and stored."""
+        task_config = {
+            "data": {
+                "source": "test-source"
+            },
+            "task": "You are analyzing customer support calls to identify common issues and provide insights for service improvement."
+        }
+        
+        block = TopicAnalysis(task_config, test_params, mock_api_client)
+        
+        # Should have task configuration
+        assert block.task_config == task_config["task"]
+        assert block.system_prompt == task_config["task"]
+        assert block.use_representation_model == True  # Should be enabled when task is provided
+        
+    def test_no_task_configuration(self, mock_api_client, test_config, test_params):
+        """Test behavior when no task configuration is provided."""
+        block = TopicAnalysis(test_config, test_params, mock_api_client)
+        
+        # Should have no task configuration
+        assert block.task_config is None
+        assert block.system_prompt is None
+        assert block.use_representation_model == True  # Default from fine_tuning config
+        
+    def test_task_with_custom_fine_tuning(self, mock_api_client, test_params):
+        """Test task configuration with custom fine-tuning settings."""
+        config_with_task_and_fine_tuning = {
+            "data": {
+                "source": "test-source"
+            },
+            "task": "Analyze customer feedback to identify improvement opportunities.",
+            "fine_tuning": {
+                "use_representation_model": False,  # This should be overridden to True
+                "model": "gpt-4",
+                "prompt": "Custom prompt for topic naming"
+            }
+        }
+        
+        block = TopicAnalysis(config_with_task_and_fine_tuning, test_params, mock_api_client)
+        
+        # Task should enable representation model even if config says False
+        assert block.task_config == config_with_task_and_fine_tuning["task"]
+        assert block.use_representation_model == True
+        assert block.representation_model_name == "gpt-4"
+        assert block.representation_prompt == "Custom prompt for topic naming"
+        
+    def test_final_summarization_configuration(self, mock_api_client, test_params):
+        """Test final summarization configuration parsing."""
+        config_with_final_summarization = {
+            "data": {
+                "source": "test-source"
+            },
+            "task": "Analyze customer feedback for insights.",
+            "final_summarization": {
+                "model": "gpt-4",
+                "provider": "openai",
+                "temperature": 0.3,
+                "prompt": "Custom final summarization prompt with {topics_text}"
+            }
+        }
+        
+        block = TopicAnalysis(config_with_final_summarization, test_params, mock_api_client)
+        
+        # Should have final summarization configuration
+        assert block.final_summarization_config == config_with_final_summarization["final_summarization"]
+        assert block.final_summarization_config["model"] == "gpt-4"
+        assert block.final_summarization_config["temperature"] == 0.3
+        assert block.final_summarization_config["prompt"] == "Custom final summarization prompt with {topics_text}"
+        
+    def test_default_final_summarization_configuration(self, mock_api_client, test_config, test_params):
+        """Test default final summarization configuration when not specified."""
+        block = TopicAnalysis(test_config, test_params, mock_api_client)
+        
+        # Should have empty final summarization config (defaults will be applied in method)
+        assert block.final_summarization_config == {}
+        
+    def test_task_with_final_summarization_config(self, mock_api_client, test_params):
+        """Test task with custom final summarization configuration."""
+        config_with_both = {
+            "data": {
+                "source": "test-source"
+            },
+            "task": "You are analyzing customer support data.",
+            "final_summarization": {
+                "model": "gpt-4-turbo",
+                "temperature": 0.7,
+                "prompt": "Provide executive summary based on: {topics_text}"
+            }
+        }
+        
+        block = TopicAnalysis(config_with_both, test_params, mock_api_client)
+        
+        # Should have both configurations
+        assert block.task_config == config_with_both["task"]
+        assert block.final_summarization_config["model"] == "gpt-4-turbo"
+        assert block.final_summarization_config["temperature"] == 0.7
+        assert "executive summary" in block.final_summarization_config["prompt"]
