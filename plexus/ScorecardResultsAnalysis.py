@@ -11,7 +11,6 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
-import mlflow
 
 from plexus.CustomLogging import logging
 from plexus.scores.CompositeScore import CompositeScore

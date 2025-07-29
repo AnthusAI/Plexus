@@ -1,6 +1,5 @@
 import os
 import json
-import mlflow
 import pandas as pd
 import numpy as np
 import inspect
@@ -28,14 +27,12 @@ import xgboost as xgb
 from plexus.Registries import scorecard_registry
 from plexus.scores.core.ScoreData import ScoreData
 from plexus.scores.core.ScoreVisualization import ScoreVisualization
-from plexus.scores.core.ScoreMLFlow import ScoreMLFlow
 from plexus.scores.core.utils import ensure_report_directory_exists
 
-class Score(ABC, mlflow.pyfunc.PythonModel,
+class Score(ABC,
     # Core Score functionality.   
     ScoreData,
-    ScoreVisualization,
-    ScoreMLFlow
+    ScoreVisualization
 ):
     """
     Abstract base class for implementing classification and scoring models in Plexus.
@@ -51,7 +48,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
     The Score class provides:
     - Standard input/output interfaces using Pydantic models
-    - MLFlow integration for experiment tracking
     - Visualization tools for model performance
     - Cost tracking for API-based models
     - Metrics computation and logging
@@ -371,9 +367,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         recall = recall_score(self.val_labels, self.val_predictions_labels, average='weighted')
         precision = precision_score(self.val_labels, self.val_predictions_labels, average='weighted')
 
-        mlflow.log_metric("validation_f1_score", f1)
-        mlflow.log_metric("validation_recall", recall)
-        mlflow.log_metric("validation_precision", precision)
 
         print(f"Validation Accuracy: {accuracy:.4f}")
         print(f"Validation F1 Score: {f1:.4f}")
@@ -413,7 +406,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             })
         self._record_metrics(metrics)
 
-        mlflow.end_run()
 
     def register_model(self):
         """
@@ -427,16 +419,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         pass
 
-    def load_context(self, context):
-        """
-        Load the trained model and any necessary artifacts based on the MLflow context.
-
-        Parameters
-        ----------
-        context : mlflow.pyfunc.PythonModelContext
-            The context object containing artifacts and other information.
-        """
-        # self.model = mlflow.keras.load_model(context.artifacts["model"])
 
     @abstractmethod
     def predict(self, context, model_input: Input) -> Union[Result, List[Result]]:
@@ -446,7 +428,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         Parameters
         ----------
         context : Any
-            Context for the prediction (e.g., MLflow context)
+            Context for the prediction
         model_input : Score.Input
             The input data for making predictions.
 
@@ -535,6 +517,21 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         with open(file_name, 'w') as json_file:
             json.dump(metrics, json_file, indent=4)
+
+    @ensure_report_directory_exists
+    def record_configuration(self, configuration):
+        """
+        Record the provided configuration dictionary as a JSON file in the appropriate report folder for this model.
+
+        Parameters
+        ----------
+        configuration : dict
+            Dictionary containing the configuration to be recorded.
+        """
+        file_name = self.report_file_name("configuration.json")
+
+        with open(file_name, 'w') as json_file:
+            json.dump(configuration, json_file, indent=4)
 
     @property
     def is_multi_class(self):

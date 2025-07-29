@@ -365,8 +365,8 @@ class Scorecard:
         if (score_class is not None):
             logging.info(f"Found score class for: {score}")
 
-            # Check if score is disabled - if isDisabled is True, return 403
-            is_disabled = score_configuration.get('isDisabled')
+            # Check if score is disabled - check both 'disabled' (YAML) and 'isDisabled' (API) fields
+            is_disabled = score_configuration.get('disabled') or score_configuration.get('isDisabled')
             if is_disabled is True:
                 logging.info(f"Score '{score}' is disabled")
                 return [Score.Result(

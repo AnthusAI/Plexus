@@ -18,7 +18,6 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tenacity import retry, wait_fixed, stop_after_attempt, before_log, retry_if_exception_type, AsyncRetrying, wait_exponential
 from requests.exceptions import Timeout, RequestException
-import mlflow
 from concurrent.futures import ThreadPoolExecutor
 from asyncio import Queue
 import importlib
@@ -74,14 +73,12 @@ class Evaluation:
     Base class for evaluating Scorecard performance through accuracy testing and consistency checking.
 
     Evaluation is used to measure how well a Scorecard performs against labeled data or to check
-    consistency of results. It integrates with MLFlow for tracking experiments and the Plexus
-    dashboard for monitoring. The class supports:
+    consistency of results. It integrates with the Plexus dashboard for monitoring. The class supports:
 
     - Accuracy testing against labeled data
     - Consistency checking through repeated scoring
     - Automatic metrics calculation and visualization
     - Cost tracking and reporting
-    - Integration with MLFlow experiments
     - Real-time progress tracking in the dashboard
 
     There are two main subclasses:
@@ -106,8 +103,8 @@ class Evaluation:
         )
         await evaluation.run()
 
-    3. Using with MLFlow tracking:
-        with evaluation:  # Automatically starts/ends MLFlow run
+    3. Using with context management:
+        with evaluation:
             await evaluation.run()
 
     4. Monitoring in dashboard:
@@ -260,58 +257,15 @@ class Evaluation:
         self.total_questions = 0
 
     def __enter__(self):
-        self.start_mlflow_run()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        # mlflow.end_run()
         pass
 
     def start_mlflow_run(self):
-        # MLFlow functionality disabled
-        # logging.getLogger('mlflow').setLevel(logging.WARNING)
-
-        # # First, make sure any existing run is ended
-        # try:
-        #     mlflow.end_run()
-        # except Exception:
-        #     pass  # Ignore any errors from ending non-existent runs
-
-        # mlflow_tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
-        # if mlflow_tracking_uri:
-        #     logging.info(f"Using MLFlow tracking URL: {mlflow_tracking_uri}")
-        #     mlflow.set_tracking_uri(mlflow_tracking_uri)
-        # else:
-        #     mlflow.set_tracking_uri(f'file:///{os.path.abspath("./mlruns")}')
-
-        # experiment_name = self.scorecard.__class__.name
-        # if os.getenv('MLFLOW_EXPERIMENT_NAME'):
-        #     experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
-        # if self.experiment_label:
-        #     experiment_name = experiment_name + " - " + self.experiment_label
-        # mlflow.set_experiment(experiment_name)
-
-        # # Now start the new run
-        # try:
-        #     mlflow.start_run()
-        # except Exception as e:
-        #     print("Error: ", e)
-        #     print("Attempting to end the previous run and start a new one.")
-        #     mlflow.end_run()
-        #     mlflow.start_run()
-
-        # # Add notes about the run
-        # mlflow.set_tag("scorecard", self.scorecard.name)
-        # mlflow.set_tag("experiment_type", self.__class__.__name__)
-        # if self.task_id:  # Add task_id as a tag if available
-        #     mlflow.set_tag("task_id", self.task_id)
-
-        # self.log_parameters()
         pass
     
     def log_parameters(self):
-        # mlflow.log_param("sampling_method", self.sampling_method)
-        # mlflow.log_param("number_of_texts_to_sample", self.number_of_texts_to_sample)
         pass
 
     def score_names(self):
@@ -331,8 +285,6 @@ class Evaluation:
             end_time = time.time()
             execution_time = end_time - start_time
             time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
-            # mlflow.log_metric("execution_time", execution_time)
-            # mlflow.log_metric("time_per_text", time_per_text)
             print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
             logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
             return result
@@ -343,8 +295,6 @@ class Evaluation:
             end_time = time.time()
             execution_time = end_time - start_time
             time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
-            # mlflow.log_metric("execution_time", execution_time)
-            # mlflow.log_metric("time_per_text", time_per_text)
             print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
             logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
             return result
@@ -1184,12 +1134,10 @@ class Evaluation:
         if not os.path.exists(report_folder_path):
             os.makedirs(report_folder_path)
 
-        # logging.info("Logging scorecard results as an artifact in MLFlow.")
         scorecard_results = ScorecardResults(self.all_results)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         results_filename = f"scorecard_results_{timestamp}.json"
         scorecard_results.save_to_file(f"{report_folder_path}/{results_filename}")
-        # mlflow.log_artifact(f"{report_folder_path}/{results_filename}")
 
         logging.info("Scoring completed.")
 
@@ -1225,7 +1173,6 @@ class Evaluation:
         def log_accuracy_heatmap():
             try:
                 analysis.plot_accuracy_heatmap()
-                # mlflow.log_artifact(f"{report_folder_path}/accuracy_heatmap.png")
             except Exception as e:
                 logging.error(f"Failed to log accuracy heatmap: {e}")
 
@@ -1236,7 +1183,6 @@ class Evaluation:
                 report_filename = f"scorecard_report_{timestamp}.html"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log HTML report: {e}")
 
@@ -1247,7 +1193,6 @@ class Evaluation:
                 report_filename = f"scorecard_report_incorrect_scores_{timestamp}.html"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log incorrect scores report: {e}")
 
@@ -1258,7 +1203,6 @@ class Evaluation:
                 report_filename = f"scorecard_report_no_costs_{timestamp}.html"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log no costs report: {e}")
 
@@ -1266,11 +1210,6 @@ class Evaluation:
             try:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 analysis.plot_scorecard_costs(results=self.all_results)
-                # mlflow.log_artifact(f"{report_folder_path}/scorecard_input_output_costs_{timestamp}.png")
-                # mlflow.log_artifact(f"{report_folder_path}/histogram_of_total_costs_{timestamp}.png")
-                # mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_{timestamp}.png")
-                # mlflow.log_artifact(f"{report_folder_path}/total_llm_calls_by_score_{timestamp}.png")
-                # mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_by_element_type_{timestamp}.png")
             except Exception as e:
                 logging.error(f"Failed to log scorecard costs: {e}")
 
@@ -1280,7 +1219,6 @@ class Evaluation:
                 report_filename = f"scorecard_report_for_incorrect_results_{timestamp}.csv"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(analysis.generate_csv_scorecard_report(results=self.all_results))
-                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log CSV report: {e}")
 
@@ -1289,7 +1227,6 @@ class Evaluation:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 report_filename = f"question_accuracy_report_{timestamp}.csv"
                 analysis.generate_question_accuracy_csv(output_file=f"{report_folder_path}/{report_filename}")
-                # mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log question accuracy CSV: {e}")
 
@@ -1313,13 +1250,6 @@ class Evaluation:
 
         # Calculate overall accuracy
         overall_accuracy = (self.total_correct / self.total_questions) * 100 if self.total_questions > 0 else 0
-        # mlflow.log_metric("overall_accuracy", overall_accuracy)
-
-        # # Log the results to MLflow
-        # mlflow.log_metric("number_of_texts", len(selected_sample_rows))
-        # mlflow.log_metric("number_of_scores", len(self.score_names()))
-        # mlflow.log_metric("total_cost", expenses['total_cost'])
-        # mlflow.log_metric("cost_per_text", expenses['cost_per_text'])
 
         # Generate the Excel report
         self.generate_excel_report(report_folder_path, self.all_results, selected_sample_rows)
@@ -1755,13 +1685,6 @@ class Evaluation:
         excel_file_path = f"{report_folder_path}/Evaluation Report for {filename_safe_score_names}_{timestamp}.xlsx"
         df_records.to_excel(excel_file_path, index=False)
         
-        # # Only log to MLFlow if there's an active run
-        # try:
-        #     if mlflow.active_run():
-        #         mlflow.log_artifact(excel_file_path)
-        # except Exception as e:
-        #     logging.warning(f"Could not log artifact to MLFlow: {e}")
-
         logging.info(f"Excel report generated at {excel_file_path}")
 
     def generate_and_log_confusion_matrix(self, results, report_folder_path):
@@ -1808,8 +1731,6 @@ class Evaluation:
             cm_path = f"{report_folder_path}/confusion_matrix_{safe_question}.png"
             plt.savefig(cm_path, bbox_inches='tight', dpi=600)
             plt.close()
-
-            # mlflow.log_artifact(cm_path)
 
     def create_performance_visualization(self, results, question, report_folder_path):
         # Sanitize the question name for use in filename
@@ -1865,8 +1786,6 @@ class Evaluation:
         plt.savefig(f"{report_folder_path}/performance_{safe_question}.png", bbox_inches='tight', dpi=600)
         plt.close()
         
-        # mlflow.log_artifact(f"{report_folder_path}/performance_{safe_question}.png")
-        
     def generate_metrics_json(self, report_folder_path, sample_size, expenses):
         overall_accuracy = None if self.total_questions == 0 else (self.total_correct / self.total_questions) * 100
         
@@ -1892,14 +1811,7 @@ class Evaluation:
         with open(metrics_file_path, 'w') as f:
             json.dump(metrics, f, indent=2)
 
-        # mlflow.log_artifact(metrics_file_path)
         logging.info(f"Metrics JSON file generated at {metrics_file_path}")
-
-        # for key, value in metrics.items():
-        #     if key in ["overall_accuracy", "cost_per_call", "total_cost"]:
-        #         mlflow.log_metric(key, float(value))
-        #     else:
-        #         mlflow.log_metric(key, value)
 
     def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
         score_config = score_instance.parameters
@@ -2615,7 +2527,6 @@ class ConsistencyEvaluation(Evaluation):
     
     def log_parameters(self):
         super().log_parameters()
-        # mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
 
 class AccuracyEvaluation(Evaluation):
     def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):

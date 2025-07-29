@@ -281,7 +281,7 @@ const detectIndentationPattern = (lines: string[]): number => {
 }
 
 /**
- * YAML validation function for indentation errors - Fixed version
+ * YAML validation function for indentation errors - Fixed version for multiline strings
  */
 export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel) => {
   const markers: editor.IMarkerData[] = []
@@ -290,6 +290,8 @@ export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel
   // Detect the document's indentation pattern
   const expectedIndentStep = detectIndentationPattern(lines)
   const indentationStack: number[] = []
+  let inMultilineString = false
+  let multilineStringIndent = 0
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -314,6 +316,54 @@ export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel
         endLineNumber: lineNumber,
         endColumn: line.indexOf('\t') + 2
       })
+    }
+    
+    // Check if we're entering a multiline string (literal | or folded >)
+    const multilineStringMatch = line.match(/:\s*[\|>][-+]?\d*\s*$/)
+    if (multilineStringMatch && isYamlKeyLine(line)) {
+      inMultilineString = true
+      // Set expected multiline string indentation to be greater than the key's indentation
+      multilineStringIndent = indentLevel + expectedIndentStep
+      continue
+    }
+    
+    // If we're in a multiline string, validate differently
+    if (inMultilineString) {
+      // Check if we've exited the multiline string (line with same or less indentation than the key, and is a key line)
+      if (indentLevel <= multilineStringIndent - expectedIndentStep && isYamlKeyLine(line)) {
+        inMultilineString = false
+        multilineStringIndent = 0
+        // Continue with normal validation for this key line
+      } else {
+        // We're still in the multiline string - skip indentation validation
+        // Only check that content has proper indentation (should be at least at multilineStringIndent level)
+        if (line.trim() !== '' && indentLevel < multilineStringIndent && !line.trim().startsWith('#')) {
+          // Allow for the first content line to establish the base indentation
+          if (i > 0) {
+            const prevContentLines = lines.slice(0, i).reverse()
+            let hasContentLine = false
+            for (const prevLine of prevContentLines) {
+              if (prevLine.trim() !== '' && !prevLine.trim().startsWith('#') && !prevLine.match(/:\s*[\|>]/)) {
+                hasContentLine = true
+                break
+              }
+            }
+            
+            // Only show warning if there are already content lines in this multiline string
+            if (hasContentLine) {
+              markers.push({
+                severity: monaco.MarkerSeverity.Warning,
+                message: `Multiline string content should be indented at least ${multilineStringIndent} spaces.`,
+                startLineNumber: lineNumber,
+                startColumn: 1,
+                endLineNumber: lineNumber,
+                endColumn: indentLevel + 1
+              })
+            }
+          }
+        }
+        continue
+      }
     }
     
     // Only validate indentation for actual YAML key lines
