@@ -15,11 +15,23 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, mock_open, MagicMock
 
-from plexus.cli.shared import get_score_yaml_path, ensure_score_yaml_path_exists, sanitize_path_name
+from plexus.cli.shared import get_score_yaml_path, sanitize_path_name
 
 
 class TestScoreYamlPath(unittest.TestCase):
     """Tests for generating the file path for a score's cached configuration."""
+    
+    def setUp(self):
+        """Set up the test environment."""
+        # Create a temporary directory for the test
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.temp_dir.name)
+    
+    def tearDown(self):
+        """Clean up after the test."""
+        os.chdir(self.old_cwd)
+        self.temp_dir.cleanup()
     
     def test_get_score_yaml_path(self):
         """Test that the path is generated correctly."""
@@ -81,8 +93,8 @@ metrics:
     
     def test_save_configuration(self):
         """Test saving a configuration to a local file."""
-        # Get the expected file path and ensure directories exist
-        yaml_path = ensure_score_yaml_path_exists(self.scorecard_name, self.score_name)
+        # Get the expected file path
+        yaml_path = get_score_yaml_path(self.scorecard_name, self.score_name)
         
         # Save the configuration
         with open(yaml_path, 'w') as f:
@@ -98,8 +110,8 @@ metrics:
     
     def test_check_cache_hit(self):
         """Test checking if a configuration exists in cache (hit)."""
-        # Get the expected file path and ensure directories exist
-        yaml_path = ensure_score_yaml_path_exists(self.scorecard_name, self.score_name)
+        # Get the expected file path
+        yaml_path = get_score_yaml_path(self.scorecard_name, self.score_name)
         
         # Create the file
         with open(yaml_path, 'w') as f:
@@ -177,7 +189,7 @@ class TestPerformanceImprovement(unittest.TestCase):
         
         # Now, cache the configurations
         for i, score_id in enumerate(self.score_ids):
-            yaml_path = ensure_score_yaml_path_exists(self.scorecard_name, self.score_names[i])
+            yaml_path = get_score_yaml_path(self.scorecard_name, self.score_names[i])
             with open(yaml_path, 'w') as f:
                 f.write(api_results[i])
         

@@ -14,9 +14,6 @@ def get_score_yaml_path(scorecard_name: str, score_name: str) -> Path:
     
     where both scorecard_name and score_name are sanitized for use in file paths.
     
-    Note: This function only computes the path - it does not create directories.
-    Call ensure_score_yaml_path_exists() if you need to create the directories.
-    
     Args:
         scorecard_name: The name of the scorecard
         score_name: The name of the score
@@ -26,37 +23,18 @@ def get_score_yaml_path(scorecard_name: str, score_name: str) -> Path:
         
     Example:
         >>> get_score_yaml_path("My Scorecard", "Call Quality Score")
-        Path('scorecards/My Scorecard/Call Quality Score.yaml')
+        Path('scorecards/my_scorecard/call_quality_score.yaml')
     """
-    # Build the path without creating directories
+    # Create the scorecards directory if it doesn't exist
     scorecards_dir = Path('scorecards')
+    scorecards_dir.mkdir(exist_ok=True)
+    
+    # Create sanitized directory names
     scorecard_dir = scorecards_dir / sanitize_path_name(scorecard_name)
+    scorecard_dir.mkdir(exist_ok=True)
     
-    # Return the YAML file path
+    # Create the YAML file path
     return scorecard_dir / f"{sanitize_path_name(score_name)}.yaml"
-
-def ensure_score_yaml_path_exists(scorecard_name: str, score_name: str) -> Path:
-    """Ensure directories exist for a score YAML file path and return the path.
-    
-    This function creates the necessary directory structure for storing a score's
-    YAML configuration file.
-    
-    Args:
-        scorecard_name: The name of the scorecard
-        score_name: The name of the score
-        
-    Returns:
-        A Path object pointing to the YAML file location with directories created
-        
-    Raises:
-        OSError: If directory creation fails due to permissions or other issues
-    """
-    yaml_path = get_score_yaml_path(scorecard_name, score_name)
-    
-    # Create parent directories if they don't exist
-    yaml_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    return yaml_path
 
 def sanitize_path_name(name: str) -> str:
     """
