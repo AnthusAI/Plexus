@@ -12,12 +12,13 @@ import json
 import time
 import asyncio
 import gc
+from tqdm.asyncio import tqdm
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, ValidationError
 from langchain.output_parsers.retry import RetryWithErrorOutputParser
 from langchain.globals import set_llm_cache
-from langchain.cache import SQLiteCache
+from langchain_community.cache import SQLiteCache
 
 # Load environment variables from .env file
 try:
@@ -38,6 +39,11 @@ except ImportError:
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Silence HTTP request logging from OpenAI/httpx
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 
 # Initialize and set the Langchain LLM cache globally
 # Cache file will be stored inside the project's tmp directory
@@ -1282,6 +1288,9 @@ async def _process_itemize_batch_async(
         for work_coro, row, transcript_index in work_items
     ]
 
+    # Initialize progress bar
+    pbar = tqdm(total=total_items, desc="Processing transcripts", unit="transcript")
+    
     # Process results as they complete
     for future in asyncio.as_completed(tasks):
         processed_count += 1
@@ -1293,16 +1302,23 @@ async def _process_itemize_batch_async(
             # Add error result to maintain order
             all_results.append(({'error': str(e)}, None))
 
-        # Log progress more frequently - every 25 transcripts or every 5 seconds
+        # Update progress bar
+        if 'pbar' in locals():
+            pbar.update(1)
+        
+        # Log progress less frequently - every 100 transcripts or every 10 seconds
         current_time = time.time()
-        if processed_count % 25 == 0 or current_time - last_log_time > 5 or processed_count == total_items:
+        if processed_count % 100 == 0 or current_time - last_log_time > 10 or processed_count == total_items:
             logger.info(f"Itemization progress: {processed_count}/{total_items} transcripts processed...")
             last_log_time = current_time
             
         # Add small delay every batch to prevent overwhelming the system
         if processed_count % max_concurrent == 0:
             await asyncio.sleep(batch_delay)
-                
+    
+    # Close progress bar
+    pbar.close()
+    
     return all_results
 
 async def _transform_transcripts_itemize_async(
