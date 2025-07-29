@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, mock_open, MagicMock
 
-from plexus.cli.shared import get_score_yaml_path, sanitize_path_name
+from plexus.cli.shared import get_score_yaml_path, ensure_score_yaml_path_exists, sanitize_path_name
 
 
 class TestScoreYamlPath(unittest.TestCase):
@@ -81,16 +81,10 @@ metrics:
     
     def test_save_configuration(self):
         """Test saving a configuration to a local file."""
-        # Get the expected file path
-        yaml_path = get_score_yaml_path(self.scorecard_name, self.score_name)
-        
-        # If the test is running in a fresh environment, ensure the parent directory doesn't exist yet
-        # If it already exists from a previous test run, that's okay too
-        if not yaml_path.parent.exists():
-            self.assertFalse(yaml_path.parent.exists())
+        # Get the expected file path and ensure directories exist
+        yaml_path = ensure_score_yaml_path_exists(self.scorecard_name, self.score_name)
         
         # Save the configuration
-        os.makedirs(yaml_path.parent, exist_ok=True)
         with open(yaml_path, 'w') as f:
             f.write(self.score_config)
         
@@ -104,11 +98,10 @@ metrics:
     
     def test_check_cache_hit(self):
         """Test checking if a configuration exists in cache (hit)."""
-        # Get the expected file path
-        yaml_path = get_score_yaml_path(self.scorecard_name, self.score_name)
+        # Get the expected file path and ensure directories exist
+        yaml_path = ensure_score_yaml_path_exists(self.scorecard_name, self.score_name)
         
         # Create the file
-        os.makedirs(yaml_path.parent, exist_ok=True)
         with open(yaml_path, 'w') as f:
             f.write(self.score_config)
         
@@ -184,8 +177,7 @@ class TestPerformanceImprovement(unittest.TestCase):
         
         # Now, cache the configurations
         for i, score_id in enumerate(self.score_ids):
-            yaml_path = get_score_yaml_path(self.scorecard_name, self.score_names[i])
-            os.makedirs(yaml_path.parent, exist_ok=True)
+            yaml_path = ensure_score_yaml_path_exists(self.scorecard_name, self.score_names[i])
             with open(yaml_path, 'w') as f:
                 f.write(api_results[i])
         
