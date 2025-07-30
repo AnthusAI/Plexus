@@ -1230,27 +1230,6 @@ def get_score_instance(scorecard_identifier: str, score_name: str, no_cache=Fals
     use_cache = not no_cache
     return Score.load(scorecard_identifier, score_name, use_cache=use_cache, yaml_only=yaml_only)
 
-def get_scorecard_class(scorecard_identifier: str):
-    """
-    DEPRECATED: Legacy function for loading whole scorecards.
-    Use get_score_instance() for individual scores instead.
-    """
-    logging.warning("get_scorecard_class() is deprecated. Use get_score_instance() for individual scores.")
-    
-    def load_scorecards_if_needed():
-        # Check if registry has any items by checking if items() returns anything
-        if not list(scorecard_registry.items()):
-            Scorecard.load_and_register_scorecards('scorecards/')
-    
-    load_scorecards_if_needed()
-    
-    # Try to get the scorecard class directly from the registry using the identifier
-    scorecard_class = scorecard_registry.get(scorecard_identifier)
-    if scorecard_class is None:
-        raise Exception(f"Scorecard class not found for: {scorecard_identifier}")
-    
-    return scorecard_class
-
 
 def create_feedback_comparison(
     current_prediction: dict,
