@@ -212,6 +212,18 @@ class TestPerformanceImprovement(unittest.TestCase):
 class TestCachingIntegration(unittest.TestCase):
     """Integration tests for configuration caching."""
     
+    def setUp(self):
+        """Set up the test environment."""
+        # Create a temporary directory for the test
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.temp_dir.name)
+    
+    def tearDown(self):
+        """Clean up after the test."""
+        os.chdir(self.old_cwd)
+        self.temp_dir.cleanup()
+    
     @patch('os.path.exists')
     @patch('builtins.open', new_callable=mock_open)
     def test_check_local_cache(self, mock_file, mock_exists):
