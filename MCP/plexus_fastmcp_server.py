@@ -3492,34 +3492,33 @@ async def plexus_predict(
                     logger.info(f"Running actual prediction for item '{target_id}' with score '{score_name}'")
                     
                     try:
-                        # Import the CLI prediction components  
-                        from plexus.cli.PredictionCommands import select_sample, predict_score, get_scorecard_class
-                        from plexus.Registries import scorecard_registry
-                        from plexus.Scorecard import Scorecard
+                        # Import the new Score loading method
+                        from plexus.scores.Score import Score
                         
-                        # Force fresh reload of YAML files by clearing registry cache
-                        logger.info("Clearing scorecard registry to ensure fresh YAML reload...")
-                        scorecard_registry._classes_by_id.clear()
-                        scorecard_registry._classes_by_key.clear()
-                        scorecard_registry._classes_by_name.clear()
-                        scorecard_registry._properties_by_id.clear()
-                        scorecard_registry._properties_by_key.clear()
-                        scorecard_registry._properties_by_name.clear()
+                        # Load the specific score instance directly (no need for whole scorecard)
+                        logger.info(f"Loading score '{score_name}' from scorecard '{scorecard_name}' with fresh API data")
+                        score_instance = Score.load(scorecard_name, score_name, use_cache=True, yaml_only=False)
+                        logger.info(f"Successfully loaded score instance for '{score_name}'")
                         
-                        # Get the scorecard class (this will now force reload from YAML files)
-                        scorecard_class = get_scorecard_class(scorecard_name)
-                        logger.info(f"Loaded fresh scorecard configuration from YAML files for '{scorecard_name}'")
+                        # Get the item text content for prediction
+                        item_text = item_data.get('description', '')
+                        if not item_text:
+                            raise Exception("No text content found in item description")
                         
-                        # Get the sample data for the item (same as CLI does)
-                        sample_row, used_item_id = select_sample(
-                            scorecard_class, score_name, target_id, fresh=False, 
-                            compare_to_feedback=False, scorecard_id=scorecard_id, score_id=found_score['id']
+                        # Create Score.Input for the prediction
+                        score_input = Score.Input(
+                            text=item_text,
+                            metadata=item_data.get('metadata', {}),
+                            results=None  # No dependency results for now
                         )
                         
-                        # Run the actual prediction (same as CLI does)
-                        _, prediction_results, costs = await predict_score(
-                            score_name, scorecard_class, sample_row, used_item_id
-                        )
+                        # Run the actual prediction using the Score instance
+                        prediction_result = score_instance.predict(context=None, model_input=score_input)
+                        
+                        # Calculate costs (simplified - score instances should track their own costs)
+                        costs = score_instance.get_accumulated_costs() if hasattr(score_instance, 'get_accumulated_costs') else {'total_cost': 0}
+                        
+                        prediction_results = prediction_result
                         
                         # Process the results same as CLI does
                         if prediction_results:

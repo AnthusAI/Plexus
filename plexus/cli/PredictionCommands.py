@@ -39,12 +39,14 @@ from plexus.dashboard.api.models.feedback_item import FeedbackItem
 @click.option('--excel', is_flag=True, help='Output results to an Excel file.')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangChain components')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
+@click.option('--no-cache', is_flag=True, help='Disable local caching entirely (always fetch from API)')
+@click.option('--yaml', is_flag=True, help='Use local YAML files only without API updates')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 @click.option('--format', type=click.Choice(['fixed', 'json', 'yaml']), default='fixed', help='Output format: fixed (human-readable), json (parseable JSON), or yaml (token-efficient YAML)')
 @click.option('--input', is_flag=True, help='Include input text and metadata in YAML output (only for --format=yaml)')
 @click.option('--trace', is_flag=True, help='Include full execution trace in YAML output (only for --format=yaml)')
 @click.option('--compare-to-feedback', is_flag=True, help='Compare current prediction to historical feedback corrections for this item and score')
-def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, fresh, task_id, format, input, trace, compare_to_feedback):
+def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, fresh, no_cache, yaml, task_id, format, input, trace, compare_to_feedback):
     """Predict scores for a scorecard"""
     try:
         # Configure event loop with custom exception handler
@@ -79,7 +81,9 @@ def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, f
             number_of_times=number,
             excel=excel, 
             use_langsmith_trace=use_langsmith_trace, 
-            fresh=fresh, 
+            fresh=fresh,
+            no_cache=no_cache,
+            yaml_only=yaml,
             task_id=task_id, 
             format=format,
             include_input=input,
@@ -119,6 +123,8 @@ async def predict_impl(
     excel: bool = False,
     use_langsmith_trace: bool = False,
     fresh: bool = False,
+    no_cache: bool = False,
+    yaml_only: bool = False,
     task_id: str = None,
     format: str = 'fixed',
     include_input: bool = False,
@@ -126,6 +132,10 @@ async def predict_impl(
     compare_to_feedback: bool = False
 ):
     """Implementation of predict command"""
+    # Validate conflicting options
+    if no_cache and yaml_only:
+        raise click.BadParameter("Cannot use both --no-cache and --yaml options together")
+    
     tracker: Optional[TaskProgressTracker] = None
     task: Optional[Task] = None
     client: Optional[PlexusDashboardClient] = None
@@ -209,14 +219,16 @@ async def predict_impl(
         
         # Querying stage: Looking up scorecard configuration
         if tracker:
-            tracker.current_stage.status_message = "Looking up scorecard configuration..."
+            tracker.current_stage.status_message = "Preparing score configurations..."
             tracker.update(current_items=0)
         
-        scorecard_class = get_scorecard_class(scorecard_identifier)
+        # We no longer load the entire scorecard upfront
+        # Instead, we'll load individual scores as needed
+        logging.info(f"Using individual score loading for scorecard '{scorecard_identifier}'")
         
         # Querying stage: Scorecard configuration loaded
         if tracker:
-            tracker.current_stage.status_message = "Scorecard configuration loaded successfully"
+            tracker.current_stage.status_message = "Score configuration approach ready"
             tracker.update(current_items=0)
             
             # Complete the Querying stage
@@ -288,7 +300,7 @@ async def predict_impl(
                     tracker.current_stage.status_message = f"Looking up item text and metadata for prediction {prediction_num}/{total_predictions}"
                 
                 sample_row, used_item_id = select_sample(
-                    scorecard_class, score_name, item_identifier, fresh, compare_to_feedback=compare_to_feedback, scorecard_id=scorecard_id, score_id=score_ids.get(score_name)
+                    scorecard_identifier, score_name, item_identifier, fresh, compare_to_feedback=compare_to_feedback, scorecard_id=scorecard_id, score_id=score_ids.get(score_name)
                 )
                 
                 # Step 2: Item lookup completed
@@ -304,8 +316,8 @@ async def predict_impl(
                     if tracker:
                         tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
                     
-                    transcript, predictions, costs = await predict_score(
-                        score_name, scorecard_class, sample_row, used_item_id
+                    transcript, predictions, costs = await predict_score_with_individual_loading(
+                        scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only
                     )
                     
                     if predictions:
@@ -484,7 +496,7 @@ async def predict_impl(
                             tracker.update(current_items=current_prediction)
                         
                         sample_row, used_item_id = select_sample(
-                            scorecard_class, score_name, item_identifier, fresh, compare_to_feedback=compare_to_feedback, scorecard_id=scorecard_id, score_id=score_ids.get(score_name)
+                            scorecard_identifier, score_name, item_identifier, fresh, compare_to_feedback=compare_to_feedback, scorecard_id=scorecard_id, score_id=score_ids.get(score_name)
                         )
                         
                         # Step 2: Item lookup completed
@@ -502,8 +514,8 @@ async def predict_impl(
                                 tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
                                 tracker.update(current_items=current_prediction)
                             
-                            transcript, predictions, costs = await predict_score(
-                                score_name, scorecard_class, sample_row, used_item_id
+                            transcript, predictions, costs = await predict_score_with_individual_loading(
+                                scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only
                             )
                             
                             if predictions:
@@ -866,7 +878,8 @@ def output_excel(results, score_names, scorecard_identifier):
 
     logging.info(f"Excel file '{filename}' has been created with the prediction results.")
 
-def select_sample(scorecard_class, score_name, item_identifier, fresh, compare_to_feedback=False, scorecard_id=None, score_id=None):
+
+def select_sample(scorecard_identifier, score_name, item_identifier, fresh, compare_to_feedback=False, scorecard_id=None, score_id=None):
     """Select an item from the Plexus API using flexible identifier resolution."""
     from plexus.cli.client_utils import create_client
     from plexus.dashboard.api.models.item import Item
@@ -957,7 +970,7 @@ def select_sample(scorecard_class, score_name, item_identifier, fresh, compare_t
             base_metadata = {
                 "item_id": item.id,
                 "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
-                "scorecard_key": scorecard_class.properties.get('key'),
+                "scorecard_identifier": scorecard_identifier,  # Use identifier instead of scorecard_key
                 "score_name": score_name
             }
             
@@ -1033,7 +1046,7 @@ def select_sample(scorecard_class, score_name, item_identifier, fresh, compare_t
             'metadata': json.dumps({
                 "item_id": item.id,
                 "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
-                "scorecard_key": scorecard_class.properties.get('key'),
+                "scorecard_identifier": scorecard_identifier,  # Use identifier instead of scorecard_key
                 "score_name": score_name
             }),
             'feedback_item': None  # No feedback for random items
@@ -1083,6 +1096,50 @@ async def predict_score(score_name, scorecard_class, sample_row, used_item_id):
         raise  # Just re-raise
     except Exception as e:
         logging.error(f"Error in predict_score: {e}")
+        logging.error(f"Full traceback: {traceback.format_exc()}")
+        raise
+
+async def predict_score_with_individual_loading(scorecard_identifier, score_name, sample_row, used_item_id, no_cache=False, yaml_only=False):
+    """
+    Predict a single score using individual score loading (new approach).
+    """
+    try:
+        # Load the score instance directly using the new approach
+        logging.info(f"Loading score '{score_name}' from scorecard '{scorecard_identifier}'")
+        score_instance = get_score_instance(scorecard_identifier, score_name, no_cache=no_cache, yaml_only=yaml_only)
+        
+        # Get the item text from the sample_row
+        item_text = sample_row.iloc[0].get('text', '') if not sample_row.empty else ''
+        if not item_text:
+            raise Exception("No text content found in sample row")
+        
+        # Create Score.Input for the prediction
+        score_input = Score.Input(
+            text=item_text,
+            metadata=sample_row.iloc[0].to_dict() if not sample_row.empty else {},
+            results=None  # No dependency results for now
+        )
+        
+        # Run the prediction using the Score instance
+        async with score_instance:
+            await score_instance.async_setup()
+            prediction_result = await score_instance.predict(context=None, model_input=score_input)
+            
+            # Get costs if available
+            costs = None
+            if hasattr(score_instance, 'get_accumulated_costs'):
+                try:
+                    costs = score_instance.get_accumulated_costs()
+                except Exception as e:
+                    logging.warning(f"Failed to get costs: {e}")
+                    costs = {'total_cost': 0}
+            else:
+                costs = {'total_cost': 0}
+                
+            return score_instance, prediction_result, costs
+            
+    except Exception as e:
+        logging.error(f"Error in predict_score_with_individual_loading: {e}")
         logging.error(f"Full traceback: {traceback.format_exc()}")
         raise
 
@@ -1156,8 +1213,30 @@ def handle_exception(loop, context, scorecard_identifier=None, score_identifier=
         loop.default_exception_handler(context)
         loop.stop()
 
+def get_score_instance(scorecard_identifier: str, score_name: str, no_cache=False, yaml_only=False):
+    """
+    Get a Score instance by loading individual score configuration.
+    
+    Args:
+        scorecard_identifier: A string that identifies the scorecard (ID, name, key, or external ID)
+        score_name: Name of the specific score to load
+        no_cache: If True, don't cache API data to local YAML files (always fetch from API).
+        yaml_only: If True, load only from local YAML files without API calls.
+        
+    Returns:
+        Score: An initialized Score instance
+    """
+    # Convert no_cache to use_cache for the Score.load method
+    use_cache = not no_cache
+    return Score.load(scorecard_identifier, score_name, use_cache=use_cache, yaml_only=yaml_only)
+
 def get_scorecard_class(scorecard_identifier: str):
-    """Get scorecard class by identifier"""
+    """
+    DEPRECATED: Legacy function for loading whole scorecards.
+    Use get_score_instance() for individual scores instead.
+    """
+    logging.warning("get_scorecard_class() is deprecated. Use get_score_instance() for individual scores.")
+    
     def load_scorecards_if_needed():
         # Check if registry has any items by checking if items() returns anything
         if not list(scorecard_registry.items()):
