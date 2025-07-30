@@ -2940,44 +2940,40 @@ class AccuracyEvaluation(Evaluation):
 
     def get_score_instance(self, score_name: str):
         """
-        Safely get a Score instance that works with both YAML-loaded and API-loaded scorecards.
+        Get a Score instance using the standardized Score.load() method.
         
-        For YAML-loaded scorecards: Uses Score.from_name() with global scorecard_registry
-        For API-loaded scorecards: Uses the scorecard instance's own score_registry
+        This method now uses the DRY, tested Score.load() approach that handles:
+        - API loading with local caching
+        - YAML-only loading from local files
+        - Proper error handling and dependency resolution
         """
         try:
-            # First try the traditional Score.from_name() approach (for YAML-loaded scorecards)
-            return Score.from_name(self.scorecard_name, score_name)
+            # Use the standardized Score.load() method
+            # This handles both API-loaded and YAML-loaded scorecards automatically
+            # Use cache for evaluations to support --yaml mode
+            return Score.load(
+                scorecard_identifier=self.scorecard_name,
+                score_name=score_name,
+                use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
+                yaml_only=False  # Allow API calls if needed
+            )
         except ValueError as e:
-            if "not found" in str(e):
-                # Scorecard not found in global registry - try instance registry (for API-loaded scorecards)
-                self.logging.info(f"Scorecard '{self.scorecard_name}' not found in global registry, trying instance registry")
-                
-                # Get the score from the scorecard instance's registry
-                if hasattr(self.scorecard, 'score_registry'):
-                    score_class = self.scorecard.score_registry.get(score_name)
-                    if score_class:
-                        score_properties = self.scorecard.score_registry.get_properties(score_name)
-                        if score_properties:
-                            # Ensure scorecard_name is set in properties
-                            score_properties = score_properties.copy()
-                            if 'scorecard_name' not in score_properties:
-                                # Use the actual scorecard name from the instance
-                                actual_scorecard_name = None
-                                if hasattr(self.scorecard, 'name') and callable(self.scorecard.name):
-                                    actual_scorecard_name = self.scorecard.name()
-                                elif hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
-                                    actual_scorecard_name = self.scorecard.properties.get('name')
-                                
-                                score_properties['scorecard_name'] = actual_scorecard_name or str(self.scorecard_name)
-                            
-                            return score_class(**score_properties)
-                        else:
-                            raise ValueError(f"Score properties for '{score_name}' not found in scorecard instance registry")
-                    else:
-                        raise ValueError(f"Score '{score_name}' not found in scorecard instance registry")
-                else:
-                    raise ValueError(f"Scorecard instance has no score_registry attribute")
+            if "not found" in str(e).lower() or "api loading failed" in str(e).lower():
+                # Fallback to YAML-only mode if API loading fails
+                self.logging.info(f"API loading failed for '{score_name}', trying YAML-only mode")
+                try:
+                    return Score.load(
+                        scorecard_identifier=self.scorecard_name,
+                        score_name=score_name,
+                        use_cache=True,
+                        yaml_only=True  # Force YAML-only loading
+                    )
+                except ValueError as yaml_error:
+                    self.logging.warning(f"YAML-only loading also failed: {yaml_error}")
+                    # If both methods fail, provide a helpful error message
+                    raise ValueError(f"Could not load score '{score_name}' from scorecard '{self.scorecard_name}'. "
+                                   f"API error: {str(e)}. YAML error: {str(yaml_error)}. "
+                                   f"Ensure the score exists and is properly configured.")
             else:
                 # Re-raise if it's a different error
                 raise
