@@ -525,21 +525,21 @@ class FeedbackAnalysis(BaseReportBlock):
                 # Construct a direct GraphQL query using the new GSI
                 # The GSI query field name is listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt
                 # It takes `accountId` and a composite sort key argument.
-                # The composite sort key is formed from scorecardId, scoreId, and updatedAt.
+                # The composite sort key is formed from scorecardId, scoreId, and editedAt.
                 # We'll name the GraphQL variable for this composite key `composite_sk_condition`
-                # and assume its type is ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput
+                # and assume its type is ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput
                 # (or similar, based on actual schema introspection).
                 query = """
                 query ListFeedbackItemsByGSI(
                     $accountId: String!,
-                    $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput,
+                    $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
                     $limit: Int,
                     $nextToken: String,
                     $sortDirection: ModelSortDirection
                 ) {
                     listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
                         accountId: $accountId,
-                        scorecardIdScoreIdUpdatedAt: $composite_sk_condition, # This is the argument for the composite sort key
+                        scorecardIdScoreIdEditedAt: $composite_sk_condition, # This is the argument for the composite sort key
                         limit: $limit,
                         nextToken: $nextToken,
                         sortDirection: $sortDirection
@@ -573,7 +573,7 @@ class FeedbackAnalysis(BaseReportBlock):
                 """
                 
                 # Prepare variables for the query
-                # The composite sort key condition 'scorecardIdScoreIdUpdatedAt'
+                # The composite sort key condition 'scorecardIdScoreIdEditedAt'
                 # expects a 'between' operator with two objects.
                 variables = {
                     "accountId": account_id,
@@ -582,12 +582,12 @@ class FeedbackAnalysis(BaseReportBlock):
                             {
                                 "scorecardId": str(plexus_scorecard_id),
                                 "scoreId": str(plexus_score_id),
-                                "updatedAt": start_date.isoformat()
+                                "editedAt": start_date.isoformat()
                             },
                             {
                                 "scorecardId": str(plexus_scorecard_id), # Must match the start for range scan
                                 "scoreId": str(plexus_score_id),     # Must match the start for range scan
-                                "updatedAt": end_date.isoformat()
+                                "editedAt": end_date.isoformat()
                             }
                         ]
                     },
