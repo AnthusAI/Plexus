@@ -600,6 +600,220 @@ class Score(ABC,
         return score_name
 
     @classmethod
+    def load(cls, scorecard_identifier: str, score_name: str, use_cache: bool = True, yaml_only: bool = False):
+        """
+        Load a single score configuration with configurable caching behavior.
+        
+        Args:
+            scorecard_identifier: A string that identifies the scorecard (ID, name, key, or external ID)
+            score_name: Name of the specific score to load
+            use_cache: If True (default), cache API data to local YAML files. If False, don't cache.
+            yaml_only: If True, load only from local YAML files without API calls.
+            
+        Returns:
+            Score: An initialized Score instance
+            
+        Raises:
+            ValueError: If the score cannot be loaded
+        """
+        from pathlib import Path
+        from ruamel.yaml import YAML
+        from plexus.cli.client_utils import create_client
+        from plexus.cli.shared import get_score_yaml_path
+        
+        logging.info(f"Loading score '{score_name}' from scorecard '{scorecard_identifier}' (use_cache={use_cache}, yaml_only={yaml_only})")
+        
+        try:
+            if yaml_only:
+                # Mode 3: Load from local YAML file only, no API calls
+                return cls._load_from_yaml_file_only(scorecard_identifier, score_name)
+            
+            # For both default and no-cache modes, we need API client and scorecard resolution
+            client = create_client()
+            if not client:
+                if use_cache:
+                    # Fall back to YAML file if API is unavailable
+                    logging.warning("API client unavailable, falling back to local YAML file")
+                    return cls._load_from_yaml_file_only(scorecard_identifier, score_name)
+                else:
+                    raise ValueError("API client unavailable and caching disabled")
+            
+            # Import API resolution functions
+            from plexus.cli.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
+            from plexus.cli.fetch_scorecard_structure import fetch_scorecard_structure
+            
+            # Resolve scorecard identifier
+            scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+            if not scorecard_id:
+                raise ValueError(f"Could not resolve scorecard identifier: {scorecard_identifier}")
+            
+            # Fetch scorecard structure
+            scorecard_structure = fetch_scorecard_structure(client, scorecard_id)
+            if not scorecard_structure:
+                raise ValueError(f"Could not fetch structure for scorecard: {scorecard_id}")
+            
+            # Find the specific score in the scorecard structure
+            target_score = None
+            for section in scorecard_structure.get('sections', {}).get('items', []):
+                for score in section.get('scores', {}).get('items', []):
+                    if (score.get('name') == score_name or 
+                        score.get('key') == score_name or 
+                        score.get('id') == score_name or 
+                        score.get('externalId') == score_name):
+                        target_score = score
+                        break
+                if target_score:
+                    break
+            
+            if not target_score:
+                raise ValueError(f"Score '{score_name}' not found in scorecard '{scorecard_identifier}'")
+            
+            # Get the score configuration
+            if use_cache:
+                # Mode 1: Default - check cache, fetch if needed, use cached result
+                yaml_path = get_score_yaml_path(scorecard_structure.get('name'), score_name)
+                
+                if yaml_path.exists():
+                    # Use cached version
+                    logging.info(f"Using cached configuration from {yaml_path}")
+                    try:
+                        with open(yaml_path, 'r') as f:
+                            config_yaml = f.read()
+                    except Exception as e:
+                        logging.warning(f"Error reading cached file, fetching from API: {str(e)}")
+                        config_yaml = cls._fetch_score_config_from_api(client, target_score)
+                        cls._cache_score_config(yaml_path, config_yaml)
+                else:
+                    # Fetch from API and cache
+                    config_yaml = cls._fetch_score_config_from_api(client, target_score)
+                    cls._cache_score_config(yaml_path, config_yaml)
+            else:
+                # Mode 2: No cache - fetch from API only
+                config_yaml = cls._fetch_score_config_from_api(client, target_score)
+            
+            # Parse the YAML configuration
+            yaml_parser = YAML(typ='safe')
+            config = yaml_parser.load(config_yaml)
+            
+            if not isinstance(config, dict):
+                raise ValueError(f"Invalid configuration format for score '{score_name}'")
+            
+            # Create Score instance from the configuration
+            score_instance = cls._create_score_from_config(config)
+            
+            loading_mode = "yaml-only" if yaml_only else ("api-with-cache" if use_cache else "api-no-cache")
+            logging.info(f"Successfully loaded score '{score_name}' (mode: {loading_mode})")
+            return score_instance
+            
+        except Exception as e:
+            error_msg = f"Error loading score '{score_name}' from scorecard '{scorecard_identifier}': {str(e)}"
+            logging.error(error_msg)
+            raise ValueError(error_msg) from e
+    
+    @classmethod
+    def _load_from_yaml_file_only(cls, scorecard_identifier: str, score_name: str):
+        """Load score from local YAML file only, without API calls."""
+        from plexus.cli.shared import get_score_yaml_path
+        from ruamel.yaml import YAML
+        
+        logging.info(f"Loading score '{score_name}' from local YAML file only")
+        
+        # Try to find the YAML file - we need the actual scorecard name
+        yaml_path = get_score_yaml_path(scorecard_identifier, score_name)
+        
+        if not yaml_path.exists():
+            raise ValueError(f"YAML file not found: {yaml_path}")
+        
+        try:
+            with open(yaml_path, 'r') as f:
+                config_yaml = f.read()
+            
+            yaml_parser = YAML(typ='safe')
+            config = yaml_parser.load(config_yaml)
+            
+            if not isinstance(config, dict):
+                raise ValueError(f"Invalid configuration format in {yaml_path}")
+            
+            score_instance = cls._create_score_from_config(config)
+            logging.info(f"Successfully loaded score '{score_name}' from {yaml_path}")
+            return score_instance
+            
+        except Exception as e:
+            raise ValueError(f"Error loading score from {yaml_path}: {str(e)}") from e
+    
+    @classmethod
+    def _fetch_score_config_from_api(cls, client, score_data: dict) -> str:
+        """Fetch score configuration from API."""
+        from gql import gql
+        
+        champion_version_id = score_data.get('championVersionId')
+        if not champion_version_id:
+            raise ValueError(f"No champion version ID found for score {score_data.get('name')}")
+        
+        query = """
+        query GetScoreVersion($id: ID!) {
+            getScoreVersion(id: $id) {
+                id
+                configuration
+            }
+        }
+        """
+        
+        try:
+            with client as session:
+                result = session.execute(gql(query), variable_values={"id": champion_version_id})
+            
+            version_data = result.get('getScoreVersion', {})
+            config_yaml = version_data.get('configuration')
+            
+            if not config_yaml:
+                raise ValueError(f"No configuration found for version: {champion_version_id}")
+            
+            return config_yaml
+            
+        except Exception as e:
+            raise ValueError(f"Error fetching configuration from API: {str(e)}") from e
+    
+    @classmethod
+    def _cache_score_config(cls, yaml_path, config_yaml: str):
+        """Cache score configuration to local YAML file."""
+        try:
+            # Ensure directory exists
+            yaml_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(yaml_path, 'w') as f:
+                f.write(config_yaml)
+            
+            logging.info(f"Cached score configuration to {yaml_path}")
+            
+        except Exception as e:
+            logging.warning(f"Failed to cache configuration to {yaml_path}: {str(e)}")
+    
+    @classmethod
+    def _create_score_from_config(cls, config: dict):
+        """Create a Score instance from configuration dictionary."""
+        import importlib
+        
+        # Get the score class
+        class_name = config.get('class')
+        if not class_name:
+            raise ValueError("No 'class' field found in score configuration")
+        
+        try:
+            # Import the score class
+            module = importlib.import_module('plexus.scores')
+            score_class = getattr(module, class_name)
+            
+            # Create instance with parameters from config
+            parameters = {k: v for k, v in config.items() if k != 'class'}
+            score_instance = score_class(**parameters)
+            
+            return score_instance
+            
+        except Exception as e:
+            raise ValueError(f"Error creating score instance from config: {str(e)}") from e
+
+    @classmethod
     def from_name(cls, scorecard, score):
         
         scorecard_class = scorecard_registry.get(scorecard)
