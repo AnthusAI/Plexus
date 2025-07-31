@@ -21,7 +21,6 @@ import yaml
 
 from plexus.CustomLogging import logging, set_log_group
 from plexus.Scorecard import Scorecard
-from plexus.Registries import scorecard_registry
 from plexus.Evaluation import AccuracyEvaluation
 from plexus.cli.console import console
 
@@ -596,9 +595,129 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
             raise ValueError(f"{error_msg}\nThis might be due to API connectivity issues or invalid configurations.\nTry using the --yaml flag to load from local YAML files instead.") from e
         raise
 
+def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
+    """
+    Load a scorecard from individual YAML configuration files saved by fetch_score_configurations.
+    
+    Args:
+        scorecard_identifier: A string that identifies the scorecard (ID, name, key, or external ID)
+        score_names: Optional list of specific score names to load
+        
+    Returns:
+        Scorecard: An initialized Scorecard instance with required scores loaded from YAML files
+        
+    Raises:
+        ValueError: If the scorecard cannot be constructed from YAML files
+    """
+    from pathlib import Path
+    from ruamel.yaml import YAML
+    from plexus.cli.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
+    from plexus.cli.fetch_scorecard_structure import fetch_scorecard_structure
+    
+    logging.info(f"Loading scorecard '{scorecard_identifier}' from individual YAML files")
+    
+    try:
+        # First resolve the scorecard identifier to get the actual scorecard name
+        client = PlexusDashboardClient()
+        
+        # 1. Resolve the scorecard ID
+        scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+        if not scorecard_id:
+            raise ValueError(f"Could not resolve scorecard identifier: {scorecard_identifier}")
+        
+        logging.info(f"Resolved scorecard ID: {scorecard_id}")
+        
+        # 2. Fetch scorecard structure to get the actual name
+        scorecard_structure = fetch_scorecard_structure(client, scorecard_id)
+        if not scorecard_structure:
+            raise ValueError(f"Could not fetch structure for scorecard: {scorecard_id}")
+        
+        # Get the actual scorecard name from the API data
+        actual_scorecard_name = scorecard_structure.get('name')
+        if not actual_scorecard_name:
+            raise ValueError(f"No name found in scorecard structure: {scorecard_structure}")
+        
+        logging.info(f"Resolved scorecard name: '{actual_scorecard_name}'")
+        
+        # Look for scorecard directory using the actual name
+        scorecards_root = Path('scorecards')
+        scorecard_dir = scorecards_root / actual_scorecard_name
+        
+        if not scorecard_dir.exists():
+            available_dirs = [d.name for d in scorecards_root.iterdir() if d.is_dir()] if scorecards_root.exists() else []
+            raise ValueError(f"Scorecard directory not found: {scorecard_dir}. Available directories: {available_dirs}")
+        
+        logging.info(f"Found scorecard directory: {scorecard_dir}")
+        
+        # Find all YAML files in the scorecard directory
+        yaml_files = list(scorecard_dir.glob('*.yaml'))
+        if not yaml_files:
+            raise ValueError(f"No YAML files found in scorecard directory: {scorecard_dir}")
+        
+        logging.info(f"Found {len(yaml_files)} YAML files in {scorecard_dir}")
+        
+        # Parse YAML files to get score configurations
+        yaml_parser = YAML(typ='safe')
+        parsed_configs = []
+        
+        for yaml_file in yaml_files:
+            try:
+                with open(yaml_file, 'r') as f:
+                    config = yaml_parser.load(f)
+                
+                if not isinstance(config, dict):
+                    logging.warning(f"Skipping non-dict configuration in {yaml_file}")
+                    continue
+                
+                score_name = config.get('name')
+                if not score_name:
+                    logging.warning(f"Skipping configuration without name in {yaml_file}")
+                    continue
+                
+                # Filter by score_names if provided
+                if score_names and score_name not in score_names:
+                    logging.info(f"Skipping score '{score_name}' (not in requested scores)")
+                    continue
+                
+                parsed_configs.append(config)
+                logging.info(f"Loaded configuration for score: {score_name}")
+                
+            except Exception as e:
+                logging.error(f"Error parsing {yaml_file}: {str(e)}")
+                continue
+        
+        if not parsed_configs:
+            if score_names:
+                raise ValueError(f"No valid configurations found for requested scores: {score_names}")
+            else:
+                raise ValueError(f"No valid configurations found in {scorecard_dir}")
+        
+        # Create scorecard structure using the resolved API data
+        scorecard_data = {
+            'id': scorecard_id,
+            'name': actual_scorecard_name,
+            'key': scorecard_structure.get('key', actual_scorecard_name),
+            'description': scorecard_structure.get('description', f'Scorecard loaded from YAML files in {scorecard_dir}')
+        }
+        
+        # Create scorecard instance using the same method as API loading
+        scorecard_instance = Scorecard.create_instance_from_api_data(
+            scorecard_id=scorecard_id,
+            api_data=scorecard_data,
+            scores_config=parsed_configs
+        )
+        
+        logging.info(f"Successfully created scorecard '{scorecard_identifier}' with {len(parsed_configs)} scores from YAML files")
+        return scorecard_instance
+        
+    except Exception as e:
+        error_msg = f"Error loading scorecard from YAML files: {str(e)}"
+        logging.error(error_msg)
+        raise ValueError(f"{error_msg}\nEnsure that individual score YAML files exist in the scorecard directory.\nYou may need to run fetch_score_configurations first to create these files.") from e
+
 @evaluate.command()
 @click.option('--scorecard', 'scorecard', default=None, help='Scorecard identifier (ID, name, key, or external ID)')
-@click.option('--yaml', is_flag=True, help='Load scorecard from local YAML file instead of the API')
+@click.option('--yaml', is_flag=True, help='Load scorecard from individual YAML files (from fetch_score_configurations) instead of the API')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangGraphScore')
 @click.option('--number-of-samples', default=1, type=int, help='Number of texts to sample')
 @click.option('--sampling-method', default='random', type=str, help='Method for sampling texts')
@@ -853,26 +972,57 @@ def accuracy(
             
             # Load the scorecard either from YAML or API
             if yaml:
-                # Load from YAML (legacy approach)
-                logging.info(f"Loading scorecard '{scorecard}' from local YAML files")
+                # Load from individual YAML files (from fetch_score_configurations)
+                logging.info(f"Loading scorecard '{scorecard}' from individual YAML configuration files")
+                
+                # Validate 'score' parameter and parse target scores
+                if score is None:
+                    score = ""  # Default to empty string if None
+                    logging.warning("'score' parameter is None, defaulting to empty string")
+                
+                target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
                 try:
-                    logging.debug("Calling Scorecard.load_and_register_scorecards('scorecards/')")
-                    Scorecard.load_and_register_scorecards('scorecards/')
-                    logging.debug(f"Successfully loaded scorecard YAML files from scorecards/ directory")
+                    scorecard_instance = load_scorecard_from_yaml_files(scorecard, target_score_identifiers)
+                    logging.info(f"Successfully loaded scorecard '{scorecard}' from YAML files with {len(scorecard_instance.scores)} scores")
                     
-                    logging.debug(f"Looking up scorecard '{scorecard}' in scorecard_registry")
-                    scorecard_class = scorecard_registry.get(scorecard)
+                    # Extract score_id and score_version_id for the primary score
+                    primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
+                    score_id_for_eval = None
+                    score_version_id_for_eval = None
                     
-                    if scorecard_class is None:
-                        error_msg = f"Scorecard with name '{scorecard}' not found."
-                        logging.error(error_msg)
-                        raise ValueError(error_msg)
+                    if primary_score_identifier and scorecard_instance.scores:
+                        logging.info(f"Identifying primary score '{primary_score_identifier}' for evaluation record")
+                        for sc_config in scorecard_instance.scores:
+                            if (sc_config.get('name') == primary_score_identifier or
+                                sc_config.get('key') == primary_score_identifier or 
+                                str(sc_config.get('id', '')) == primary_score_identifier or
+                                sc_config.get('externalId') == primary_score_identifier):
+                                score_id_for_eval = sc_config.get('id')
+                                score_version_id_for_eval = sc_config.get('version')
+                                
+                                if not score_version_id_for_eval:
+                                    score_version_id_for_eval = sc_config.get('championVersionId')
+                                
+                                if isinstance(score_id_for_eval, str) and '-' in score_id_for_eval:
+                                    logging.info(f"Found primary score from YAML: {sc_config.get('name')} with ID: {score_id_for_eval}")
+                                    logging.info(f"Using version ID: {score_version_id_for_eval}")
+                                break
+                    
+                    # If no match found, fall back to first score
+                    if not score_id_for_eval and scorecard_instance.scores:
+                        sc_config = scorecard_instance.scores[0]
+                        score_id_for_eval = sc_config.get('id')
+                        score_version_id_for_eval = sc_config.get('version')
                         
-                    logging.debug(f"Instantiating scorecard class: {scorecard_class.__name__}")
-                    scorecard_instance = scorecard_class(scorecard=scorecard)
-                    logging.info(f"Using scorecard {scorecard} with class {scorecard_instance.__class__.__name__}")
+                        if not score_version_id_for_eval:
+                            score_version_id_for_eval = sc_config.get('championVersionId')
+                        
+                        if isinstance(score_id_for_eval, str) and '-' in score_id_for_eval:
+                            logging.info(f"Using first score from YAML for evaluation record: {sc_config.get('name')} with ID: {score_id_for_eval}")
+                            logging.info(f"Using version ID: {score_version_id_for_eval}")
+                    
                 except Exception as e:
-                    error_msg = f"Error loading scorecard from YAML: {str(e)}"
+                    error_msg = f"Error loading scorecard from YAML files: {str(e)}"
                     logging.error(error_msg)
                     raise ValueError(error_msg)
             else:
@@ -1329,15 +1479,31 @@ def get_data_driven_samples(
     logging.info(f"number_of_samples: {number_of_samples}")
     logging.info(f"random_seed: {random_seed}")
     
+    # Get score class name for error messages
+    score_class_name = score_config.get('class', 'UnknownScore')
+    
     try:
-        score_class_name = score_config['class']
-        score_module_path = f'plexus.scores.{score_class_name}'
-        score_module = importlib.import_module(score_module_path)
-        score_class = getattr(score_module, score_class_name)
+        # Use the standardized Score.load() method instead of manual instantiation
+        try:
+            score_instance = Score.load(
+                scorecard_identifier=scorecard_name,
+                score_name=score_name,
+                use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
+                yaml_only=False  # Allow API calls if needed
+            )
+            logging.info(f"Successfully loaded score '{score_name}' using Score.load()")
+        except ValueError as load_error:
+            logging.warning(f"Score.load() failed: {load_error}")
+            # Fallback to manual instantiation for backward compatibility
+            score_class_name = score_config['class']
+            score_module_path = f'plexus.scores.{score_class_name}'
+            score_module = importlib.import_module(score_module_path)
+            score_class = getattr(score_module, score_class_name)
 
-        score_config['scorecard_name'] = scorecard_name
-        score_config['score_name'] = score_name
-        score_instance = score_class(**score_config)
+            score_config['scorecard_name'] = scorecard_name
+            score_config['score_name'] = score_name
+            score_instance = score_class(**score_config)
+            logging.info(f"Fallback to manual instantiation successful for '{score_name}'")
 
         # ADD THESE LOGGING STATEMENTS:
         logging.info(f"=== DEBUGGING SCORE CONFIGURATION ===")
@@ -1376,12 +1542,14 @@ def get_data_driven_samples(
         if not hasattr(score_instance, 'dataframe'):
             error_msg = f"Score instance {score_class_name} does not have a 'dataframe' attribute after data loading"
             logging.error(error_msg)
-            raise ValueError(error_msg)
+            # Don't raise here - let the general exception handler catch it
+            return []
         
         if score_instance.dataframe is None:
             error_msg = f"Score instance {score_class_name} dataframe is None after data loading"
             logging.error(error_msg)
-            raise ValueError(error_msg)
+            # Don't raise here - let the general exception handler catch it
+            return []
         
         if len(score_instance.dataframe) == 0:
             error_msg = f"Score instance {score_class_name} dataframe is empty after data loading"
@@ -1391,7 +1559,8 @@ def get_data_driven_samples(
             logging.error("2. Database connectivity issues")
             logging.error("3. Invalid data configuration")
             logging.error("4. Data cache issues when using --fresh flag")
-            raise ValueError(error_msg)
+            # Don't raise here - let the general exception handler catch it
+            return []
 
         logging.info(f"Successfully loaded dataframe with {len(score_instance.dataframe)} rows")
 

@@ -752,35 +752,52 @@ class Scorecard:
         # Determine which scores collection to use
         scores_to_use = self.scores if hasattr(self, 'scores') else getattr(self.__class__, 'scores', [])
         
+        # Build complete name_to_id mapping from ALL available scores (not just subset)
+        # This is needed for dependency resolution
+        for score in scores_to_use:
+            score_id = str(score.get('id', ''))
+            score_name = score['name']
+            name_to_id[score_name] = score_id
+        
+        # Build dependency graph only for scores in the subset
         for score in scores_to_use:
             if score['name'] in subset_of_score_names:
                 score_id = str(score.get('id', ''))
                 score_name = score['name']
-                name_to_id[score_name] = score_id
                 
                 # Handle both simple list and conditional dependencies
                 dependencies = score.get('depends_on', [])
                 if isinstance(dependencies, list):
-                    # Simple list of dependencies
+                    # Simple list of dependencies - include ALL dependencies that exist in name_to_id
+                    deps = []
+                    for dep in dependencies:
+                        dep_id = name_to_id.get(dep)
+                        if dep_id:  # Only include if we have the dependency loaded
+                            deps.append(dep_id)
+                        else:
+                            logging.warning(f"Dependency '{dep}' for score '{score_name}' not found in loaded scores")
                     graph[score_id] = {
                         'name': score_name,
-                        'deps': [name_to_id.get(dep, dep) for dep in dependencies if dep in subset_of_score_names],
+                        'deps': deps,
                         'conditions': {}
                     }
                 elif isinstance(dependencies, dict):
-                    # Dictionary with conditions
+                    # Dictionary with conditions - include ALL dependencies that exist in name_to_id
                     deps = []
                     conditions = {}
                     for dep, condition in dependencies.items():
-                        if dep in subset_of_score_names:
-                            deps.append(name_to_id.get(dep, dep))
+                        dep_id = name_to_id.get(dep)
+                        if dep_id:  # Only include if we have the dependency loaded
+                            deps.append(dep_id)
                             if isinstance(condition, dict):
-                                conditions[name_to_id.get(dep, dep)] = condition
+                                conditions[dep_id] = condition
                             elif isinstance(condition, str):
-                                conditions[name_to_id.get(dep, dep)] = {
+                                conditions[dep_id] = {
                                     'operator': '==',
                                     'value': condition
                                 }
+                        else:
+                            logging.warning(f"Dependency '{dep}' for score '{score_name}' not found in loaded scores")
                     graph[score_id] = {
                         'name': score_name,
                         'deps': deps,

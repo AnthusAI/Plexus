@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from plexus.cli.PredictionCommands import (
     predict, predict_impl, output_excel, select_sample, predict_score,
-    predict_score_impl, handle_exception, get_scorecard_class, create_score_input,
+    predict_score_impl, handle_exception, create_score_input,
     create_feedback_comparison
 )
 from plexus.scores.LangGraphScore import BatchProcessingPause
@@ -248,16 +248,14 @@ class TestPredictImpl:
     @pytest.mark.asyncio
     async def test_predict_impl_success_fixed_format(self, mock_scorecard_registry, sample_scorecard_class):
         """Test predict_impl with successful prediction in fixed format"""
-        mock_scorecard_registry.get.return_value = sample_scorecard_class
-        
-        # Mock the prediction pipeline
-        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
-             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
-             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+        # Mock the new individual score loading pipeline
+        with patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score_with_individual_loading') as mock_predict_score, \
+             patch('plexus.scores.Score.Score.load') as mock_score_load, \
              patch('plexus.cli.PredictionCommands.rich') as mock_rich:
             
-            mock_get_scorecard.return_value = sample_scorecard_class
             mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            mock_score_load.return_value = Mock()
             
             # Mock prediction result
             mock_prediction = Mock()
@@ -277,15 +275,14 @@ class TestPredictImpl:
     @pytest.mark.asyncio
     async def test_predict_impl_success_json_format(self, mock_scorecard_registry, sample_scorecard_class):
         """Test predict_impl with successful prediction in JSON format"""
-        mock_scorecard_registry.get.return_value = sample_scorecard_class
-        
-        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
-             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
-             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+        # Mock the new individual score loading pipeline
+        with patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score_with_individual_loading') as mock_predict_score, \
+             patch('plexus.scores.Score.Score.load') as mock_score_load, \
              patch('builtins.print') as mock_print:
             
-            mock_get_scorecard.return_value = sample_scorecard_class
             mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            mock_score_load.return_value = Mock()
             
             # Create a more explicit Mock that ensures hasattr() works correctly
             mock_prediction = Mock(spec=['value', 'explanation', 'trace'])
@@ -315,13 +312,13 @@ class TestPredictImpl:
         """Test predict_impl with successful prediction in YAML format"""
         mock_scorecard_registry.get.return_value = sample_scorecard_class
         
-        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
-             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
-             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+        with patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score_with_individual_loading') as mock_predict_score, \
+             patch('plexus.scores.Score.Score.load') as mock_score_load, \
              patch('plexus.cli.PredictionCommands.output_yaml_prediction_results') as mock_yaml_output:
             
-            mock_get_scorecard.return_value = sample_scorecard_class
             mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            mock_score_load.return_value = Mock()
             
             mock_prediction = Mock()
             mock_prediction.value = 8.5
@@ -352,13 +349,13 @@ class TestPredictImpl:
         """Test predict_impl with Excel output"""
         mock_scorecard_registry.get.return_value = sample_scorecard_class
         
-        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
-             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
-             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+        with patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score_with_individual_loading') as mock_predict_score, \
+             patch('plexus.scores.Score.Score.load') as mock_score_load, \
              patch('plexus.cli.PredictionCommands.output_excel') as mock_output_excel:
             
-            mock_get_scorecard.return_value = sample_scorecard_class
             mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            mock_score_load.return_value = Mock()
             
             mock_prediction = Mock()
             mock_prediction.value = 8.5
@@ -377,13 +374,13 @@ class TestPredictImpl:
         """Test predict_impl with no prediction results"""
         mock_scorecard_registry.get.return_value = sample_scorecard_class
         
-        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
-             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
-             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+        with patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score_with_individual_loading') as mock_predict_score, \
+             patch('plexus.scores.Score.Score.load') as mock_score_load, \
              patch('plexus.cli.PredictionCommands.rich') as mock_rich:
             
-            mock_get_scorecard.return_value = sample_scorecard_class
             mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            mock_score_load.return_value = Mock()
             mock_predict_score.return_value = (None, None, None)
             
             await predict_impl(
@@ -399,13 +396,13 @@ class TestPredictImpl:
         """Test predict_impl with list of predictions"""
         mock_scorecard_registry.get.return_value = sample_scorecard_class
         
-        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
-             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
-             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+        with patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score_with_individual_loading') as mock_predict_score, \
+             patch('plexus.scores.Score.Score.load') as mock_score_load, \
              patch('plexus.cli.PredictionCommands.rich'):
             
-            mock_get_scorecard.return_value = sample_scorecard_class
             mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            mock_score_load.return_value = Mock()
             
             # Mock list of predictions
             mock_prediction = Mock()
@@ -424,14 +421,13 @@ class TestPredictImpl:
     @pytest.mark.asyncio
     async def test_predict_impl_batch_processing_pause(self, mock_scorecard_registry, sample_scorecard_class):
         """Test predict_impl with BatchProcessingPause exception"""
-        mock_scorecard_registry.get.return_value = sample_scorecard_class
-        
-        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
-             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
-             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score:
+        # Mock the new individual score loading pipeline
+        with patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score_with_individual_loading') as mock_predict_score, \
+             patch('plexus.scores.Score.Score.load') as mock_score_load:
             
-            mock_get_scorecard.return_value = sample_scorecard_class
             mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            mock_score_load.return_value = Mock()
             mock_predict_score.side_effect = BatchProcessingPause("batch-123", "thread-456", "Test pause")
             
             with pytest.raises(BatchProcessingPause):
@@ -445,12 +441,11 @@ class TestPredictImpl:
         """Test predict_impl with multiple items"""
         mock_scorecard_registry.get.return_value = sample_scorecard_class
         
-        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
-             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
-             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+        with patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score_with_individual_loading') as mock_predict_score, \
+             patch('plexus.scores.Score.Score.load') as mock_score_load, \
              patch('plexus.cli.PredictionCommands.output_yaml_prediction_results') as mock_yaml_output:
             
-            mock_get_scorecard.return_value = sample_scorecard_class
             
             # Mock different samples for each item
             mock_select_sample.side_effect = [
@@ -547,20 +542,20 @@ class TestSelectSample:
     
     def test_select_sample_with_item_id_direct_lookup(self, mock_client, mock_item, sample_item_data, mock_env_vars):
         """Test select_sample with specific item ID - direct lookup"""
-        sample_scorecard_class = Mock()
-        sample_scorecard_class.properties = {'key': 'test-scorecard'}
-        
         # Mock Item.get_by_id success
         mock_item_instance = Mock()
         mock_item_instance.id = sample_item_data['id']
         mock_item_instance.text = sample_item_data['text']
+        mock_item_instance.metadata = None  # No metadata to avoid JSON serialization issues
         mock_item.get_by_id.return_value = mock_item_instance
         
-        with patch('plexus.cli.reports.utils.resolve_account_id_for_command') as mock_resolve_account:
+        with patch('plexus.cli.reports.utils.resolve_account_id_for_command') as mock_resolve_account, \
+             patch('plexus.cli.PredictionCommands.memoized_resolve_item_identifier') as mock_resolve_item:
             mock_resolve_account.return_value = 'account-123'
+            mock_resolve_item.return_value = 'item-123'
             
             sample_row, used_item_id = select_sample(
-                sample_scorecard_class, 'test-score', 'item-123', fresh=False
+                'test-scorecard', 'test-score', 'item-123', fresh=False
             )
             
             assert used_item_id == 'item-123'
@@ -569,13 +564,11 @@ class TestSelectSample:
     
     def test_select_sample_with_item_id_identifier_search(self, mock_client, mock_item, sample_item_data, mock_env_vars):
         """Test select_sample with identifier search fallback"""
-        sample_scorecard_class = Mock()
-        sample_scorecard_class.properties = {'key': 'test-scorecard'}
-        
         # Mock item instance that will be returned by Item.get_by_id for the resolved ID
         mock_item_instance = Mock()
         mock_item_instance.id = sample_item_data['id']
         mock_item_instance.text = sample_item_data['text']
+        mock_item_instance.metadata = None  # No metadata to avoid JSON serialization issues
         
         # Mock Item.get_by_id to succeed for the resolved ID
         mock_item.get_by_id.return_value = mock_item_instance
@@ -588,7 +581,7 @@ class TestSelectSample:
             mock_resolve_identifier.return_value = 'item-123'
             
             sample_row, used_item_id = select_sample(
-                sample_scorecard_class, 'test-score', 'search-term', fresh=False
+                'test-scorecard', 'test-score', 'search-term', fresh=False
             )
             
             assert used_item_id == 'item-123'
@@ -613,9 +606,6 @@ class TestSelectSample:
     
     def test_select_sample_without_item_id(self, mock_client, mock_item, sample_item_data, mock_env_vars):
         """Test select_sample without specific item ID - gets most recent"""
-        sample_scorecard_class = Mock()
-        sample_scorecard_class.properties = {'key': 'test-scorecard'}
-        
         # Mock Item.list to return a proper item instance
         mock_item_instance = Mock()
         mock_item_instance.id = sample_item_data['id']
@@ -627,7 +617,7 @@ class TestSelectSample:
             mock_resolve_account.return_value = 'account-123'
             
             sample_row, used_item_id = select_sample(
-                sample_scorecard_class, 'test-score', None, fresh=False
+                'test-scorecard', 'test-score', None, fresh=False
             )
             
             assert used_item_id == 'item-123'
@@ -811,81 +801,6 @@ class TestHandleException:
             mock_loop.stop.assert_called_once()
 
 
-class TestGetScorecardClass:
-    """Test the get_scorecard_class function"""
-    
-    def test_get_scorecard_class_success(self, mock_scorecard_class, mock_scorecard_registry):
-        """Test successful scorecard class retrieval via direct registry lookup"""
-        # Mock the scorecard registry to return a scorecard class on the first call (fallback path)
-        expected_scorecard = Mock()
-        
-        # Set up the registry mock to return None for API-resolved keys but the scorecard for the original identifier
-        def mock_get(identifier):
-            if identifier == 'test-scorecard':
-                return expected_scorecard
-            return None
-        
-        mock_scorecard_registry.get.side_effect = mock_get
-        
-        # Mock to force the fallback path by making API resolution fail
-        with patch('plexus.cli.client_utils.create_client') as mock_create_client, \
-             patch('plexus.cli.memoized_resolvers.memoized_resolve_scorecard_identifier') as mock_resolve_scorecard:
-            
-            # Mock client
-            mock_client = Mock()
-            mock_create_client.return_value = mock_client
-            
-            # Mock identifier resolution to fail (so it falls back to direct registry lookup)
-            mock_resolve_scorecard.return_value = None
-            
-            # Call the function
-            result = get_scorecard_class('test-scorecard')
-            
-            # Verify the result
-            assert result == expected_scorecard
-            assert result is not None
-    
-    def test_get_scorecard_class_success_with_api_resolution(self, mock_scorecard_class, mock_scorecard_registry):
-        """Test successful scorecard class retrieval with API resolution"""
-        # Mock the scorecard registry to return a scorecard class
-        expected_scorecard = Mock()
-        mock_scorecard_registry.get.return_value = expected_scorecard
-        
-        # Mock the API client and related functions that get_scorecard_class uses
-        with patch('plexus.cli.client_utils.create_client') as mock_create_client, \
-             patch('plexus.cli.memoized_resolvers.memoized_resolve_scorecard_identifier') as mock_resolve_scorecard:
-            
-            # Mock client
-            mock_client = Mock()
-            mock_create_client.return_value = mock_client
-            
-            # Mock identifier resolution to succeed
-            mock_resolve_scorecard.return_value = 'scorecard-id-123'
-            
-            # Mock the GraphQL response
-            mock_client.execute.return_value = {
-                'getScorecard': {
-                    'id': 'scorecard-id-123',
-                    'name': 'Test Scorecard',
-                    'key': 'test-scorecard-key'
-                }
-            }
-            
-            # Call the function
-            result = get_scorecard_class('test-scorecard')
-            
-            # Verify the result
-            assert result == expected_scorecard
-            assert result is not None
-    
-    def test_get_scorecard_class_not_found(self, mock_scorecard_class, mock_scorecard_registry):
-        """Test scorecard class not found"""
-        # Mock the registry to return None (scorecard not found)
-        mock_scorecard_registry.get.return_value = None
-        
-        # Expect the actual error message from the implementation
-        with pytest.raises(Exception, match="Scorecard class not found for: nonexistent"):
-            get_scorecard_class('nonexistent')
 
 
 class TestCreateScoreInput:
