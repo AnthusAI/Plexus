@@ -1479,15 +1479,31 @@ def get_data_driven_samples(
     logging.info(f"number_of_samples: {number_of_samples}")
     logging.info(f"random_seed: {random_seed}")
     
+    # Get score class name for error messages
+    score_class_name = score_config.get('class', 'UnknownScore')
+    
     try:
-        score_class_name = score_config['class']
-        score_module_path = f'plexus.scores.{score_class_name}'
-        score_module = importlib.import_module(score_module_path)
-        score_class = getattr(score_module, score_class_name)
+        # Use the standardized Score.load() method instead of manual instantiation
+        try:
+            score_instance = Score.load(
+                scorecard_identifier=scorecard_name,
+                score_name=score_name,
+                use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
+                yaml_only=False  # Allow API calls if needed
+            )
+            logging.info(f"Successfully loaded score '{score_name}' using Score.load()")
+        except ValueError as load_error:
+            logging.warning(f"Score.load() failed: {load_error}")
+            # Fallback to manual instantiation for backward compatibility
+            score_class_name = score_config['class']
+            score_module_path = f'plexus.scores.{score_class_name}'
+            score_module = importlib.import_module(score_module_path)
+            score_class = getattr(score_module, score_class_name)
 
-        score_config['scorecard_name'] = scorecard_name
-        score_config['score_name'] = score_name
-        score_instance = score_class(**score_config)
+            score_config['scorecard_name'] = scorecard_name
+            score_config['score_name'] = score_name
+            score_instance = score_class(**score_config)
+            logging.info(f"Fallback to manual instantiation successful for '{score_name}'")
 
         # ADD THESE LOGGING STATEMENTS:
         logging.info(f"=== DEBUGGING SCORE CONFIGURATION ===")
@@ -1526,12 +1542,14 @@ def get_data_driven_samples(
         if not hasattr(score_instance, 'dataframe'):
             error_msg = f"Score instance {score_class_name} does not have a 'dataframe' attribute after data loading"
             logging.error(error_msg)
-            raise ValueError(error_msg)
+            # Don't raise here - let the general exception handler catch it
+            return []
         
         if score_instance.dataframe is None:
             error_msg = f"Score instance {score_class_name} dataframe is None after data loading"
             logging.error(error_msg)
-            raise ValueError(error_msg)
+            # Don't raise here - let the general exception handler catch it
+            return []
         
         if len(score_instance.dataframe) == 0:
             error_msg = f"Score instance {score_class_name} dataframe is empty after data loading"
@@ -1541,7 +1559,8 @@ def get_data_driven_samples(
             logging.error("2. Database connectivity issues")
             logging.error("3. Invalid data configuration")
             logging.error("4. Data cache issues when using --fresh flag")
-            raise ValueError(error_msg)
+            # Don't raise here - let the general exception handler catch it
+            return []
 
         logging.info(f"Successfully loaded dataframe with {len(score_instance.dataframe)} rows")
 

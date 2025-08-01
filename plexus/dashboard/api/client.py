@@ -333,6 +333,35 @@ class _BaseAPIClient:
                 continue
             
         return None
+    
+    def load_score_configuration(self, scorecard_identifier: str, score_name: str, 
+                                use_cache: bool = False, yaml_only: bool = False):
+        """
+        Load a score configuration using the standardized Score.load() method.
+        
+        This provides a convenient way for dashboard clients to load score configurations
+        using the same DRY, tested logic used throughout the system.
+        
+        Args:
+            scorecard_identifier: Scorecard identifier (ID, key, name, etc.)
+            score_name: Name of the score to load
+            use_cache: Whether to use cached YAML files (default: False for fresh API data)
+            yaml_only: Whether to restrict to YAML-only loading (default: False)
+            
+        Returns:
+            Score instance with loaded configuration
+            
+        Raises:
+            ValueError: If the score cannot be loaded
+        """
+        from plexus.scores.Score import Score
+        
+        return Score.load(
+            scorecard_identifier=scorecard_identifier,
+            score_name=score_name,
+            use_cache=use_cache,
+            yaml_only=yaml_only
+        )
 
     def log_score(
         self, 
