@@ -270,11 +270,19 @@ const DetailContent = React.memo(({
   )
   
   // Parse YAML configuration if available, otherwise create default YAML
-  const defaultYaml = stringifyYaml({
-    name: score.name,
-    externalId: score.externalId,
-    key: score.key
-  })
+  const defaultYamlObj: Record<string, any> = {
+    name: score.name
+  };
+  
+  // Only add fields that have values to avoid "key: null" in YAML
+  if (score.externalId && score.externalId !== '') {
+    defaultYamlObj.externalId = score.externalId;
+  }
+  if (score.key && score.key !== '') {
+    defaultYamlObj.key = score.key;
+  }
+  
+  const defaultYaml = stringifyYaml(defaultYamlObj)
   
   // Track the current configuration in local state
   const [currentConfig, setCurrentConfig] = React.useState(currentVersion?.configuration || defaultYaml)
@@ -378,7 +386,13 @@ const DetailContent = React.memo(({
           if ('id' in parsed) delete parsed.id;
         }
       } else {
-        parsed[field] = value;
+        // Only set the field if the value is not empty/null to avoid "key: null" in YAML
+        if (value !== null && value !== undefined && value !== '') {
+          parsed[field] = value;
+        } else {
+          // Remove the field entirely if it's empty/null
+          delete parsed[field];
+        }
       }
       
       // Update the configuration
@@ -1270,33 +1284,61 @@ export function ScoreComponent({
         
         // Update name if changed
         if (changes.name !== undefined) {
-          updatedConfig.name = changes.name;
+          if (changes.name && changes.name !== '') {
+            updatedConfig.name = changes.name;
+          } else {
+            delete updatedConfig.name;
+          }
         }
         
         // Update key if changed
         if (changes.key !== undefined) {
-          updatedConfig.key = changes.key;
+          if (changes.key && changes.key !== '') {
+            updatedConfig.key = changes.key;
+          } else {
+            delete updatedConfig.key;
+          }
         }
         
         // Update description if changed
         if (changes.description !== undefined) {
-          updatedConfig.description = changes.description;
+          if (changes.description && changes.description !== '') {
+            updatedConfig.description = changes.description;
+          } else {
+            delete updatedConfig.description;
+          }
         }
         
         // Update external ID with the appropriate format
         if (changes.externalId !== undefined) {
-          if (usesUnderscoreFormat) {
-            updatedConfig.external_id = changes.externalId;
-            // Remove camelCase if exists
-            if ('externalId' in updatedConfig) {
-              delete updatedConfig.externalId;
+          if (changes.externalId && changes.externalId !== '') {
+            if (usesUnderscoreFormat) {
+              updatedConfig.external_id = changes.externalId;
+              // Remove camelCase if exists
+              if ('externalId' in updatedConfig) {
+                delete updatedConfig.externalId;
+              }
+            } else {
+              updatedConfig.externalId = changes.externalId;
+              // Remove snake_case if exists
+              if ('external_id' in updatedConfig) {
+                delete updatedConfig.external_id;
+              }
             }
           } else {
-            updatedConfig.externalId = changes.externalId;
-            // Remove snake_case if exists
-            if ('external_id' in updatedConfig) {
-              delete updatedConfig.external_id;
-            }
+            // Remove all external ID fields if empty
+            delete updatedConfig.externalId;
+            delete updatedConfig.external_id;
+            delete updatedConfig.id;
+          }
+        }
+        
+        // Update isDisabled if changed
+        if (changes.isDisabled !== undefined) {
+          if (changes.isDisabled) {
+            updatedConfig.isDisabled = changes.isDisabled;
+          } else {
+            delete updatedConfig.isDisabled;
           }
         }
         
@@ -1445,12 +1487,25 @@ export function ScoreComponent({
       if (!configurationYaml) {
         // Check if we should use external_id or externalId format
         // Default to external_id for new configurations as it's more standard
-        configurationYaml = stringifyYaml({
-          name: editedScore.name,
-          external_id: editedScore.externalId,
-          key: editedScore.key,
-          description: editedScore.description
-        });
+        const newConfigObj: Record<string, any> = {
+          name: editedScore.name
+        };
+        
+        // Only add fields that have values to avoid "key: null" in YAML
+        if (editedScore.externalId && editedScore.externalId !== '') {
+          newConfigObj.external_id = editedScore.externalId;
+        }
+        if (editedScore.key && editedScore.key !== '') {
+          newConfigObj.key = editedScore.key;
+        }
+        if (editedScore.description && editedScore.description !== '') {
+          newConfigObj.description = editedScore.description;
+        }
+        if (editedScore.isDisabled) {
+          newConfigObj.isDisabled = editedScore.isDisabled;
+        }
+        
+        configurationYaml = stringifyYaml(newConfigObj);
       } else {
         // Ensure the configuration has the latest values
         try {
@@ -1463,21 +1518,47 @@ export function ScoreComponent({
 
           
           // Update the external ID field using the same format that was in the original YAML
-          if (hasSimpleId) {
-            // Using simple id format
-            parsed.id = editedScore.externalId;
-          } else if (hasExternalUnderscoreId) {
-            // Using snake_case format
-            parsed.external_id = editedScore.externalId;
+          if (editedScore.externalId && editedScore.externalId !== '') {
+            if (hasSimpleId) {
+              // Using simple id format
+              parsed.id = editedScore.externalId;
+            } else if (hasExternalUnderscoreId) {
+              // Using snake_case format
+              parsed.external_id = editedScore.externalId;
+            } else {
+              // Using camelCase format (default)
+              parsed.externalId = editedScore.externalId;
+            }
           } else {
-            // Using camelCase format (default)
-            parsed.externalId = editedScore.externalId;
+            // Remove all external ID fields if empty
+            delete parsed.id;
+            delete parsed.external_id;
+            delete parsed.externalId;
           }
           
           // Update other fields
           parsed.name = editedScore.name;
-          parsed.key = editedScore.key;
-          if (editedScore.description) parsed.description = editedScore.description;
+          
+          // Only set key if it has a value
+          if (editedScore.key && editedScore.key !== '') {
+            parsed.key = editedScore.key;
+          } else {
+            delete parsed.key;
+          }
+          
+          // Only set description if it has a value
+          if (editedScore.description && editedScore.description !== '') {
+            parsed.description = editedScore.description;
+          } else {
+            delete parsed.description;
+          }
+          
+          // Handle isDisabled field
+          if (editedScore.isDisabled) {
+            parsed.isDisabled = editedScore.isDisabled;
+          } else {
+            delete parsed.isDisabled;
+          }
           
           // Update the configuration
           configurationYaml = stringifyYaml(parsed);
