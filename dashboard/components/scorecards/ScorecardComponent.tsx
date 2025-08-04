@@ -809,6 +809,7 @@ export const DetailContent = React.memo(function DetailContent({
               type: score.type,
               order: score.order,
               key: score.key || '',
+              externalId: (score as any).externalId || score.id,
               icon: <ListCheck className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
             })) || [];
             
