@@ -52,8 +52,61 @@ def iteratively_fetch_configurations(
     else:
         logging.info("CACHING STRATEGY: Always fetching from API, ignoring local cache (but still writing to cache)")
     
-    # Build name/ID mappings
+    # Build initial name/ID mappings from target scores
+    # But we need complete mappings for dependency resolution, so we'll update these later
     id_to_name, name_to_id = build_name_id_mappings(target_scores)
+    
+    # Fetch complete scorecard structure to build full name/ID mappings for dependency resolution
+    logging.info("Fetching complete scorecard structure for dependency resolution")
+    complete_structure_query = gql(f"""
+    query GetCompleteScorecardStructure {{
+        getScorecard(id: "{scorecard_data.get('id')}") {{
+            id
+            name
+            key
+            sections {{
+                items {{
+                    id
+                    name
+                    scores {{
+                        items {{
+                            id
+                            name
+                            key
+                            externalId
+                            championVersionId
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }}
+    """)
+    
+    try:
+        with client as session:
+            complete_structure_result = session.execute(complete_structure_query)
+        
+        complete_structure_data = complete_structure_result.get('getScorecard', {})
+        
+        # Extract ALL scores from ALL sections to build complete mappings
+        all_scorecard_scores = []
+        for section in complete_structure_data.get('sections', {}).get('items', []):
+            section_scores = section.get('scores', {}).get('items', [])
+            all_scorecard_scores.extend(section_scores)
+            
+        # Build complete name/ID mappings for ALL scores in the scorecard
+        complete_id_to_name, complete_name_to_id = build_name_id_mappings(all_scorecard_scores)
+        
+        # Update our mappings with the complete ones
+        id_to_name.update(complete_id_to_name)
+        name_to_id.update(complete_name_to_id)
+        
+        logging.info(f"Built complete name/ID mappings for {len(complete_name_to_id)} scores in scorecard")
+        
+    except Exception as e:
+        logging.error(f"Error fetching complete scorecard structure for dependency resolution: {str(e)}")
+        # Continue with partial mappings - this is not fatal but may cause dependency resolution issues
     
     # Initialize tracking sets
     all_scores = target_scores.copy()  # Keeps growing as we discover dependencies
