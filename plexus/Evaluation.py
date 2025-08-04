@@ -1464,10 +1464,7 @@ class Evaluation:
 
     def _get_update_variables(self, metrics, status):
         """Get the variables for the update mutation"""
-        # --- DETAILED LOGGING START ---
-        self.logging.info(f"[_get_update_variables ENTRY] Status: {status}, Metrics keys: {list(metrics.keys())}")
-        self.logging.info(f"[_get_update_variables] Raw metrics input: {metrics}")
-        # --- DETAILED LOGGING END ---
+# Removed verbose logging to improve performance
         elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
         
         # Format metrics for API
@@ -1578,9 +1575,6 @@ class Evaluation:
         
         # Add confusion matrix if available in metrics
         confusion_matrix_val = metrics.get("confusionMatrix")
-        # --- DETAILED LOGGING START ---
-        self.logging.info(f"[_get_update_variables] confusionMatrix value from metrics: {confusion_matrix_val}")
-        # --- DETAILED LOGGING END ---
         if confusion_matrix_val:
             try:
                 update_input["confusionMatrix"] = json.dumps(confusion_matrix_val)
@@ -1592,9 +1586,6 @@ class Evaluation:
 
         # Add class distributions if available
         predicted_dist_val = metrics.get("predictedClassDistribution")
-        # --- DETAILED LOGGING START ---
-        self.logging.info(f"[_get_update_variables] predictedClassDistribution value from metrics: {predicted_dist_val}")
-        # --- DETAILED LOGGING END ---
         if predicted_dist_val:
             try:
                 update_input["predictedClassDistribution"] = json.dumps(predicted_dist_val)
@@ -1605,9 +1596,6 @@ class Evaluation:
             update_input["predictedClassDistribution"] = json.dumps([])
 
         dataset_dist_val = metrics.get("datasetClassDistribution")
-        # --- DETAILED LOGGING START ---
-        self.logging.info(f"[_get_update_variables] datasetClassDistribution value from metrics: {dataset_dist_val}")
-        # --- DETAILED LOGGING END ---
         if dataset_dist_val:
             try:
                 update_input["datasetClassDistribution"] = json.dumps(dataset_dist_val)
@@ -1624,10 +1612,7 @@ class Evaluation:
         elif status == "COMPLETED":
             update_input["estimatedRemainingSeconds"] = 0
             
-        # Log the update fields we're sending to help diagnose issues
-        # --- DETAILED LOGGING START ---
-        self.logging.info(f"[_get_update_variables PRE-RETURN] Final update_input: {json.dumps(update_input, default=str)}") 
-        # --- DETAILED LOGGING END ---
+        # Log the update fields we're sending (summary only for performance)
         # logging.info(f"Sending update to evaluation {self.experiment_id} with fields: {json.dumps(update_input, default=str)}") # Comment out previous log
 
         return {
@@ -1930,6 +1915,12 @@ Total cost:       ${expenses['total_cost']:.6f}
                     'results': filtered_results,  # Use the filtered results dictionary
                     'human_labels': human_labels
                 }
+                
+                # Preserve all original dataframe columns for identifier extraction
+                # This ensures FeedbackItems IDs column and other dataset-specific columns are available
+                for col_name in row.index:
+                    if col_name not in result:  # Don't overwrite the explicitly set keys above
+                        result[col_name] = row[col_name]
 
                 # Track if we've processed any scores for this text
                 has_processed_scores = False
@@ -2146,14 +2137,13 @@ Total cost:       ${expenses['total_cost']:.6f}
             if feedback_item_id:
                 metadata_dict['feedback_item_id'] = feedback_item_id
             
-            # First, create or upsert the Item record
-            # We'll use the content_id as the externalId
-            item_database_id = await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
+            # The Item should already exist from dataset creation - evaluations don't create Items
+            # Use content_id as the itemId since Items are created by the data loading process
             
             # Create data dictionary with all required fields
             data = {
                 'evaluationId': self.experiment_id,
-                'itemId': item_database_id or content_id,  # Use database ID if available, fallback to content_id
+                'itemId': content_id,  # Use content_id directly
                 'accountId': self.account_id,
                 'scorecardId': self.scorecard_id,
                 'metadata': json.dumps(metadata_dict),  # Add the metadata that was created earlier
@@ -2302,125 +2292,12 @@ Total cost:       ${expenses['total_cost']:.6f}
             self.logging.error(f"Full error details:", exc_info=True)
             raise
 
-    async def _create_or_upsert_item(self, *, content_id, score_result, result):
-        """Create or update an Item record for the given content_id.
-        
-        Returns:
-            str: The database ID of the Item record, or None if creation failed
-        """
-        try:
-            self.logging.info(f"=== Creating/Upserting Item Record ===")
-            self.logging.info(f"Content ID: {content_id}")
-            self.logging.info(f"Account ID: {self.account_id}")
-            
-            # First, check if an item with this externalId already exists for this account
-            query = """
-            query GetItemByAccountAndExternalId($accountId: String!, $externalId: String!) {
-                listItems(filter: {accountId: {eq: $accountId}, externalId: {eq: $externalId}}, limit: 1) {
-                    items {
-                        id
-                    }
-                }
-            }
-            """
-            
-            variables = {
-                "accountId": self.account_id,
-                "externalId": content_id
-            }
-            
-            self.logging.info(f"Checking if item exists with externalId: {content_id}")
-            response = await asyncio.to_thread(self.dashboard_client.execute, query, variables)
-            
-            existing_items = response.get('listItems', {}).get('items', [])
-            
-            if existing_items:
-                # Item exists, we'll update it
-                item_id = existing_items[0]['id']
-                self.logging.info(f"Found existing item with id: {item_id}, will update")
-                
-                # Update the item with latest information
-                mutation = """
-                mutation UpdateItem($input: UpdateItemInput!) {
-                    updateItem(input: $input) {
-                        id
-                        externalId
-                    }
-                }
-                """
-                
-                # Extract description from metadata if available
-                description = ""
-                if score_result.metadata and 'text' in score_result.metadata:
-                    # Truncate long text for description
-                    description = score_result.metadata['text'][:200] + "..." if len(score_result.metadata['text']) > 200 else score_result.metadata['text']
-                
-                update_variables = {
-                    "input": {
-                        "id": item_id,
-                        "updatedAt": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
-                        "description": description,
-                        "evaluationId": self.experiment_id
-                    }
-                }
-                
-                await asyncio.to_thread(self.dashboard_client.execute, mutation, update_variables)
-                self.logging.info(f"Successfully updated item: {item_id}")
-                return item_id
-                
-            else:
-                # Item doesn't exist, create a new one
-                self.logging.info(f"No existing item found with externalId: {content_id}, creating new item")
-                
-                mutation = """
-                mutation CreateItem($input: CreateItemInput!) {
-                    createItem(input: $input) {
-                        id
-                        externalId
-                    }
-                }
-                """
-                
-                # Extract description from metadata if available
-                description = ""
-                if score_result.metadata and 'text' in score_result.metadata:
-                    # Truncate long text for description
-                    description = score_result.metadata['text'][:200] + "..." if len(score_result.metadata['text']) > 200 else score_result.metadata['text']
-                
-                # Get score name if available
-                score_name = score_result.parameters.name if hasattr(score_result, 'parameters') and hasattr(score_result.parameters, 'name') else ""
-                
-                # Determine if this is an evaluation item
-                is_evaluation = self.experiment_id is not None
-                
-                create_variables = {
-                    "input": {
-                        "externalId": content_id,
-                        "description": description,
-                        "accountId": self.account_id,
-                        "evaluationId": self.experiment_id,
-                        "isEvaluation": is_evaluation,
-                        "createdByType": "evaluation"
-                    }
-                }
-                
-                # Remove None values
-                create_variables["input"] = {k: v for k, v in create_variables["input"].items() if v is not None}
-                
-                create_response = await asyncio.to_thread(self.dashboard_client.execute, mutation, create_variables)
-                created_item = create_response.get('createItem', {})
-                new_item_id = created_item.get('id')
-                self.logging.info(f"Successfully created new item with externalId: {content_id}, ID: {new_item_id}")
-                return new_item_id
-                
-        except Exception as e:
-            self.logging.error(f"=== Item Creation/Update Failed ===")
-            self.logging.error(f"Error: {str(e)}")
-            self.logging.error(f"Error type: {type(e).__name__}")
-            self.logging.error("Full error details:", exc_info=True)
-            # We'll continue with score result creation even if item creation fails
-            self.logging.warning("Continuing with ScoreResult creation despite Item creation failure")
-            return None  # Return None if item creation fails
+    # REMOVED: _create_or_upsert_item method
+    # Items should already exist from dataset creation (FeedbackItems, CallCriteriaDBCache)
+    # Evaluations should not be creating Items - that's duplication of functionality
+
+    # REMOVED: _extract_identifiers_from_dataset_row method
+    # This was only used for Item creation, which evaluations shouldn't be doing
 
     # DEPRECATED: This method is no longer used. feedback_item_id now comes directly from the dataset.
     async def _find_feedback_item(self, *, content_id: str, score_name: str) -> str | None:
@@ -2520,6 +2397,246 @@ Total cost:       ${expenses['total_cost']:.6f}
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.__aexit__(exc_type, exc_val, exc_tb))
 
+    @staticmethod
+    def get_evaluation_info(evaluation_id: str, include_score_results: bool = False) -> dict:
+        """
+        Get detailed information about an evaluation by its ID.
+        
+        Args:
+            evaluation_id: The ID of the evaluation to look up
+            include_score_results: Whether to include score results in the response
+            
+        Returns:
+            dict: Evaluation information including scorecard name, score name, and metrics
+        """
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+        from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+        from plexus.dashboard.api.models.score import Score as DashboardScore
+        import json
+        
+        try:
+            client = PlexusDashboardClient()
+            
+            # Get the evaluation
+            evaluation = DashboardEvaluation.get_by_id(evaluation_id, client, include_score_results=include_score_results)
+            
+            # Get scorecard name if scorecard ID is available
+            scorecard_name = None
+            if evaluation.scorecardId:
+                try:
+                    scorecard = DashboardScorecard.get_by_id(evaluation.scorecardId, client)
+                    scorecard_name = scorecard.name
+                except Exception as e:
+                    logging.warning(f"Could not fetch scorecard name for ID {evaluation.scorecardId}: {e}")
+                    scorecard_name = evaluation.scorecardId
+            
+            # Get score name if score ID is available
+            score_name = None
+            if evaluation.scoreId:
+                try:
+                    score = DashboardScore.get_by_id(evaluation.scoreId, client)
+                    score_name = score.name
+                except Exception as e:
+                    logging.warning(f"Could not fetch score name for ID {evaluation.scoreId}: {e}")
+                    score_name = evaluation.scoreId
+            
+            # Parse metrics if available
+            metrics = None
+            if evaluation.metrics:
+                try:
+                    if isinstance(evaluation.metrics, str):
+                        metrics = json.loads(evaluation.metrics)
+                    else:
+                        metrics = evaluation.metrics
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse metrics: {e}")
+                    metrics = evaluation.metrics
+            
+            # Parse parameters if available
+            parameters = None
+            if evaluation.parameters:
+                try:
+                    if isinstance(evaluation.parameters, str):
+                        parameters = json.loads(evaluation.parameters)
+                    else:
+                        parameters = evaluation.parameters
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse parameters: {e}")
+                    parameters = evaluation.parameters
+            
+            # Parse confusion matrix if available
+            confusion_matrix = None
+            if evaluation.confusionMatrix:
+                try:
+                    if isinstance(evaluation.confusionMatrix, str):
+                        confusion_matrix = json.loads(evaluation.confusionMatrix)
+                    else:
+                        confusion_matrix = evaluation.confusionMatrix
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse confusion matrix: {e}")
+                    confusion_matrix = evaluation.confusionMatrix
+            
+            # Parse class distributions if available
+            predicted_class_distribution = None
+            if evaluation.predictedClassDistribution:
+                try:
+                    if isinstance(evaluation.predictedClassDistribution, str):
+                        predicted_class_distribution = json.loads(evaluation.predictedClassDistribution)
+                    else:
+                        predicted_class_distribution = evaluation.predictedClassDistribution
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse predicted class distribution: {e}")
+                    predicted_class_distribution = evaluation.predictedClassDistribution
+            
+            dataset_class_distribution = None
+            if evaluation.datasetClassDistribution:
+                try:
+                    if isinstance(evaluation.datasetClassDistribution, str):
+                        dataset_class_distribution = json.loads(evaluation.datasetClassDistribution)
+                    else:
+                        dataset_class_distribution = evaluation.datasetClassDistribution
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse dataset class distribution: {e}")
+                    dataset_class_distribution = evaluation.datasetClassDistribution
+            
+            result = {
+                'id': evaluation.id,
+                'type': evaluation.type,
+                'status': evaluation.status,
+                'scorecard_name': scorecard_name,
+                'scorecard_id': evaluation.scorecardId,
+                'score_name': score_name,
+                'score_id': evaluation.scoreId,
+                'accuracy': evaluation.accuracy,
+                'metrics': metrics,
+                'parameters': parameters,
+                'confusion_matrix': confusion_matrix,
+                'predicted_class_distribution': predicted_class_distribution,
+                'dataset_class_distribution': dataset_class_distribution,
+                'total_items': evaluation.totalItems,
+                'processed_items': evaluation.processedItems,
+                'cost': evaluation.cost,
+                'elapsed_seconds': evaluation.elapsedSeconds,
+                'estimated_remaining_seconds': evaluation.estimatedRemainingSeconds,
+                'started_at': evaluation.startedAt.isoformat() if evaluation.startedAt else None,
+                'created_at': evaluation.createdAt.isoformat() if evaluation.createdAt else None,
+                'updated_at': evaluation.updatedAt.isoformat() if evaluation.updatedAt else None,
+                'error_message': evaluation.errorMessage,
+                'error_details': evaluation.errorDetails,
+                'task_id': evaluation.taskId
+            }
+            
+            if include_score_results:
+                # Score results would be available in the evaluation object if requested
+                # For now, we'll indicate that this feature could be added
+                result['score_results_available'] = True
+            
+            return result
+            
+        except Exception as e:
+            logging.error(f"Error getting evaluation info for ID {evaluation_id}: {str(e)}")
+            raise ValueError(f"Could not get evaluation info: {str(e)}")
+    
+    @staticmethod  
+    def get_latest_evaluation(account_key: str = None, evaluation_type: str = None) -> dict:
+        """
+        Get information about the most recent evaluation.
+        
+        Args:
+            account_key: Account key to filter by (default: from PLEXUS_ACCOUNT_KEY env var)
+            evaluation_type: Optional filter by evaluation type (e.g., 'accuracy')
+            
+        Returns:
+            dict: Latest evaluation information
+        """
+        import os
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        from plexus.dashboard.api.models.account import Account
+        
+        try:
+            # Use PLEXUS_ACCOUNT_KEY environment variable if no account_key provided
+            if account_key is None:
+                account_key = os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria')
+            
+            client = PlexusDashboardClient()
+            
+            # Get the account
+            account = Account.list_by_key(key=account_key, client=client)
+            if not account:
+                raise ValueError(f"No account found with key: {account_key}")
+            
+            # Use the proper GraphQL query with sorting by updatedAt
+            query = """
+            query ListEvaluationByAccountIdAndUpdatedAt($accountId: String!, $sortDirection: ModelSortDirection, $limit: Int) {
+                listEvaluationByAccountIdAndUpdatedAt(accountId: $accountId, sortDirection: $sortDirection, limit: $limit) {
+                    items {
+                        id
+                        type
+                        accountId
+                        status
+                        createdAt
+                        updatedAt
+                        parameters
+                        metrics
+                        inferences
+                        accuracy
+                        cost
+                        startedAt
+                        elapsedSeconds
+                        estimatedRemainingSeconds
+                        totalItems
+                        processedItems
+                        errorMessage
+                        errorDetails
+                        scorecardId
+                        scoreId
+                        confusionMatrix
+                        scoreGoal
+                        datasetClassDistribution
+                        isDatasetClassDistributionBalanced
+                        predictedClassDistribution
+                        isPredictedClassDistributionBalanced
+                        taskId
+                    }
+                }
+            }
+            """
+            
+            variables = {
+                'accountId': account.id,
+                'sortDirection': 'DESC',
+                'limit': 1  # Get just the most recent
+            }
+            
+            # Add type filter if provided
+            if evaluation_type:
+                # If type filtering is needed, we'll need to get more results and filter client-side
+                # since the specialized query doesn't support type filtering
+                variables['limit'] = 10
+            
+            result = client.execute(query, variables)
+            
+            if not result or 'listEvaluationByAccountIdAndUpdatedAt' not in result or not result['listEvaluationByAccountIdAndUpdatedAt']['items']:
+                return None
+            
+            evaluations = result['listEvaluationByAccountIdAndUpdatedAt']['items']
+            
+            # Filter by type if specified
+            if evaluation_type:
+                evaluations = [e for e in evaluations if e.get('type') == evaluation_type]
+                if not evaluations:
+                    return None
+            
+            latest_evaluation_data = evaluations[0]
+            
+            # Use the existing get_evaluation_info method to get full details
+            return Evaluation.get_evaluation_info(latest_evaluation_data['id'])
+            
+        except Exception as e:
+            logging.error(f"Error getting latest evaluation: {str(e)}")
+            raise ValueError(f"Could not get latest evaluation: {str(e)}")
+
 class ConsistencyEvaluation(Evaluation):
     def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
         super().__init__(**kwargs)
@@ -2538,10 +2655,14 @@ class AccuracyEvaluation(Evaluation):
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
         
-        # Validate score_id format - should be a UUID with hyphens
-        if self.score_id and not (isinstance(self.score_id, str) and '-' in self.score_id):
-            self.logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {self.score_id}")
-            self.logging.warning(f"This may cause issues with Evaluation records. Expected format is UUID with hyphens.")
+        # Validate score_id format - must be a DynamoDB UUID with hyphens for Amplify Gen2 schema association
+        if self.score_id:
+            if isinstance(self.score_id, str) and '-' in self.score_id:
+                self.logging.info(f"Score ID provided in correct DynamoDB UUID format: {self.score_id}")
+            else:
+                self.logging.warning(f"WARNING: Score ID must be a DynamoDB UUID format for Amplify Gen2 schema association: {self.score_id}")
+                self.logging.warning(f"Expected UUID format with hyphens. External IDs must be resolved to DynamoDB UUIDs before passing to AccuracyEvaluation.")
+                self.logging.warning(f"This will cause the evaluation record to be created without a Score ID, breaking the table association.")
         
         self.score_version_id = score_version_id  # Store score version ID
         self.visualize = visualize
@@ -2678,13 +2799,14 @@ class AccuracyEvaluation(Evaluation):
                 update_data['scorecardId'] = self.scorecard_id
             
             if self.score_id:
-                # Validate score_id format - should be a UUID with hyphens
-                if not (isinstance(self.score_id, str) and '-' in self.score_id):
-                    self.logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {self.score_id}")
-                    self.logging.warning(f"This will cause issues with Evaluation records. Expected format is UUID with hyphens.")
-                    self.logging.warning(f"Will not add this Score ID to the evaluation record update.")
-                else:
+                # Validate score_id format - must be a DynamoDB UUID with hyphens for Amplify Gen2 schema association
+                if isinstance(self.score_id, str) and '-' in self.score_id:
                     update_data['scoreId'] = self.score_id
+                    self.logging.info(f"Adding Score ID to evaluation update: {self.score_id}")
+                else:
+                    self.logging.warning(f"WARNING: Score ID must be a DynamoDB UUID format for Amplify Gen2 schema association: {self.score_id}")
+                    self.logging.warning(f"Expected UUID format with hyphens. External IDs must be resolved to DynamoDB UUIDs before passing to AccuracyEvaluation.")
+                    self.logging.warning(f"Will not add this Score ID to the evaluation record update.")
             
             if hasattr(self, 'score_version_id') and self.score_version_id:
                 update_data['scoreVersionId'] = self.score_version_id
@@ -2947,34 +3069,13 @@ class AccuracyEvaluation(Evaluation):
         - YAML-only loading from local files
         - Proper error handling and dependency resolution
         """
-        try:
-            # Use the standardized Score.load() method
-            # This handles both API-loaded and YAML-loaded scorecards automatically
-            # Use cache for evaluations to support --yaml mode
-            return Score.load(
-                scorecard_identifier=self.scorecard_name,
-                score_name=score_name,
-                use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
-                yaml_only=False  # Allow API calls if needed
-            )
-        except ValueError as e:
-            if "not found" in str(e).lower() or "api loading failed" in str(e).lower():
-                # Fallback to YAML-only mode if API loading fails
-                self.logging.info(f"API loading failed for '{score_name}', trying YAML-only mode")
-                try:
-                    return Score.load(
-                        scorecard_identifier=self.scorecard_name,
-                        score_name=score_name,
-                        use_cache=True,
-                        yaml_only=True  # Force YAML-only loading
-                    )
-                except ValueError as yaml_error:
-                    self.logging.warning(f"YAML-only loading also failed: {yaml_error}")
-                    # If both methods fail, provide a helpful error message
-                    raise ValueError(f"Could not load score '{score_name}' from scorecard '{self.scorecard_name}'. "
-                                   f"API error: {str(e)}. YAML error: {str(yaml_error)}. "
-                                   f"Ensure the score exists and is properly configured.")
-            else:
-                # Re-raise if it's a different error
-                raise
+        # Use the standardized Score.load() method
+        # This handles both API-loaded and YAML-loaded scorecards automatically
+        # Use cache for evaluations to support --yaml mode
+        return Score.load(
+            scorecard_identifier=self.scorecard_name,
+            score_name=score_name,
+            use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
+            yaml_only=False  # Allow API calls if needed
+        )
 

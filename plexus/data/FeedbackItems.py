@@ -48,6 +48,7 @@ class FeedbackItems(DataCache):
         limit_per_cell: Optional[int] = Field(None, description="Maximum number of items to sample from each confusion matrix cell")
         initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
         final_value: Optional[str] = Field(None, description="Filter by corrected human value")
+        identifier_extractor: Optional[str] = Field(None, description="Optional client-specific identifier extractor class (e.g., 'CallCriteriaIdentifierExtractor')")
         cache_file: str = Field(default="feedback_items_cache.parquet", description="Cache file name")
         local_cache_directory: str = Field(default='./.plexus_training_data_cache/', description="Local cache directory")
         
@@ -83,6 +84,11 @@ class FeedbackItems(DataCache):
         self.normalized_initial_value = self._normalize_value(self.parameters.initial_value)
         self.normalized_final_value = self._normalize_value(self.parameters.final_value)
         
+        # Load identifier extractor if specified
+        self.identifier_extractor = None
+        if self.parameters.identifier_extractor:
+            self.identifier_extractor = self._load_identifier_extractor(self.parameters.identifier_extractor)
+        
         logger.info(f"Initialized FeedbackItems cache for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
 
     def _normalize_value(self, value: Optional[str]) -> Optional[str]:
@@ -111,6 +117,35 @@ class FeedbackItems(DataCache):
             Normalized value (lowercase, stripped) or None
         """
         return self._normalize_value(value)
+
+    def _load_identifier_extractor(self, extractor_class_name: str):
+        """
+        Load the identifier extractor class following Plexus extension loading pattern.
+        
+        Args:
+            extractor_class_name: Name of the extractor class (e.g., 'CallCriteriaIdentifierExtractor')
+            
+        Returns:
+            Instance of the identifier extractor class, or None if loading fails
+        """
+        import importlib
+        
+        try:
+            # Try to load from plexus_extensions module (same pattern as CallCriteriaDBCache)
+            module_path = f"plexus_extensions.{extractor_class_name}"
+            module = importlib.import_module(module_path)
+            extractor_class = getattr(module, extractor_class_name)
+            
+            # Initialize the extractor with basic parameters
+            # The extractor should handle its own database connections and config
+            extractor = extractor_class()
+            
+            logger.info(f"Successfully loaded identifier extractor: {extractor_class_name}")
+            return extractor
+            
+        except Exception as e:
+            logger.warning(f"Failed to load identifier extractor '{extractor_class_name}': {e}")
+            return None
 
     def _resolve_identifiers(self) -> Tuple[str, str, str, str]:
         """
@@ -512,14 +547,36 @@ class FeedbackItems(DataCache):
         logger.info(f"Created dataset with {len(df)} rows and {len(df.columns)} columns: {list(df.columns)}")
         logger.debug(f"Sample row data: {rows[0] if rows else 'No rows'}")
         
-        # DEBUGGING: Print column info to help debug
-        print(f"DEBUG: FeedbackItems._create_dataset_rows created DataFrame with columns: {list(df.columns)}")
-        if len(df) > 0:
-            print(f"DEBUG: Sample row keys: {list(df.iloc[0].to_dict().keys())}")
-            print(f"DEBUG: Sample feedback_item_id value: '{df.iloc[0]['feedback_item_id'] if 'feedback_item_id' in df.columns else 'NO FEEDBACK_ITEM_ID COLUMN'}'")
-            print(f"DEBUG: Sample text value: '{df.iloc[0]['text'] if 'text' in df.columns else 'NO TEXT COLUMN'}'")
-            print(f"DEBUG: Sample comment value: '{df.iloc[0][f'{score_name} comment'] if f'{score_name} comment' in df.columns else 'NO COMMENT COLUMN'}'")
-            print(f"DEBUG: Sample edit comment value: '{df.iloc[0][f'{score_name} edit comment'] if f'{score_name} edit comment' in df.columns else 'NO EDIT COMMENT COLUMN'}'")
+        # Use the comprehensive debug utility from base class
+        self.debug_dataframe(df, "FEEDBACK_ITEMS_DATASET", logger)
+        
+        # Additional FeedbackItems-specific debugging
+        logger.info("FEEDBACK_ITEMS_SPECIFIC_CHECKS:")
+        
+        # Check for missing required columns specific to FeedbackItems format
+        required_columns = ['content_id', 'feedback_item_id', 'text', 'metadata', 'IDs', score_name, f"{score_name} comment", f"{score_name} edit comment"]
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            logger.error(f"Missing required FeedbackItems columns: {missing_columns}")
+        else:
+            logger.info("All required FeedbackItems columns present")
+        
+        # Special debugging for IDs column structure
+        if 'IDs' in df.columns and len(df) > 0:
+            logger.info("FEEDBACK_ITEMS_IDS_DEBUG: Analyzing IDs column structure...")
+            sample_ids = df.iloc[0]['IDs']
+            logger.info(f"Sample IDs value type: {type(sample_ids)}")
+            logger.info(f"Sample IDs value: {sample_ids}")
+            try:
+                if isinstance(sample_ids, str):
+                    ids_parsed = json.loads(sample_ids)
+                    logger.info(f"Successfully parsed {len(ids_parsed)} identifiers")
+                    for idx, identifier in enumerate(ids_parsed):
+                        logger.info(f"Identifier {idx}: {identifier}")
+                else:
+                    logger.warning(f"IDs is not a JSON string, type: {type(sample_ids)}")
+            except Exception as e:
+                logger.warning(f"Could not parse IDs JSON: {e}")
         
         return df
     
@@ -563,7 +620,7 @@ class FeedbackItems(DataCache):
     
     def _create_ids_hash(self, feedback_item: FeedbackItem) -> str:
         """
-        Create IDs hash from Item identifiers.
+        Create IDs hash from Item identifiers, using identifier extractor if available.
         
         Expected format: List of objects with name, value, and optional URL.
         
@@ -580,7 +637,50 @@ class FeedbackItems(DataCache):
         
         item = feedback_item.item
         
-        # Add external ID if available
+        # Use identifier extractor if available to get client-specific identifiers
+        if self.identifier_extractor:
+            try:
+                client_identifiers = self.identifier_extractor.extract_identifiers(feedback_item)
+                if client_identifiers:
+                    ids.extend(client_identifiers)
+                    logger.info(f"IDENTIFIERS_DEBUG: Added {len(client_identifiers)} client identifiers to IDs: {client_identifiers}")
+                    
+                    # Convert to the format expected by Item.upsert_by_identifiers
+                    identifiers_dict = {}
+                    for identifier in client_identifiers:
+                        if isinstance(identifier, dict) and 'name' in identifier and 'value' in identifier:
+                            name = str(identifier['name']).lower().replace(' ', '_')
+                            identifiers_dict[name] = str(identifier['value'])
+                    
+                    # Upsert the Item with extracted identifiers to ensure it has proper Identifier records
+                    if identifiers_dict:
+                        logger.info(f"IDENTIFIERS_DEBUG: Upserting Item {item.id} with identifiers: {identifiers_dict}")
+                        try:
+                            # Create a dashboard client for Item operations
+                            dashboard_client = create_client()
+                            # Get the resolved score ID for associating Items with scores
+                            _, _, score_id, _ = self._resolve_identifiers()
+                            # Use the centralized Item upsert method from base DataCache class
+                            item_id, was_created, error_msg = self.upsert_item_for_dataset_row(
+                                dashboard_client=dashboard_client,
+                                account_id=feedback_item.accountId,
+                                item_data=item,
+                                identifiers_dict=identifiers_dict,
+                                external_id=item.externalId or item.id,
+                                score_id=score_id  # Associate Item with the score being evaluated
+                            )
+                            if error_msg:
+                                logger.warning(f"IDENTIFIERS_DEBUG: Error upserting Item with identifiers: {error_msg}")
+                            else:
+                                logger.info(f"IDENTIFIERS_DEBUG: Successfully upserted Item {item_id} (was_created: {was_created})")
+                        except Exception as upsert_error:
+                            logger.warning(f"IDENTIFIERS_DEBUG: Failed to upsert Item with identifiers: {upsert_error}")
+                else:
+                    logger.info(f"IDENTIFIERS_DEBUG: No client identifiers returned from extractor")
+            except Exception as e:
+                logger.warning(f"IDENTIFIERS_DEBUG: Failed to extract client identifiers: {e}")
+        
+        # Add external ID if available (fallback/additional identifier)
         external_id = getattr(item, 'externalId', None)
         if external_id:
             ids.append({
@@ -589,7 +689,7 @@ class FeedbackItems(DataCache):
                 'url': None
             })
         
-        # Process legacy JSON identifiers field
+        # Process legacy JSON identifiers field (fallback for backward compatibility)
         identifiers_json = getattr(item, 'identifiers', None)
         if identifiers_json:
             try:
