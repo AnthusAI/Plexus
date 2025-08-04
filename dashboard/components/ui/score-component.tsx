@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -157,13 +157,18 @@ const GridContent = React.memo(({
   // This ensures React renders them in the same cycle
   const displayData = React.useMemo(() => ({
     name: score.name,
-    description: score.description || ''
-  }), [score.name, score.description]);
+    description: score.description || '',
+    externalId: score.externalId || score.id
+  }), [score.name, score.description, score.externalId, score.id]);
   
   return (
     <div className="flex justify-between items-start">
-      <div className="space-y-2 min-h-[4.5rem]">
+      <div className="space-y-1.5">
         <div className="font-medium">{displayData.name}</div>
+        <div className="text-sm text-muted-foreground flex items-center gap-1">
+          <IdCard className="h-3 w-3" />
+          <span>{displayData.externalId}</span>
+        </div>
         <div className="text-sm">{displayData.description}</div>
       </div>
       {score.icon && (
@@ -1464,6 +1469,7 @@ export function ScoreComponent({
               name
               externalId
               key
+              description
             }
           }
         `,
@@ -1471,8 +1477,9 @@ export function ScoreComponent({
           input: {
             id: String(score.id),
             name: editedScore.name,
-            externalId: editedScore.externalId,
-            key: editedScore.key,
+            ...(editedScore.externalId && editedScore.externalId !== '' && { externalId: editedScore.externalId }),
+            ...(editedScore.key && editedScore.key !== '' && { key: editedScore.key }),
+            ...(editedScore.description && editedScore.description !== '' && { description: editedScore.description }),
           }
         }
       });
@@ -1646,6 +1653,9 @@ export function ScoreComponent({
       setHasChanges(false);
       setVersionNote('');
       setForceExpandHistory(true); // Auto-expand version history after save
+      
+      // Call the parent's onSave callback if provided
+      onSave?.();
     } catch (error) {
       console.error('Error saving score:', error);
       toast.error(error instanceof Error ? error.message : 'Error updating score');
@@ -1736,7 +1746,7 @@ export function ScoreComponent({
               onToggleFullWidth={onToggleFullWidth}
               onClose={onClose}
               onEditChange={handleEditChange}
-              onSave={onSave || handleSave}
+              onSave={handleSave}
               onCancel={handleCancel}
               onFeedbackAnalysis={onFeedbackAnalysis}
               hasChanges={hasChanges}
