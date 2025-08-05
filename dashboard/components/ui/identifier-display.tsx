@@ -76,15 +76,6 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
     return [];
   }, [identifiers]);
 
-  // Determine what to show
-  const hasComplexIdentifiers = parsedIdentifiers.length > 0;
-  const firstIdentifier = hasComplexIdentifiers ? parsedIdentifiers[0] : null;
-  
-  // If no complex identifiers, fall back to externalId
-  if (!hasComplexIdentifiers && !externalId) {
-    return null;
-  }
-
   const iconClasses = cn(
     iconSize === 'sm' && 'h-3 w-3 flex-shrink-0',
     iconSize === 'md' && 'h-4 w-4 flex-shrink-0', 
@@ -95,7 +86,7 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   const textClasses = cn(baseTextSize, 'flex-shrink-0');
   const labelTextClasses = cn('!text-xs', 'font-medium text-muted-foreground');
 
-  // Skeleton mode rendering
+  // Skeleton mode rendering - check this BEFORE any data checks
   if (skeletonMode) {
     const finalTextClasses = cn(textClasses, className);
     return (
@@ -104,6 +95,15 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
         <div className="h-3 w-20 bg-muted rounded animate-pulse" />
       </div>
     );
+  }
+
+  // Determine what to show
+  const hasComplexIdentifiers = parsedIdentifiers.length > 0;
+  const firstIdentifier = hasComplexIdentifiers ? parsedIdentifiers[0] : null;
+  
+  // If no complex identifiers, fall back to externalId
+  if (!hasComplexIdentifiers && !externalId) {
+    return null;
   }
 
   const renderIdentifierValue = (identifier: IdentifierItem) => {

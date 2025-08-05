@@ -78,7 +78,26 @@ const baseResult = {
     text: longText
   },
   trace: realisticTraceData,
-  itemId: '49445947'
+  itemId: '49445947',
+  itemIdentifiers: [
+    {
+      name: 'form',
+      value: '49445947'
+    },
+    {
+      name: 'session',
+      value: 'XCC18834SCRUFF'
+    },
+    {
+      name: 'report',
+      value: '2090346',
+      url: 'https://example.com/reports/2090346'
+    },
+    {
+      name: 'ID',
+      value: 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
+    }
+  ]
 };
 
 export const ListVariantCorrect: Story = {
@@ -158,4 +177,16 @@ export const DetailVariantWithStringTrace: Story = {
     variant: 'detail'
   },
   name: 'Detail Variant with String Trace'
+};
+
+export const DetailVariantSimpleId: Story = {
+  args: {
+    result: {
+      ...baseResult,
+      itemId: '49445947',
+      itemIdentifiers: null  // Force fallback to simple itemId
+    },
+    variant: 'detail'
+  },
+  name: 'Detail Variant with Simple ID Only'
 }; 
