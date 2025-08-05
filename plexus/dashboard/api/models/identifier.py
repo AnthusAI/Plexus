@@ -211,15 +211,17 @@ class Identifier(BaseModel):
         """
         Find an identifier by name and exact value within an account.
         
-        Uses the byAccountNameAndValue GSI for efficient lookup within identifier types.
+        Uses regular listIdentifiers with compound filter for compatibility.
         """
         query = """
         query FindIdentifierByNameAndValue($accountId: String!, $name: String!, $value: String!) {
-            listIdentifierByAccountIdAndNameAndValue(
-                accountId: $accountId,
-                nameValue: {
-                    name: {eq: $name}
-                    value: {eq: $value}
+            listIdentifiers(
+                filter: {
+                    and: [
+                        {accountId: {eq: $accountId}}
+                        {name: {eq: $name}}
+                        {value: {eq: $value}}
+                    ]
                 },
                 limit: 1
             ) {
@@ -236,7 +238,7 @@ class Identifier(BaseModel):
             'value': value
         })
         
-        items = result.get('listIdentifierByAccountIdAndNameAndValue', {}).get('items', [])
+        items = result.get('listIdentifiers', {}).get('items', [])
         if not items:
             return None
             
