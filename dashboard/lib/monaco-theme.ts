@@ -121,10 +121,13 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
         [/^\s*([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key'],
         [/^\s*(['"])((?:[^'"]|\\.)*)(\1)\s*(?=:)/, ['delimiter', 'key', 'delimiter']],
         
+        // Keys after array dashes (on same line as -)
+        [/([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key'],
+        
         // Values after colons
         [/:\s*/, 'delimiter', '@value'],
         
-        // Arrays
+        // Arrays - stay in root state to process keys properly
         [/^\s*-\s*/, 'delimiter.array'],
         
         // Everything else
@@ -132,6 +135,13 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       ],
       
       value: [
+        // Array items - pop back to root and process as array
+        [/^\s*-\s*/, 'delimiter.array', '@pop'],
+        
+        // Keys in value context (for nested structures)
+        [/^\s*([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key', '@pop'],
+        [/^\s*(['"])((?:[^'"]|\\.)*)(\1)\s*(?=:)/, ['delimiter', 'key', 'delimiter'], '@pop'],
+        
         // Strings (single quoted)
         [/'([^'\\]|\\.)*'/, 'string', '@pop'],
         
@@ -166,8 +176,18 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       ],
       
       multiline: [
-        [/^(\s*)(.*)$/, ['', 'string']],
-        [/^(?!\s)/, '', '@pop'],
+        // Exit multiline string when we encounter a YAML key (with colon) at base indentation or less
+        [/^([a-zA-Z_][\w\-]*)\s*:/, 'key', '@pop'],
+        [/^(\s*)([a-zA-Z_][\w\-]*)\s*:/, ['', 'key'], '@pop'],
+        [/^(\s*)(['"])(.*?)\2\s*:/, ['', 'delimiter', 'key', 'delimiter'], '@pop'],
+        // Exit multiline string for document separators
+        [/^(---|\.\.\.)/, 'tag', '@pop'],
+        // Exit multiline string for list items at base level only (not indented lists within the string)
+        [/^-\s/, 'delimiter.array', '@pop'],
+        // Exit multiline string for comments that start at beginning of line
+        [/^\s*#.*$/, 'comment'],
+        // Everything else in a multiline string is treated as string content (including quotes)
+        [/^.*$/, 'string'],
       ],
     },
   })
@@ -450,8 +470,8 @@ export const defineCustomMonacoThemes = (monaco: Monaco): void => {
     { token: 'delimiter.comma', foreground: getCssVar('--muted-foreground') },
     { token: 'bracket', foreground: getCssVar('--muted-foreground') },
     
-    // Identifiers - using foreground color
-    { token: 'identifier', foreground: getCssVar('--foreground') },
+    // Identifiers - using string color (most YAML identifiers are string-like)
+    { token: 'identifier', foreground: getEditorColor('--editor-string') },
     
     // Whitespace - minimal visibility for indentation guides
     { token: 'whitespace', foreground: getCssVar('--border') },
