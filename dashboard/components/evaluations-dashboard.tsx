@@ -303,7 +303,14 @@ export function transformEvaluationLocal(evaluation: Schema['Evaluation']['type'
       value: string | number;
       confidence: number | null;
       metadata: any;
+      explanation?: string | null;
+      trace: any | null;
       itemId: string | null;
+      itemIdentifiers?: Array<{
+        name: string;
+        value: string;
+        url?: string;
+      }> | null;
     }>;
   } | null;
 
