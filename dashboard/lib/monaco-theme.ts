@@ -117,6 +117,7 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
         [/^---\s*$/, 'tag'],
         [/^\.\.\.\s*$/, 'tag'],
         
+        
         // Keys (including quoted keys) - more comprehensive pattern
         [/^\s*([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key'],
         [/^\s*(['"])((?:[^'"]|\\.)*)(\1)\s*(?=:)/, ['delimiter', 'key', 'delimiter']],
@@ -177,6 +178,9 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       
       multiline: [
         // Exit multiline string when we encounter a YAML key (with colon) at base indentation or less
+        // Specific pattern for user_message with multiline indicators
+        [/^(\s*)(user_message)(\s*)(:)(\s*)([\|\>][-+]?\d*\s*)$/, ['', 'key', '', 'delimiter', '', 'string.yaml'], '@multiline'],
+        [/^(\s*)([a-zA-Z_][\w\-]*)\s*:\s*([\|\>][-+]?\d*\s*)$/, ['', 'key', 'delimiter', 'string.yaml'], '@multiline'],
         [/^([a-zA-Z_][\w\-]*)\s*:/, 'key', '@pop'],
         [/^(\s*)([a-zA-Z_][\w\-]*)\s*:/, ['', 'key'], '@pop'],
         [/^(\s*)(['"])(.*?)\2\s*:/, ['', 'delimiter', 'key', 'delimiter'], '@pop'],
