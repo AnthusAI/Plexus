@@ -257,6 +257,10 @@ mcp = FastMCP(
     - run_plexus_evaluation: Dispatches a scorecard evaluation to run in the background. 
       The server will confirm dispatch but will not track progress or results. 
       Monitor evaluation status via Plexus Dashboard or system logs.
+    - plexus_evaluation_info: Get detailed information about a specific evaluation by its ID,
+      including scorecard name, score name, metrics, progress, and status.
+    - plexus_evaluation_last: Get information about the most recent evaluation,
+      optionally filtered by evaluation type (e.g., 'accuracy', 'consistency').
     
     ## Report Tools
     - plexus_reports_list: List available reports with optional filtering by report configuration
@@ -3335,7 +3339,9 @@ async def plexus_predict(
     item_ids: Optional[str] = None,
     include_input: bool = False,
     include_trace: bool = False,
-    output_format: str = "json"
+    output_format: str = "json",
+    no_cache: bool = False,
+    yaml_only: bool = False
 ) -> Union[str, Dict[str, Any]]:
     """
     Run predictions on one or more items using a specific score configuration.
@@ -3349,6 +3355,8 @@ async def plexus_predict(
     - include_input: Whether to include the original input text and metadata in output (default: False)  
     - include_trace: Whether to include detailed execution trace for debugging (default: False)
     - output_format: Output format - "json" or "yaml" (default: "json")
+    - no_cache: If True, disable local caching entirely (always fetch from API) (default: False)
+    - yaml_only: If True, load only from local YAML files without API calls (default: False)
     
     Returns:
     - Prediction results with scores, explanations, and optional input/trace data
@@ -3364,6 +3372,8 @@ async def plexus_predict(
             return "Error: Either item_id or item_ids must be provided."
         if item_id and item_ids:
             return "Error: Cannot specify both item_id and item_ids. Use one or the other."
+        if no_cache and yaml_only:
+            return "Error: Cannot specify both no_cache and yaml_only. Use one or the other."
         
         # Try to import required modules directly
         try:
@@ -3492,71 +3502,105 @@ async def plexus_predict(
                     logger.info(f"Running actual prediction for item '{target_id}' with score '{score_name}'")
                     
                     try:
-                        # Import the new Score loading method
-                        from plexus.scores.Score import Score
-                        
-                        # Load the specific score instance directly (no need for whole scorecard)
-                        logger.info(f"Loading score '{score_name}' from scorecard '{scorecard_name}' with fresh API data")
-                        score_instance = Score.load(scorecard_name, score_name, use_cache=True, yaml_only=False)
-                        logger.info(f"Successfully loaded score instance for '{score_name}'")
-                        
                         # Get the item text content for prediction
-                        item_text = item_data.get('description', '')
+                        item_text = item_data.get('text', '') or item_data.get('description', '')
                         if not item_text:
-                            raise Exception("No text content found in item description")
+                            raise Exception("No text content found in item text or description fields")
                         
-                        # Create Score.Input for the prediction
-                        score_input = Score.Input(
+                        # Parse metadata from JSON string if needed
+                        metadata_raw = item_data.get('metadata', {})
+                        if isinstance(metadata_raw, str):
+                            try:
+                                import json
+                                metadata = json.loads(metadata_raw)
+                            except json.JSONDecodeError:
+                                logger.warning(f"Failed to parse metadata JSON: {metadata_raw}")
+                                metadata = {}
+                        else:
+                            metadata = metadata_raw
+                        
+                        # Use the canonical Scorecard dependency system for all predictions
+                        # This ensures consistent behavior with CLI, evaluations, and production
+                        from plexus.Scorecard import Scorecard
+                        
+                        use_cache = not no_cache
+                        cache_mode = "YAML-only" if yaml_only else ("no-cache" if no_cache else "default")
+                        logger.info(f"Using canonical Scorecard system to predict '{score_name}' from '{scorecard_name}' with {cache_mode} mode")
+                        
+                        if yaml_only:
+                            # For YAML-only mode, load scorecard from local files
+                            logger.info("Loading scorecard from YAML files for dependency resolution")
+                            scorecard_instance = Scorecard.load(scorecard_name, use_cache=use_cache, yaml_only=yaml_only)
+                        else:
+                            # For normal mode, use API data with caching
+                            logger.info("Loading scorecard with API data for dependency resolution")
+                            scorecard_instance = Scorecard.load(scorecard_name, use_cache=use_cache)
+                        
+                        # Use the battle-tested score_entire_text method which handles all dependency logic:
+                        # - Builds dependency graphs automatically
+                        # - Handles conditional dependencies (==, !=, in, not in)
+                        # - Processes scores in correct dependency order
+                        # - Skips scores when conditions aren't met
+                        # - Handles async processing with proper error handling
+                        logger.info(f"Running scorecard evaluation with canonical dependency resolution for score '{score_name}'")
+                        
+                        results = await scorecard_instance.score_entire_text(
                             text=item_text,
-                            metadata=item_data.get('metadata', {}),
-                            results=None  # No dependency results for now
+                            metadata=metadata,
+                            modality=None,
+                            subset_of_score_names=[score_name]  # This automatically includes dependencies
                         )
                         
-                        # Run the actual prediction using the Score instance
-                        prediction_result = score_instance.predict(context=None, model_input=score_input)
+                        # Extract the result for our target score
+                        if results and score_name in results:
+                            scorecard_result = results[score_name]
+                            prediction_result = scorecard_result
+                            logger.info(f"Successfully got result from canonical scorecard system for '{score_name}'")
+                        else:
+                            raise Exception(f"No result found for score '{score_name}' in scorecard evaluation. Available results: {list(results.keys()) if results else 'None'}")
                         
-                        # Calculate costs (simplified - score instances should track their own costs)
-                        costs = score_instance.get_accumulated_costs() if hasattr(score_instance, 'get_accumulated_costs') else {'total_cost': 0}
-                        
+                        # Process results from canonical Scorecard system
+                        # All results now come from scorecard_instance.score_entire_text()
                         prediction_results = prediction_result
                         
-                        # Process the results same as CLI does
-                        if prediction_results:
-                            if isinstance(prediction_results, list):
-                                prediction_results = prediction_results[0]  # Take first result
+                        if prediction_results and hasattr(prediction_results, 'value') and prediction_results.value is not None:
+                            explanation = (
+                                getattr(prediction_results, 'explanation', None) or
+                                prediction_results.metadata.get('explanation', '') if hasattr(prediction_results, 'metadata') and prediction_results.metadata else
+                                ''
+                            )
                             
-                            if prediction_results:
-                                if hasattr(prediction_results, 'value') and prediction_results.value is not None:
-                                    explanation = (
-                                        getattr(prediction_results, 'explanation', None) or
-                                        prediction_results.metadata.get('explanation', '') if hasattr(prediction_results, 'metadata') and prediction_results.metadata else
-                                        ''
-                                    )
-                                    prediction_result = {
-                                        "item_id": target_id,
-                                        "scores": [
-                                            {
-                                                "name": score_name,
-                                                "value": prediction_results.value,
-                                                "explanation": explanation,
-                                                "cost": costs
-                                            }
-                                        ]
+                            # Extract costs from scorecard result
+                            costs = {}
+                            if hasattr(prediction_results, 'cost'):
+                                costs = prediction_results.cost
+                            elif hasattr(prediction_results, 'metadata') and prediction_results.metadata:
+                                costs = prediction_results.metadata.get('cost', {})
+                            
+                            prediction_result = {
+                                "item_id": target_id,
+                                "scores": [
+                                    {
+                                        "name": score_name,
+                                        "value": prediction_results.value,
+                                        "explanation": explanation,
+                                        "cost": costs
                                     }
-                                    # Extract trace information if available
-                                    if include_trace:
-                                        trace = None
-                                        if hasattr(prediction_results, 'trace'):
-                                            trace = prediction_results.trace
-                                        elif hasattr(prediction_results, 'metadata') and prediction_results.metadata:
-                                            trace = prediction_results.metadata.get('trace')
-                                        
-                                        if trace:
-                                            prediction_result["scores"][0]["trace"] = trace
-                                else:
-                                    raise Exception("No valid prediction value returned")
+                                ]
+                            }
+                            
+                            # Extract trace information if available
+                            if include_trace:
+                                trace = None
+                                if hasattr(prediction_results, 'trace'):
+                                    trace = prediction_results.trace
+                                elif hasattr(prediction_results, 'metadata') and prediction_results.metadata:
+                                    trace = prediction_results.metadata.get('trace')
+                                
+                                if trace:
+                                    prediction_result["scores"][0]["trace"] = trace
                         else:
-                            raise Exception("No predictions returned from score")
+                            raise Exception("No valid prediction value returned from canonical scorecard system")
                         
                     except Exception as pred_error:
                         logger.error(f"Error running actual prediction: {str(pred_error)}", exc_info=True)
@@ -4066,6 +4110,525 @@ async def plexus_score_delete(
         # Restore original stdout
         sys.stdout = old_stdout
 
+
+@mcp.tool()
+async def plexus_evaluation_info(
+    evaluation_id: str,
+    include_score_results: bool = False
+) -> str:
+    """
+    Get detailed information about a specific evaluation by its ID.
+    
+    This tool provides comprehensive information about an evaluation including:
+    - Basic details (ID, type, status)
+    - Scorecard and score names (resolved from IDs)
+    - Progress and metrics information
+    - Timing details
+    - Error information (if any)
+    - Cost information
+    
+    Parameters:
+    - evaluation_id: The unique ID of the evaluation to look up
+    - include_score_results: Whether to include score results information (default: False)
+    
+    Returns:
+    - Formatted string with comprehensive evaluation information
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Import the evaluation functionality
+        try:
+            from plexus.Evaluation import Evaluation
+        except ImportError as e:
+            return f"Import error: Could not import Evaluation class: {str(e)}"
+        
+        if not evaluation_id or not evaluation_id.strip():
+            return "Error: evaluation_id is required"
+        
+        try:
+            # Get evaluation information using the shared method
+            evaluation_info = Evaluation.get_evaluation_info(evaluation_id, include_score_results)
+            
+            # Format the output in a readable way
+            output_lines = []
+            output_lines.append("=== Evaluation Information ===")
+            output_lines.append(f"ID: {evaluation_info['id']}")
+            output_lines.append(f"Type: {evaluation_info['type']}")
+            output_lines.append(f"Status: {evaluation_info['status']}")
+            
+            if evaluation_info['scorecard_name']:
+                output_lines.append(f"Scorecard: {evaluation_info['scorecard_name']}")
+            elif evaluation_info['scorecard_id']:
+                output_lines.append(f"Scorecard ID: {evaluation_info['scorecard_id']}")
+            else:
+                output_lines.append("Scorecard: Not specified")
+                
+            if evaluation_info['score_name']:
+                output_lines.append(f"Score: {evaluation_info['score_name']}")
+            elif evaluation_info['score_id']:
+                output_lines.append(f"Score ID: {evaluation_info['score_id']}")
+            else:
+                output_lines.append("Score: Not specified")
+            
+            output_lines.append("\n=== Progress & Metrics ===")
+            if evaluation_info['total_items']:
+                output_lines.append(f"Total Items: {evaluation_info['total_items']}")
+            if evaluation_info['processed_items'] is not None:
+                output_lines.append(f"Processed Items: {evaluation_info['processed_items']}")
+            if evaluation_info['accuracy'] is not None:
+                output_lines.append(f"Accuracy: {evaluation_info['accuracy']:.2f}%")
+            
+            if evaluation_info['metrics']:
+                output_lines.append("\n=== Detailed Metrics ===")
+                for metric in evaluation_info['metrics']:
+                    if isinstance(metric, dict) and 'name' in metric and 'value' in metric:
+                        output_lines.append(f"{metric['name']}: {metric['value']:.2f}")
+                    else:
+                        output_lines.append(f"Metric: {metric}")
+            
+            output_lines.append("\n=== Timing ===")
+            if evaluation_info['started_at']:
+                output_lines.append(f"Started At: {evaluation_info['started_at']}")
+            if evaluation_info['elapsed_seconds']:
+                output_lines.append(f"Elapsed Time: {evaluation_info['elapsed_seconds']} seconds")
+            if evaluation_info['estimated_remaining_seconds']:
+                output_lines.append(f"Estimated Remaining: {evaluation_info['estimated_remaining_seconds']} seconds")
+            
+            output_lines.append("\n=== Timestamps ===")
+            output_lines.append(f"Created At: {evaluation_info['created_at']}")
+            output_lines.append(f"Updated At: {evaluation_info['updated_at']}")
+            
+            if evaluation_info['cost']:
+                output_lines.append("\n=== Cost ===")
+                output_lines.append(f"Total Cost: ${evaluation_info['cost']:.6f}")
+            
+            if evaluation_info['error_message']:
+                output_lines.append("\n=== Error Information ===")
+                output_lines.append(f"Error Message: {evaluation_info['error_message']}")
+                if evaluation_info['error_details']:
+                    output_lines.append(f"Error Details: {evaluation_info['error_details']}")
+            
+            if evaluation_info['task_id']:
+                output_lines.append("\n=== Task ===")
+                output_lines.append(f"Task ID: {evaluation_info['task_id']}")
+                
+            if include_score_results and evaluation_info.get('score_results_available'):
+                output_lines.append("\n=== Score Results ===")
+                output_lines.append("Score results functionality available (can be implemented if needed)")
+            
+            return "\n".join(output_lines)
+            
+        except ValueError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            return f"Unexpected error getting evaluation info: {str(e)}"
+            
+    except Exception as e:
+        return f"Unexpected error: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during plexus_evaluation_info: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def plexus_evaluation_last(
+    account_key: str = 'call-criteria',
+    evaluation_type: str = ""
+) -> str:
+    """
+    Get information about the most recent evaluation.
+    
+    This tool finds and returns detailed information about the latest evaluation,
+    optionally filtered by evaluation type (e.g., 'accuracy', 'consistency').
+    
+    Parameters:
+    - account_key: Account key to filter by (default: 'call-criteria')
+    - evaluation_type: Optional filter by evaluation type (e.g., 'accuracy', 'consistency')
+    
+    Returns:
+    - Formatted string with comprehensive information about the latest evaluation
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Import the evaluation functionality
+        try:
+            from plexus.Evaluation import Evaluation
+        except ImportError as e:
+            return f"Import error: Could not import Evaluation class: {str(e)}"
+        
+        # Convert empty string to None for evaluation_type filter
+        eval_type_filter = evaluation_type.strip() if evaluation_type and evaluation_type.strip() else None
+        
+        try:
+            # Get latest evaluation information using the shared method
+            latest_evaluation = Evaluation.get_latest_evaluation(account_key, eval_type_filter)
+            
+            if not latest_evaluation:
+                if eval_type_filter:
+                    return f"No evaluations found for account '{account_key}' with type '{eval_type_filter}'"
+                else:
+                    return f"No evaluations found for account '{account_key}'"
+            
+            # Format the output in a readable way (same as info command)
+            output_lines = []
+            output_lines.append("=== Latest Evaluation Information ===")
+            output_lines.append(f"ID: {latest_evaluation['id']}")
+            output_lines.append(f"Type: {latest_evaluation['type']}")
+            output_lines.append(f"Status: {latest_evaluation['status']}")
+            
+            if latest_evaluation['scorecard_name']:
+                output_lines.append(f"Scorecard: {latest_evaluation['scorecard_name']}")
+            elif latest_evaluation['scorecard_id']:
+                output_lines.append(f"Scorecard ID: {latest_evaluation['scorecard_id']}")
+            else:
+                output_lines.append("Scorecard: Not specified")
+                
+            if latest_evaluation['score_name']:
+                output_lines.append(f"Score: {latest_evaluation['score_name']}")
+            elif latest_evaluation['score_id']:
+                output_lines.append(f"Score ID: {latest_evaluation['score_id']}")
+            else:
+                output_lines.append("Score: Not specified")
+            
+            output_lines.append("\n=== Progress & Metrics ===")
+            if latest_evaluation['total_items']:
+                output_lines.append(f"Total Items: {latest_evaluation['total_items']}")
+            if latest_evaluation['processed_items'] is not None:
+                output_lines.append(f"Processed Items: {latest_evaluation['processed_items']}")
+            if latest_evaluation['accuracy'] is not None:
+                output_lines.append(f"Accuracy: {latest_evaluation['accuracy']:.2f}%")
+            
+            if latest_evaluation['metrics']:
+                output_lines.append("\n=== Detailed Metrics ===")
+                for metric in latest_evaluation['metrics']:
+                    if isinstance(metric, dict) and 'name' in metric and 'value' in metric:
+                        output_lines.append(f"{metric['name']}: {metric['value']:.2f}")
+                    else:
+                        output_lines.append(f"Metric: {metric}")
+            
+            output_lines.append("\n=== Timing ===")
+            if latest_evaluation['started_at']:
+                output_lines.append(f"Started At: {latest_evaluation['started_at']}")
+            if latest_evaluation['elapsed_seconds']:
+                output_lines.append(f"Elapsed Time: {latest_evaluation['elapsed_seconds']} seconds")
+            if latest_evaluation['estimated_remaining_seconds']:
+                output_lines.append(f"Estimated Remaining: {latest_evaluation['estimated_remaining_seconds']} seconds")
+            
+            output_lines.append("\n=== Timestamps ===")
+            output_lines.append(f"Created At: {latest_evaluation['created_at']}")
+            output_lines.append(f"Updated At: {latest_evaluation['updated_at']}")
+            
+            if latest_evaluation['cost']:
+                output_lines.append("\n=== Cost ===")
+                output_lines.append(f"Total Cost: ${latest_evaluation['cost']:.6f}")
+            
+            if latest_evaluation['error_message']:
+                output_lines.append("\n=== Error Information ===")
+                output_lines.append(f"Error Message: {latest_evaluation['error_message']}")
+                if latest_evaluation['error_details']:
+                    output_lines.append(f"Error Details: {latest_evaluation['error_details']}")
+            
+            if latest_evaluation['task_id']:
+                output_lines.append("\n=== Task ===")
+                output_lines.append(f"Task ID: {latest_evaluation['task_id']}")
+            
+            return "\n".join(output_lines)
+            
+        except ValueError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            return f"Unexpected error getting latest evaluation: {str(e)}"
+            
+    except Exception as e:
+        return f"Unexpected error: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during plexus_evaluation_last: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def plexus_dataset_load(
+    source_identifier: str,
+    fresh: bool = False
+) -> str:
+    """
+    Load a dataset from a DataSource using the existing CLI functionality.
+    
+    This tool reuses the core dataset loading logic from the CLI command to ensure DRY principles.
+    It loads a dataframe from the specified data source, generates a Parquet file,
+    and creates a new DataSet record in the database.
+    
+    Parameters:
+    - source_identifier: Identifier (ID, key, or name) of the DataSource to load
+    - fresh: Force a fresh load, ignoring any caches (default: False)
+    
+    Returns:
+    - Status message indicating success/failure and dataset information
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Import the core dataset loading functionality
+        try:
+            from plexus.cli.DatasetCommands import create_client
+            from plexus.cli.identifier_resolution import resolve_data_source
+            from plexus.cli.DatasetCommands import create_initial_data_source_version, get_amplify_bucket
+            import yaml
+            import pandas as pd
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+            from io import BytesIO
+            from datetime import datetime, timezone
+            import importlib
+            import boto3
+            from botocore.exceptions import NoCredentialsError
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Dataset loading functionality may not be available."
+        
+        # Create client using the existing function
+        client = create_client()
+        
+        # Reuse the core dataset loading logic from DatasetCommands.py
+        # This is the exact same logic as in the CLI command's _load() function
+        
+        # 1. Fetch the DataSource
+        logger.info(f"Resolving DataSource with identifier: {source_identifier}")
+        data_source = await resolve_data_source(client, source_identifier)
+        if not data_source:
+            return f"Error: Could not resolve DataSource with identifier: {source_identifier}"
+        
+        logger.info(f"Found DataSource: {data_source.name} (ID: {data_source.id})")
+
+        # 2. Parse YAML configuration
+        if not data_source.yamlConfiguration:
+            return f"Error: DataSource '{data_source.name}' has no yamlConfiguration."
+
+        try:
+            config = yaml.safe_load(data_source.yamlConfiguration)
+        except yaml.YAMLError as e:
+            return f"Error parsing yamlConfiguration: {e}"
+
+        if not isinstance(config, dict):
+            return f"Error: yamlConfiguration must be a YAML dictionary, but got {type(config).__name__}: {config}"
+
+        # Handle both scorecard format (with 'data' section) and dataset format (direct config)
+        data_config = config.get('data')
+        if not data_config:
+            # Check if this is a direct dataset configuration (recommended format)
+            if 'class' in config:
+                logger.info("Detected direct dataset configuration format")
+                
+                # Handle built-in Plexus classes vs client-specific extensions
+                class_name = config['class']
+                if class_name in ['FeedbackItems']:
+                    # Built-in Plexus classes (single file modules)
+                    class_path = f"plexus.data.{class_name}"
+                else:
+                    # Client-specific extensions (existing behavior)
+                    class_path = f"plexus_extensions.{class_name}.{class_name}"
+                
+                data_config = {
+                    'class': class_path,
+                    'parameters': {k: v for k, v in config.items() if k != 'class'}
+                }
+            else:
+                return "Error: No 'data' section in yamlConfiguration and no 'class' specified."
+
+        # 3. Dynamically load DataCache class
+        data_cache_class_path = data_config.get('class')
+        if not data_cache_class_path:
+            return "Error: No 'class' specified in data configuration."
+
+        try:
+            module_path, class_name = data_cache_class_path.rsplit('.', 1)
+            module = importlib.import_module(module_path)
+            data_cache_class = getattr(module, class_name)
+        except (ImportError, AttributeError) as e:
+            return f"Error: Could not import data cache class '{data_cache_class_path}': {e}"
+
+        # 4. Load dataframe
+        logger.info(f"Loading dataframe using {data_cache_class_path}...")
+        data_cache_params = data_config.get('parameters', {})
+        data_cache = data_cache_class(**data_cache_params)
+
+        # Pass the parameters to load_dataframe
+        dataframe = data_cache.load_dataframe(data=data_cache_params, fresh=fresh)
+        logger.info(f"Loaded dataframe with {len(dataframe)} rows and columns: {dataframe.columns.tolist()}")
+
+        # 5. Generate Parquet file in memory
+        if dataframe.empty:
+            return "Warning: Dataframe is empty, no dataset created."
+
+        logger.info("Generating Parquet file in memory...")
+        buffer = BytesIO()
+        table = pa.Table.from_pandas(dataframe)
+        pq.write_table(table, buffer)
+        buffer.seek(0)
+        logger.info("Parquet file generated successfully.")
+
+        # 6. Get the current DataSource version and resolve score version
+        logger.info("Creating new DataSet record...")
+        
+        if not hasattr(data_source, 'accountId') or not data_source.accountId:
+            return "Error: DataSource is missing accountId. Cannot proceed."
+        account_id = data_source.accountId
+
+        # Get the current version of the DataSource, creating one if it doesn't exist
+        if not data_source.currentVersionId:
+            logger.info("DataSource has no currentVersionId. Creating initial version...")
+            data_source_version_id = await create_initial_data_source_version(client, data_source)
+            if not data_source_version_id:
+                return "Error: Failed to create initial DataSource version."
+        else:
+            data_source_version_id = data_source.currentVersionId
+            logger.info(f"Using existing DataSource version ID: {data_source_version_id}")
+
+        # Get the score version - use the score linked to the DataSource if available (optional)
+        score_version_id = None
+        if hasattr(data_source, 'scoreId') and data_source.scoreId:
+            logger.info(f"DataSource is linked to score ID: {data_source.scoreId}")
+            # Get the champion version of this score
+            score_query = client.execute(
+                """
+                query GetScore($id: ID!) {
+                    getScore(id: $id) {
+                        id
+                        name
+                        championVersionId
+                    }
+                }
+                """,
+                {"id": data_source.scoreId}
+            )
+            
+            if score_query and score_query.get('getScore') and score_query['getScore'].get('championVersionId'):
+                score_version_id = score_query['getScore']['championVersionId']
+                logger.info(f"Using champion version ID: {score_version_id}")
+            else:
+                logger.warning(f"Score {data_source.scoreId} has no champion version. Creating DataSet without score version.")
+        else:
+            logger.info("DataSource is not linked to a specific score. Creating DataSet without score version.")
+
+        # Create a DataSet linked to the DataSource version and optionally to a score version
+        dataset_input = {
+            "name": f"{data_source.name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}",
+            "accountId": account_id,
+            "dataSourceVersionId": data_source_version_id,
+        }
+        
+        # Add optional fields only if they have values
+        if score_version_id:
+            dataset_input["scoreVersionId"] = score_version_id
+        if hasattr(data_source, 'scorecardId') and data_source.scorecardId:
+            dataset_input["scorecardId"] = data_source.scorecardId
+        if hasattr(data_source, 'scoreId') and data_source.scoreId:
+            dataset_input["scoreId"] = data_source.scoreId
+            
+        new_dataset_record = client.execute(
+            """
+            mutation CreateDataSet($input: CreateDataSetInput!) {
+                createDataSet(input: $input) {
+                    id
+                    name
+                    dataSourceVersionId
+                    scoreVersionId
+                }
+            }
+            """,
+            {
+                "input": dataset_input
+            }
+        )
+        new_dataset = new_dataset_record['createDataSet']
+        new_dataset_id = new_dataset['id']
+        
+        logger.info(f"Created DataSet record with ID: {new_dataset_id}")
+
+        # 7. Upload Parquet to S3
+        file_name = "dataset.parquet"
+        s3_key = f"datasets/{account_id}/{new_dataset_id}/{file_name}"
+        
+        logger.info(f"Uploading Parquet file to S3 at: {s3_key}")
+        
+        bucket_name = get_amplify_bucket()
+        if not bucket_name:
+             logger.error("S3 bucket name not found. Cannot upload file.")
+             client.execute("""
+                mutation UpdateDataSet($input: UpdateDataSetInput!) {
+                    updateDataSet(input: $input) { id }
+                }
+             """, {"input": {"id": new_dataset_id, "description": "FAILED: S3 bucket not configured."}})
+             return "Error: S3 bucket name not found. Cannot upload file."
+
+        try:
+            s3_client = boto3.client('s3')
+            s3_client.upload_fileobj(buffer, bucket_name, s3_key)
+            logger.info("File uploaded successfully to S3.")
+        except NoCredentialsError:
+            return "Error: AWS credentials not found."
+        except Exception as e:
+            logger.error(f"Failed to upload file to S3: {e}")
+            client.execute("""
+               mutation UpdateDataSet($input: UpdateDataSetInput!) {
+                   updateDataSet(input: $input) { id }
+               }
+            """, {"input": {"id": new_dataset_id, "description": f"FAILED: S3 upload failed: {e}"}})
+            return f"Error: Failed to upload file to S3: {e}"
+
+        # 8. Update DataSet with file path
+        logger.info(f"Updating DataSet record with file path...")
+        client.execute(
+            """
+            mutation UpdateDataSet($input: UpdateDataSetInput!) {
+                updateDataSet(input: $input) {
+                    id
+                    file
+                }
+            }
+            """,
+            {
+                "input": {
+                    "id": new_dataset_id,
+                    "file": s3_key,
+                }
+            }
+        )
+        logger.info("DataSet record updated successfully.")
+        
+        return f"Successfully loaded dataset '{data_source.name}':\n" + \
+               f"- DataSet ID: {new_dataset_id}\n" + \
+               f"- Rows: {len(dataframe)}\n" + \
+               f"- Columns: {dataframe.columns.tolist()}\n" + \
+               f"- S3 Path: {s3_key}\n" + \
+               f"- Fresh Load: {fresh}"
+
+    except Exception as e:
+        logger.error(f"Error in dataset load: {str(e)}", exc_info=True)
+        return f"Error loading dataset: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during dataset_load: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
 
 
 # Main function to run the server

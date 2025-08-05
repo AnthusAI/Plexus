@@ -70,6 +70,59 @@ def create_client() -> PlexusDashboardClient:
     logging.debug(f"Using API URL: {client.api_url}")
     return client
 
+def resolve_score_external_id_to_uuid(client: PlexusDashboardClient, external_id: str, scorecard_id: str = None) -> str:
+    """
+    Resolve a score external ID to its DynamoDB UUID using GraphQL API.
+    
+    Args:
+        client: PlexusDashboardClient instance
+        external_id: The external ID to resolve (e.g., "45925")
+        scorecard_id: Optional scorecard ID to narrow the search
+        
+    Returns:
+        str: DynamoDB UUID for the score, or None if not found
+    """
+    logging.info(f"Resolving score external ID '{external_id}' to DynamoDB UUID...")
+    
+    try:
+        # Build the filter dynamically based on whether scorecard_id is provided
+        filter_conditions = {"externalId": {"eq": external_id}}
+        if scorecard_id:
+            filter_conditions["scorecardId"] = {"eq": scorecard_id}
+        
+        query = """
+        query ListScores($filter: ModelScoreFilterInput!, $limit: Int) {
+            listScores(filter: $filter, limit: $limit) {
+                items {
+                    id
+                    externalId
+                    name
+                    scorecardId
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "filter": filter_conditions,
+            "limit": 1
+        }
+            
+        result = client.execute(query, variables)
+        
+        if result and 'listScores' in result and result['listScores']['items']:
+            score_item = result['listScores']['items'][0]
+            uuid = score_item['id']
+            logging.info(f"Successfully resolved external ID '{external_id}' to DynamoDB UUID: {uuid}")
+            return uuid
+        else:
+            logging.warning(f"Could not resolve external ID '{external_id}' to DynamoDB UUID")
+            return None
+            
+    except Exception as e:
+        logging.error(f"Error resolving external ID '{external_id}' to UUID: {str(e)}")
+        return None
+
 def get_amplify_bucket():
     """Get the S3 bucket name from environment variables or fall back to reading amplify_outputs.json."""
     # First try environment variable (consistent with reporting commands)
@@ -327,6 +380,80 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
     except Exception as e:
         raise ValueError(f"Failed to load {file_type} file: {str(e)}")
     
+    # COMPREHENSIVE DATASET DEBUG LOGGING FOR CLOUD DATASET
+    logging.info("=" * 80)
+    logging.info("DATASET DEBUG: load_samples_from_cloud_dataset - CLOUD DATASET LOADED")
+    logging.info("=" * 80)
+    
+    # 1. Dataset shape
+    logging.info(f"CLOUD_DATASET_SHAPE: {df.shape} (rows x columns)")
+    
+    # 2. Column headers and data types
+    logging.info(f"CLOUD_DATASET_COLUMNS: {df.columns.tolist()}")
+    logging.info("CLOUD_DATASET_COLUMN_TYPES:")
+    for col in df.columns:
+        dtype = df[col].dtype
+        logging.info(f"  {col}: {dtype}")
+    
+    # 3. First few rows of data
+    if len(df) > 0:
+        logging.info("CLOUD_DATASET_FIRST_FEW_ROWS:")
+        for i in range(min(3, len(df))):
+            logging.info(f"  Row {i}:")
+            for col in df.columns:
+                value = df.iloc[i][col]
+                # Truncate long values for readability
+                if isinstance(value, str) and len(value) > 100:
+                    display_value = value[:97] + "..."
+                else:
+                    display_value = value
+                logging.info(f"    {col}: '{display_value}'")
+    else:
+        logging.info("CLOUD_DATASET_FIRST_FEW_ROWS: Dataset is empty")
+    
+    # 4. Data quality checks
+    logging.info("CLOUD_DATASET_QUALITY_CHECK:")
+    cloud_quality_issues = []
+    
+    if len(df) > 0:
+        # Check for null/empty data in key columns
+        key_columns = ['text', 'content_id'] if 'text' in df.columns else []
+        if 'content_id' in df.columns:
+            key_columns.append('content_id')
+        for col in key_columns:
+            if col in df.columns:
+                null_count = df[col].isnull().sum()
+                empty_count = (df[col] == '').sum() if df[col].dtype == 'object' else 0
+                if null_count > 0:
+                    cloud_quality_issues.append(f"Column '{col}' has {null_count} null values")
+                if empty_count > 0:
+                    cloud_quality_issues.append(f"Column '{col}' has {empty_count} empty string values")
+        
+        # Check for expected score column
+        if score_name in df.columns:
+            logging.info(f"CLOUD_DATASET_SCORE_COLUMN: Found score column '{score_name}'")
+            value_counts = df[score_name].value_counts(dropna=False)
+            # Removed verbose value distribution logging to improve performance
+        else:
+            cloud_quality_issues.append(f"Expected score column '{score_name}' not found")
+        
+        # Check for duplicates in content_id if it exists
+        if 'content_id' in df.columns:
+            duplicates = df['content_id'].duplicated().sum()
+            if duplicates > 0:
+                cloud_quality_issues.append(f"Found {duplicates} duplicate content_id values")
+    
+    if cloud_quality_issues:
+        logging.warning("CLOUD_DATASET_QUALITY_ISSUES:")
+        for issue in cloud_quality_issues:
+            logging.warning(f"  - {issue}")
+    else:
+        logging.info("CLOUD_DATASET_QUALITY_ISSUES: None - dataset looks healthy")
+    
+    logging.info("=" * 80)
+    logging.info("END CLOUD DATASET DEBUG")
+    logging.info("=" * 80)
+    
     logging.info(f"Loaded DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
     
     # Sample the dataframe if number_of_samples is specified
@@ -400,12 +527,14 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
                 metadata = {}
         
         # Create the sample dictionary with metadata included
+        # Keep IDs column at top level for identifier extraction
         processed_sample = {
             'text': sample.get('text', ''),
             f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
             'content_id': sample.get('content_id', ''),
+            'IDs': sample.get('IDs', ''),  # Keep IDs at top level
             'columns': {
-                **{k: v for k, v in sample.items() if k not in ['text', score_name_column_name, 'content_id', 'metadata']},
+                **{k: v for k, v in sample.items() if k not in ['text', score_name_column_name, 'content_id', 'metadata', 'IDs']},
                 'metadata': metadata  # Include the metadata in the columns
             }
         }
@@ -996,30 +1125,25 @@ def accuracy(
                             if (sc_config.get('name') == primary_score_identifier or
                                 sc_config.get('key') == primary_score_identifier or 
                                 str(sc_config.get('id', '')) == primary_score_identifier or
-                                sc_config.get('externalId') == primary_score_identifier):
+                                sc_config.get('externalId') == primary_score_identifier or
+                                sc_config.get('originalExternalId') == primary_score_identifier):
                                 score_id_for_eval = sc_config.get('id')
                                 score_version_id_for_eval = sc_config.get('version')
                                 
                                 if not score_version_id_for_eval:
                                     score_version_id_for_eval = sc_config.get('championVersionId')
                                 
-                                if isinstance(score_id_for_eval, str) and '-' in score_id_for_eval:
+                                # The score_id_for_eval should be valid at this point
+                                if score_id_for_eval:
                                     logging.info(f"Found primary score from YAML: {sc_config.get('name')} with ID: {score_id_for_eval}")
                                     logging.info(f"Using version ID: {score_version_id_for_eval}")
-                                break
+                                    break
                     
-                    # If no match found, fall back to first score
-                    if not score_id_for_eval and scorecard_instance.scores:
-                        sc_config = scorecard_instance.scores[0]
-                        score_id_for_eval = sc_config.get('id')
-                        score_version_id_for_eval = sc_config.get('version')
-                        
-                        if not score_version_id_for_eval:
-                            score_version_id_for_eval = sc_config.get('championVersionId')
-                        
-                        if isinstance(score_id_for_eval, str) and '-' in score_id_for_eval:
-                            logging.info(f"Using first score from YAML for evaluation record: {sc_config.get('name')} with ID: {score_id_for_eval}")
-                            logging.info(f"Using version ID: {score_version_id_for_eval}")
+                    # If no match found and user specified a score, that's an error  
+                    if not score_id_for_eval and primary_score_identifier:
+                        error_msg = f"Could not find score '{primary_score_identifier}' in scorecard YAML files"
+                        logging.error(error_msg)
+                        raise ValueError(error_msg)
                     
                 except Exception as e:
                     error_msg = f"Error loading scorecard from YAML files: {str(e)}"
@@ -1044,33 +1168,61 @@ def accuracy(
                     if primary_score_identifier and scorecard_instance.scores:
                         logging.info(f"Identifying primary score '{primary_score_identifier}' for evaluation record")
                         for sc_config in scorecard_instance.scores:
+                            # Debug what we're comparing
+                            logging.info(f"CLI_DEBUG: Checking score config for match:")
+                            logging.info(f"CLI_DEBUG:   name: {sc_config.get('name')}")
+                            logging.info(f"CLI_DEBUG:   key: {sc_config.get('key')}")
+                            logging.info(f"CLI_DEBUG:   id: {sc_config.get('id')}")
+                            logging.info(f"CLI_DEBUG:   externalId: {sc_config.get('externalId')}")
+                            logging.info(f"CLI_DEBUG:   originalExternalId: {sc_config.get('originalExternalId')}")
+                            logging.info(f"CLI_DEBUG:   primary_score_identifier: {primary_score_identifier}")
+                            
                             if (sc_config.get('name') == primary_score_identifier or
                                 sc_config.get('key') == primary_score_identifier or 
                                 str(sc_config.get('id', '')) == primary_score_identifier or
-                                sc_config.get('externalId') == primary_score_identifier):
+                                sc_config.get('externalId') == primary_score_identifier or
+                                sc_config.get('originalExternalId') == primary_score_identifier):
                                 score_id_for_eval = sc_config.get('id')
                                 score_version_id_for_eval = sc_config.get('version')
                                 
                                 if not score_version_id_for_eval:
                                     score_version_id_for_eval = sc_config.get('championVersionId')
                                 
-                                if isinstance(score_id_for_eval, str) and '-' in score_id_for_eval:
+                                logging.info(f"CLI_DEBUG: Match found! score_id_for_eval = {score_id_for_eval}")
+                                
+                                # If the score_id_for_eval looks like an external ID (numeric),
+                                # we need to resolve it to the actual DynamoDB UUID for Amplify Gen2 schema association
+                                if score_id_for_eval and (isinstance(score_id_for_eval, int) or str(score_id_for_eval).isdigit()):
+                                    logging.info(f"CLI_DEBUG: score_id_for_eval '{score_id_for_eval}' appears to be external ID, resolving to DynamoDB UUID...")
+                                    try:
+                                        # Use scorecard ID if available for better resolution
+                                        scorecard_id_for_resolution = scorecard_id if 'scorecard_record' in locals() and scorecard_record else None
+                                        resolved_uuid = resolve_score_external_id_to_uuid(client, str(score_id_for_eval), scorecard_id_for_resolution)
+                                        if resolved_uuid:
+                                            score_id_for_eval = resolved_uuid
+                                            logging.info(f"CLI_DEBUG: Successfully resolved external ID to DynamoDB UUID: {score_id_for_eval}")
+                                        else:
+                                            logging.warning(f"CLI_DEBUG: Could not resolve external ID {score_id_for_eval} to DynamoDB UUID")
+                                            score_id_for_eval = None  # Clear invalid external ID
+                                    except Exception as resolve_error:
+                                        logging.warning(f"CLI_DEBUG: Error resolving external ID to UUID: {resolve_error}")
+                                        score_id_for_eval = None
+                                
+                                # The score_id_for_eval should be the database UUID at this point
+                                logging.info(f"CLI_DEBUG: After resolution, score_id_for_eval = {score_id_for_eval}")
+                                if score_id_for_eval:
+                                    logging.info(f"CLI_DEBUG: Breaking from loop with valid score_id_for_eval")
                                     logging.info(f"Found primary score early: {sc_config.get('name')} with ID: {score_id_for_eval}")
                                     logging.info(f"Using champion version ID: {score_version_id_for_eval}")
-                                break
+                                    break
+                                else:
+                                    logging.warning(f"CLI_DEBUG: score_id_for_eval is None after resolution, not breaking from loop")
                     
-                    # If no match found, fall back to first score
-                    if not score_id_for_eval and scorecard_instance.scores:
-                        sc_config = scorecard_instance.scores[0]
-                        score_id_for_eval = sc_config.get('id')
-                        score_version_id_for_eval = sc_config.get('version')
-                        
-                        if not score_version_id_for_eval:
-                            score_version_id_for_eval = sc_config.get('championVersionId')
-                        
-                        if isinstance(score_id_for_eval, str) and '-' in score_id_for_eval:
-                            logging.info(f"Using first score for evaluation record: {sc_config.get('name')} with ID: {score_id_for_eval}")
-                            logging.info(f"Using champion version ID: {score_version_id_for_eval}")
+                    # If no match found and user specified a score, that's an error
+                    if not score_id_for_eval and primary_score_identifier:
+                        error_msg = f"Could not find score '{primary_score_identifier}' in scorecard"
+                        logging.error(error_msg)
+                        raise ValueError(error_msg)
                         
                 except Exception as e:
                     error_msg = f"Failed to load scorecard from API: {str(e)}"
@@ -1137,7 +1289,8 @@ def accuracy(
                     if (sc_config.get('name') == primary_score_identifier or
                         sc_config.get('key') == primary_score_identifier or
                         str(sc_config.get('id', '')) == primary_score_identifier or
-                        sc_config.get('externalId') == primary_score_identifier):
+                        sc_config.get('externalId') == primary_score_identifier or
+                        sc_config.get('originalExternalId') == primary_score_identifier):
                         primary_score_config = sc_config
                         primary_score_name = sc_config.get('name')
                         primary_score_index = i
@@ -1234,7 +1387,8 @@ def accuracy(
                                             if sc.get('name') and any(sc.get('name') == tid or 
                                                                       sc.get('key') == tid or 
                                                                       str(sc.get('id', '')) == tid or
-                                                                      sc.get('externalId') == tid for tid in target_score_identifiers)]
+                                                                      sc.get('externalId') == tid or
+                                                                      sc.get('originalExternalId') == tid for tid in target_score_identifiers)]
                  logging.info(f"Evaluating subset of scores: {subset_of_score_names}")
             else:
                  logging.info("Evaluating all scores in the loaded scorecard.")
@@ -1251,9 +1405,25 @@ def accuracy(
                 if not score_version_id_for_eval:
                     score_version_id_for_eval = primary_score_config.get('championVersionId')
                 
-                if not (isinstance(score_id_for_eval, str) and '-' in score_id_for_eval):
-                    logging.warning(f"WARNING: Score ID for evaluation doesn't appear to be in DynamoDB UUID format: {score_id_for_eval}")
-                    score_id_for_eval = None
+                # If the score_id_for_eval looks like an external ID (numeric),
+                # we need to resolve it to the actual DynamoDB UUID for Amplify Gen2 schema association
+                if score_id_for_eval and (isinstance(score_id_for_eval, int) or str(score_id_for_eval).isdigit()):
+                    logging.info(f"CLI_DEBUG: score_id_for_eval '{score_id_for_eval}' appears to be external ID, resolving to DynamoDB UUID...")
+                    try:
+                        # Use scorecard ID if available for better resolution  
+                        scorecard_id_for_resolution = scorecard_id if 'scorecard_record' in locals() and scorecard_record else None
+                        resolved_uuid = resolve_score_external_id_to_uuid(client, str(score_id_for_eval), scorecard_id_for_resolution)
+                        if resolved_uuid:
+                            score_id_for_eval = resolved_uuid
+                            logging.info(f"CLI_DEBUG: Successfully resolved external ID to DynamoDB UUID: {score_id_for_eval}")
+                        else:
+                            logging.warning(f"CLI_DEBUG: Could not resolve external ID {score_id_for_eval} to DynamoDB UUID")
+                            score_id_for_eval = None  # Clear invalid external ID
+                    except Exception as resolve_error:
+                        logging.warning(f"CLI_DEBUG: Error resolving external ID to UUID: {resolve_error}")
+                        score_id_for_eval = None
+                        
+                logging.info(f"CLI_DEBUG: Final score_id_for_eval being passed to Evaluation: {score_id_for_eval}")
 
             # Instantiate AccuracyEvaluation
             logging.info("Instantiating AccuracyEvaluation...")
@@ -1302,6 +1472,12 @@ def accuracy(
                     scorecard_identifier = str(scorecard)
                 
                 logging.info(f"Using scorecard identifier for AccuracyEvaluation: {scorecard_identifier} (type: {type(scorecard_identifier)})")
+            
+            # Debug logging before creating AccuracyEvaluation
+            logging.info(f"CLI_DEBUG: About to create AccuracyEvaluation with:")
+            logging.info(f"CLI_DEBUG:   score_id_for_eval = {score_id_for_eval}")
+            logging.info(f"CLI_DEBUG:   score_version_id_for_eval = {score_version_id_for_eval}")
+            logging.info(f"CLI_DEBUG:   subset_of_score_names = {subset_of_score_names}")
             
             accuracy_eval = AccuracyEvaluation(
                 scorecard_name=scorecard_identifier,
@@ -1484,26 +1660,14 @@ def get_data_driven_samples(
     
     try:
         # Use the standardized Score.load() method instead of manual instantiation
-        try:
-            score_instance = Score.load(
-                scorecard_identifier=scorecard_name,
-                score_name=score_name,
-                use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
-                yaml_only=False  # Allow API calls if needed
-            )
-            logging.info(f"Successfully loaded score '{score_name}' using Score.load()")
-        except ValueError as load_error:
-            logging.warning(f"Score.load() failed: {load_error}")
-            # Fallback to manual instantiation for backward compatibility
-            score_class_name = score_config['class']
-            score_module_path = f'plexus.scores.{score_class_name}'
-            score_module = importlib.import_module(score_module_path)
-            score_class = getattr(score_module, score_class_name)
-
-            score_config['scorecard_name'] = scorecard_name
-            score_config['score_name'] = score_name
-            score_instance = score_class(**score_config)
-            logging.info(f"Fallback to manual instantiation successful for '{score_name}'")
+        # Use the standardized Score.load() method - no fallback, let API errors propagate
+        score_instance = Score.load(
+            scorecard_identifier=scorecard_name,
+            score_name=score_name,
+            use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
+            yaml_only=False  # Allow API calls if needed
+        )
+        logging.info(f"Successfully loaded score '{score_name}' using Score.load()")
 
         # ADD THESE LOGGING STATEMENTS:
         logging.info(f"=== DEBUGGING SCORE CONFIGURATION ===")
@@ -1535,8 +1699,49 @@ def get_data_driven_samples(
         # Load and process the data
         logging.info("Loading data...")
         score_instance.load_data(data=score_config['data'], fresh=fresh)
+        
+        # COMPREHENSIVE DEBUG LOGGING AFTER DATA LOAD
+        logging.info("=" * 80)
+        logging.info("DATASET DEBUG: EvaluationCommands - POST-LOAD_DATA ANALYSIS")
+        logging.info("=" * 80)
+        
+        if hasattr(score_instance, 'dataframe') and score_instance.dataframe is not None:
+            # Use the comprehensive debug utility from DataCache base class
+            if hasattr(score_instance, 'debug_dataframe'):
+                score_instance.debug_dataframe(score_instance.dataframe, "POST_LOAD_DATA", logging)
+            else:
+                # Fallback if debug_dataframe method not available
+                logging.info(f"POST_LOAD_DATA_SHAPE: {score_instance.dataframe.shape}")
+                logging.info(f"POST_LOAD_DATA_COLUMNS: {list(score_instance.dataframe.columns)}")
+        else:
+            logging.error("POST_LOAD_DATA: No dataframe available after load_data call")
+        
+        logging.info("=" * 80)
+        logging.info("END POST-LOAD_DATA DEBUG")
+        logging.info("=" * 80)
+        
         logging.info("Processing data...")
         score_instance.process_data()
+        
+        # COMPREHENSIVE DEBUG LOGGING AFTER DATA PROCESSING  
+        logging.info("=" * 80)
+        logging.info("DATASET DEBUG: EvaluationCommands - POST-PROCESS_DATA ANALYSIS")
+        logging.info("=" * 80)
+        
+        if hasattr(score_instance, 'dataframe') and score_instance.dataframe is not None:
+            # Use the comprehensive debug utility from DataCache base class
+            if hasattr(score_instance, 'debug_dataframe'):
+                score_instance.debug_dataframe(score_instance.dataframe, "POST_PROCESS_DATA", logging)
+            else:
+                # Fallback if debug_dataframe method not available
+                logging.info(f"POST_PROCESS_DATA_SHAPE: {score_instance.dataframe.shape}")
+                logging.info(f"POST_PROCESS_DATA_COLUMNS: {list(score_instance.dataframe.columns)}")
+        else:
+            logging.error("POST_PROCESS_DATA: No dataframe available after process_data call")
+        
+        logging.info("=" * 80)
+        logging.info("END POST-PROCESS_DATA DEBUG")
+        logging.info("=" * 80)
 
         # Check if dataframe exists and has data
         if not hasattr(score_instance, 'dataframe'):
@@ -1640,12 +1845,14 @@ def get_data_driven_samples(
                     metadata = {}
             
             # Create the sample dictionary with metadata included
+            # Keep IDs column at top level for identifier extraction
             processed_sample = {
                 'text': sample.get('text', ''),
                 f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
                 'content_id': sample.get('content_id', ''),
+                'IDs': sample.get('IDs', ''),  # Keep IDs at top level
                 'columns': {
-                    **{k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id', 'metadata']},
+                    **{k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id', 'metadata', 'IDs']},
                     'metadata': metadata  # Include the metadata in the columns
                 }
             }
@@ -2116,3 +2323,171 @@ def list_results(id: str, limit: int):
     except Exception as e:
         logging.error(f"Error listing results: {e}")
         click.echo(f"Error: {e}", err=True)
+
+@evaluations.command()
+@click.argument('evaluation_id', required=True)
+@click.option('--include-score-results', is_flag=True, help='Include score results in the output')
+def info(evaluation_id: str, include_score_results: bool):
+    """Get detailed information about an evaluation"""
+    try:
+        from plexus.Evaluation import Evaluation
+        
+        logging.info(f"Getting evaluation info for ID: {evaluation_id}")
+        evaluation_info = Evaluation.get_evaluation_info(evaluation_id, include_score_results)
+        
+        # Display the evaluation information
+        click.echo(f"\n=== Evaluation Information ===")
+        click.echo(f"ID: {evaluation_info['id']}")
+        click.echo(f"Type: {evaluation_info['type']}")
+        click.echo(f"Status: {evaluation_info['status']}")
+        
+        if evaluation_info['scorecard_name']:
+            click.echo(f"Scorecard: {evaluation_info['scorecard_name']}")
+        elif evaluation_info['scorecard_id']:
+            click.echo(f"Scorecard ID: {evaluation_info['scorecard_id']}")
+        else:
+            click.echo("Scorecard: Not specified")
+            
+        if evaluation_info['score_name']:
+            click.echo(f"Score: {evaluation_info['score_name']}")
+        elif evaluation_info['score_id']:
+            click.echo(f"Score ID: {evaluation_info['score_id']}")
+        else:
+            click.echo("Score: Not specified")
+        
+        click.echo(f"\n=== Progress & Metrics ===")
+        if evaluation_info['total_items']:
+            click.echo(f"Total Items: {evaluation_info['total_items']}")
+        if evaluation_info['processed_items'] is not None:
+            click.echo(f"Processed Items: {evaluation_info['processed_items']}")
+        if evaluation_info['accuracy'] is not None:
+            click.echo(f"Accuracy: {evaluation_info['accuracy']:.2f}%")
+        
+        if evaluation_info['metrics']:
+            click.echo(f"\n=== Detailed Metrics ===")
+            for metric in evaluation_info['metrics']:
+                if isinstance(metric, dict) and 'name' in metric and 'value' in metric:
+                    click.echo(f"{metric['name']}: {metric['value']:.2f}")
+                else:
+                    click.echo(f"Metric: {metric}")
+        
+        click.echo(f"\n=== Timing ===")
+        if evaluation_info['started_at']:
+            click.echo(f"Started At: {evaluation_info['started_at']}")
+        if evaluation_info['elapsed_seconds']:
+            click.echo(f"Elapsed Time: {evaluation_info['elapsed_seconds']} seconds")
+        if evaluation_info['estimated_remaining_seconds']:
+            click.echo(f"Estimated Remaining: {evaluation_info['estimated_remaining_seconds']} seconds")
+        
+        click.echo(f"\n=== Timestamps ===")
+        click.echo(f"Created At: {evaluation_info['created_at']}")
+        click.echo(f"Updated At: {evaluation_info['updated_at']}")
+        
+        if evaluation_info['cost']:
+            click.echo(f"\n=== Cost ===")
+            click.echo(f"Total Cost: ${evaluation_info['cost']:.6f}")
+        
+        if evaluation_info['error_message']:
+            click.echo(f"\n=== Error Information ===")
+            click.echo(f"Error Message: {evaluation_info['error_message']}")
+            if evaluation_info['error_details']:
+                click.echo(f"Error Details: {evaluation_info['error_details']}")
+        
+        if evaluation_info['task_id']:
+            click.echo(f"\n=== Task ===")
+            click.echo(f"Task ID: {evaluation_info['task_id']}")
+            
+        if include_score_results and evaluation_info.get('score_results_available'):
+            click.echo(f"\n=== Score Results ===")
+            click.echo("Score results functionality available (can be implemented if needed)")
+        
+    except Exception as e:
+        logging.error(f"Error getting evaluation info: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
+@evaluations.command()
+@click.option('--account-key', default='call-criteria', help='Account key to filter by')
+@click.option('--type', help='Filter by evaluation type (e.g., accuracy, consistency)')
+def last(account_key: str, type: Optional[str]):
+    """Get information about the most recent evaluation"""
+    try:
+        from plexus.Evaluation import Evaluation
+        
+        logging.info(f"Getting latest evaluation for account: {account_key}")
+        if type:
+            logging.info(f"Filtering by type: {type}")
+            
+        latest_evaluation = Evaluation.get_latest_evaluation(account_key, type)
+        
+        if not latest_evaluation:
+            if type:
+                click.echo(f"No evaluations found for account '{account_key}' with type '{type}'")
+            else:
+                click.echo(f"No evaluations found for account '{account_key}'")
+            return
+        
+        # Display the latest evaluation information using the same format as info command
+        click.echo(f"\n=== Latest Evaluation Information ===")
+        click.echo(f"ID: {latest_evaluation['id']}")
+        click.echo(f"Type: {latest_evaluation['type']}")
+        click.echo(f"Status: {latest_evaluation['status']}")
+        
+        if latest_evaluation['scorecard_name']:
+            click.echo(f"Scorecard: {latest_evaluation['scorecard_name']}")
+        elif latest_evaluation['scorecard_id']:
+            click.echo(f"Scorecard ID: {latest_evaluation['scorecard_id']}")
+        else:
+            click.echo("Scorecard: Not specified")
+            
+        if latest_evaluation['score_name']:
+            click.echo(f"Score: {latest_evaluation['score_name']}")
+        elif latest_evaluation['score_id']:
+            click.echo(f"Score ID: {latest_evaluation['score_id']}")
+        else:
+            click.echo("Score: Not specified")
+        
+        click.echo(f"\n=== Progress & Metrics ===")
+        if latest_evaluation['total_items']:
+            click.echo(f"Total Items: {latest_evaluation['total_items']}")
+        if latest_evaluation['processed_items'] is not None:
+            click.echo(f"Processed Items: {latest_evaluation['processed_items']}")
+        if latest_evaluation['accuracy'] is not None:
+            click.echo(f"Accuracy: {latest_evaluation['accuracy']:.2f}%")
+        
+        if latest_evaluation['metrics']:
+            click.echo(f"\n=== Detailed Metrics ===")
+            for metric in latest_evaluation['metrics']:
+                if isinstance(metric, dict) and 'name' in metric and 'value' in metric:
+                    click.echo(f"{metric['name']}: {metric['value']:.2f}")
+                else:
+                    click.echo(f"Metric: {metric}")
+        
+        click.echo(f"\n=== Timing ===")
+        if latest_evaluation['started_at']:
+            click.echo(f"Started At: {latest_evaluation['started_at']}")
+        if latest_evaluation['elapsed_seconds']:
+            click.echo(f"Elapsed Time: {latest_evaluation['elapsed_seconds']} seconds")
+        if latest_evaluation['estimated_remaining_seconds']:
+            click.echo(f"Estimated Remaining: {latest_evaluation['estimated_remaining_seconds']} seconds")
+        
+        click.echo(f"\n=== Timestamps ===")
+        click.echo(f"Created At: {latest_evaluation['created_at']}")
+        click.echo(f"Updated At: {latest_evaluation['updated_at']}")
+        
+        if latest_evaluation['cost']:
+            click.echo(f"\n=== Cost ===")
+            click.echo(f"Total Cost: ${latest_evaluation['cost']:.6f}")
+        
+        if latest_evaluation['error_message']:
+            click.echo(f"\n=== Error Information ===")
+            click.echo(f"Error Message: {latest_evaluation['error_message']}")
+            if latest_evaluation['error_details']:
+                click.echo(f"Error Details: {latest_evaluation['error_details']}")
+        
+        if latest_evaluation['task_id']:
+            click.echo(f"\n=== Task ===")
+            click.echo(f"Task ID: {latest_evaluation['task_id']}")
+        
+    except Exception as e:
+        logging.error(f"Error getting latest evaluation: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)

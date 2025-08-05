@@ -60,6 +60,11 @@ export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 's
     explanation: string | null;
     trace: any | null;
     itemId: string | null;
+    itemIdentifiers?: Array<{
+      name: string;
+      value: string;
+      url?: string;
+    }> | null;
     createdAt: string;
   }>;
 };
@@ -322,6 +327,19 @@ const EVALUATION_FIELDS = `
       trace
       itemId
       createdAt
+      item {
+        id
+        externalId
+        identifiers
+        itemIdentifiers {
+          items {
+            name
+            value
+            url
+            position
+          }
+        }
+      }
       feedbackItem {
         id
         editCommentValue
@@ -742,6 +760,19 @@ export function observeRecentEvaluations(
                 trace
                 itemId
                 createdAt
+                item {
+                  id
+                  externalId
+                  identifiers
+                  itemIdentifiers {
+                    items {
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
+                }
               }
             }
           }
@@ -802,6 +833,19 @@ export function observeRecentEvaluations(
                 trace
                 itemId
                 createdAt
+                item {
+                  id
+                  externalId
+                  identifiers
+                  itemIdentifiers {
+                    items {
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
+                }
               }
             }
           }
@@ -873,6 +917,11 @@ export interface LocalScoreResult {
   };
   explanation: string | null;
   itemId: string | null;
+  itemIdentifiers?: Array<{
+    name: string;
+    value: string;
+    url?: string;
+  }> | null;
   createdAt: string;
 }
 
@@ -891,6 +940,11 @@ type RawScoreResult = {
   metadata: any;
   explanation: string | null;
   itemId: string | null;
+  itemIdentifiers?: Array<{
+    name: string;
+    value: string;
+    url?: string;
+  }> | null;
   correct: boolean;
   createdAt: string;
   scoringJob?: {
@@ -904,19 +958,7 @@ type RawScoreResults = {
   items: RawScoreResult[];
 };
 
-// Update the transformEvaluation function's score results handling
 export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvaluation | null {
-  console.debug('transformEvaluation input:', {
-    evaluationId: evaluation?.id,
-    hasTask: !!evaluation?.task,
-    taskType: typeof evaluation?.task,
-    taskData: evaluation?.task,
-    taskKeys: evaluation?.task ? Object.keys(evaluation.task) : [],
-    status: evaluation?.status,
-    type: evaluation?.type,
-    hasScoreResults: !!evaluation?.scoreResults,
-    scoreResultsType: evaluation?.scoreResults ? typeof evaluation.scoreResults : 'undefined'
-  });
 
   if (!evaluation) return null;
 
@@ -936,13 +978,6 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     }
   }
 
-  console.debug('Task data after processing:', {
-    hasTaskData: !!taskData,
-    taskId: taskData?.id,
-    taskStatus: taskData?.status,
-    taskType: taskData?.type,
-    taskStages: taskData?.stages
-  });
 
   // Get scorecard and score data
   const scorecardData = evaluation.scorecard ? 
@@ -968,34 +1003,88 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     }
   }
 
-  console.debug('Score results after initial processing:', {
-    hasRawScoreResults: !!rawScoreResults,
-    rawScoreResultsType: typeof rawScoreResults,
-    isArray: Array.isArray(rawScoreResults),
-    hasItems: rawScoreResults && typeof rawScoreResults === 'object' && 'items' in rawScoreResults
-  });
 
-  // Standardize score results to ensure consistent format
-  const standardizedScoreResults = standardizeScoreResults(rawScoreResults);
+  // Extract score results array
+  let standardizedScoreResults: any[] = [];
+  if (rawScoreResults) {
+    if (Array.isArray(rawScoreResults)) {
+      standardizedScoreResults = rawScoreResults;
+    } else if (typeof rawScoreResults === 'object' && 'items' in rawScoreResults && Array.isArray(rawScoreResults.items)) {
+      standardizedScoreResults = rawScoreResults.items;
+    }
+  }
 
-  console.debug('Score results after standardization:', {
-    count: standardizedScoreResults.length,
-    firstResult: standardizedScoreResults[0],
-    isArray: Array.isArray(standardizedScoreResults)
-  });
 
   // Transform score results into the expected format
-  const transformedScoreResults = standardizedScoreResults.map(result => ({
-    id: result.id,
-    value: result.value,
-    confidence: result.confidence ?? null,
-    metadata: result.metadata ?? null,
-    explanation: result.explanation ?? null,
-    trace: result.trace ?? null,
-    itemId: result.itemId ?? null,
-    createdAt: result.createdAt || new Date().toISOString(),
-    feedbackItem: result.feedbackItem ?? null  // Preserve feedbackItem relationship
-  }));
+  const transformedScoreResults = standardizedScoreResults.map((result: any) => {
+    // Extract item identifier data if available
+    let itemIdentifiers = null;
+    
+    if (result.item?.itemIdentifiers?.items) {
+      itemIdentifiers = result.item.itemIdentifiers.items
+        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0)) // Sort by position
+        .map((identifier: any) => ({
+          name: identifier.name,
+          value: identifier.value,
+          url: identifier.url || undefined
+        }));
+    } else if (result.item?.identifiers) {
+      // Handle legacy JSON identifiers format
+      try {
+        const parsed = JSON.parse(result.item.identifiers);
+        if (Array.isArray(parsed)) {
+          itemIdentifiers = parsed.map((identifier: any) => ({
+            name: identifier.name,
+            value: identifier.value || identifier.id, // Support both value and id fields
+            url: identifier.url || undefined
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to parse legacy identifiers JSON:', error);
+      }
+    }
+
+    // Parse metadata (which might be JSON string, sometimes double-encoded)
+    let parsedMetadata;
+    try {
+      if (typeof result.metadata === 'string') {
+        parsedMetadata = JSON.parse(result.metadata);
+        if (typeof parsedMetadata === 'string') {
+          parsedMetadata = JSON.parse(parsedMetadata);
+        }
+      } else {
+        parsedMetadata = result.metadata || {};
+      }
+    } catch (e) {
+      console.warn('Error parsing metadata:', e);
+      parsedMetadata = {};
+    }
+
+    // Extract results from nested structure if present
+    const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
+    const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
+
+    // Construct properly formatted metadata object
+    const processedMetadata = {
+      human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? null,
+      correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct),
+      human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null,
+      text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? null
+    };
+
+    return {
+      id: result.id,
+      value: result.value,
+      confidence: result.confidence ?? null,
+      metadata: processedMetadata,
+      explanation: result.explanation ?? scoreResult?.explanation ?? null,
+      trace: result.trace ?? scoreResult?.trace ?? null,
+      itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
+      itemIdentifiers,
+      createdAt: result.createdAt || new Date().toISOString(),
+      feedbackItem: result.feedbackItem ?? null  // Preserve feedbackItem relationship
+    };
+  });
 
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: ProcessedEvaluation = {
@@ -1014,15 +1103,6 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     scoreResults: transformedScoreResults
   };
 
-  console.debug('Final transformed evaluation:', {
-    evaluationId: transformedEvaluation.id,
-    hasTask: !!transformedEvaluation.task,
-    taskType: typeof transformedEvaluation.task,
-    taskKeys: transformedEvaluation.task ? Object.keys(transformedEvaluation.task) : [],
-    taskStages: transformedEvaluation.task?.stages,
-    scoreResultsCount: transformedEvaluation.scoreResults?.length,
-    firstScoreResult: transformedEvaluation.scoreResults?.[0]
-  });
 
   return transformedEvaluation;
 }
@@ -1062,6 +1142,11 @@ export type Evaluation = {
       metadata: any;
       trace: any | null;
       itemId: string | null;
+      itemIdentifiers?: Array<{
+        name: string;
+        value: string;
+        url?: string;
+      }> | null;
     }>;
   } | null;
 };
@@ -1091,41 +1176,3 @@ export type TaskStageSubscriptionEvent = {
 export type { BaseEvaluation };
 
 // Add a standardization function for score results
-export function standardizeScoreResults(scoreResults: any): Array<any> {
-  console.log('standardizeScoreResults input:', {
-    type: typeof scoreResults,
-    isNull: scoreResults === null,
-    isUndefined: scoreResults === undefined,
-    isArray: Array.isArray(scoreResults),
-    hasItems: scoreResults && typeof scoreResults === 'object' && 'items' in scoreResults,
-    raw: scoreResults
-  });
-
-  // Case 1: null or undefined
-  if (!scoreResults) {
-    console.log('standardizeScoreResults: input is null or undefined, returning empty array');
-    return [];
-  }
-
-  // Case 2: already an array
-  if (Array.isArray(scoreResults)) {
-    console.log('standardizeScoreResults: input is already an array with length', scoreResults.length);
-    return scoreResults;
-  }
-
-  // Case 3: object with items property that is an array
-  if (typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
-    console.log('standardizeScoreResults: input is an object with items array of length', scoreResults.items.length);
-    return scoreResults.items;
-  }
-
-  // Case 4: object with items property that is not an array
-  if (typeof scoreResults === 'object' && 'items' in scoreResults) {
-    console.log('standardizeScoreResults: input has items property but it is not an array:', scoreResults.items);
-    return [];
-  }
-
-  // Case 5: unknown format
-  console.log('standardizeScoreResults: unknown format, returning empty array');
-  return [];
-}

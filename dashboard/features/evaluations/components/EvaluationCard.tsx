@@ -10,15 +10,17 @@ import {
 } from '@/components/ui/dropdown-menu'
 import EvaluationTask from '@/components/EvaluationTask'
 import { calculateProgress } from '../utils/format'
-import type { EvaluationTaskData, TaskData, TaskStage } from '@/types/tasks/evaluation'
+import type { TaskData, TaskStage } from '@/types/tasks/evaluation'
+import type { EvaluationTaskData } from '@/components/EvaluationTask'
+import type { ProcessedEvaluation } from '@/utils/data-operations'
 import { TaskStatus } from '@/types/shared'
 
 interface EvaluationCardProps {
-  evaluation: Schema['Evaluation']['type']
+  evaluation: ProcessedEvaluation
   selectedEvaluationId: string | undefined | null
   scorecardNames: Record<string, string>
   scoreNames: Record<string, string>
-  onSelect: (evaluation: Schema['Evaluation']['type']) => void
+  onSelect: (evaluation: ProcessedEvaluation) => void
   onDelete: (evaluationId: string) => Promise<boolean>
   evaluationRefsMap?: React.MutableRefObject<Map<string, HTMLDivElement | null>>
 }
@@ -91,6 +93,7 @@ export const EvaluationCard = React.memo(({
     startedAt: evaluation.startedAt || undefined,
     errorMessage: evaluation.errorMessage || undefined,
     errorDetails: evaluation.errorDetails || null,
+    scoreResults: evaluation.scoreResults as any, // Pass the transformed score results with itemIdentifiers
     task: taskData
   }
 
@@ -98,7 +101,7 @@ export const EvaluationCard = React.memo(({
     const fetchTaskData = async () => {
       if (typeof evaluation.task === 'function') {
         try {
-          const result = await evaluation.task()
+          const result = await (evaluation.task as any)()
           if (result.data) {
             const rawTask = result.data as RawTask
             // Transform to match TaskData interface

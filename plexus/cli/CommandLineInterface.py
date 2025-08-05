@@ -79,6 +79,7 @@ cli.add_command(score_chat)
 cli.add_command(lake_group)
 cli.add_command(feedback)
 cli.add_command(scorecards)
+cli.add_command(evaluations)
 cli.add_command(count)
 cli.add_command(dataset)
 

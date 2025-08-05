@@ -1,13 +1,14 @@
 import React from 'react'
 import { Schema } from '@/amplify/data/resource'
 import { EvaluationCard } from './EvaluationCard'
+import type { ProcessedEvaluation } from '@/utils/data-operations'
 
 interface EvaluationGridProps {
-  evaluations: Schema['Evaluation']['type'][]
+  evaluations: ProcessedEvaluation[]
   selectedEvaluationId: string | undefined | null
   scorecardNames: Record<string, string>
   scoreNames: Record<string, string>
-  onSelect: (evaluation: Schema['Evaluation']['type']) => void
+  onSelect: (evaluation: ProcessedEvaluation) => void
   onDelete: (evaluationId: string) => Promise<boolean>
   evaluationRefsMap?: React.MutableRefObject<Map<string, HTMLDivElement | null>>
 }
