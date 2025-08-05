@@ -323,6 +323,7 @@ class Item(BaseModel):
         metadata: Optional[Dict] = None,
         evaluation_id: Optional[str] = None,
         is_evaluation: bool = False,
+        score_id: Optional[str] = None,
         debug: bool = False
     ) -> Tuple[str, bool, Optional[str]]:
         """
@@ -360,9 +361,9 @@ class Item(BaseModel):
                 text='Full transcript text...'
             )
         """
+        logger = logging.getLogger(__name__)
         if debug:
             logging.basicConfig(level=logging.DEBUG)
-            logger = logging.getLogger(__name__)
             logger.debug(f"[ITEM UPSERT] Starting upsert with identifiers: {identifiers}")
         
         if not account_id:
@@ -383,10 +384,12 @@ class Item(BaseModel):
             
             # Step 3: Create or update the Item
             if existing_item:
-                # Update existing Item
+                # Update existing Item and ensure it has all required identifiers
                 item_id = existing_item['id']
                 if debug:
-                    logger.debug(f"[ITEM UPSERT] Updating existing Item: {item_id}")
+                    logger.info(f"IDENTIFIER_DEBUG: [ITEM UPSERT] Updating existing Item: {item_id} (will check for missing identifiers)")
+                else:
+                    logger.info(f"IDENTIFIER_DEBUG: Updating existing Item: {item_id}")
                 
                 update_kwargs = {}
                 if description:
@@ -408,6 +411,24 @@ class Item(BaseModel):
                 item_obj = cls.get_by_id(item_id, client)
                 if item_obj:
                     updated_item = item_obj.update(**update_kwargs)
+                    
+                    # Check for missing identifiers and create them
+                    if identifiers:
+                        missing_identifiers = cls._find_missing_identifiers(client, account_id, item_id, identifiers, debug)
+                        if missing_identifiers:
+                            if debug:
+                                logger.info(f"IDENTIFIER_DEBUG: Found {len(missing_identifiers)} missing identifiers for existing Item {item_id}: {missing_identifiers}")
+                            try:
+                                identifier_ids = cls._create_identifier_records(client, item_id, account_id, missing_identifiers, debug)
+                                if debug:
+                                    logger.info(f"IDENTIFIER_DEBUG: Successfully created {len(identifier_ids)} missing identifier records for existing Item {item_id}")
+                            except Exception as e:
+                                logger.error(f"IDENTIFIER_DEBUG: Failed to create missing identifier records for existing Item {item_id}: {e}")
+                                # Don't fail the upsert if identifier creation fails
+                        else:
+                            if debug:
+                                logger.info(f"IDENTIFIER_DEBUG: No missing identifiers found for existing Item {item_id}")
+                    
                     return updated_item.id, False, None
                 else:
                     return None, False, f"Could not retrieve existing Item {item_id} for update"
@@ -415,7 +436,9 @@ class Item(BaseModel):
             else:
                 # Create new Item
                 if debug:
-                    logger.debug("[ITEM UPSERT] Creating new Item")
+                    logger.info(f"IDENTIFIER_DEBUG: [ITEM UPSERT] Creating new Item (identifiers will be created)")
+                else:
+                    logger.info(f"IDENTIFIER_DEBUG: Creating new Item")
                 
                 # Set evaluation_id for non-evaluation items
                 if not evaluation_id:
@@ -436,6 +459,8 @@ class Item(BaseModel):
                     create_kwargs['text'] = text
                 if metadata:
                     create_kwargs['metadata'] = metadata
+                if score_id:
+                    create_kwargs['scoreId'] = score_id
                 
                 # Add legacy identifiers format for backwards compatibility
                 if identifiers:
@@ -458,7 +483,15 @@ class Item(BaseModel):
                 
                 # Create separate Identifier records for GSI-based lookups
                 if identifiers:
-                    cls._create_identifier_records(client, new_item.id, account_id, identifiers, debug)
+                    logger.info(f"IDENTIFIER_DEBUG: About to create identifier records for item {new_item.id} with identifiers: {identifiers}")
+                    try:
+                        identifier_ids = cls._create_identifier_records(client, new_item.id, account_id, identifiers, debug)
+                        logger.info(f"IDENTIFIER_DEBUG: Successfully created {len(identifier_ids)} identifier records with IDs: {identifier_ids}")
+                    except Exception as e:
+                        logger.error(f"IDENTIFIER_DEBUG: Failed to create identifier records: {e}")
+                        raise
+                else:
+                    logger.info(f"IDENTIFIER_DEBUG: No identifiers provided ({identifiers}), skipping identifier record creation")
                 
                 return new_item.id, True, None
         
@@ -500,73 +533,17 @@ class Item(BaseModel):
         from .identifier import Identifier
         
         # Extract identifier values for the lookup strategy
-        form_id_value = None
-        report_id_value = None
-        session_id_value = None
-        
+        # Look up by any identifier value - system is agnostic to identifier types
         if isinstance(identifiers, dict):
-            # Extract formId
-            if 'formId' in identifiers and identifiers['formId']:
-                form_id_value = str(identifiers['formId'])
-            elif 'form ID' in identifiers and identifiers['form ID']:
-                form_id_value = str(identifiers['form ID'])
-            
-            # Extract reportId  
-            if 'reportId' in identifiers and identifiers['reportId']:
-                report_id_value = str(identifiers['reportId'])
-            elif 'report ID' in identifiers and identifiers['report ID']:
-                report_id_value = str(identifiers['report ID'])
-            
-            # Extract sessionId
-            if 'sessionId' in identifiers and identifiers['sessionId']:
-                session_id_value = str(identifiers['sessionId'])
-            elif 'session ID' in identifiers and identifiers['session ID']:
-                session_id_value = str(identifiers['session ID'])
-        
-        # STEP 1: Try formId first (most specific identifier)
-        if form_id_value:
-            identifier = Identifier.find_by_value(form_id_value, account_id, client)
-            if identifier:
-                
-                # Validate and get the associated Item
-                item_id = identifier.itemId
-                if isinstance(item_id, str) and item_id.strip():
-                    item = cls.get_by_id(item_id, client)
-                    if item:
-                        return {
-                            'id': item.id,
-                            'externalId': item.externalId,
-                            'description': item.description,
-                            'accountId': item.accountId,
-                            'identifiers': item.identifiers,
-                            'text': item.text
-                        }
-                
-        
-        # STEP 2: Try reportId/sessionId lookup (for multi-form reports)
-        # This handles the case where one report has multiple forms that should share the same Item
-        if report_id_value or session_id_value:
-            fallback_values_to_try = []
-            
-            # Prioritize reportId as it's more specific than sessionId
-            if report_id_value:
-                fallback_values_to_try.append(report_id_value)
-            if session_id_value:
-                fallback_values_to_try.append(session_id_value)
-            
-            for identifier_value in fallback_values_to_try:
-                
-                identifier = Identifier.find_by_value(identifier_value, account_id, client)
-                if identifier:
-                    
-                    # Validate and get the associated Item
-                    item_id = identifier.itemId
-                    if isinstance(item_id, str) and item_id.strip():
-                        item = cls.get_by_id(item_id, client)
-                        if item:
-                            # CRITICAL: Validate that this Item should accept the new formId
-                            # Check if the reportId/sessionId actually matches
-                            if cls._validate_item_relationship(item, identifiers, debug):
+            for key, value in identifiers.items():
+                if value is not None and str(value).strip():
+                    identifier = Identifier.find_by_value(str(value), account_id, client)
+                    if identifier:
+                        # Validate and get the associated Item
+                        item_id = identifier.itemId
+                        if isinstance(item_id, str) and item_id.strip():
+                            item = cls.get_by_id(item_id, client)
+                            if item:
                                 return {
                                     'id': item.id,
                                     'externalId': item.externalId,
@@ -575,39 +552,9 @@ class Item(BaseModel):
                                     'identifiers': item.identifiers,
                                     'text': item.text
                                 }
-                            else:
-                                continue
-        
-        # STEP 3: Try other identifiers as final fallback (for backward compatibility)
-        other_values_to_try = []
-        if isinstance(identifiers, dict):
-            for key in ['ccId']:
-                if key in identifiers and identifiers[key]:
-                    other_values_to_try.append(str(identifiers[key]))
-            
-            # Also try direct stored name lookups for backwards compatibility
-            for stored_name in ['call criteria ID']:
-                if stored_name in identifiers and identifiers[stored_name]:
-                    other_values_to_try.append(str(identifiers[stored_name]))
-        
-        if other_values_to_try:
-            for identifier_value in other_values_to_try:
                 
-                identifier = Identifier.find_by_value(identifier_value, account_id, client)
-                if identifier:
-                    
-                    item_id = identifier.itemId
-                    if isinstance(item_id, str) and item_id.strip():
-                        item = cls.get_by_id(item_id, client)
-                        if item:
-                            return {
-                                'id': item.id,
-                                'externalId': item.externalId,
-                                'description': item.description,
-                                'accountId': item.accountId,
-                                'identifiers': item.identifiers,
-                                'text': item.text
-                            }
+        
+        # No existing Item found with any of the provided identifier values
         return None
     
     @classmethod
@@ -744,6 +691,77 @@ class Item(BaseModel):
                 logger.error(f"Error in external_id lookup: {e}")
             return None
     
+    @classmethod  
+    def _find_missing_identifiers(
+        cls,
+        client: _BaseAPIClient,
+        account_id: str,
+        item_id: str,
+        identifiers: Dict[str, Any],
+        debug: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Find identifiers that are missing or need updates for an existing Item.
+        Looks up identifiers by NAME for the Item, then checks if the value needs updating.
+        
+        Args:
+            client: PlexusDashboardClient instance
+            account_id: The account ID  
+            item_id: The Item's ID
+            identifiers: Dict containing all desired identifier values
+            debug: Enable debug logging
+            
+        Returns:
+            Dict containing identifier key-value pairs that need to be created/updated
+        """
+        from .identifier import Identifier
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        identifiers_to_create = {}
+        
+        try:
+            if isinstance(identifiers, dict):
+                # Get all existing identifiers for this item in one call
+                item_identifiers = Identifier.list_by_item_id(item_id, client)
+                existing_by_name = {identifier.name: identifier for identifier in item_identifiers}
+                
+                if debug:
+                    logger.debug(f"IDENTIFIER_DEBUG: Item {item_id} has {len(existing_by_name)} existing identifiers: {list(existing_by_name.keys())}")
+                
+                for key, value in identifiers.items():
+                    if value is not None and str(value).strip():
+                        # Convert key to display name (same logic as _create_identifier_records)
+                        name = key.replace('_', ' ').replace('Id', ' ID').title().strip()
+                        value = str(value).strip()
+                        
+                        existing_identifier = existing_by_name.get(name)
+                        
+                        if not existing_identifier:
+                            # Identifier name doesn't exist for this item - need to create
+                            identifiers_to_create[key] = value
+                            if debug:
+                                logger.debug(f"IDENTIFIER_DEBUG: Missing identifier {name} for item {item_id}, will create with value {value}")
+                        elif existing_identifier.value != value:
+                            # Identifier exists but value is different - need to update
+                            identifiers_to_create[key] = value
+                            if debug:
+                                logger.debug(f"IDENTIFIER_DEBUG: Identifier {name} exists for item {item_id} but value differs (existing: {existing_identifier.value}, new: {value}), will update")
+                        else:
+                            # Identifier exists with correct value - no action needed
+                            if debug:
+                                logger.debug(f"IDENTIFIER_DEBUG: Identifier {name}={value} already exists correctly for item {item_id}")
+        
+        except Exception as e:
+            logger.error(f"Error finding missing identifiers for item {item_id}: {e}")
+            # Be conservative - if we can't check properly, assume all need to be created
+            # but limit to avoid creating duplicates
+            if debug:
+                logger.debug(f"IDENTIFIER_DEBUG: Error during identifier check, will attempt to create all identifiers")
+            return identifiers
+        
+        return identifiers_to_create
+
     @classmethod
     def _create_identifier_records(
         cls,
@@ -772,44 +790,102 @@ class Item(BaseModel):
         # Import here to avoid circular import
         from .identifier import Identifier
         
+        logger = logging.getLogger(__name__)
         created_identifiers = []
         
         try:
             if isinstance(identifiers, dict):
-                # Create identifiers in a consistent order with proper names
-                identifier_mapping = {
-                    'formId': 'Form',
-                    'reportId': 'Report',
-                    'sessionId': 'Session',
-                    'ccId': 'CC ID'
-                }
-                
+                # Create identifier records for all provided key-value pairs
+                # The Item system should be agnostic to identifier types
                 position = 1
-                for key, name in identifier_mapping.items():
-                    if key in identifiers and identifiers[key]:
-                        value = str(identifiers[key])
+                for key, value in identifiers.items():
+                    if value is not None and str(value).strip():
+                        # Use the key as the identifier name, cleaning it up for display
+                        name = key.replace('_', ' ').replace('Id', ' ID').title().strip()
+                        value = str(value).strip()
+                        # Item system is agnostic - no hardcoded URLs for specific identifier types
                         url = None
                         
-                        # Add URL for form IDs
-                        if key == 'formId':
-                            url = f"https://app.callcriteria.com/r/{value}"
-                        
                         # Create the identifier using the Identifier model
-                        identifier = Identifier.create(
-                            client=client,
-                            itemId=item_id,
-                            name=name,
-                            value=value,
-                            accountId=account_id,
-                            url=url,
-                            position=position
-                        )
-                        
-                        created_identifiers.append(f"{item_id}#{name}#{value}")
-                        
                         if debug:
-                            logger = logging.getLogger(__name__)
-                            logger.debug(f"[CREATE IDENTIFIER] Created {name} identifier: {value}")
+                            logger.debug(f"IDENTIFIER_DEBUG: Creating identifier {name}={value} for item {item_id}")
+                        
+                        try:
+                            # First check if this exact identifier already exists using simple value lookup
+                            # This avoids the problematic compound query
+                            existing_identifier = Identifier.find_by_value(
+                                value=value,
+                                account_id=account_id,
+                                client=client
+                            )
+                            
+                            # If found, check if it's the right name and item
+                            if existing_identifier and existing_identifier.name != name:
+                                # Wrong name, so treat as not existing
+                                existing_identifier = None
+                            
+                            if existing_identifier:
+                                if debug:
+                                    logger.debug(f"[CREATE IDENTIFIER] Identifier {name}={value} already exists for item {existing_identifier.itemId}")
+                                
+                                # If it's for the same item, consider it successful
+                                if existing_identifier.itemId == item_id:
+                                    created_identifiers.append(f"{item_id}#{name}#{value}")
+                                    if debug:
+                                        logger.debug(f"[CREATE IDENTIFIER] Reusing existing {name} identifier: {value}")
+                                else:
+                                    if debug:
+                                        logger.warning(f"[CREATE IDENTIFIER] Identifier {name}={value} exists for different item {existing_identifier.itemId}")
+                            else:
+                                # Create new identifier since it doesn't exist
+                                identifier = Identifier.create(
+                                    client=client,
+                                    itemId=item_id,
+                                    name=name,
+                                    value=value,
+                                    accountId=account_id,
+                                    url=url,
+                                    position=position
+                                )
+                                
+                                if debug:
+                                    logger.debug(f"IDENTIFIER_DEBUG: Created identifier with ID: {identifier.id if identifier else 'None'}")
+                                
+                                # Only add to success list if identifier was actually created
+                                if identifier and identifier.id:
+                                    created_identifiers.append(f"{item_id}#{name}#{value}")
+                                    if debug:
+                                        logger.debug(f"[CREATE IDENTIFIER] Successfully created {name} identifier: {value}")
+                                else:
+                                    if debug:
+                                        logger.warning(f"[CREATE IDENTIFIER] Failed to create {name} identifier: {value} - returned None or invalid identifier")
+                                    
+                        except Exception as create_error:
+                            # Check if this is a duplicate key error (common DynamoDB conditional request failure)
+                            error_str = str(create_error).lower()
+                            if "conditional request failed" in error_str or "duplicate" in error_str:
+                                if debug:
+                                    logger.debug(f"[CREATE IDENTIFIER] Identifier {name}={value} likely already exists (conditional request failed)")
+                                # Try to find the existing identifier and verify it's for this item
+                                try:
+                                    existing_identifier = Identifier.find_by_value(
+                                        value=value,
+                                        account_id=account_id,
+                                        client=client
+                                    )
+                                    # Check if it's the right name
+                                    if existing_identifier and existing_identifier.name != name:
+                                        existing_identifier = None
+                                    if existing_identifier and existing_identifier.itemId == item_id:
+                                        created_identifiers.append(f"{item_id}#{name}#{value}")
+                                        if debug:
+                                            logger.debug(f"[CREATE IDENTIFIER] Found existing {name} identifier after conditional request failed: {value}")
+                                except Exception:
+                                    pass
+                            else:
+                                if debug:
+                                    logger.error(f"[CREATE IDENTIFIER] Exception creating {name} identifier: {value} - {str(create_error)}")
+                            # Continue with next identifier instead of failing entirely
                         
                         position += 1
             
