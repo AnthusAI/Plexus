@@ -6,6 +6,7 @@ import { CardButton } from '@/components/CardButton'
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison'
 import { Button } from '@/components/ui/button'
 import { ScoreResultTrace } from './score-result-trace'
+import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -23,6 +24,11 @@ export interface ScoreResultData {
   }
   trace?: any | null
   itemId: string | null
+  itemIdentifiers?: Array<{
+    name: string
+    value: string
+    url?: string
+  }> | null
   feedbackItem?: {
     editCommentValue: string | null
   } | null
@@ -140,9 +146,15 @@ export function ScoreResultComponent({
                   <Scale className="w-4 h-4 mr-1 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">Value</p>
                 </div>
-                <span className="text-sm text-muted-foreground">
-                  ID: {result.itemId}
-                </span>
+                {(result.itemIdentifiers || result.itemId) && (
+                  <IdentifierDisplay 
+                    identifiers={result.itemIdentifiers || undefined}
+                    externalId={result.itemId || undefined}
+                    iconSize="sm"
+                    textSize="xs"
+                    displayMode="full"
+                  />
+                )}
               </div>
               <LabelBadgeComparison
                 predictedLabel={result.value}

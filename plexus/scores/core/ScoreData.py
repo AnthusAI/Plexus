@@ -28,6 +28,71 @@ class ScoreData:
 
         self.dataframe = data_cache.load_dataframe(data=data, fresh=fresh)
 
+        # COMPREHENSIVE DATASET DEBUG LOGGING AFTER LOAD
+        logging.info("=" * 80)
+        logging.info("DATASET DEBUG: ScoreData.load_data - DATAFRAME LOADED")
+        logging.info("=" * 80)
+        
+        # 1. Dataset shape
+        logging.info(f"LOADED_DATASET_SHAPE: {self.dataframe.shape} (rows x columns)")
+        
+        # 2. Column headers and data types
+        logging.info(f"LOADED_DATASET_COLUMNS: {list(self.dataframe.columns)}")
+        logging.info("LOADED_DATASET_COLUMN_TYPES:")
+        for col in self.dataframe.columns:
+            dtype = self.dataframe[col].dtype
+            logging.info(f"  {col}: {dtype}")
+        
+        # 3. First few rows of data
+        if len(self.dataframe) > 0:
+            logging.info("LOADED_DATASET_FIRST_FEW_ROWS:")
+            for i in range(min(3, len(self.dataframe))):
+                logging.info(f"  Row {i}:")
+                for col in self.dataframe.columns:
+                    value = self.dataframe.iloc[i][col]
+                    # Truncate long values for readability
+                    if isinstance(value, str) and len(value) > 100:
+                        display_value = value[:97] + "..."
+                    else:
+                        display_value = value
+                    logging.info(f"    {col}: '{display_value}'")
+        else:
+            logging.info("LOADED_DATASET_FIRST_FEW_ROWS: Dataset is empty")
+        
+        # 4. Data quality checks
+        logging.info("LOADED_DATASET_QUALITY_CHECK:")
+        quality_issues = []
+        
+        if len(self.dataframe) > 0:
+            # Check for null/empty data in key columns
+            key_columns = ['text'] if 'text' in self.dataframe.columns else []
+            for col in key_columns:
+                null_count = self.dataframe[col].isnull().sum()
+                empty_count = (self.dataframe[col] == '').sum() if self.dataframe[col].dtype == 'object' else 0
+                if null_count > 0:
+                    quality_issues.append(f"Column '{col}' has {null_count} null values")
+                if empty_count > 0:
+                    quality_issues.append(f"Column '{col}' has {empty_count} empty string values")
+            
+            # Check for potential score columns
+            score_columns = [col for col in self.dataframe.columns if col not in ['text', 'content_id', 'feedback_item_id', 'metadata', 'IDs']]
+            if score_columns:
+                logging.info(f"LOADED_DATASET_SCORE_COLUMNS: Found {len(score_columns)} potential score columns: {score_columns}")
+                for col in score_columns:
+                    value_counts = self.dataframe[col].value_counts(dropna=False)
+                    # Removed verbose value distribution logging to improve performance
+        
+        if quality_issues:
+            logging.warning("LOADED_DATASET_QUALITY_ISSUES:")
+            for issue in quality_issues:
+                logging.warning(f"  - {issue}")
+        else:
+            logging.info("LOADED_DATASET_QUALITY_ISSUES: None - dataset looks healthy")
+        
+        logging.info("=" * 80)
+        logging.info("END LOADED DATASET DEBUG")
+        logging.info("=" * 80)
+
         logging.debug(f"Loaded dataframe: {self.dataframe.head().to_string()}")
         
         # Apply dependency filters if they exist

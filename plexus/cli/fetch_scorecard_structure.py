@@ -42,6 +42,8 @@ def fetch_scorecard_structure(client, identifier: str) -> Optional[Dict[str, Any
                 key
                 externalId
                 championVersionId
+                type
+                description
               }
             }
           }
@@ -58,7 +60,17 @@ def fetch_scorecard_structure(client, identifier: str) -> Optional[Dict[str, Any
             logging.error(f"Could not fetch scorecard with ID: {scorecard_id}")
             return None
         
-        return result['getScorecard']
+        scorecard_data = result['getScorecard']
+        
+        # DEBUG: Log what the API is actually returning for score IDs vs external IDs
+        logging.info("DEBUG: Checking API response for score ID/externalId consistency...")
+        if scorecard_data and 'sections' in scorecard_data:
+            for section in scorecard_data['sections']['items']:
+                if 'scores' in section and section['scores']['items']:
+                    for score in section['scores']['items'][:2]:  # Just log first 2 scores for brevity
+                        logging.info(f"DEBUG: Score API data - name: {score.get('name')}, id: {score.get('id')}, externalId: {score.get('externalId')}")
+        
+        return scorecard_data
     except Exception as e:
         logging.error(f"Error fetching scorecard structure: {str(e)}")
         return None 

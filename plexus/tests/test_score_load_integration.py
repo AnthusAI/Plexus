@@ -9,7 +9,7 @@ This module tests the standardized Score.load() method integration across:
 Focus areas:
 - API loading with caching
 - YAML-only loading
-- Fallback behavior
+- Direct error propagation (no fallback behavior)
 - Error handling
 - Backward compatibility
 """
@@ -57,59 +57,47 @@ class TestEvaluationGetScoreInstance(unittest.TestCase):
     
     @patch('plexus.scores.Score.Score.load')
     def test_api_load_fails_fallback_to_yaml(self, mock_score_load):
-        """Test fallback to YAML-only mode when API loading fails."""
+        """Test that API errors are propagated directly without fallback."""
         # Arrange
-        mock_score_instance = MagicMock()
-        # First call (API + cache) fails, second call (YAML-only) succeeds
-        mock_score_load.side_effect = [
-            ValueError("API loading failed"),
-            mock_score_instance
-        ]
-        
-        # Act
-        result = self.get_score_instance(self.evaluation, "test_score")
-        
-        # Assert
-        self.assertEqual(mock_score_load.call_count, 2)
-        # First call should be API + cache
-        mock_score_load.assert_any_call(
-            scorecard_identifier="test_scorecard",
-            score_name="test_score",
-            use_cache=True,
-            yaml_only=False
-        )
-        # Second call should be YAML-only
-        mock_score_load.assert_any_call(
-            scorecard_identifier="test_scorecard",
-            score_name="test_score",
-            use_cache=True,
-            yaml_only=True
-        )
-        self.assertEqual(result, mock_score_instance)
-        # Should log the fallback attempt
-        self.evaluation.logging.info.assert_called_with(
-            "API loading failed for 'test_score', trying YAML-only mode"
-        )
-    
-    @patch('plexus.scores.Score.Score.load')
-    def test_both_load_methods_fail(self, mock_score_load):
-        """Test error handling when both API and YAML loading fail."""
-        # Arrange
-        mock_score_load.side_effect = [
-            ValueError("API loading failed"),
-            ValueError("YAML loading failed")
-        ]
+        mock_score_load.side_effect = ValueError("API loading failed")
         
         # Act & Assert
         with self.assertRaises(ValueError) as context:
             self.get_score_instance(self.evaluation, "test_score")
         
-        # Verify error message contains both errors
-        error_message = str(context.exception)
-        self.assertIn("Could not load score 'test_score'", error_message)
-        self.assertIn("test_scorecard", error_message)
-        self.assertIn("API error: API loading failed", error_message)
-        self.assertIn("YAML error: YAML loading failed", error_message)
+        # Verify error is propagated
+        self.assertIn("API loading failed", str(context.exception))
+        
+        # Verify only one call was made (no fallback)
+        self.assertEqual(mock_score_load.call_count, 1)
+        mock_score_load.assert_called_once_with(
+            scorecard_identifier="test_scorecard",
+            score_name="test_score",
+            use_cache=True,
+            yaml_only=False
+        )
+    
+    @patch('plexus.scores.Score.Score.load')
+    def test_both_load_methods_fail(self, mock_score_load):
+        """Test that API errors are propagated directly without fallback attempts."""
+        # Arrange
+        mock_score_load.side_effect = ValueError("API loading failed")
+        
+        # Act & Assert
+        with self.assertRaises(ValueError) as context:
+            self.get_score_instance(self.evaluation, "test_score")
+        
+        # Verify error is propagated directly
+        self.assertEqual(str(context.exception), "API loading failed")
+        
+        # Verify only one call was made (no fallback)
+        self.assertEqual(mock_score_load.call_count, 1)
+        mock_score_load.assert_called_once_with(
+            scorecard_identifier="test_scorecard",
+            score_name="test_score",
+            use_cache=True,
+            yaml_only=False
+        )
     
     @patch('plexus.scores.Score.Score.load')
     def test_non_not_found_error_propagated(self, mock_score_load):
@@ -171,24 +159,10 @@ class TestEvaluationCommandsDataDrivenSamples(unittest.TestCase):
         self.assertIsInstance(result, list)
     
     @patch('plexus.scores.Score.Score.load')
-    @patch('plexus.cli.EvaluationCommands.importlib')
-    @patch('plexus.cli.EvaluationCommands.logging')
-    def test_score_load_fails_fallback_to_manual(self, mock_logging, mock_importlib, mock_score_load):
-        """Test fallback to manual instantiation when Score.load() fails."""
+    def test_score_load_fails_returns_empty_list(self, mock_score_load):
+        """Test that Score.load() failures result in empty list returned."""
         # Arrange
         mock_score_load.side_effect = ValueError("Score.load() failed")
-        
-        # Mock manual instantiation
-        mock_score_class = MagicMock()
-        mock_score_instance = MagicMock()
-        mock_score_instance.dataframe = MagicMock()
-        mock_score_instance.dataframe.__len__ = MagicMock(return_value=10)
-        mock_score_instance.dataframe.to_dict.return_value = [{"content_id": 1, "text": "test"}]
-        mock_score_class.return_value = mock_score_instance
-        
-        mock_module = MagicMock()
-        mock_module.TestScore = mock_score_class
-        mock_importlib.import_module.return_value = mock_module
         
         # Import the function to test
         from plexus.cli.EvaluationCommands import get_data_driven_samples
@@ -199,11 +173,9 @@ class TestEvaluationCommandsDataDrivenSamples(unittest.TestCase):
             self.score_config, fresh=False, content_ids_to_sample_set=self.content_ids_set
         )
         
-        # Assert
+        # Assert - function catches exception and returns empty list
         mock_score_load.assert_called_once()
-        mock_logging.warning.assert_called_with("Score.load() failed: Score.load() failed")
-        mock_importlib.import_module.assert_called_with("plexus.scores.TestScore")
-        mock_logging.info.assert_any_call("Fallback to manual instantiation successful for 'test_score'")
+        self.assertEqual(result, [])
         self.assertIsInstance(result, list)
 
 
@@ -296,39 +268,31 @@ class TestScoreLoadOperationalModes(unittest.TestCase):
         )
     
     @patch('plexus.scores.Score.Score.load')
-    def test_yaml_only_mode_fallback(self, mock_score_load):
-        """Test YAML-only mode as fallback."""
+    def test_yaml_only_mode_no_fallback(self, mock_score_load):
+        """Test that API errors are propagated directly without YAML-only fallback."""
         from plexus.Evaluation import AccuracyEvaluation
         evaluation = MagicMock()
         evaluation.scorecard_name = "test_scorecard"
         evaluation.logging = MagicMock()
         
-        mock_score_instance = MagicMock()
-        # First call fails, second succeeds
-        mock_score_load.side_effect = [
-            ValueError("API not found"),
-            mock_score_instance
-        ]
+        # First call fails - no fallback should occur
+        mock_score_load.side_effect = ValueError("API not found")
         
-        # Act
-        result = AccuracyEvaluation.get_score_instance(evaluation, "test_score")
+        # Act & Assert
+        with self.assertRaises(ValueError) as context:
+            AccuracyEvaluation.get_score_instance(evaluation, "test_score")
         
-        # Assert - should try API mode first, then YAML-only
-        expected_calls = [
-            unittest.mock.call(
-                scorecard_identifier="test_scorecard",
-                score_name="test_score", 
-                use_cache=True,
-                yaml_only=False
-            ),
-            unittest.mock.call(
-                scorecard_identifier="test_scorecard",
-                score_name="test_score",
-                use_cache=True, 
-                yaml_only=True
-            )
-        ]
-        mock_score_load.assert_has_calls(expected_calls)
+        # Should propagate the error directly
+        self.assertEqual(str(context.exception), "API not found")
+        
+        # Should only make one call (no fallback)
+        self.assertEqual(mock_score_load.call_count, 1)
+        mock_score_load.assert_called_once_with(
+            scorecard_identifier="test_scorecard",
+            score_name="test_score", 
+            use_cache=True,
+            yaml_only=False
+        )
 
 
 class TestBackwardCompatibility(unittest.TestCase):
@@ -368,39 +332,25 @@ class TestBackwardCompatibility(unittest.TestCase):
         self.assertIn('use_cache', params)
         self.assertIn('yaml_only', params)
     
-    @patch('plexus.cli.EvaluationCommands.importlib')
     @patch('plexus.scores.Score.Score.load')
-    def test_get_data_driven_samples_fallback_preserved(self, mock_score_load, mock_importlib):
-        """Test that get_data_driven_samples maintains fallback to manual instantiation."""
+    def test_get_data_driven_samples_error_handling(self, mock_score_load):
+        """Test that get_data_driven_samples returns empty list on Score.load() errors."""
         # Arrange - Score.load() fails
         mock_score_load.side_effect = ValueError("Score.load() failed")
-        
-        # Setup manual instantiation mocks
-        mock_score_class = MagicMock()
-        mock_score_instance = MagicMock()
-        mock_score_instance.dataframe = MagicMock()
-        mock_score_instance.dataframe.__len__ = MagicMock(return_value=5)
-        mock_score_instance.dataframe.to_dict.return_value = []
-        mock_score_class.return_value = mock_score_instance
-        
-        mock_module = MagicMock()
-        mock_module.TestScore = mock_score_class
-        mock_importlib.import_module.return_value = mock_module
         
         from plexus.cli.EvaluationCommands import get_data_driven_samples
         
         score_config = {"class": "TestScore", "data": {}}
         
-        # Act - should not raise exception, should fall back
+        # Act - should not raise exception, should return empty list
         result = get_data_driven_samples(
             MagicMock(), "test_scorecard", "test_score", 
             score_config, False, set()
         )
         
-        # Assert - should have attempted Score.load() and fallen back to manual
+        # Assert - should have attempted Score.load() and returned empty list on error
         mock_score_load.assert_called_once()
-        mock_importlib.import_module.assert_called_with("plexus.scores.TestScore") 
-        mock_score_class.assert_called_once()
+        self.assertEqual(result, [])
         self.assertIsInstance(result, list)
 
 

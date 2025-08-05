@@ -138,33 +138,45 @@ class Scorecard:
                 try:
                     yaml_parser = YAML(typ='safe')
                     score_config = yaml_parser.load(score_config)
-                    # Important: Ensure we don't lose IDs during parsing
-                    if not score_config.get('id') and score_config.get('name'):
-                        # Try to find the original ID by name from the API data
-                        if hasattr(self, 'properties') and self.properties:
-                            for section in self.properties.get('sections', {}).get('items', []):
-                                for score_item in section.get('scores', {}).get('items', []):
-                                    if score_item.get('name') == score_config.get('name'):
-                                        score_config['id'] = score_item.get('id')
+                    # Always use database UUID from API data if available
+                    if score_config.get('name') and hasattr(self, 'properties') and self.properties:
+                        for section in self.properties.get('sections', {}).get('items', []):
+                            for score_item in section.get('scores', {}).get('items', []):
+                                if score_item.get('name') == score_config.get('name'):
+                                    # Always use database UUID from API, not external ID from YAML
+                                    api_id = score_item.get('id')
+                                    original_id = score_config.get('id')
+                                    if api_id and original_id != api_id:
+                                        logging.info(f"Replacing ID {original_id} with database UUID {api_id} for score {score_config.get('name')}")
+                                        score_config['id'] = api_id
+                                        # Preserve the original external ID for matching purposes
+                                        score_config['originalExternalId'] = str(original_id)
+                                    if not score_config.get('version'):
                                         score_config['version'] = score_item.get('championVersionId')
-                                        logging.info(f"Restored ID {score_item.get('id')} for score {score_config.get('name')}")
-                                        break
+                                        logging.info(f"Setting version {score_item.get('championVersionId')} for score {score_config.get('name')}")
+                                    break
                     parsed_configs.append(score_config)
                 except Exception as e:
                     logging.warning(f"Invalid score configuration format: {type(score_config)}")
                     continue
             elif isinstance(score_config, dict):
-                # For dict configs, ensure IDs are preserved
-                if not score_config.get('id') and score_config.get('name'):
-                    # Try to find the original ID by name from the API data
-                    if hasattr(self, 'properties') and self.properties:
-                        for section in self.properties.get('sections', {}).get('items', []):
-                            for score_item in section.get('scores', {}).get('items', []):
-                                if score_item.get('name') == score_config.get('name'):
-                                    score_config['id'] = score_item.get('id')
+                # For dict configs, always use the database UUID from API data if available
+                if score_config.get('name') and hasattr(self, 'properties') and self.properties:
+                    for section in self.properties.get('sections', {}).get('items', []):
+                        for score_item in section.get('scores', {}).get('items', []):
+                            if score_item.get('name') == score_config.get('name'):
+                                # Always use database UUID from API, not external ID from YAML
+                                api_id = score_item.get('id')
+                                original_id = score_config.get('id')
+                                if api_id and original_id != api_id:
+                                    logging.info(f"Replacing ID {original_id} with database UUID {api_id} for score {score_config.get('name')}")
+                                    score_config['id'] = api_id
+                                    # Preserve the original external ID for matching purposes
+                                    score_config['originalExternalId'] = str(original_id)
+                                if not score_config.get('version'):
                                     score_config['version'] = score_item.get('championVersionId')
-                                    logging.info(f"Restored ID {score_item.get('id')} for score {score_config.get('name')}")
-                                    break
+                                    logging.info(f"Setting version {score_item.get('championVersionId')} for score {score_config.get('name')}")
+                                break
                 parsed_configs.append(score_config)
             else:
                 logging.warning(f"Invalid score configuration format: {type(score_config)}")
@@ -905,9 +917,14 @@ class Scorecard:
                     # Look for the corresponding score in API data
                     for api_score in all_api_scores:
                         if api_score.get('name') == config.get('name'):
-                            if not config.get('id'):
-                                config['id'] = api_score.get('id')
-                                logging.info(f"Setting ID {api_score.get('id')} for config {config.get('name')}")
+                            # Always use database UUID from API, not external ID from config
+                            api_id = api_score.get('id')
+                            original_id = config.get('id')
+                            if api_id and original_id != api_id:
+                                logging.info(f"Replacing ID {original_id} with database UUID {api_id} for config {config.get('name')}")
+                                config['id'] = api_id
+                                # Preserve the original external ID for matching purposes
+                                config['originalExternalId'] = str(original_id)
                             if not config.get('version'):
                                 # Reorder fields in the exact order: name, key, id, version, parent
                                 ordered_config = {}

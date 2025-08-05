@@ -59,11 +59,8 @@ class TestScoreLoadErrorScenarios(unittest.TestCase):
     @patch('plexus.scores.Score.Score.load')
     def test_malformed_config_error(self, mock_score_load):
         """Test handling of malformed configuration errors."""
-        # Arrange - first call with error that triggers fallback, second also fails
-        mock_score_load.side_effect = [
-            ValueError("API loading failed - Invalid YAML structure"),
-            ValueError("Backup also invalid")
-        ]
+        # Arrange - API error should be propagated directly, no fallback
+        mock_score_load.side_effect = ValueError("API loading failed - Invalid YAML structure")
         
         # Act & Assert
         with self.assertRaises(ValueError) as context:
@@ -71,7 +68,6 @@ class TestScoreLoadErrorScenarios(unittest.TestCase):
         
         error_msg = str(context.exception)
         self.assertIn("Invalid YAML structure", error_msg)
-        self.assertIn("Backup also invalid", error_msg)
     
     @patch('plexus.scores.Score.Score.load')
     def test_empty_scorecard_name(self, mock_score_load):
@@ -403,53 +399,47 @@ class TestLoggingAndDebugging(unittest.TestCase):
     
     @patch('plexus.scores.Score.Score.load')
     def test_logging_in_fallback_scenario(self, mock_score_load):
-        """Test that appropriate logging occurs during fallback scenarios."""
+        """Test that API errors are propagated directly without any fallback."""
         # Arrange
         from plexus.Evaluation import AccuracyEvaluation
         evaluation = MagicMock()
         evaluation.scorecard_name = "test_scorecard"
         evaluation.logging = MagicMock()
         
-        mock_score_instance = MagicMock()
-        mock_score_load.side_effect = [
-            ValueError("API loading failed"),
-            mock_score_instance
-        ]
+        mock_score_load.side_effect = ValueError("API loading failed")
         
-        # Act
-        result = AccuracyEvaluation.get_score_instance(evaluation, "test_score")
+        # Act & Assert
+        with self.assertRaises(ValueError) as context:
+            AccuracyEvaluation.get_score_instance(evaluation, "test_score")
         
-        # Assert logging calls
-        evaluation.logging.info.assert_called_with(
-            "API loading failed for 'test_score', trying YAML-only mode"
-        )
-        self.assertEqual(result, mock_score_instance)
+        # Verify the original error is propagated
+        self.assertIn("API loading failed", str(context.exception))
+        
+        # Verify no fallback logging occurred
+        evaluation.logging.info.assert_not_called()
+        evaluation.logging.warning.assert_not_called()
     
     @patch('plexus.scores.Score.Score.load')
     def test_logging_in_double_failure_scenario(self, mock_score_load):
-        """Test logging when both API and YAML loading fail."""
+        """Test that API errors are propagated directly without fallback."""
         # Arrange
         from plexus.Evaluation import AccuracyEvaluation
         evaluation = MagicMock()
         evaluation.scorecard_name = "test_scorecard"
         evaluation.logging = MagicMock()
         
-        mock_score_load.side_effect = [
-            ValueError("API loading failed"),
-            ValueError("YAML failed")
-        ]
+        mock_score_load.side_effect = ValueError("API loading failed")
         
         # Act & Assert
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as context:
             AccuracyEvaluation.get_score_instance(evaluation, "test_score")
         
-        # Verify logging occurred
-        evaluation.logging.info.assert_called_with(
-            "API loading failed for 'test_score', trying YAML-only mode"
-        )
-        evaluation.logging.warning.assert_called_with(
-            "YAML-only loading also failed: YAML failed"
-        )
+        # Verify the original error is propagated
+        self.assertIn("API loading failed", str(context.exception))
+        
+        # Verify no fallback logging occurred
+        evaluation.logging.info.assert_not_called()
+        evaluation.logging.warning.assert_not_called()
 
 
 if __name__ == '__main__':

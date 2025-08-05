@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
-import { transformAmplifyTask, processTask, standardizeScoreResults } from '@/utils/data-operations'
+import { transformAmplifyTask, processTask } from '@/utils/data-operations'
 import type { EvaluationTaskProps } from '@/types/tasks/evaluation'
 import type { TaskStatus } from '@/types/shared'
 import EvaluationTask from '@/components/EvaluationTask'
@@ -94,32 +94,10 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   onShare,
   onDelete
 }: TaskDisplayProps) {
-  // Add debug logging for onClose prop
-  console.log('TaskDisplay component received props:', {
-    variant,
-    taskId: reportData?.id || evaluationData?.id,
-    hasOnClose: !!onClose,
-    hasOnToggleFullWidth: !!onToggleFullWidth
-  });
 
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay)
 
-  // Add detailed logging for evaluationData or reportData
-  console.log('TaskDisplay received data:', {
-    id: reportData?.id || evaluationData?.id,
-    type: reportData ? 'Report' : evaluationData?.type,
-    hasTask: !!task,
-    taskId: task?.id,
-    taskType: typeof task,
-    taskKeys: task ? Object.keys(task) : [],
-    taskStages: task?.stages,
-    taskStagesType: task?.stages ? typeof task.stages : 'undefined',
-    taskStagesData: (task?.stages as any)?.data,
-    taskStagesItems: (task?.stages as any)?.items,
-    hasScoreResults: !!evaluationData?.scoreResults,
-    variant
-  });
 
   useEffect(() => {
     async function processTaskData() {
@@ -132,22 +110,8 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         return;
       }
       try {
-        console.log('TaskDisplay: Processing task data:', {
-          taskId: task.id,
-          taskStages: task.stages,
-          taskStagesType: typeof task.stages
-        });
         const convertedTask = await transformAmplifyTask(task);
-        console.log('TaskDisplay: Converted task:', {
-          taskId: convertedTask.id,
-          stages: convertedTask.stages
-        });
         const result = await processTask(convertedTask);
-        console.log('TaskDisplay: Processed task result:', {
-          taskId: result.id,
-          stages: result.stages,
-          stagesCount: result.stages?.length
-        });
         setProcessedTask(result);
       } catch (error) {
         console.error('Error processing task:', error);
@@ -157,98 +121,15 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     processTaskData();
   }, [task]);
 
-  // Memoize score results transformation
   const transformedScoreResults = useMemo(() => {
-    if (!evaluationData) return [];
+    if (!evaluationData?.scoreResults) return [];
 
-    console.log('TaskDisplay transforming score results:', {
-      hasResults: !!evaluationData.scoreResults,
-      scoreResultsType: evaluationData.scoreResults ? typeof evaluationData.scoreResults : 'undefined',
-      hasItems: evaluationData.scoreResults && 'items' in evaluationData.scoreResults
-    });
-
-    // Standardize score results to ensure consistent format
-    const standardizedResults = standardizeScoreResults(evaluationData.scoreResults);
-    
-    console.log('TaskDisplay standardized score results:', {
-      count: standardizedResults.length,
-      firstResult: standardizedResults[0],
-      isArray: Array.isArray(standardizedResults)
-    });
-
-    if (!standardizedResults.length) {
-      console.log('No score results to transform');
-      return [];
-    }
-
-    const transformed = standardizedResults.map((result: any) => {
-      // Parse metadata if it's a string
-      let parsedMetadata;
-      try {
-        if (typeof result.metadata === 'string') {
-          parsedMetadata = JSON.parse(result.metadata);
-          if (typeof parsedMetadata === 'string') {
-            parsedMetadata = JSON.parse(parsedMetadata);
-          }
-        } else {
-          parsedMetadata = result.metadata || {};
-        }
-
-        console.log('Score result metadata in TaskDisplay:', {
-          resultId: result.id,
-          rawMetadata: result.metadata,
-          parsedMetadata,
-          metadataType: typeof result.metadata,
-          hasResults: !!parsedMetadata?.results,
-          resultsKeys: parsedMetadata?.results ? Object.keys(parsedMetadata.results) : [],
-          humanLabel: parsedMetadata?.human_label,
-          nestedHumanLabel: parsedMetadata?.results?.[Object.keys(parsedMetadata.results)[0]]?.metadata?.human_label
-        });
-
-      } catch (e) {
-        console.error('Error parsing metadata:', e);
-        parsedMetadata = {};
-      }
-
-      // Extract results from nested structure if present
-      const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
-      const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
-
-      const transformedResult = {
-        id: result.id,
-        value: result.value,
-        confidence: result.confidence ?? null,
-        explanation: result.explanation ?? scoreResult?.explanation ?? null,
-        metadata: {
-          human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? result.metadata?.human_label ?? null,
-          correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct ?? result.metadata?.correct),
-          human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? result.metadata?.human_explanation ?? null,
-          text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? result.metadata?.text ?? null
-        },
-        trace: result.trace ?? scoreResult?.trace ?? null,
-        itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
-        createdAt: result.createdAt,
-        feedbackItem: result.feedbackItem ?? null  // Preserve feedbackItem relationship
-      };
-
-      console.log('Transformed score result in TaskDisplay:', {
-        id: transformedResult.id,
-        value: transformedResult.value,
-        humanLabel: transformedResult.metadata.human_label,
-        correct: transformedResult.metadata.correct,
-        explanation: transformedResult.explanation
-      });
-
-      return transformedResult;
-    });
-
-    console.log('TaskDisplay final transformed score results:', {
-      inputCount: standardizedResults.length,
-      transformedCount: transformed.length,
-      firstTransformed: transformed[0]
-    });
-
-    return transformed;
+    // All score results come pre-transformed with itemIdentifiers included
+    return Array.isArray(evaluationData.scoreResults) ? 
+      evaluationData.scoreResults : 
+      (evaluationData.scoreResults && typeof evaluationData.scoreResults === 'object' && 'items' in evaluationData.scoreResults ? 
+        evaluationData.scoreResults.items : 
+        []);
   }, [evaluationData]);
 
   // Define base properties, prefer reportData if available
@@ -391,11 +272,6 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
               workerNodeId: task?.workerNodeId,
               stages: (() => {
                 // Try to extract stages from the original task data
-                console.log('TaskDisplay: Extracting stages from task in fallback case:', {
-                  taskId: task?.id,
-                  taskStages: task?.stages,
-                  taskStagesType: typeof task?.stages
-                });
                 
                 // Handle different possible structures for stages
                 let stageItems: any[] = [];
@@ -404,7 +280,6 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
                     stageItems = task.stages;
                   } else if (typeof task.stages === 'function') {
                     // This is a lazy loader, we can't process it synchronously
-                    console.log('TaskDisplay: Task stages is a lazy loader, cannot process synchronously');
                   } else {
                     // Try to access data or items properties safely
                     const stagesData = (task.stages as any);
@@ -416,10 +291,6 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
                   }
                 }
                 
-                console.log('TaskDisplay: Extracted stage items:', {
-                  count: stageItems.length,
-                  items: stageItems
-                });
                 
                 return {
                   items: stageItems.map((stage: any) => ({
