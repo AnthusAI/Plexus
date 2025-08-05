@@ -221,11 +221,11 @@ class TestDataCacheUpsertFunctionality:
 
     def test_upsert_with_alternative_id_fields(self):
         """Test extraction of external_id from alternative fields."""
-        # Test with externalId field
-        item_data_external_id = {'externalId': 'ext-123', 'description': 'External ID test'}
-        
         with patch('plexus.dashboard.api.models.item.Item.upsert_by_identifiers') as mock_upsert:
             mock_upsert.return_value = (self.item_uuid, True, None)
+            
+            # Test with externalId field
+            item_data_external_id = {'externalId': 'ext-123', 'description': 'External ID test'}
             
             self.data_cache.upsert_item_for_dataset_row(
                 dashboard_client=self.mock_client,
@@ -237,21 +237,25 @@ class TestDataCacheUpsertFunctionality:
             call_args = mock_upsert.call_args[1]
             assert call_args['external_id'] == 'ext-123'
 
-        # Test with object having externalId attribute
-        mock_upsert.reset_mock()
-        item_object = Mock()
-        item_object.externalId = 'obj-ext-456'
-        del item_object.id  # Make sure id attribute doesn't exist
-        
-        self.data_cache.upsert_item_for_dataset_row(
-            dashboard_client=self.mock_client,
-            account_id=self.account_id,
-            item_data=item_object,
-            identifiers_dict=self.identifiers_dict
-        )
-        
-        call_args = mock_upsert.call_args[1]
-        assert call_args['external_id'] == 'obj-ext-456'
+            # Test with object having externalId attribute
+            mock_upsert.reset_mock()
+            
+            # Create a simple object with only externalId attribute
+            class MockItemWithExternalId:
+                def __init__(self, external_id):
+                    self.externalId = external_id
+            
+            item_object = MockItemWithExternalId('obj-ext-456')
+            
+            self.data_cache.upsert_item_for_dataset_row(
+                dashboard_client=self.mock_client,
+                account_id=self.account_id,
+                item_data=item_object,
+                identifiers_dict=self.identifiers_dict
+            )
+            
+            call_args = mock_upsert.call_args[1]
+            assert call_args['external_id'] == 'obj-ext-456'
 
     def test_upsert_error_handling(self):
         """Test error handling when Item.upsert_by_identifiers fails."""
