@@ -54,7 +54,7 @@ import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
 import { AmplifyTask, ProcessedTask, Evaluation, TaskStageType, TaskSubscriptionEvent } from '@/utils/data-operations'
-import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, standardizeScoreResults } from '@/utils/data-operations'
+import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, transformEvaluation } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
@@ -271,7 +271,7 @@ interface ScoreResult {
   createdAt?: string;
 }
 
-export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
+export function transformEvaluationLocal(evaluation: Schema['Evaluation']['type']) {
   console.debug('transformEvaluation input:', {
     evaluationId: evaluation?.id,
     hasTask: !!evaluation?.task,
@@ -332,28 +332,7 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     };
   };
 
-  // Transform score results to include trace field
-  const transformScoreResults = (scoreResults: any) => {
-    if (!scoreResults) return null;
-    
-    // Handle items array
-    if (typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
-      return {
-        items: scoreResults.items.map((item: any) => ({
-          id: item.id,
-          value: item.value,
-          confidence: item.confidence,
-          metadata: item.metadata,
-          explanation: item.explanation,
-          trace: item.trace,
-          itemId: item.itemId,
-          createdAt: item.createdAt
-        }))
-      };
-    }
-    
-    return scoreResults;
-  };
+  // Note: Score results transformation is now handled by the golden path transformEvaluation function
 
   // Get stages from task data
   const rawStages = taskData?.stages;
@@ -407,7 +386,7 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
       ...taskData,
       stages: transformedStages
     } as AmplifyTask) : null,
-    scoreResults: transformScoreResults(scoreResults)
+    scoreResults: scoreResults
   };
 
   console.debug('Final transformed evaluation:', {
