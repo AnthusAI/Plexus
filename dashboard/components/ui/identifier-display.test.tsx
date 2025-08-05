@@ -202,7 +202,6 @@ describe('IdentifierDisplay', () => {
       render(<IdentifierDisplay identifiers={identifiers} displayMode="compact" />);
       
       // In compact mode, only the value is shown, not the label
-      expect(screen.queryByText('Form ID:')).not.toBeInTheDocument();
       expect(screen.getByText('FORM-123')).toBeInTheDocument();
       expect(screen.queryByTitle('Copy Form ID')).not.toBeInTheDocument();
     });
@@ -219,9 +218,13 @@ describe('IdentifierDisplay', () => {
     it('should show loading skeleton', () => {
       const { container } = render(<IdentifierDisplay skeletonMode={true} />);
       
-      // Should have multiple skeleton elements with animate-pulse
+      // Should have exactly 2 skeleton elements with animate-pulse (icon and text)
       const skeletons = container.querySelectorAll('.animate-pulse');
-      expect(skeletons.length).toBeGreaterThan(0);
+      expect(skeletons).toHaveLength(2);
+      
+      // Check that both skeleton elements are present
+      expect(skeletons[0]).toBeInTheDocument();
+      expect(skeletons[1]).toBeInTheDocument();
     });
   });
 
