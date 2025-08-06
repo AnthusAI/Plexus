@@ -6,18 +6,20 @@ from plexus.CustomLogging import logging
 from plexus.dashboard.api.models.score_result import ScoreResult
 from plexus.scores.Score import Score
 from plexus.LangChainUser import LangChainUser
+from plexus.scores.nodes.LuaRuntime import get_lua_runtime, is_lua_available
 import pydantic
 import sys
 from io import StringIO
 
 class LogicalClassifier(BaseNode):
     """
-    A node that performs programmatic classification using a provided function.
+    A node that performs programmatic classification using a provided Python or Lua function.
     Returns None to allow flow to continue to subsequent nodes if no match is found.
     """
     
     class Parameters(BaseNode.Parameters):
-        code: str = Field(description="Python code string defining the score function")
+        code: str = Field(description="Code string defining the score function")
+        language: str = Field(default="lua", description="Programming language: 'lua' or 'python'")
         # Make conditions optional with a default of None
         conditions: Optional[list] = Field(default=None, description="List of conditions for routing results")
 
@@ -27,6 +29,11 @@ class LogicalClassifier(BaseNode):
         criteria_met: Optional[Any] = None  # Allow any type for criteria_met
 
     def __init__(self, **parameters):
+        # Store node_name if provided before calling parent constructors
+        node_name = parameters.get('node_name')
+        if node_name:
+            parameters['name'] = node_name
+        
         LangChainUser.__init__(self, **parameters)
         # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
         combined_parameters_model = pydantic.create_model(
@@ -34,6 +41,24 @@ class LogicalClassifier(BaseNode):
             __base__=(LogicalClassifier.Parameters, LangChainUser.Parameters))
         self.parameters = combined_parameters_model(**parameters)
         
+        # Validate language parameter
+        if self.parameters.language not in ['python', 'lua']:
+            raise ValueError(f"Unsupported language: {self.parameters.language}. Must be 'lua' or 'python'")
+        
+        # Check Lua availability for default case
+        if self.parameters.language == 'lua' and not is_lua_available():
+            raise ValueError("Lua runtime not available. Install with: pip install lupa>=2.0\n" +
+                           "Lua is the default language for security reasons. " +
+                           "To use Python instead, specify language='python' explicitly.")
+        
+        # Prepare the execution function based on language
+        if self.parameters.language == 'python':
+            self._prepare_python_function()
+        else:
+            self._prepare_lua_function()
+    
+    def _prepare_python_function(self):
+        """Prepare Python function for execution."""
         # Create a custom print function that logs instead of printing to stdout
         def log_print(*args, **kwargs):
             """Custom print function that logs messages instead of printing to stdout."""
@@ -74,7 +99,13 @@ class LogicalClassifier(BaseNode):
         exec(self.parameters.code, namespace)
         self.score_function = namespace.get('score')
         if not self.score_function:
-            raise ValueError("Code must define a 'score' function")
+            raise ValueError("Python code must define a 'score' function")
+    
+    def _prepare_lua_function(self):
+        """Prepare Lua function for execution."""
+        self.lua_runtime = get_lua_runtime()
+        # Validation will happen during execution
+        self.score_function = None  # Will be resolved at runtime
 
     def get_score_node(self):
         """Node that executes the programmatic scoring function."""
@@ -109,7 +140,19 @@ class LogicalClassifier(BaseNode):
             # logging.info(f"LogicalClassifier score_input: {score_input}")
 
             # Execute the score function with both parameters and input
-            result = score_function(parameters, score_input)
+            try:
+                if self.parameters.language == 'python':
+                    result = score_function(parameters, score_input)
+                else:  # lua
+                    result = self.lua_runtime.execute_score_function(
+                        self.parameters.code,
+                        parameters,
+                        score_input
+                    )
+            except Exception as e:
+                logging.error(f"Error executing {self.parameters.language} score function in {self.node_name}: {str(e)}")
+                # Return original state to allow flow to continue
+                return state
             
             if result is None:
                 # Continue to next node
