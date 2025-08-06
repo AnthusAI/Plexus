@@ -44,8 +44,6 @@ import { getClient } from '@/utils/amplify-client'
 import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
 import { TaskDispatchButton, evaluationsConfig } from '@/components/task-dispatch'
 import { EvaluationCard, EvaluationGrid } from '@/features/evaluations'
-import { useEvaluationSubscriptions, useTaskUpdates } from '@/features/evaluations'
-import { formatStatus, getBadgeVariant, calculateProgress } from '@/features/evaluations'
 import EvaluationTask from '@/components/EvaluationTask'
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { CardButton } from "@/components/CardButton"
@@ -53,7 +51,7 @@ import { GraphQLResult as APIGraphQLResult } from '@aws-amplify/api-graphql'
 import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
-import { AmplifyTask, ProcessedTask, Evaluation, TaskStageType, TaskSubscriptionEvent } from '@/utils/data-operations'
+import { AmplifyTask, ProcessedTask, Evaluation, TaskStageType } from '@/utils/data-operations'
 import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, transformEvaluation } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
@@ -541,7 +539,6 @@ export default function EvaluationsDashboard({
   useEffect(() => {
     const fetchAccountId = async () => {
       try {
-        console.log('Fetching account ID...')
         const accountResponse = await getClient().graphql<ListAccountResponse>({
           query: LIST_ACCOUNTS,
           variables: {
@@ -551,7 +548,6 @@ export default function EvaluationsDashboard({
 
         if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
           const id = accountResponse.data.listAccounts.items[0].id
-          console.log('Found account ID:', id)
           setAccountId(id)
         } else {
           console.warn('No account found with key:', ACCOUNT_KEY)
@@ -964,136 +960,3 @@ export default function EvaluationsDashboard({
   )
 }
 
-// Add TaskStageSubscriptionEvent type
-type TaskStageSubscriptionEvent = {
-  type: 'create' | 'update';
-  data: {
-    stageId?: string;
-    taskId?: string;
-    name?: string;
-    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-    processedItems?: number;
-    totalItems?: number;
-    startedAt?: string;
-    completedAt?: string;
-    estimatedCompletionAt?: string;
-    statusMessage?: string;
-  } | null;
-};
-
-// Update the merge functions to properly handle the LazyLoader type
-function mergeTaskUpdate(evaluations: Evaluation[], taskData: TaskSubscriptionEvent['data']): Evaluation[] {
-  if (!evaluations || !taskData) {
-    console.warn('mergeTaskUpdate called with invalid data:', { hasEvaluations: !!evaluations, hasTaskData: !!taskData });
-    return evaluations || [];
-  }
-
-  return evaluations.map(evaluation => {
-    // Skip if evaluation is null or doesn't have a task
-    if (!evaluation?.task) {
-      return evaluation;
-    }
-
-    const task = getValueFromLazyLoader(evaluation.task);
-    if (!task?.id || !taskData?.id || task.id !== taskData.id) {
-      return evaluation;
-    }
-
-    // Create updated task with new data, preserving all existing fields
-    const updatedTask = {
-      ...task,
-      status: taskData.status,
-      startedAt: taskData.startedAt,
-      completedAt: taskData.completedAt,
-      stages: taskData.stages
-    };
-
-    // Return updated evaluation while preserving all other fields
-    return {
-      ...evaluation,
-      task: updatedTask as AmplifyTask,
-      // Explicitly preserve score results
-      scoreResults: evaluation.scoreResults
-    };
-  });
-}
-
-function mergeTaskStageUpdate(
-  evaluations: Evaluation[], 
-  stageData: TaskStageType,
-  taskId: string
-): Evaluation[] {
-  if (!evaluations || !stageData || !taskId) {
-    console.warn('mergeTaskStageUpdate called with invalid data:', { 
-      hasEvaluations: !!evaluations, 
-      hasStageData: !!stageData,
-      taskId 
-    });
-    return evaluations || [];
-  }
-
-  return evaluations.map(evaluation => {
-    // Skip if evaluation is null or doesn't have a task
-    if (!evaluation?.task) {
-      return evaluation;
-    }
-
-    const task = getValueFromLazyLoader(evaluation.task);
-    // Check if this is the task we're looking for
-    if (!task || task.id !== taskId) {
-      return evaluation;
-    }
-
-    const stages = getValueFromLazyLoader(task.stages);
-    if (!stages?.data?.items) {
-      // If no stages exist yet, create new stages array
-      const updatedStages = {
-        data: {
-          items: [stageData]
-        }
-      };
-
-      const updatedTask = {
-        ...task,
-        stages: updatedStages
-      };
-
-      // Return updated evaluation while preserving all other fields
-      return {
-        ...evaluation,
-        task: updatedTask as AmplifyTask,
-        // Explicitly preserve score results
-        scoreResults: evaluation.scoreResults
-      };
-    }
-
-    // Find if this stage already exists
-    const stageIndex = stages.data.items.findIndex(
-      (stage: TaskStageType) => stage?.id === stageData.id || stage?.name === stageData.name
-    );
-
-    const updatedStages = {
-      data: {
-        items: stageIndex === -1 
-          ? [...stages.data.items, stageData] // Add new stage
-          : stages.data.items.map((stage: TaskStageType, index: number) => // Update existing stage
-              index === stageIndex ? { ...stage, ...stageData } : stage
-            )
-      }
-    };
-
-    // Create updated task with new stages
-    const updatedTask = {
-      ...task,
-      stages: updatedStages
-    };
-
-    // Return updated evaluation while preserving all other fields
-    return {
-      ...evaluation,
-      task: updatedTask as AmplifyTask,
-      // Explicitly preserve score results
-      scoreResults: evaluation.scoreResults
-    };
-  });
-}

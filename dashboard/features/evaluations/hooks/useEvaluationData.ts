@@ -183,11 +183,6 @@ export function useEvaluationData({
       taskMapRef.current.set(updateTaskId, taskToStore);
     }
     
-    console.log('Updated taskMap:', {
-      taskId: updateTaskId,
-      taskInMap: taskMapRef.current.has(updateTaskId),
-      taskData: taskMapRef.current.get(updateTaskId)
-    });
 
     // Update any evaluations that reference this task
     setEvaluations(prevEvaluations => {
@@ -236,12 +231,6 @@ export function useEvaluationData({
     // Update stage in map
     updateTaskStages(taskId, stageData);
 
-    console.log('Updated stageMap:', {
-      taskId,
-      stageId: stageData.id,
-      stageCount: getTaskStagesSize(taskId),
-      stageData
-    });
 
     // Update any evaluations that reference this task
     setEvaluations(prevEvaluations => {
@@ -381,17 +370,24 @@ export function useEvaluationData({
     activeSubscriptionRef.current = evaluationSubscription;
     subscriptions.push(evaluationSubscription);
 
-    // Subscribe to evaluation creates
+    // NOTE: Testing if these subscriptions are the ones actually working
+    // Subscribe to evaluation creates - TEMPORARILY RE-ENABLED FOR DEBUGGING
     const evaluationCreateSubscription = (client.graphql({
       query: EVALUATION_UPDATE_SUBSCRIPTION.replace('onUpdateEvaluation', 'onCreateEvaluation')
     }) as unknown as { subscribe: Function }).subscribe({
       next: ({ data }: { data?: { onCreateEvaluation: Schema['Evaluation']['type'] } }) => {
         if (data?.onCreateEvaluation) {
-          console.log('Evaluation create received:', {
+          console.log('Evaluation create received in useEvaluationData:', {
             evaluationId: data.onCreateEvaluation.id,
             type: data.onCreateEvaluation.type,
             taskId: data.onCreateEvaluation.taskId,
-            hasTask: !!data.onCreateEvaluation.task
+            hasTask: !!data.onCreateEvaluation.task,
+            scorecardId: data.onCreateEvaluation.scorecardId,
+            scorecard: data.onCreateEvaluation.scorecard,
+            scorecardName: data.onCreateEvaluation.scorecard?.name,
+            scoreId: data.onCreateEvaluation.scoreId,
+            score: data.onCreateEvaluation.score,
+            scoreName: data.onCreateEvaluation.score?.name
           });
 
           // If the evaluation doesn't have a task but has a taskId, check our taskMap
@@ -479,18 +475,94 @@ export function useEvaluationData({
     });
     subscriptions.push(evaluationCreateSubscription);
 
-    // Subscribe to evaluation updates
+    // Subscribe to evaluation updates - TEMPORARILY RE-ENABLED FOR DEBUGGING
     const evaluationUpdateSubscription = (client.graphql({
       query: EVALUATION_UPDATE_SUBSCRIPTION
     }) as unknown as { subscribe: Function }).subscribe({
       next: ({ data }: { data?: { onUpdateEvaluation: Schema['Evaluation']['type'] } }) => {
         if (data?.onUpdateEvaluation) {
-          console.log('Evaluation update received:', {
-            evaluationId: data.onUpdateEvaluation.id,
-            type: data.onUpdateEvaluation.type,
-            taskId: data.onUpdateEvaluation.taskId,
-            hasTask: !!data.onUpdateEvaluation.task
-          });
+
+          // If we have scorecard/score IDs but no scorecard/score data, fetch them
+          const needsScorecard = data.onUpdateEvaluation.scorecardId && !data.onUpdateEvaluation.scorecard;
+          const needsScore = data.onUpdateEvaluation.scoreId && !data.onUpdateEvaluation.score;
+          
+          
+          if (needsScorecard || needsScore) {
+            
+            try {
+              // Fetch scorecard data if needed
+              if (needsScorecard) {
+                (client.graphql({
+                query: `query GetScorecard($id: ID!) {
+                  getScorecard(id: $id) {
+                    id
+                    name
+                  }
+                }`,
+                variables: { id: data.onUpdateEvaluation.scorecardId }
+              }) as Promise<any>).then((result: any) => {
+                if (result.data?.getScorecard) {
+                  // Update the evaluation with the scorecard data
+                  setEvaluations(prev => {
+                    const updated = prev.map(e => {
+                      if (e.id === data.onUpdateEvaluation.id) {
+                        const updatedEval = {
+                          ...e,
+                          scorecard: { 
+                            id: result.data.getScorecard.id, 
+                            name: result.data.getScorecard.name 
+                          }
+                        };
+                        return updatedEval;
+                      }
+                      return e;
+                    });
+                    return [...updated]; // Force new array reference
+                  });
+                }
+              }).catch((error: any) => {
+                console.error('Error fetching scorecard:', error);
+              });
+            }
+            
+            // Fetch score data if needed
+            if (needsScore) {
+              (client.graphql({
+                query: `query GetScore($id: ID!) {
+                  getScore(id: $id) {
+                    id
+                    name
+                  }
+                }`,
+                variables: { id: data.onUpdateEvaluation.scoreId }
+              }) as Promise<any>).then((result: any) => {
+                if (result.data?.getScore) {
+                  // Update the evaluation with the score data
+                  setEvaluations(prev => {
+                    const updated = prev.map(e => {
+                      if (e.id === data.onUpdateEvaluation.id) {
+                        const updatedEval = {
+                          ...e,
+                          score: { 
+                            id: result.data.getScore.id, 
+                            name: result.data.getScore.name 
+                          }
+                        };
+                        return updatedEval;
+                      }
+                      return e;
+                    });
+                    return [...updated]; // Force new array reference
+                  });
+                }
+              }).catch((error: any) => {
+                console.error('Error fetching score:', error);
+              });
+            }
+            } catch (fetchError) {
+              console.error('Error in scorecard/score fetching:', fetchError);
+            }
+          }
 
           // If the evaluation doesn't have a task but has a taskId, check our taskMap
           let evaluationWithTask = data.onUpdateEvaluation;
@@ -585,24 +657,25 @@ export function useEvaluationData({
             };
 
             setEvaluations(prev => {
-              const updatedEvaluations = prev.map(e => 
-                e.id === transformedEvaluation.id ? transformedEvaluation : e
-              );
+              const updatedEvaluations = prev.map(e => {
+                if (e.id === transformedEvaluation.id) {
+                  // Preserve existing score results and scorecard/score names when updating evaluation
+                  return {
+                    ...transformedEvaluation,
+                    scoreResults: e.scoreResults || transformedEvaluation.scoreResults,
+                    scorecard: transformedEvaluation.scorecard || e.scorecard,
+                    score: transformedEvaluation.score || e.score
+                  };
+                }
+                return e;
+              });
 
               // If this evaluation is now running and is the most recent, set up subscription
               if (isNowRunning && isMostRecent(updatedEvaluations)) {
                 const scoreResults = getValueFromLazyLoader(transformedEvaluation.scoreResults);
-                console.log('Setting up score results subscription for evaluation:', {
-                  evaluationId: transformedEvaluation.id,
-                  currentScoreResultsCount: scoreResults?.length ?? 0,
-                  taskStatus: getValueFromLazyLoader(transformedEvaluation.task)?.status,
-                  evaluationStatus: transformedEvaluation.status,
-                  isNewestEvaluation: transformedEvaluation === updatedEvaluations[0]
-                });
 
                 // Clean up existing subscription if any
                 if (activeSubscriptionRef.current) {
-                  console.log('Cleaning up existing subscription');
                   activeSubscriptionRef.current.unsubscribe();
                   activeSubscriptionRef.current = null;
                 }
@@ -719,27 +792,8 @@ export function useEvaluationData({
             });
           }
 
-          console.log('Checking if should subscribe to score results:', {
-            evaluationId: data.onUpdateEvaluation.id,
-            status: data.onUpdateEvaluation.status,
-            taskStatus: typeof data.onUpdateEvaluation.task === 'function' 
-              ? null 
-              : (data.onUpdateEvaluation.task as any)?.status,
-            hasExistingSubscription: !!activeSubscriptionRef.current
-          });
 
-          // After setting up new subscription
-          console.log('Score results subscription set up:', {
-            evaluationId: data.onUpdateEvaluation.id,
-            subscriptionTime: new Date().toISOString()
-          });
 
-          // When receiving score results
-          console.log('Score results received:', {
-            evaluationId: data.onUpdateEvaluation.id,
-            hasScoreResults: !!data.onUpdateEvaluation.scoreResults,
-            timestamp: new Date().toISOString()
-          });
         }
       },
       error: (error: Error) => {
@@ -807,13 +861,6 @@ export function useEvaluationData({
       filterValuesRef.current.selectedScore
     ).subscribe({
       next: async ({ items, isSynced }) => {
-        console.log('Refetched evaluations:', {
-          count: items.length,
-          filters: {
-            selectedScorecard: filterValuesRef.current.selectedScorecard,
-            selectedScore: filterValuesRef.current.selectedScore
-          }
-        });
 
         // Transform items and filter out nulls
         const transformedItems = items

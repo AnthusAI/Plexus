@@ -1285,7 +1285,10 @@ evaluation:
     prevProps.task.status === nextProps.task.status &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.selectedScoreResultId === nextProps.selectedScoreResultId &&
-    prevProps.isFullWidth === nextProps.isFullWidth
+    prevProps.isFullWidth === nextProps.isFullWidth &&
+    // CHECK FOR SCORECARD/SCORE CHANGES - CRITICAL FOR REALTIME UPDATES
+    prevProps.task.scorecard === nextProps.task.scorecard &&
+    prevProps.task.score === nextProps.task.score
   );
 });
 

@@ -382,6 +382,9 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     prevProps.evaluationData.status === nextProps.evaluationData.status &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.selectedScoreResultId === nextProps.selectedScoreResultId &&
-    prevProps.isFullWidth === nextProps.isFullWidth
+    prevProps.isFullWidth === nextProps.isFullWidth &&
+    // CHECK FOR SCORECARD/SCORE CHANGES - CRITICAL FOR REALTIME UPDATES
+    prevProps.evaluationData.scorecard?.name === nextProps.evaluationData.scorecard?.name &&
+    prevProps.evaluationData.score?.name === nextProps.evaluationData.score?.name
   );
 }); 

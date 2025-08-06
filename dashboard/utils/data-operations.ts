@@ -646,7 +646,6 @@ export function observeRecentEvaluations(
 
     // Set up subscription
     try {
-      console.debug('Setting up evaluation subscriptions...');
       const client = getClient();
 
       // Helper function to handle evaluation changes
@@ -654,6 +653,12 @@ export function observeRecentEvaluations(
         console.debug(`Handling ${action} for evaluation:`, {
           evaluationId: evaluation.id,
           type: evaluation.type,
+          scorecardId: evaluation.scorecardId,
+          scorecard: evaluation.scorecard,
+          scorecardName: evaluation.scorecard?.name,
+          scoreId: evaluation.scoreId,
+          score: evaluation.score,
+          scoreName: evaluation.score?.name,
           taskData: evaluation.task,
           taskId: evaluation.task?.id,
           taskStatus: evaluation.task?.status,
@@ -664,9 +669,27 @@ export function observeRecentEvaluations(
         if (action === 'create') {
           evaluations = [evaluation, ...evaluations];
         } else {
-          evaluations = evaluations.map(e => 
-            e.id === evaluation.id ? evaluation : e
-          );
+          evaluations = evaluations.map(e => {
+            if (e.id === evaluation.id) {
+              // Preserve scorecard/score data from existing evaluation if missing in update
+              const updatedEvaluation = {
+                ...evaluation,
+                scorecard: evaluation.scorecard || e.scorecard,
+                score: evaluation.score || e.score
+              };
+              console.debug('Updated evaluation with preserved scorecard/score:', {
+                evaluationId: updatedEvaluation.id,
+                originalScorecard: evaluation.scorecard,
+                originalScore: evaluation.score,
+                existingScorecard: e.scorecard,
+                existingScore: e.score,
+                finalScorecard: updatedEvaluation.scorecard,
+                finalScore: updatedEvaluation.score
+              });
+              return updatedEvaluation;
+            }
+            return e;
+          });
         }
         
         subscriber.next({ items: evaluations, isSynced: true });
@@ -859,7 +882,9 @@ export function observeRecentEvaluations(
         next: ({ data }: { data: any }) => {
           // Handle the subscription event
           console.debug('Create subscription event received:', { data });
-          // Existing logic to handle create event
+          if (data?.onCreateEvaluation) {
+            handleEvaluationChange(data.onCreateEvaluation, 'create');
+          }
         },
         error: (error: any) => {
           console.error('Error in create subscription:', error);
@@ -871,7 +896,9 @@ export function observeRecentEvaluations(
       const updateSub = (client.graphql({ query: updateEvaluationSubscriptionQuery }) as unknown as { subscribe: (observer: { next: ({ data }: { data: any }) => void, error: (error: any) => void }) => any }).subscribe({
         next: ({ data }: { data: any }) => {
           console.debug('Update subscription event received:', { data });
-          // Existing logic to handle update event
+          if (data?.onUpdateEvaluation) {
+            handleEvaluationChange(data.onUpdateEvaluation, 'update');
+          }
         },
         error: (error: any) => {
           console.error('Error in update subscription:', error);
@@ -889,7 +916,6 @@ export function observeRecentEvaluations(
 
     // Cleanup function
     return () => {
-      console.debug('Cleaning up evaluation subscriptions');
       subscriptionCleanup.forEach(sub => {
         try {
           if (sub && typeof sub.unsubscribe === 'function') {
@@ -989,6 +1015,18 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     (typeof evaluation.score === 'function' ?
       getValueFromLazyLoader(evaluation.score)?.data :
       evaluation.score) : null;
+
+  console.debug('transformEvaluation scorecard/score processing:', {
+    evaluationId: evaluation.id,
+    rawScorecard: evaluation.scorecard,
+    rawScore: evaluation.score,
+    scorecardType: typeof evaluation.scorecard,
+    scoreType: typeof evaluation.score,
+    scorecardData,
+    scoreData,
+    finalScorecardName: scorecardData?.name,
+    finalScoreName: scoreData?.name
+  });
 
   // Get score results data - handle both function and object cases
   let rawScoreResults: any = null;
