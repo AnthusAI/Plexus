@@ -424,7 +424,6 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
 
     // Set up new 30-second refresh timer
     const refreshTimer = setInterval(() => {
-      console.log('🔄 useUnifiedMetrics: Auto-refresh triggered', { configKey })
       fetchMetricsInBackground()
     }, 30000) // 30 seconds
 

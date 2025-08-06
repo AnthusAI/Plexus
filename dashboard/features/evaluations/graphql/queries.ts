@@ -21,7 +21,15 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
       errorDetails
       accountId
       scorecardId
+      scorecard {
+        id
+        name
+      }
       scoreId
+      score {
+        id
+        name
+      }
       confusionMatrix
       scoreGoal
       datasetClassDistribution
