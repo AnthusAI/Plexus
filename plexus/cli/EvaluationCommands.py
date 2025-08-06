@@ -1250,11 +1250,23 @@ def accuracy(
                             logging.info(f"Updating task {task.id} with scorecard ID: {scorecard_id}")
                             task.update(scorecardId=scorecard_id)
                             
-                        # Update the evaluation record with the scorecard ID
+                        # Update the evaluation record with BOTH scorecard ID and score ID
                         if evaluation_record:
-                            logging.info(f"Updating evaluation record {evaluation_record.id} with scorecard ID: {scorecard_id}")
-                            evaluation_record.update(scorecardId=scorecard_id)
-                            logging.info(f"Successfully updated evaluation record with IDs")
+                            update_data = {'scorecardId': scorecard_id}
+                            
+                            # Add score ID if available and valid
+                            if score_id_for_eval and isinstance(score_id_for_eval, str) and '-' in score_id_for_eval and len(score_id_for_eval.split('-')) == 5:
+                                update_data['scoreId'] = score_id_for_eval
+                                logging.info(f"Updating evaluation record {evaluation_record.id} with scorecard ID: {scorecard_id} AND score ID: {score_id_for_eval}")
+                            else:
+                                logging.info(f"Updating evaluation record {evaluation_record.id} with scorecard ID: {scorecard_id} (score ID not valid: {score_id_for_eval})")
+                            
+                            evaluation_record.update(**update_data)
+                            
+                            if 'scoreId' in update_data:
+                                logging.info(f"Successfully updated evaluation record with BOTH scorecard and score IDs")
+                            else:
+                                logging.info(f"Successfully updated evaluation record with scorecard ID only")
                     else:
                         logging.warning(f"Could not find matching dashboard scorecard for key {scorecard_key}")
                 else:
