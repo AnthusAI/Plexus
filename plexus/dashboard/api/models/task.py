@@ -865,7 +865,7 @@ class Task(BaseModel):
         if created_stages:
             first_stage = min(created_stages, key=lambda s: s.order)
             self.update(currentStageId=first_stage.id)
-            logging.info(f"Set current stage to: {first_stage.name}")
+            logging.info(f"==== STAGE: {first_stage.name} ====")
         
         logging.info(f"Successfully created {len(created_stages)} stages in batch")
         return created_stages

@@ -63,7 +63,7 @@ def identify_target_scores(scorecard_structure: Dict[str, Any], score_names: Opt
                 score.get('externalId') == target_name):
                 target_scores.append(score)
                 found = True
-                logging.info(f"Found target score: {score.get('name')} (ID: {score.get('id')})")
+                logging.info(f"Found target score: {score.get('name')}")
                 break
                 
         if not found:

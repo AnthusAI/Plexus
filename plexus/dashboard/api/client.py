@@ -66,27 +66,19 @@ import time
 from datetime import datetime, timezone
 import logging
 from plexus.utils import truncate_dict_strings_inner
-logging.basicConfig(level=logging.DEBUG)
-
-# Configure GQL loggers to show output
-gql_logger = logging.getLogger('gql')
-gql_logger.setLevel(logging.DEBUG)
-gql_logger.propagate = True
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-stream_handler.setFormatter(formatter)
-gql_logger.addHandler(stream_handler)
-
-# Disable noisy transport logging
+# Configure minimal logging for GraphQL operations
+# Only show warnings and errors from external libraries
 transport_logger = logging.getLogger('gql.transport')
 transport_logger.setLevel(logging.WARNING)
 transport_logger.propagate = False
 
-# Disable noisy requests logging
 requests_logger = logging.getLogger('urllib3')
 requests_logger.setLevel(logging.WARNING)
 requests_logger.propagate = False
+
+gql_logger = logging.getLogger('gql')
+gql_logger.setLevel(logging.WARNING)
+gql_logger.propagate = False
 
 if TYPE_CHECKING:
     from .models.scoring_job import ScoringJob

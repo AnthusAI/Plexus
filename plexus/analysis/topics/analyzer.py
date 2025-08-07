@@ -53,9 +53,9 @@ cache_db_file_path = cache_dir_path / "topics_llm_cache.db"
 try:
     # Ensure the cache directory exists
     cache_dir_path.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Initializing Langchain LLM SQLite cache for analyzer at {cache_db_file_path}")
+    logger.debug(f"Initializing Langchain LLM SQLite cache for analyzer at {cache_db_file_path}")
     set_llm_cache(SQLiteCache(database_path=str(cache_db_file_path)))
-    logger.info(f"Langchain LLM SQLite cache initialized successfully for fine-tuning phase.")
+    logger.debug(f"Langchain LLM SQLite cache initialized successfully for fine-tuning phase.")
 except Exception as e:
     logger.warning(f"Could not initialize Langchain LLM SQLite cache for analyzer: {e}. Fine-tuning LLM calls will not be cached.")
 

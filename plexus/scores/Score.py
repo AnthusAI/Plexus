@@ -675,7 +675,7 @@ class Score(ABC,
                 
                 if yaml_path.exists():
                     # Use cached version
-                    logging.info(f"Using cached configuration from {yaml_path}")
+                    logging.debug(f"Using cached configuration from {yaml_path}")
                     try:
                         with open(yaml_path, 'r') as f:
                             config_yaml = f.read()
