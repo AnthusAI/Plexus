@@ -257,7 +257,7 @@ class FeedbackItems(DataCache):
         # For dataset generation, we should always generate fresh data
         # The cache is only used for internal optimization during the same run
         # TODO: Remove caching entirely for dataset generation commands
-        if False:  # Disable cache loading for now
+        if not fresh and self._cache_exists(cache_identifier):
             return self._load_from_cache(cache_identifier)
         
         logger.info(f"Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
