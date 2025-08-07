@@ -1003,6 +1003,29 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
       taskData = evaluation.task as AmplifyTask;
     }
   }
+  
+  // Get stage items - handle both LazyLoader and direct object formats
+  let stageItems: any[] = [];
+  if (taskData?.stages) {
+    // Check if stages is a LazyLoader function
+    if (typeof taskData.stages === 'function') {
+      const stageResponse = getValueFromLazyLoader(taskData.stages);
+      stageItems = stageResponse?.data?.items || [];
+    } else {
+      // Handle direct object format (new structure)
+      stageItems = taskData.stages?.data?.items || taskData.stages?.items || [];
+    }
+  }
+
+  // Only log when we actually have stage changes to reduce noise
+  if (stageItems.length > 0) {
+    console.log('🔍 TRACE_STAGES: transformEvaluation found stage data:', {
+      evaluationId: evaluation.id,
+      taskDataId: taskData?.id,
+      stageCount: stageItems.length,
+      stageStatuses: stageItems.map((s: any) => ({ name: s.name, status: s.status }))
+    });
+  }
 
 
   // Get scorecard and score data

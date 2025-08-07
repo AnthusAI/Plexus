@@ -138,6 +138,10 @@ export const TaskStatus = React.memo(({
   estimatedRemainingSeconds
 }: TaskStatusProps) => {
 
+  if (stages.length > 0) {
+    console.log(`STAGE_TRACE: TaskStatus render with stages: ${stages.map(s => `${s.name}:${s.status}`).join(',')}`);
+  }
+
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
