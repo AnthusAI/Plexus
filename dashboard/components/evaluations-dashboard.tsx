@@ -577,6 +577,17 @@ export default function EvaluationsDashboard({
     });
   }, [selectedScorecard, selectedScore, evaluations.length]);
 
+  // Add logging to track evaluation updates
+  useEffect(() => {
+    const runningEvaluations = evaluations.filter(e => e.status === 'RUNNING' || e.task?.status === 'RUNNING');
+    if (runningEvaluations.length > 0) {
+      runningEvaluations.forEach(e => {
+        const stages = e.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
+        console.log(`STAGE_TRACE: EvaluationsDashboard received eval ${e.id} with stages: ${stages}`);
+      });
+    }
+  }, [evaluations]);
+
   // Set dataHasLoadedOnce to true once data has loaded
   useEffect(() => {
     if (!isLoading && evaluations.length > 0 && !dataHasLoadedOnce) {
@@ -649,6 +660,25 @@ export default function EvaluationsDashboard({
     if (!selectedEvaluationId) return null;
     const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId);
     if (!evaluation) return null;
+
+    // Special logging for the evaluation that's having stage update issues
+    if (selectedEvaluationId === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
+      console.log(`STAGE_TRACE: renderSelectedTask for ${selectedEvaluationId} - task stages: ${evaluation.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+    }
+    
+    // CRITICAL DEBUG: Always log which evaluation is selected vs which is getting updates
+    console.log(`STAGE_TRACE: renderSelectedTask - selectedEvaluationId: ${selectedEvaluationId}, evaluation found: ${evaluation?.id}`);
+    if (evaluation?.id !== selectedEvaluationId) {
+      console.error(`STAGE_TRACE: MISMATCH - selectedEvaluationId ${selectedEvaluationId} but found evaluation ${evaluation?.id}`);
+    }
+    
+    // DEBUG: Check if the evaluation that got stage updates is in the evaluations array
+    const evalWithStageUpdates = evaluations.find(e => e.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c');
+    if (evalWithStageUpdates) {
+      console.log(`STAGE_TRACE: Evaluation ff9cecfb-b568-4715-bc7a-8be6c763028c in evaluations array with stages: ${evalWithStageUpdates.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+    } else {
+      console.log(`STAGE_TRACE: Evaluation ff9cecfb-b568-4715-bc7a-8be6c763028c NOT FOUND in evaluations array`);
+    }
 
     console.log('Rendering selected task:', {
       evaluationId: evaluation.id,
@@ -869,6 +899,14 @@ export default function EvaluationsDashboard({
                 `}>
                   {filteredEvaluations.map((evaluation: any) => {
                     const clickHandler = getEvaluationClickHandler(evaluation.id);
+                    
+                    // Log for ALL evaluations that match our problem evaluation, and all running evaluations
+                    if (evaluation.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
+                      console.log(`STAGE_TRACE: EvaluationsDashboard rendering TARGET ${evaluation.id} status=${evaluation.status} taskStatus=${evaluation.task?.status} with stages: ${evaluation.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+                    } else if (evaluation.status === 'RUNNING' || evaluation.task?.status === 'RUNNING') {
+                      console.log(`STAGE_TRACE: EvaluationsDashboard rendering ${evaluation.id} with stages: ${evaluation.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+                    }
+                    
                     return (
                       <div 
                         key={evaluation.id} 
