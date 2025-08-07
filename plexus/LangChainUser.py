@@ -59,10 +59,22 @@ class LangChainUser:
             def on_llm_end(self, response: LLMResult, **kwargs):
                 usage = {}
                 if isinstance(response, LLMResult):
+                    # Method 1: Check response.llm_output (works for most models)
                     if response.llm_output:
-                        logging.info(f"LLM output: {response.llm_output}")
                         usage = response.llm_output.get("token_usage", response.llm_output.get("usage", {}))
-                        logging.debug(f"Token usage: {usage}")
+                    
+                    # Method 2: Check message.response_metadata (gpt-4.1-mini-2025-04-14)
+                    if not usage and hasattr(response, 'generations') and response.generations:
+                        for gen_list in response.generations:
+                            if gen_list:
+                                for gen in gen_list:
+                                    if hasattr(gen, 'message') and hasattr(gen.message, 'response_metadata'):
+                                        response_metadata = gen.message.response_metadata
+                                        if 'token_usage' in response_metadata:
+                                            usage = response_metadata['token_usage']
+                                            break
+                            if usage:
+                                break
 
                     # Handle the nested structure
                     if "token_usage" in usage:
@@ -75,8 +87,6 @@ class LangChainUser:
                     # Track cached tokens if available
                     prompt_tokens_details = usage.get("prompt_tokens_details", {})
                     self.cached_tokens += prompt_tokens_details.get("cached_tokens", 0)
-
-                    logging.info(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}, Cached: {self.cached_tokens}")
 
             def on_chain_end(self, outputs, **kwargs):
                 logging.info(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}, Cached: {self.cached_tokens}")
@@ -177,21 +187,29 @@ class LangChainUser:
         # ... other model providers ...
 
     def get_token_usage(self):
-        # if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
-        #     return {
-        #         "prompt_tokens": self.openai_callback.prompt_tokens,
-        #         "completion_tokens": self.openai_callback.completion_tokens,
-        #         "total_tokens": self.openai_callback.total_tokens,
-        #         "successful_requests": self.openai_callback.successful_requests
-        #     }
-        # else:
-            return {
-                "prompt_tokens": self.token_counter.prompt_tokens,
-                "completion_tokens": self.token_counter.completion_tokens,
-                "total_tokens": self.token_counter.total_tokens,
-                "successful_requests": self.token_counter.llm_calls,
-                "cached_tokens": self.token_counter.cached_tokens
-            }
+        # For OpenAI providers, try OpenAI callback first, fallback to token counter
+        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
+            if hasattr(self, 'openai_callback') and self.openai_callback:
+                # Check if OpenAI callback has valid token data
+                if (self.openai_callback.prompt_tokens > 0 or 
+                    self.openai_callback.completion_tokens > 0 or
+                    self.openai_callback.successful_requests > 0):
+                    return {
+                        "prompt_tokens": self.openai_callback.prompt_tokens,
+                        "completion_tokens": self.openai_callback.completion_tokens,
+                        "total_tokens": self.openai_callback.total_tokens,
+                        "successful_requests": self.openai_callback.successful_requests,
+                        "cached_tokens": getattr(self.openai_callback, 'cached_tokens', 0)
+                    }
+        
+        # Fallback to token counter (used for non-OpenAI providers or when OpenAI callback fails)
+        return {
+            "prompt_tokens": self.token_counter.prompt_tokens,
+            "completion_tokens": self.token_counter.completion_tokens,
+            "total_tokens": self.token_counter.total_tokens,
+            "successful_requests": self.token_counter.llm_calls,
+            "cached_tokens": self.token_counter.cached_tokens
+        }
 
     def get_azure_credential(self):
         """Get Azure credential for authentication."""
