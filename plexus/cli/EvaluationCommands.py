@@ -154,7 +154,6 @@ def lookup_data_source(client: PlexusDashboardClient, name: Optional[str] = None
         raise ValueError("Must provide either name, key, or id to look up DataSource")
     
     if id:
-        logging.info(f"Looking up DataSource by ID: {id}")
         query = """
         query GetDataSource($id: ID!) {
             getDataSource(id: $id) {
@@ -174,7 +173,6 @@ def lookup_data_source(client: PlexusDashboardClient, name: Optional[str] = None
         return result['getDataSource']
     
     elif key:
-        logging.info(f"Looking up DataSource by key: {key}")
         query = """
         query ListDataSourcesByKey($key: String!) {
             listDataSourcesByKey(key: $key) {
@@ -196,7 +194,6 @@ def lookup_data_source(client: PlexusDashboardClient, name: Optional[str] = None
         return result['listDataSourcesByKey']['items'][0]
     
     else:  # name
-        logging.info(f"Looking up DataSource by name: {name}")
         query = """
         query ListDataSourcesByName($name: String!) {
             listDataSourcesByName(name: $name) {
@@ -219,7 +216,6 @@ def lookup_data_source(client: PlexusDashboardClient, name: Optional[str] = None
 
 def get_latest_dataset_for_data_source(client: PlexusDashboardClient, data_source_id: str) -> dict:
     """Get the most recent DataSet for a DataSource by finding its current version"""
-    logging.info(f"Looking up latest dataset for DataSource ID: {data_source_id}")
     
     # First, get the DataSource and its current version
     data_source = lookup_data_source(client, id=data_source_id)
@@ -228,7 +224,6 @@ def get_latest_dataset_for_data_source(client: PlexusDashboardClient, data_sourc
     if not current_version_id:
         raise ValueError(f"DataSource {data_source_id} has no current version")
     
-    logging.info(f"Found current version ID: {current_version_id}")
     
     # Now get datasets for this version
     query = """
@@ -257,12 +252,10 @@ def get_latest_dataset_for_data_source(client: PlexusDashboardClient, data_sourc
     datasets.sort(key=lambda x: x['createdAt'], reverse=True)
     latest_dataset = datasets[0]
     
-    logging.info(f"Found latest dataset: {latest_dataset['id']} (created: {latest_dataset['createdAt']})")
     return latest_dataset
 
 def get_dataset_by_id(client: PlexusDashboardClient, dataset_id: str) -> dict:
     """Get a specific DataSet by ID"""
-    logging.info(f"Looking up dataset by ID: {dataset_id}")
     query = """
     query GetDataSet($id: ID!) {
         getDataSet(id: $id) {
@@ -340,7 +333,6 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
             raise ValueError(f"S3 bucket name not found. Cannot download file: {data_file_path}")
         key = data_file_path
         full_s3_url = f"s3://{bucket_name}/{key}"
-        logging.info(f"Constructed full S3 URL: {full_s3_url}")
         data_file_path = full_s3_url  # Update for logging consistency
     
     logging.info(f"Downloading from S3 bucket: {bucket_name}, key: {key}")
@@ -380,79 +372,31 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
     except Exception as e:
         raise ValueError(f"Failed to load {file_type} file: {str(e)}")
     
-    # COMPREHENSIVE DATASET DEBUG LOGGING FOR CLOUD DATASET
-    logging.info("=" * 80)
-    logging.info("DATASET DEBUG: load_samples_from_cloud_dataset - CLOUD DATASET LOADED")
-    logging.info("=" * 80)
+    # Essential dataset info
+    logging.info(f"Dataset loaded: {df.shape[0]} rows x {df.shape[1]} columns")
+    logging.info(f"Columns: {df.columns.tolist()}")
     
-    # 1. Dataset shape
-    logging.info(f"CLOUD_DATASET_SHAPE: {df.shape} (rows x columns)")
-    
-    # 2. Column headers and data types
-    logging.info(f"CLOUD_DATASET_COLUMNS: {df.columns.tolist()}")
-    logging.info("CLOUD_DATASET_COLUMN_TYPES:")
-    for col in df.columns:
-        dtype = df[col].dtype
-        logging.info(f"  {col}: {dtype}")
-    
-    # 3. First few rows of data
+    # Show first 3 rows sample
     if len(df) > 0:
-        logging.info("CLOUD_DATASET_FIRST_FEW_ROWS:")
+        logging.info("Sample data (first 3 rows):")
         for i in range(min(3, len(df))):
-            logging.info(f"  Row {i}:")
+            row_data = {}
             for col in df.columns:
                 value = df.iloc[i][col]
-                # Truncate long values for readability
                 if isinstance(value, str) and len(value) > 100:
-                    display_value = value[:97] + "..."
+                    row_data[col] = value[:97] + "..."
                 else:
-                    display_value = value
-                logging.info(f"    {col}: '{display_value}'")
-    else:
-        logging.info("CLOUD_DATASET_FIRST_FEW_ROWS: Dataset is empty")
+                    row_data[col] = value
+            logging.info(f"  Row {i}: {row_data}")
     
-    # 4. Data quality checks
-    logging.info("CLOUD_DATASET_QUALITY_CHECK:")
-    cloud_quality_issues = []
+    # Basic quality check
+    quality_issues = []
+    if len(df) > 0 and score_name not in df.columns:
+        quality_issues.append(f"Expected score column '{score_name}' not found")
     
-    if len(df) > 0:
-        # Check for null/empty data in key columns
-        key_columns = ['text', 'content_id'] if 'text' in df.columns else []
-        if 'content_id' in df.columns:
-            key_columns.append('content_id')
-        for col in key_columns:
-            if col in df.columns:
-                null_count = df[col].isnull().sum()
-                empty_count = (df[col] == '').sum() if df[col].dtype == 'object' else 0
-                if null_count > 0:
-                    cloud_quality_issues.append(f"Column '{col}' has {null_count} null values")
-                if empty_count > 0:
-                    cloud_quality_issues.append(f"Column '{col}' has {empty_count} empty string values")
-        
-        # Check for expected score column
-        if score_name in df.columns:
-            logging.info(f"CLOUD_DATASET_SCORE_COLUMN: Found score column '{score_name}'")
-            value_counts = df[score_name].value_counts(dropna=False)
-            # Removed verbose value distribution logging to improve performance
-        else:
-            cloud_quality_issues.append(f"Expected score column '{score_name}' not found")
-        
-        # Check for duplicates in content_id if it exists
-        if 'content_id' in df.columns:
-            duplicates = df['content_id'].duplicated().sum()
-            if duplicates > 0:
-                cloud_quality_issues.append(f"Found {duplicates} duplicate content_id values")
-    
-    if cloud_quality_issues:
-        logging.warning("CLOUD_DATASET_QUALITY_ISSUES:")
-        for issue in cloud_quality_issues:
-            logging.warning(f"  - {issue}")
-    else:
-        logging.info("CLOUD_DATASET_QUALITY_ISSUES: None - dataset looks healthy")
-    
-    logging.info("=" * 80)
-    logging.info("END CLOUD DATASET DEBUG")
-    logging.info("=" * 80)
+    if quality_issues:
+        for issue in quality_issues:
+            logging.warning(f"Data quality issue: {issue}")
     
     logging.info(f"Loaded DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
     
@@ -591,10 +535,6 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
     from plexus.cli.identify_target_scores import identify_target_scores
     import logging
     
-    if use_cache:
-        logging.info(f"Loading scorecard '{scorecard_identifier}' from API with local cache preference")
-    else:
-        logging.info(f"Loading scorecard '{scorecard_identifier}' from API (ignoring local cache)")
     
     try:
         # Create client directly without context manager
@@ -640,9 +580,7 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
                 score_name = score.get('name', 'Unknown')
                 championVersionId = score.get('championVersionId')
                 score_key = score.get('key', 'Unknown')
-                logging.info(f"Score ID: {score_id}")
-                logging.info(f"Score Key: {score_key}")
-                logging.info(f"Champion Version ID: {championVersionId}")
+                logging.debug(f"Score: {score_name} (ID: {score_id}, Key: {score_key})")
                 
             # Store the first target score's ID and championVersionId for later use
             # This is critical for setting the evaluation record properly
@@ -711,8 +649,7 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
         
         # Get actual name from the properties
         scorecard_name = scorecard_structure.get('name', scorecard_identifier)
-        logging.info(f"Successfully loaded scorecard '{scorecard_name}' with " +
-                    f"{len(scores_config)} scores and their dependencies")
+        logging.info(f"Loaded scorecard '{scorecard_name}' with {len(scores_config)} scores")
 
         return scorecard_instance
         
@@ -776,14 +713,12 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
             available_dirs = [d.name for d in scorecards_root.iterdir() if d.is_dir()] if scorecards_root.exists() else []
             raise ValueError(f"Scorecard directory not found: {scorecard_dir}. Available directories: {available_dirs}")
         
-        logging.info(f"Found scorecard directory: {scorecard_dir}")
         
         # Find all YAML files in the scorecard directory
         yaml_files = list(scorecard_dir.glob('*.yaml'))
         if not yaml_files:
             raise ValueError(f"No YAML files found in scorecard directory: {scorecard_dir}")
         
-        logging.info(f"Found {len(yaml_files)} YAML files in {scorecard_dir}")
         
         # Parse YAML files to get score configurations
         yaml_parser = YAML(typ='safe')
@@ -836,7 +771,7 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
             scores_config=parsed_configs
         )
         
-        logging.info(f"Successfully created scorecard '{scorecard_identifier}' with {len(parsed_configs)} scores from YAML files")
+        logging.info(f"Loaded scorecard '{scorecard_identifier}' from YAML with {len(parsed_configs)} scores")
         return scorecard_instance
         
     except Exception as e:
@@ -884,8 +819,8 @@ def accuracy(
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     """
-    logging.info("=== ACCURACY COMMAND STARTED ===")
-    logging.info(f"Parameters: scorecard={scorecard}, yaml={yaml}, score='{score}', number_of_samples={number_of_samples}, dry_run={dry_run}")
+    logging.info("Starting accuracy evaluation")
+    logging.info(f"Scorecard: {scorecard}, Score: {score}, Samples: {number_of_samples}, Dry run: {dry_run}")
     
     # If dry-run is enabled, provide a simplified successful execution path
     if dry_run:
@@ -915,10 +850,10 @@ def accuracy(
         console.print("[dim]To run with actual sample evaluation, remove the --dry-run flag.[/dim]")
         return
     
-    logging.info("=== NOT DRY RUN - PROCEEDING WITH NORMAL EXECUTION ===")
+    # Proceeding with normal evaluation
     # Original implementation for non-dry-run mode
     async def _run_accuracy():
-        logging.info("=== STARTING _run_accuracy FUNCTION ===")
+        # Starting evaluation process
         nonlocal task_id, score  # Make task_id and score accessible to modify in the async function
         
         task = None  # Track the task
@@ -1095,7 +1030,7 @@ def accuracy(
             if tracker:
                 tracker.current_stage.status_message = "Starting evaluation setup"
                 tracker.update(current_items=0)
-                logging.info("Entered Setup stage: Starting evaluation setup")
+                # Stage Setup already logged by task creation
             else:
                 logging.info("Running accuracy experiment...")
             
@@ -1112,7 +1047,7 @@ def accuracy(
                 target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
                 try:
                     scorecard_instance = load_scorecard_from_yaml_files(scorecard, target_score_identifiers)
-                    logging.info(f"Successfully loaded scorecard '{scorecard}' from YAML files with {len(scorecard_instance.scores)} scores")
+                    logging.info(f"Loaded scorecard '{scorecard}' from YAML with {len(scorecard_instance.scores)} scores")
                     
                     # Extract score_id and score_version_id for the primary score
                     primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
@@ -1135,8 +1070,7 @@ def accuracy(
                                 
                                 # The score_id_for_eval should be valid at this point
                                 if score_id_for_eval:
-                                    logging.info(f"Found primary score from YAML: {sc_config.get('name')} with ID: {score_id_for_eval}")
-                                    logging.info(f"Using version ID: {score_version_id_for_eval}")
+                                    logging.info(f"Using primary score from YAML: {sc_config.get('name')}")
                                     break
                     
                     # If no match found and user specified a score, that's an error  
@@ -1168,14 +1102,6 @@ def accuracy(
                     if primary_score_identifier and scorecard_instance.scores:
                         logging.info(f"Identifying primary score '{primary_score_identifier}' for evaluation record")
                         for sc_config in scorecard_instance.scores:
-                            # Debug what we're comparing
-                            logging.info(f"CLI_DEBUG: Checking score config for match:")
-                            logging.info(f"CLI_DEBUG:   name: {sc_config.get('name')}")
-                            logging.info(f"CLI_DEBUG:   key: {sc_config.get('key')}")
-                            logging.info(f"CLI_DEBUG:   id: {sc_config.get('id')}")
-                            logging.info(f"CLI_DEBUG:   externalId: {sc_config.get('externalId')}")
-                            logging.info(f"CLI_DEBUG:   originalExternalId: {sc_config.get('originalExternalId')}")
-                            logging.info(f"CLI_DEBUG:   primary_score_identifier: {primary_score_identifier}")
                             
                             if (sc_config.get('name') == primary_score_identifier or
                                 sc_config.get('key') == primary_score_identifier or 
@@ -1188,35 +1114,24 @@ def accuracy(
                                 if not score_version_id_for_eval:
                                     score_version_id_for_eval = sc_config.get('championVersionId')
                                 
-                                logging.info(f"CLI_DEBUG: Match found! score_id_for_eval = {score_id_for_eval}")
-                                
                                 # If the score_id_for_eval looks like an external ID (numeric),
                                 # we need to resolve it to the actual DynamoDB UUID for Amplify Gen2 schema association
                                 if score_id_for_eval and (isinstance(score_id_for_eval, int) or str(score_id_for_eval).isdigit()):
-                                    logging.info(f"CLI_DEBUG: score_id_for_eval '{score_id_for_eval}' appears to be external ID, resolving to DynamoDB UUID...")
                                     try:
                                         # Use scorecard ID if available for better resolution
                                         scorecard_id_for_resolution = scorecard_id if 'scorecard_record' in locals() and scorecard_record else None
                                         resolved_uuid = resolve_score_external_id_to_uuid(client, str(score_id_for_eval), scorecard_id_for_resolution)
                                         if resolved_uuid:
                                             score_id_for_eval = resolved_uuid
-                                            logging.info(f"CLI_DEBUG: Successfully resolved external ID to DynamoDB UUID: {score_id_for_eval}")
                                         else:
-                                            logging.warning(f"CLI_DEBUG: Could not resolve external ID {score_id_for_eval} to DynamoDB UUID")
                                             score_id_for_eval = None  # Clear invalid external ID
                                     except Exception as resolve_error:
-                                        logging.warning(f"CLI_DEBUG: Error resolving external ID to UUID: {resolve_error}")
                                         score_id_for_eval = None
                                 
                                 # The score_id_for_eval should be the database UUID at this point
-                                logging.info(f"CLI_DEBUG: After resolution, score_id_for_eval = {score_id_for_eval}")
                                 if score_id_for_eval:
-                                    logging.info(f"CLI_DEBUG: Breaking from loop with valid score_id_for_eval")
-                                    logging.info(f"Found primary score early: {sc_config.get('name')} with ID: {score_id_for_eval}")
-                                    logging.info(f"Using champion version ID: {score_version_id_for_eval}")
+                                    logging.info(f"Using primary score from API: {sc_config.get('name')}")
                                     break
-                                else:
-                                    logging.warning(f"CLI_DEBUG: score_id_for_eval is None after resolution, not breaking from loop")
                     
                     # If no match found and user specified a score, that's an error
                     if not score_id_for_eval and primary_score_identifier:
@@ -1239,15 +1154,12 @@ def accuracy(
                     logging.warning("Could not find scorecard key in instance properties")
                     
                 if scorecard_key:
-                    logging.info(f"Looking up Scorecard record for key: {scorecard_key}")
                     scorecard_record = DashboardScorecard.list_by_key(key=scorecard_key, client=client)
                     if scorecard_record:
                         scorecard_id = scorecard_record.id
-                        logging.info(f"Found Scorecard record with ID: {scorecard_id}")
                         
                         # Update the task with the scorecard ID
                         if task:
-                            logging.info(f"Updating task {task.id} with scorecard ID: {scorecard_id}")
                             task.update(scorecardId=scorecard_id)
                             
                         # Update the evaluation record with BOTH scorecard ID and score ID
@@ -1257,16 +1169,15 @@ def accuracy(
                             # Add score ID if available and valid
                             if score_id_for_eval and isinstance(score_id_for_eval, str) and '-' in score_id_for_eval and len(score_id_for_eval.split('-')) == 5:
                                 update_data['scoreId'] = score_id_for_eval
-                                logging.info(f"Updating evaluation record {evaluation_record.id} with scorecard ID: {scorecard_id} AND score ID: {score_id_for_eval}")
                             else:
-                                logging.info(f"Updating evaluation record {evaluation_record.id} with scorecard ID: {scorecard_id} (score ID not valid: {score_id_for_eval})")
+                                logging.warning(f"Score ID format invalid for evaluation update: {score_id_for_eval}")
                             
                             evaluation_record.update(**update_data)
                             
                             if 'scoreId' in update_data:
-                                logging.info(f"Successfully updated evaluation record with BOTH scorecard and score IDs")
+                                logging.info("Updated evaluation record with scorecard and score IDs")
                             else:
-                                logging.info(f"Successfully updated evaluation record with scorecard ID only")
+                                logging.info("Updated evaluation record with scorecard ID only")
                     else:
                         logging.warning(f"Could not find matching dashboard scorecard for key {scorecard_key}")
                 else:
@@ -1357,7 +1268,6 @@ def accuracy(
                             key=data_source_key, 
                             id=data_source_id
                         )
-                        logging.info(f"Found data source: {data_source['name']} (ID: {data_source['id']})")
                         cloud_dataset = get_latest_dataset_for_data_source(client, data_source['id'])
                     
                     logging.info(f"Using cloud dataset: {cloud_dataset['name']} (ID: {cloud_dataset['id']})")
@@ -1420,22 +1330,16 @@ def accuracy(
                 # If the score_id_for_eval looks like an external ID (numeric),
                 # we need to resolve it to the actual DynamoDB UUID for Amplify Gen2 schema association
                 if score_id_for_eval and (isinstance(score_id_for_eval, int) or str(score_id_for_eval).isdigit()):
-                    logging.info(f"CLI_DEBUG: score_id_for_eval '{score_id_for_eval}' appears to be external ID, resolving to DynamoDB UUID...")
                     try:
                         # Use scorecard ID if available for better resolution  
                         scorecard_id_for_resolution = scorecard_id if 'scorecard_record' in locals() and scorecard_record else None
                         resolved_uuid = resolve_score_external_id_to_uuid(client, str(score_id_for_eval), scorecard_id_for_resolution)
                         if resolved_uuid:
                             score_id_for_eval = resolved_uuid
-                            logging.info(f"CLI_DEBUG: Successfully resolved external ID to DynamoDB UUID: {score_id_for_eval}")
                         else:
-                            logging.warning(f"CLI_DEBUG: Could not resolve external ID {score_id_for_eval} to DynamoDB UUID")
-                            score_id_for_eval = None  # Clear invalid external ID
+                                score_id_for_eval = None  # Clear invalid external ID
                     except Exception as resolve_error:
-                        logging.warning(f"CLI_DEBUG: Error resolving external ID to UUID: {resolve_error}")
                         score_id_for_eval = None
-                        
-                logging.info(f"CLI_DEBUG: Final score_id_for_eval being passed to Evaluation: {score_id_for_eval}")
 
             # Instantiate AccuracyEvaluation
             logging.info("Instantiating AccuracyEvaluation...")
@@ -1457,12 +1361,10 @@ def accuracy(
                 yaml_scorecard_id = scorecard_instance.properties.get('externalId')
                 if yaml_scorecard_id and yaml_scorecard_id.isdigit():
                     yaml_scorecard_id = int(yaml_scorecard_id)
-                logging.info(f"Found scorecard ID from properties.externalId: {yaml_scorecard_id} (type: {type(yaml_scorecard_id)})")
             
             if not yaml_scorecard_id and hasattr(scorecard_instance, 'scorecard_configurations') and scorecard_instance.scorecard_configurations:
                 config = scorecard_instance.scorecard_configurations[0]
                 yaml_scorecard_id = config.get('id')
-                logging.info(f"Found scorecard ID from scorecard_configurations: {yaml_scorecard_id} (type: {type(yaml_scorecard_id)})")
             
             if not yaml_scorecard_id:
                 yaml_scorecard_id = scorecard_id_resolved
@@ -1485,11 +1387,6 @@ def accuracy(
                 
                 logging.info(f"Using scorecard identifier for AccuracyEvaluation: {scorecard_identifier} (type: {type(scorecard_identifier)})")
             
-            # Debug logging before creating AccuracyEvaluation
-            logging.info(f"CLI_DEBUG: About to create AccuracyEvaluation with:")
-            logging.info(f"CLI_DEBUG:   score_id_for_eval = {score_id_for_eval}")
-            logging.info(f"CLI_DEBUG:   score_version_id_for_eval = {score_version_id_for_eval}")
-            logging.info(f"CLI_DEBUG:   subset_of_score_names = {subset_of_score_names}")
             
             accuracy_eval = AccuracyEvaluation(
                 scorecard_name=scorecard_identifier,
@@ -1513,7 +1410,7 @@ def accuracy(
             # Advance to Processing stage
             if tracker:
                 tracker.advance_stage()
-                logging.info("Entered Processing stage: Running AccuracyEvaluation")
+                logging.info("==== STAGE: Processing ====")
 
             # Initialize final_metrics with default values
             final_metrics = {
@@ -1535,9 +1432,7 @@ def accuracy(
                 raise
                 
 
-            # Advance to the Finalizing stage after evaluation completes
-            if tracker:
-                tracker.advance_stage()
+            # Finalizing stage advancement now handled in AccuracyEvaluation.run()
             
             # Final update to the evaluation record
             if evaluation_record:
@@ -1595,7 +1490,6 @@ def accuracy(
                     # Remove None values from update_fields
                     update_fields = {k: v for k, v in update_fields.items() if v is not None}
                     
-                    logging.info(f"Updating evaluation with the following fields: {json.dumps(update_fields, default=str)}")
                     
                     try:
                         evaluation_record.update(**update_fields)
@@ -1613,6 +1507,12 @@ def accuracy(
             logging.info(f"Precision: {final_metrics.get('precision', 'N/A')}")
             logging.info(f"Alignment: {final_metrics.get('alignment', 'N/A')}")
             logging.info(f"Recall: {final_metrics.get('recall', 'N/A')}")
+            
+            # Complete the Finalizing stage
+            if tracker:
+                tracker.current_stage.complete()
+                tracker._update_api_task_progress(force_critical=True)
+                logging.info("Finalizing stage completed")
 
         except Exception as e:
             logging.error(f"Evaluation failed: {str(e)}")
@@ -1623,7 +1523,7 @@ def accuracy(
             raise
 
     # Create and run the event loop
-    logging.info("=== ABOUT TO START EVENT LOOP AND CALL _run_accuracy ===")
+    # Starting async evaluation process
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -1631,7 +1531,7 @@ def accuracy(
         asyncio.set_event_loop(loop)
 
     try:
-        logging.info("=== CALLING loop.run_until_complete(_run_accuracy()) ===")
+        # Running async evaluation
         loop.run_until_complete(_run_accuracy())
     except asyncio.CancelledError:
         logging.info("Task was cancelled - cleaning up...")
@@ -1660,12 +1560,12 @@ def get_data_driven_samples(
     number_of_samples=None,
     random_seed=None
 ):
-    logging.info(f"=== Starting get_data_driven_samples ===")
-    logging.info(f"scorecard_name: {scorecard_name}")
-    logging.info(f"score_name: {score_name}")
-    logging.info(f"fresh: {fresh}")
-    logging.info(f"number_of_samples: {number_of_samples}")
-    logging.info(f"random_seed: {random_seed}")
+    logging.debug(f"Loading data samples for {score_name}")
+    # Scorecard: {scorecard_name}
+    # Score: {score_name}
+    # Fresh data load: {fresh}
+    # Sample count: {number_of_samples}
+    # Random seed: {random_seed}
     
     # Get score class name for error messages
     score_class_name = score_config.get('class', 'UnknownScore')
@@ -1681,79 +1581,26 @@ def get_data_driven_samples(
         )
         logging.info(f"Successfully loaded score '{score_name}' using Score.load()")
 
-        # ADD THESE LOGGING STATEMENTS:
-        logging.info(f"=== DEBUGGING SCORE CONFIGURATION ===")
-        logging.info(f"Score name: {score_name}")
-        logging.info(f"Score class: {score_class_name}")
-        logging.info(f"Full score_config keys: {list(score_config.keys())}")
-        
-        if 'data' in score_config:
-            logging.info(f"Data config found: {score_config['data']}")
-            data_config = score_config['data']
-            if isinstance(data_config, dict):
-                logging.info(f"Data config keys: {list(data_config.keys())}")
-                if 'queries' in data_config:
-                    logging.info(f"Queries found: {data_config['queries']}")
-                    logging.info(f"Number of queries: {len(data_config['queries']) if isinstance(data_config['queries'], list) else 'not a list'}")
-                else:
-                    logging.info("No 'queries' key found in data config")
-                if 'searches' in data_config:
-                    logging.info(f"Searches found: {data_config['searches']}")
-                    logging.info(f"Number of searches: {len(data_config['searches']) if isinstance(data_config['searches'], list) else 'not a list'}")
-                else:
-                    logging.info("No 'searches' key found in data config")
-            else:
-                logging.info(f"Data config is not a dict, type: {type(data_config)}")
-        else:
-            logging.info("No 'data' key found in score_config")
-        logging.info(f"=== END DEBUGGING SCORE CONFIGURATION ===")
 
         # Load and process the data
         logging.info("Loading data...")
         score_instance.load_data(data=score_config['data'], fresh=fresh)
         
-        # COMPREHENSIVE DEBUG LOGGING AFTER DATA LOAD
-        logging.info("=" * 80)
-        logging.info("DATASET DEBUG: EvaluationCommands - POST-LOAD_DATA ANALYSIS")
-        logging.info("=" * 80)
-        
+        # Basic dataset info after loading
         if hasattr(score_instance, 'dataframe') and score_instance.dataframe is not None:
-            # Use the comprehensive debug utility from DataCache base class
-            if hasattr(score_instance, 'debug_dataframe'):
-                score_instance.debug_dataframe(score_instance.dataframe, "POST_LOAD_DATA", logging)
-            else:
-                # Fallback if debug_dataframe method not available
-                logging.info(f"POST_LOAD_DATA_SHAPE: {score_instance.dataframe.shape}")
-                logging.info(f"POST_LOAD_DATA_COLUMNS: {list(score_instance.dataframe.columns)}")
+            logging.info(f"Data loaded: {score_instance.dataframe.shape[0]} rows x {score_instance.dataframe.shape[1]} columns")
+            logging.info(f"Columns: {list(score_instance.dataframe.columns)}")
         else:
-            logging.error("POST_LOAD_DATA: No dataframe available after load_data call")
-        
-        logging.info("=" * 80)
-        logging.info("END POST-LOAD_DATA DEBUG")
-        logging.info("=" * 80)
+            logging.error("No dataframe available after data loading")
         
         logging.info("Processing data...")
         score_instance.process_data()
         
-        # COMPREHENSIVE DEBUG LOGGING AFTER DATA PROCESSING  
-        logging.info("=" * 80)
-        logging.info("DATASET DEBUG: EvaluationCommands - POST-PROCESS_DATA ANALYSIS")
-        logging.info("=" * 80)
-        
+        # Basic dataset info after processing
         if hasattr(score_instance, 'dataframe') and score_instance.dataframe is not None:
-            # Use the comprehensive debug utility from DataCache base class
-            if hasattr(score_instance, 'debug_dataframe'):
-                score_instance.debug_dataframe(score_instance.dataframe, "POST_PROCESS_DATA", logging)
-            else:
-                # Fallback if debug_dataframe method not available
-                logging.info(f"POST_PROCESS_DATA_SHAPE: {score_instance.dataframe.shape}")
-                logging.info(f"POST_PROCESS_DATA_COLUMNS: {list(score_instance.dataframe.columns)}")
+            logging.info(f"Data processed: {score_instance.dataframe.shape[0]} rows x {score_instance.dataframe.shape[1]} columns")
         else:
-            logging.error("POST_PROCESS_DATA: No dataframe available after process_data call")
-        
-        logging.info("=" * 80)
-        logging.info("END POST-PROCESS_DATA DEBUG")
-        logging.info("=" * 80)
+            logging.error("No dataframe available after data processing")
 
         # Check if dataframe exists and has data
         if not hasattr(score_instance, 'dataframe'):
@@ -1870,7 +1717,7 @@ def get_data_driven_samples(
             }
             processed_samples.append(processed_sample)
         
-        logging.info(f"=== Completed get_data_driven_samples successfully ===")
+        logging.debug(f"Completed get_data_driven_samples successfully")
         logging.info(f"Returning {len(processed_samples)} processed samples")
         
         # No need for a final progress update here since we're just returning the samples
@@ -1878,7 +1725,7 @@ def get_data_driven_samples(
         return processed_samples
         
     except Exception as e:
-        logging.error(f"=== Error in get_data_driven_samples ===")
+        logging.error(f"Error in get_data_driven_samples")
         logging.error(f"Error type: {type(e).__name__}")
         logging.error(f"Error message: {str(e)}")
         logging.error("This error occurred while trying to load labeled samples for evaluation")

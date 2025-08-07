@@ -53,9 +53,9 @@ cache_db_file_path = cache_dir_path / "topics_llm_cache.db"
 try:
     # Ensure the cache directory exists
     cache_dir_path.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Attempting to initialize Langchain LLM SQLite cache at {cache_db_file_path}")
+    logger.debug(f"Attempting to initialize Langchain LLM SQLite cache at {cache_db_file_path}")
     set_llm_cache(SQLiteCache(database_path=str(cache_db_file_path))) # Pass the full file path
-    logger.info(f"Langchain LLM SQLite cache initialized successfully at {cache_db_file_path}.")
+    logger.debug(f"Langchain LLM SQLite cache initialized successfully at {cache_db_file_path}.")
 except Exception as e:
     logger.warning(f"Could not initialize Langchain LLM SQLite cache (\'{cache_db_file_path}\'): {e}. LLM calls will not be cached across runs.")
 

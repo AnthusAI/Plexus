@@ -203,7 +203,7 @@ async def predict_impl(
                 # Start with Querying stage
                 tracker.current_stage.status_message = "Starting prediction setup..."
                 tracker.update(current_items=0)
-                logging.info("Entered Querying stage: Starting prediction setup")
+                logging.info("==== STAGE: Querying ====")
                 
                 # Log all configured stages for debugging
                 all_stages = tracker.get_all_stages()
@@ -240,7 +240,7 @@ async def predict_impl(
             tracker.advance_stage()
             tracker.current_stage.status_message = "Starting predictions..."
             tracker.update(current_items=0)
-            logging.info(f"Entered Predicting stage (current stage: {tracker.current_stage.name})")
+            logging.info(f"==== STAGE: {tracker.current_stage.name} ====")
         
         # Initialize feedback comparison variables
         scorecard_id = None
@@ -656,7 +656,7 @@ async def predict_impl(
             tracker.advance_stage()
             tracker.current_stage.status_message = "Starting result archiving..."
             tracker.update(current_items=total_predictions)
-            logging.info(f"Entered Archiving stage (current stage: {tracker.current_stage.name})")
+            logging.info(f"==== STAGE: {tracker.current_stage.name} ====")
         
         if excel and results:
             if tracker:

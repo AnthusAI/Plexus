@@ -46,11 +46,13 @@ def iteratively_fetch_configurations(
         logging.error("Cannot fetch configurations: No scorecard name provided")
         return {}
     
-    # Log the caching strategy
+    # Determine caching strategy
     if use_cache:
-        logging.info("CACHING STRATEGY: Using local cache first, fetching from API only for missing configs")
+        # Using local cache first, then API for missing configs
+        pass
     else:
-        logging.info("CACHING STRATEGY: Always fetching from API, ignoring local cache (but still writing to cache)")
+        # Fetching fresh from API (ignoring local cache)
+        pass
     
     # Build initial name/ID mappings from target scores
     # But we need complete mappings for dependency resolution, so we'll update these later
@@ -102,7 +104,7 @@ def iteratively_fetch_configurations(
         id_to_name.update(complete_id_to_name)
         name_to_id.update(complete_name_to_id)
         
-        logging.info(f"Built complete name/ID mappings for {len(complete_name_to_id)} scores in scorecard")
+        # Built complete name/ID mappings for dependency resolution
         
     except Exception as e:
         logging.error(f"Error fetching complete scorecard structure for dependency resolution: {str(e)}")
@@ -127,7 +129,7 @@ def iteratively_fetch_configurations(
     iteration = 1
     
     while True:
-        logging.info(f"Starting iteration {iteration} with {len(all_score_ids) - len(processed_ids)} scores to process")
+        # Processing iteration for dependency resolution
         
         # Get current unprocessed scores
         current_scores = [
@@ -149,7 +151,7 @@ def iteratively_fetch_configurations(
             # When use_cache=False, force fetch all configurations from API
             # Create a cache_status dict with all scores marked as not cached
             cache_status = {score.get('id'): False for score in current_scores if score.get('id')}
-            logging.info("Bypassing local cache check - fetching all configurations from API")
+            # Bypassing local cache - fetching fresh from API
             
             # Fetch all configurations from API
             new_configs = fetch_score_configurations(client, scorecard_data, current_scores, cache_status, use_cache=use_cache)

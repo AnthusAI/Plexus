@@ -142,7 +142,7 @@ class Evaluation:
         
         # Set up logging for evaluations
         self.logging = logging.getLogger('plexus/evaluation')
-        self.logging.info("Starting Evaluation initialization...")
+        # Initialize evaluation
 
         # Initialize basic parameters
         self.scorecard_name = scorecard_name
@@ -167,14 +167,12 @@ class Evaluation:
 
         # Initialize dashboard client
         try:
-            self.logging.info("Initializing Plexus Dashboard client...")
             self.dashboard_client = PlexusDashboardClient.for_account(account_key)
             
-            self.logging.info(f"Looking up account with key: {account_key}")
             account = Account.list_by_key(key=account_key, client=self.dashboard_client)
             if not account:
                 raise ValueError(f"No account found with key: {account_key}")
-            self.logging.info(f"Found account: {account.name} ({account.id})")
+            self.logging.info(f"Initialized evaluation for account: {account.name}")
             
             self.account_id = account.id
             
@@ -191,7 +189,6 @@ class Evaluation:
             else:
                 scorecard_display_name = str(self.scorecard_name)
                 
-            self.logging.info(f"Looking up scorecard with name: {scorecard_display_name}")
             try:
                 # Try different lookup methods in order of preference
                 scorecard_obj = None
@@ -200,62 +197,52 @@ class Evaluation:
                 if hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
                     scorecard_key = self.scorecard.properties.get('key')
                     if scorecard_key:
-                        self.logging.info(f"Using scorecard key from properties: {scorecard_key}")
                         try:
                             scorecard_obj = DashboardScorecard.get_by_key(scorecard_key, self.dashboard_client)
                         except ValueError:
-                            self.logging.info(f"Scorecard not found by key: {scorecard_key}")
+                            pass
                 
                 # If not found by key, try by display name
                 if not scorecard_obj and scorecard_display_name:
-                    self.logging.info(f"Trying lookup by display name: {scorecard_display_name}")
                     try:
                         scorecard_obj = DashboardScorecard.get_by_name(scorecard_display_name, self.dashboard_client)
                     except ValueError:
-                        self.logging.info(f"Scorecard not found by display name: {scorecard_display_name}")
+                        pass
                 
                 # If still not found, try with the scorecard_name parameter
                 if not scorecard_obj:
-                    self.logging.info(f"Trying lookup by scorecard_name parameter: {self.scorecard_name}")
                     try:
                         scorecard_obj = DashboardScorecard.get_by_name(self.scorecard_name, self.dashboard_client)
                     except ValueError:
-                        self.logging.info(f"Scorecard not found by scorecard_name: {self.scorecard_name}")
+                        pass
                 
                 # If still not found, try by external ID if available
                 if not scorecard_obj and hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
                     external_id = self.scorecard.properties.get('externalId')
                     if external_id:
-                        self.logging.info(f"Trying lookup by external ID: {external_id}")
                         try:
                             scorecard_obj = DashboardScorecard.get_by_id(external_id, self.dashboard_client)
                         except ValueError:
-                            self.logging.info(f"Scorecard not found by external ID: {external_id}")
+                            pass
                 
                 if scorecard_obj:
-                    self.logging.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
+                    self.logging.info(f"Found scorecard: {scorecard_obj.name}")
                     self.scorecard_id = scorecard_obj.id
                     
                     # Look up Score ID IMMEDIATELY after Scorecard ID to set both as soon as possible
                     if self.score_id:
-                        self.logging.info(f"Looking up score with identifier: {self.score_id}")
-                        self.logging.info(f"DEBUG: Initial score_id value: {self.score_id}, type: {type(self.score_id)}")
                         try:
                             # Validate score_id format - must be a DynamoDB UUID with hyphens for Amplify Gen2 schema association
                             if isinstance(self.score_id, str) and '-' in self.score_id and len(self.score_id.split('-')) == 5:
                                 # Score ID is already in DynamoDB UUID format, use it directly
-                                self.logging.info(f"Score ID provided in correct DynamoDB UUID format: {self.score_id}")
-                                self.logging.info(f"DEBUG: Score ID is already valid UUID, keeping as-is: {self.score_id}")
+                                pass
                             else:
                                 # Score ID might be an external ID, name, or key - need to resolve it
-                                self.logging.info(f"Score ID not in DynamoDB UUID format, attempting lookup: {self.score_id}")
                                 try:
                                     score_obj = None
                                     # Try lookup by name first
                                     try:
                                         score_obj = DashboardScore.get_by_name(self.score_id, self.scorecard_id, self.dashboard_client)
-                                        if score_obj:
-                                            self.logging.info(f"Found score by name: {score_obj.name} ({score_obj.id})")
                                     except Exception:
                                         pass
                                     
@@ -263,8 +250,6 @@ class Evaluation:
                                     if not score_obj:
                                         try:
                                             score_obj = DashboardScore.get_by_key(self.score_id, self.scorecard_id, self.dashboard_client)
-                                            if score_obj:
-                                                self.logging.info(f"Found score by key: {score_obj.name} ({score_obj.id})")
                                         except Exception:
                                             pass
                                     
@@ -272,47 +257,31 @@ class Evaluation:
                                     if not score_obj:
                                         try:
                                             score_obj = DashboardScore.get_by_external_id(self.score_id, self.scorecard_id, self.dashboard_client)
-                                            if score_obj:
-                                                self.logging.info(f"Found score by external ID: {score_obj.name} ({score_obj.id})")
                                         except Exception:
                                             pass
                                     
                                     if score_obj:
-                                        old_score_id = self.score_id
                                         self.score_id = score_obj.id
-                                        self.logging.info(f"Resolved score identifier '{old_score_id}' to DynamoDB UUID: {self.score_id}")
+                                        self.logging.info(f"Resolved score identifier to UUID: {self.score_id}")
                                     else:
-                                        self.logging.warning(f"Could not resolve score identifier '{self.score_id}' to a DynamoDB UUID")
-                                        self.logging.warning(f"This will cause issues with Evaluation records. Expected format is UUID with hyphens.")
-                                        # Keep the original score_id but warn that it may cause issues
+                                        self.logging.warning(f"Could not resolve score identifier: {self.score_id}")
                                 except Exception as score_lookup_error:
-                                    self.logging.warning(f"Failed to lookup score '{self.score_id}': {score_lookup_error}")
-                                    self.logging.warning(f"Using original score_id, but this may cause issues if not in DynamoDB UUID format")
+                                    self.logging.warning(f"Failed to lookup score: {score_lookup_error}")
                         except Exception as e:
                             self.logging.error(f"Error processing score ID: {str(e)}")
-                            # Continue with the original score_id value
-                    else:
-                        self.logging.info("No score_id provided in initialization")
                     
                     # Update the evaluation record immediately with both IDs now that they're both set
-                    self.logging.info(f"DEBUG: About to check evaluation record update - evaluation_id: {getattr(self, 'evaluation_id', 'NOT_SET')}, score_id: {self.score_id}")
                     if hasattr(self, 'evaluation_id') and self.evaluation_id:
                         update_data = {'scorecardId': self.scorecard_id}
                         
                         # Add score_id if it's available and validated
-                        self.logging.info(f"DEBUG: Validating score_id for evaluation update: score_id={self.score_id}, type={type(self.score_id)}")
                         if self.score_id and isinstance(self.score_id, str):
-                            self.logging.info(f"DEBUG: score_id is string, checking format: has_hyphen={'-' in self.score_id}, parts={len(self.score_id.split('-')) if '-' in self.score_id else 'NO_HYPHEN'}")
                             if '-' in self.score_id and len(self.score_id.split('-')) == 5:
                                 update_data['scoreId'] = self.score_id
-                                self.logging.info(f"Adding Score ID to immediate evaluation update: {self.score_id}")
                             else:
                                 self.logging.warning(f"Score ID format invalid for evaluation update: {self.score_id}")
-                        else:
-                            self.logging.warning(f"Score ID not available or not string for evaluation update: {self.score_id}")
                         
                         try:
-                            self.logging.info(f"Updating evaluation record {self.evaluation_id} immediately with: {update_data}")
                             mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                                 updateEvaluation(input: $input) {
                                     id
@@ -326,15 +295,9 @@ class Evaluation:
                                     **update_data
                                 }
                             })
-                            if 'scoreId' in update_data:
-                                self.logging.info("Successfully updated evaluation record with BOTH scorecard and score IDs immediately after resolution")
-                            else:
-                                self.logging.info("Successfully updated evaluation record with scorecard ID only (score ID was not valid)")
                         except Exception as e:
-                            self.logging.error(f"Failed to update evaluation record immediately: {str(e)}")
+                            self.logging.error(f"Failed to update evaluation record: {str(e)}")
                             # Continue initialization even if update fails
-                    else:
-                        self.logging.warning(f"Cannot update evaluation record - evaluation_id not available: hasattr={hasattr(self, 'evaluation_id')}, value={getattr(self, 'evaluation_id', 'NOT_SET')}")
                 else:
                     self.logging.error("Failed to find scorecard")
                     raise ValueError(f"Could not find scorecard with name: {self.scorecard.name}")
@@ -387,8 +350,7 @@ class Evaluation:
             end_time = time.time()
             execution_time = end_time - start_time
             time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
-            print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
-            logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
+            logging.info(f"{func.__name__} executed in {execution_time:.2f} seconds. Average per text: {time_per_text:.2f}s")
             return result
 
         def sync_wrapper(self, *args, **kwargs):
@@ -397,8 +359,7 @@ class Evaluation:
             end_time = time.time()
             execution_time = end_time - start_time
             time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
-            print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
-            logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
+            logging.info(f"{func.__name__} executed in {execution_time:.2f} seconds. Average per text: {time_per_text:.2f}s")
             return result
 
         if asyncio.iscoroutinefunction(func):
@@ -546,7 +507,7 @@ class Evaluation:
                 serialized_variables = safe_json_dumps(variables)
                 clean_variables = json.loads(serialized_variables)
                 
-                logging.debug(f"Updating evaluation with variables: {json.dumps(clean_variables, indent=2)}")
+                # Updating evaluation metrics
                 
                 # Execute the mutation with proper client handling
                 # Use asyncio.to_thread for the synchronous execute method
@@ -578,16 +539,14 @@ class Evaluation:
                     logging.warning(f"Error closing GraphQL client: {str(e)}")
 
     def calculate_metrics(self, results):
-        # --- BEGIN NEW LOGGING ---
-        self.logging.info(f"--- Entering calculate_metrics with {len(results)} results ---")
         if not results:
-            self.logging.warning("calculate_metrics received an empty list of results.")
+            self.logging.warning("No results to calculate metrics")
             # Return default/empty metrics to avoid crashing
             return {
                 "accuracy": 0,
-                "alignment": 0,  # Changed from sensitivity to alignment
+                "alignment": 0,
                 "precision": 0,
-                "recall": 0,      # Changed from specificity to recall
+                "recall": 0,
                 "confusionMatrix": {
                     "matrix": [[0, 0], [0, 0]],
                     "labels": ['yes', 'no']
@@ -605,7 +564,6 @@ class Evaluation:
                     "percentage": 0
                 }]
             }
-        # --- END NEW LOGGING ---
 
         # Import metrics classes
         from plexus.analysis.metrics.gwet_ac1 import GwetAC1
@@ -614,8 +572,7 @@ class Evaluation:
         from plexus.analysis.metrics.recall import Recall
         from plexus.analysis.metrics.metric import Metric
 
-        # Use self.logging instead of logging globally
-        self.logging.info(f"\nStarting metrics calculation with {len(results)} results")
+        self.logging.info(f"Calculating metrics for {len(results)} results")
         predicted_distributions = {}
         actual_distributions = {}
         confusion_matrices = {}
@@ -635,39 +592,29 @@ class Evaluation:
         # First pass: build distributions and confusion matrices
         logged_results_count = 0
         for result in results:
-            logging.info(f"\nProcessing result for form_id: {result['form_id']}")
-            
             for score_identifier, score_result in result['results'].items():
-                # --- Add logging before skips ---
-                self.logging.info(f"  Processing score_identifier: {score_identifier}")
-                if hasattr(score_result, 'value'):
-                    self.logging.info(f"    Score value: {score_result.value}")
-                else:
-                    self.logging.warning(f"    Score result object has no 'value' attribute: {score_result}")
-                    continue # Skip if value is missing
+                if not hasattr(score_result, 'value'):
+                    self.logging.warning(f"Score result has no 'value' attribute: {score_identifier}")
+                    continue
 
                 # Skip if the score result is an error
                 if isinstance(score_result.value, str) and score_result.value.upper() == "ERROR":
-                    self.logging.warning(f"  Skipping metrics calculation for error result: {score_identifier}")
                     continue
 
                 # Ensure parameters attribute exists before accessing name
                 if not hasattr(score_result, 'parameters') or not hasattr(score_result.parameters, 'name'):
-                    self.logging.warning(f"  Skipping metrics calculation for result without valid parameters/name: {score_identifier}")
+                    self.logging.warning(f"Skipping result without valid parameters: {score_identifier}")
                     continue
                 score_name = score_result.parameters.name
-                self.logging.info(f"    Score name resolved to: {score_name}")
 
                 # Skip if this is a dependency score and not our primary score
                 if primary_score_name and score_name != primary_score_name:
-                    logging.info(f"  Skipping metrics for dependency score: {score_name} (Primary: {primary_score_name})")
                     continue
 
                 # Ensure metadata and human_label exist before accessing
                 if not hasattr(score_result, 'metadata') or 'human_label' not in score_result.metadata:
-                    self.logging.warning(f"  Skipping metrics calculation for result missing metadata or human_label: {score_identifier}")
+                    self.logging.warning(f"Skipping result missing metadata: {score_identifier}")
                     continue
-                # --- End logging ---
 
                 # Standardize and prepare predicted & actual values
                 predicted = str(score_result.value).lower().strip()
@@ -681,18 +628,13 @@ class Evaluation:
                 all_predictions.append(predicted)
                 all_actuals.append(actual)
                 
-                # Log the first 10 results for visual inspection
-                if logged_results_count < 10:
-                    self.logging.info(f"  Result {logged_results_count + 1}: Form ID: {result.get('form_id', 'N/A')}, Score: {score_name}, Predicted: '{predicted}', Actual: '{actual}'")
+                # Log the first few results for inspection
+                if logged_results_count < 5:
+                    self.logging.info(f"Sample {logged_results_count + 1}: {score_name} - Predicted: '{predicted}', Actual: '{actual}'")
                     logged_results_count += 1
 
-                self.logging.info(f"Score: {score_name}")
-                self.logging.info(f"Predicted: '{predicted}'")
-                self.logging.info(f"Actual: '{actual}'")
-                
                 # Determine correctness - check if predicted value exactly matches the actual value
                 is_correct = predicted == actual
-                self.logging.info(f"Correct: {is_correct}")
                 
                 # Update score_result metadata to ensure correct value is set
                 score_result.metadata['correct'] = is_correct
@@ -740,10 +682,7 @@ class Evaluation:
         accuracy_value = 0
         if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
             try:
-                # Add diagnostic logging for Accuracy inputs
-                self.logging.info(f"Accuracy calculation inputs:")
-                self.logging.info(f"  Predictions ({len(all_predictions)}): {all_predictions[:10]}...")
-                self.logging.info(f"  Actuals ({len(all_actuals)}): {all_actuals[:10]}...")
+                # Calculate accuracy
                 
                 # Create an Accuracy instance and use proper Metric.Input interface
                 accuracy_calculator = Accuracy()
@@ -753,31 +692,20 @@ class Evaluation:
                 )
                 result = accuracy_calculator.calculate(metric_input)
                 accuracy_value = result.value
-                self.logging.info(f"Calculated Accuracy: {accuracy_value}")
-                self.logging.info(f"Matches: {result.metadata.get('matches', 0)}/{result.metadata.get('total', 0)}")
+                # Accuracy calculated successfully
             except Exception as e:
                 self.logging.error(f"Error calculating Accuracy: {str(e)}")
-                self.logging.exception("Stack trace for Accuracy calculation error:")
                 # Fall back to manual calculation if the Accuracy class fails
                 accuracy_value = total_correct / total_predictions if total_predictions > 0 else 0
-                self.logging.info(f"Fallback to manual accuracy calculation: {accuracy_value}")
         else:
             # If lists are empty or unequal, use the original calculation
             accuracy_value = total_correct / total_predictions if total_predictions > 0 else 0
-            self.logging.info(f"Used manual accuracy calculation due to empty or unequal lists: {accuracy_value}")
         
         # Calculate Gwet's AC1 for alignment
         gwet_ac1_value = 0
         if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
             try:
-                # Add diagnostic logging for AC1 inputs
-                self.logging.info(f"Gwet's AC1 calculation inputs:")
-                self.logging.info(f"  Predictions ({len(all_predictions)}): {all_predictions[:10]}...")
-                self.logging.info(f"  Actuals ({len(all_actuals)}): {all_actuals[:10]}...")
-                
-                # Calculate unique categories for debugging
-                unique_categories = set(all_predictions + all_actuals)
-                self.logging.info(f"  Unique categories: {unique_categories}")
+                # Calculate AC1
                 
                 # Create a GwetAC1 instance and use proper Metric.Input interface
                 gwet_calculator = GwetAC1()
@@ -787,15 +715,11 @@ class Evaluation:
                 )
                 result = gwet_calculator.calculate(metric_input)
                 gwet_ac1_value = result.value
-                self.logging.info(f"Calculated Gwet's AC1: {gwet_ac1_value}")
-                
                 # Map AC1 from [-1, 1] to [0, 1] for backward compatibility
                 # Any negative values are mapped to 0
                 gwet_ac1_mapped = max(0, (gwet_ac1_value + 1) / 2)
-                self.logging.info(f"Mapped Gwet's AC1 (for backward compatibility): {gwet_ac1_mapped}")
             except Exception as e:
                 self.logging.error(f"Error calculating Gwet's AC1: {str(e)}")
-                self.logging.exception("Stack trace for AC1 calculation error:")
                 gwet_ac1_value = 0
         
         # Calculate precision using the Precision metric class
@@ -805,20 +729,15 @@ class Evaluation:
         binary_confusion_matrix = None
         for score_name, matrix_data in confusion_matrices.items():
             labels = sorted(list(matrix_data['labels']))
-            self.logging.info(f"Checking labels for score '{score_name}' for binary metrics: {labels}")
             
             if len(labels) == 2 and 'yes' in labels and 'no' in labels:
-                self.logging.info(f"Found binary classification data for score '{score_name}'")
                 binary_confusion_matrix = matrix_data
                 break
         
         # Calculate precision using the Precision class
         if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
             try:
-                # Add diagnostic logging for Precision inputs
-                self.logging.info(f"Precision calculation inputs:")
-                self.logging.info(f"  Predictions ({len(all_predictions)}): {all_predictions[:10]}...")
-                self.logging.info(f"  Actuals ({len(all_actuals)}): {all_actuals[:10]}...")
+                # Calculate Precision
                 
                 # Create a Precision instance and use proper Metric.Input interface
                 precision_calculator = Precision(positive_labels=['yes'])
@@ -828,10 +747,7 @@ class Evaluation:
                 )
                 result = precision_calculator.calculate(metric_input)
                 precision_value = result.value
-                self.logging.info(f"Calculated Precision: {precision_value}")
-                self.logging.info(f"True Positives: {result.metadata.get('true_positives', 0)}")
-                self.logging.info(f"False Positives: {result.metadata.get('false_positives', 0)}")
-                self.logging.info(f"Total Predicted Positive: {result.metadata.get('total_predicted_positive', 0)}")
+                precision_value = result.value
             except Exception as e:
                 self.logging.error(f"Error calculating Precision: {str(e)}")
                 self.logging.exception("Stack trace for Precision calculation error:")
@@ -842,11 +758,11 @@ class Evaluation:
                     tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
                     fp = binary_confusion_matrix['matrix'].get('no', {}).get('yes', 0)
                     precision_value = tp / (tp + fp) if (tp + fp) > 0 else 0
-                    self.logging.info(f"Fallback to manual precision calculation from matrix: {precision_value}")
+                    # Fallback to manual precision calculation from matrix
                 else:
                     # If no binary confusion matrix, use accuracy as a fallback
                     precision_value = accuracy_value
-                    self.logging.info(f"Using accuracy as fallback for precision: {precision_value}")
+                    # Using accuracy as fallback for precision
         elif binary_confusion_matrix:
             # If we have a binary confusion matrix but couldn't use the Precision class
             tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
@@ -854,8 +770,8 @@ class Evaluation:
             precision_value = tp / (tp + fp) if (tp + fp) > 0 else 0
             self.logging.info(f"Calculated precision manually from confusion matrix: {precision_value}")
         else:
-            # Default fallback
-            self.logging.info(f"Using accuracy as fallback for precision due to insufficient data: {precision_value}")
+            # Default fallback - using accuracy as fallback for precision due to insufficient data
+            precision_value = accuracy_value
         
         # Calculate recall using the Recall metric class
         recall_value = accuracy_value  # Default fallback is to use accuracy
@@ -863,10 +779,7 @@ class Evaluation:
         # Calculate recall using the Recall class
         if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
             try:
-                # Add diagnostic logging for Recall inputs
-                self.logging.info(f"Recall calculation inputs:")
-                self.logging.info(f"  Predictions ({len(all_predictions)}): {all_predictions[:10]}...")
-                self.logging.info(f"  Actuals ({len(all_actuals)}): {all_actuals[:10]}...")
+                # Calculate Recall
                 
                 # Create a Recall instance and use proper Metric.Input interface
                 recall_calculator = Recall(positive_labels=['yes'])
@@ -876,10 +789,7 @@ class Evaluation:
                 )
                 result = recall_calculator.calculate(metric_input)
                 recall_value = result.value
-                self.logging.info(f"Calculated Recall: {recall_value}")
-                self.logging.info(f"True Positives: {result.metadata.get('true_positives', 0)}")
-                self.logging.info(f"False Negatives: {result.metadata.get('false_negatives', 0)}")
-                self.logging.info(f"Total Actual Positive: {result.metadata.get('total_actual_positive', 0)}")
+                recall_value = result.value
             except Exception as e:
                 self.logging.error(f"Error calculating Recall: {str(e)}")
                 self.logging.exception("Stack trace for Recall calculation error:")
@@ -890,11 +800,11 @@ class Evaluation:
                     tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
                     fn = binary_confusion_matrix['matrix'].get('yes', {}).get('no', 0)
                     recall_value = tp / (tp + fn) if (tp + fn) > 0 else 0
-                    self.logging.info(f"Fallback to manual recall calculation from matrix: {recall_value}")
+                    # Fallback to manual recall calculation from matrix
                 else:
                     # If no binary confusion matrix, use accuracy as a fallback
                     recall_value = accuracy_value
-                    self.logging.info(f"Using accuracy as fallback for recall: {recall_value}")
+                    # Using accuracy as fallback for recall
         elif binary_confusion_matrix:
             # If we have a binary confusion matrix but couldn't use the Recall class
             tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
@@ -902,8 +812,8 @@ class Evaluation:
             recall_value = tp / (tp + fn) if (tp + fn) > 0 else 0
             self.logging.info(f"Calculated recall manually from confusion matrix: {recall_value}")
         else:
-            # Default fallback
-            self.logging.info(f"Using accuracy as fallback for recall due to insufficient data: {recall_value}")
+            # Default fallback - using accuracy as fallback for recall due to insufficient data
+            recall_value = accuracy_value
         
         # Alignment is calculated with Gwet's AC1
         alignment = gwet_ac1_value
@@ -942,10 +852,7 @@ class Evaluation:
                 "matrix": matrix,
                 "labels": labels
             }
-            self.logging.info(f"\nSelected Confusion Matrix for API (Score: {target_score_name}):")
-            self.logging.info(f"Labels: {labels}")
-            for i, row in enumerate(matrix):
-                self.logging.info(f"{labels[i]}: {row}")
+            # Confusion matrix prepared for API
         else:
             # Create a default empty matrix if none were generated
             self.logging.warning("No confusion matrix data generated, creating default structure.")
@@ -1000,15 +907,8 @@ class Evaluation:
                 "percentage": 0
             })
 
-        # --- BEGIN NEW LOGGING ---
-        self.logging.info("\n--- Calculated Metrics Summary ---")
-        self.logging.info(f"Total predictions processed: {total_predictions}")
-        self.logging.info(f"Total correct predictions: {total_correct}")
-        self.logging.info(f"Final Accuracy: {accuracy_value}")
-        self.logging.info(f"Final Precision: {precision_value}")
-        self.logging.info(f"Final Alignment (Gwet's AC1): {alignment}")
-        self.logging.info(f"Final Recall: {recall_value}")  # Changed from Specificity to Recall
-        # --- END NEW LOGGING ---
+        # Log final metrics summary
+        self.logging.info(f"Metrics: {total_correct}/{total_predictions} correct, Accuracy: {accuracy_value:.3f}, Precision: {precision_value:.3f}, Alignment: {alignment:.3f}, Recall: {recall_value:.3f}")
 
         return {
             "accuracy": accuracy_value,
@@ -1022,10 +922,7 @@ class Evaluation:
         }
 
     async def _async_run(self):
-        # --- BEGIN NEW LOGGING ---
-        print("\n\n--- Evaluation _async_run CALLED ---\n\n")
-        self.logging.info("--- Evaluation _async_run CALLED ---")
-        # --- END NEW LOGGING ---
+        # Starting evaluation
 
         # Configure logging
         # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -1566,7 +1463,6 @@ class Evaluation:
 
     def _get_update_variables(self, metrics, status):
         """Get the variables for the update mutation"""
-# Removed verbose logging to improve performance
         elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
         
         # Format metrics for API
@@ -1579,18 +1475,17 @@ class Evaluation:
             # For alignment (Gwet's AC1), we map from [-1, 1] to [0, 100] for UI display
             # Only map if the value is negative, otherwise use the raw value scaled to percentage
             alignment_value = metrics["alignment"]
-            self.logging.info(f"[_get_update_variables] Processing alignment value: {alignment_value}")
+            # Process alignment value
             if alignment_value < 0:
                 display_value = 0  # Map negative values to 0
             else:
                 display_value = alignment_value * 100  # Scale to percentage
             metrics_for_api.append({"name": "Alignment", "value": display_value})
-            self.logging.info(f"[_get_update_variables] Added Alignment to metrics_for_api with value: {display_value}")
+            # Added alignment to metrics
         if metrics.get("recall") is not None:
             metrics_for_api.append({"name": "Recall", "value": metrics["recall"] * 100})
         
-        # Log what metrics we've prepared for API
-        self.logging.info(f"[_get_update_variables] Prepared metrics_for_api: {metrics_for_api}")
+        # Metrics prepared for API
         
         # Get first score's confusion matrix
         confusion_matrix_data = metrics.get("confusion_matrices", [{}])[0] if metrics.get("confusion_matrices") else {}
@@ -1641,29 +1536,24 @@ class Evaluation:
             # Double check that we have our alignment metric if it should be there
             has_alignment = any(m["name"] == "Alignment" for m in metrics_for_api)
             if "alignment" in metrics and not has_alignment:
-                self.logging.warning(f"[_get_update_variables] Alignment exists in metrics but not in metrics_for_api!")
-                # Force add it if not already there
+                # Force add alignment if missing
                 alignment_value = metrics["alignment"]
                 display_value = 0 if alignment_value < 0 else alignment_value * 100
                 metrics_for_api.append({"name": "Alignment", "value": display_value})
-                self.logging.info(f"[_get_update_variables] Forced added Alignment with value: {display_value}")
             
             # Additional validation to ensure all required metrics are included
             metric_names = [m["name"] for m in metrics_for_api]
-            self.logging.info(f"[_get_update_variables] Current metric names in metrics_for_api: {metric_names}")
             
             # Force append any missing metrics with default N/A value (-1 displays as N/A in UI)
             required_metrics = ["Accuracy", "Precision", "Alignment", "Recall"]
             for required_metric in required_metrics:
                 if required_metric not in metric_names:
-                    self.logging.warning(f"[_get_update_variables] Required metric {required_metric} missing - adding with default value")
                     metrics_for_api.append({"name": required_metric, "value": -1})
             
             # Final check and sort for consistent order
             metrics_for_api.sort(key=lambda x: required_metrics.index(x["name"]) if x["name"] in required_metrics else 999)
             
             update_input["metrics"] = json.dumps(metrics_for_api)
-            self.logging.info(f"[_get_update_variables] Final metrics_for_api JSON: {json.dumps(metrics_for_api)}")
         else:
             # Create default metrics list with all required metrics if empty
             default_metrics = [
@@ -1673,7 +1563,6 @@ class Evaluation:
                 {"name": "Recall", "value": metrics.get("recall", 0) * 100}
             ]
             update_input["metrics"] = json.dumps(default_metrics)
-            self.logging.info(f"[_get_update_variables] Using default metrics: {json.dumps(default_metrics)}")
         
         # Add confusion matrix if available in metrics
         confusion_matrix_val = metrics.get("confusionMatrix")
@@ -1957,11 +1846,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 # Get feedback_item_id from the dataset if available
                 feedback_item_id = row.get('feedback_item_id', None)
                 
-                # Debug logging for feedback_item_id
-                if feedback_item_id:
-                    logging.info(f"Found feedback_item_id in dataset: {feedback_item_id}")
-                else:
-                    logging.debug(f"No feedback_item_id found in row. Available columns: {list(row.index) if hasattr(row, 'index') else 'N/A'}")
+                # Extract feedback_item_id if available
                 
                 # Initialize human_labels dictionary
                 human_labels = {}
@@ -1975,7 +1860,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         logging.warning(f"Failed to parse metadata as JSON. Using empty dict. Metadata: {metadata_string}")
                         metadata = {}
 
-                logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
+                # Processing text
 
                 # If score_name is provided, only process that score
                 score_names_to_process = [score_name] if score_name else self.score_names_to_process()
@@ -1997,9 +1882,10 @@ Total cost:       ${expenses['total_cost']:.6f}
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
                                     score_instance.generate_graph_visualization(output_path)
-                                    logging.info(f"Generated graph visualization at {output_path}")
+                                    # Generated graph visualization
                             except ValueError as e:
-                                self.logging.info(f"Could not get score instance for visualization: {e}, skipping {score_to_process}")
+                                # Skip visualization if score instance not found
+                                pass
                 
                 scorecard_results = await self.scorecard.score_entire_text(
                     text=text,
@@ -2046,7 +1932,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                                 break
                         
                         if not score_config:
-                            logging.warning(f"Could not find configuration for score '{current_score_name}' in self.scorecard.scores. Skipping.")
+                            logging.warning(f"Score configuration not found: {current_score_name}")
                             continue
                             
                         # Determine label score name from config or default to current score name
@@ -2056,7 +1942,6 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                         # Skip if this is a dependency score and not our primary score
                         if primary_score_name and score_name != primary_score_name:
-                            logging.info(f"Skipping result creation for dependency score: {score_name}")
                             continue
 
                         # First check for override
@@ -2072,7 +1957,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                             elif label_score_name in row.index:
                                 human_label = row[label_score_name]
                             else:
-                                logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
+                                logging.warning(f"Label column not found for score: {score_identifier}")
                                 continue
 
                         human_label = str(human_label).lower().rstrip('.!?')
@@ -2088,7 +1973,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         if form_id in self.override_data:
                             for override_question_name, correct_value in self.override_data[form_id].items():
                                 if str(override_question_name) in human_labels:
-                                    logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_labels[str(override_question_name)]}' to '{correct_value}'")
+                                    # Override applied
                                     human_labels[str(override_question_name)] = correct_value
 
                         score_result.metadata['human_label'] = human_label
@@ -2102,11 +1987,10 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                         # Create ScoreResult in a non-blocking way only for the primary score
                         if getattr(self, 'dry_run', False):
-                            self.logging.info(f"[DRY RUN] Skipping ScoreResult creation for {score_name}")
+                            pass  # Skip ScoreResult creation in dry run
                         elif self.dashboard_client and self.experiment_id:
                             try:
                                 self.scoreresult_creation_attempts = getattr(self, 'scoreresult_creation_attempts', 0) + 1
-                                self.logging.info(f"Attempting to create ScoreResult for {score_name} with content_id: {content_id} (attempt #{self.scoreresult_creation_attempts})")
                                 await self._create_score_result(
                                     score_result=score_result,
                                     content_id=content_id,
@@ -2114,17 +1998,10 @@ Total cost:       ${expenses['total_cost']:.6f}
                                     feedback_item_id=feedback_item_id
                                 )
                                 self.scoreresult_creation_successes = getattr(self, 'scoreresult_creation_successes', 0) + 1
-                                self.logging.info(f"Successfully created ScoreResult for {score_name} (success #{self.scoreresult_creation_successes})")
                             except Exception as score_result_error:
                                 self.scoreresult_creation_failures = getattr(self, 'scoreresult_creation_failures', 0) + 1
-                                self.logging.error(f"Failed to create ScoreResult for {score_name}: {str(score_result_error)} (failure #{self.scoreresult_creation_failures})")
-                                self.logging.error(f"ScoreResult creation error details:", exc_info=True)
+                                self.logging.error(f"Failed to create ScoreResult: {str(score_result_error)}")
                                 # Don't re-raise - continue with evaluation but log the failure
-                        else:
-                            if not self.dashboard_client:
-                                self.logging.warning(f"Skipping ScoreResult creation - no dashboard_client available")
-                            if not self.experiment_id:
-                                self.logging.warning(f"Skipping ScoreResult creation - no experiment_id available")
 
                     except Exception as e:
                         logging.exception(f"Error processing {score_identifier}: {e}")
@@ -2190,20 +2067,7 @@ Total cost:       ${expenses['total_cost']:.6f}
     async def _create_score_result(self, *, score_result, content_id, result, feedback_item_id=None):
         """Create a score result in the dashboard."""
         try:
-            # Log the raw inputs
-            logging.info("Creating score result with raw inputs:")
-            logging.info(f"score_result value: {score_result.value}")
-            logging.info(f"score_result metadata: {truncate_dict_strings_inner(score_result.metadata)}")
-            logging.info(f"content_id: {content_id}")
-            logging.info(f"result dict: {truncate_dict_strings_inner(result)}")
-            logging.info(f"feedback_item_id: {feedback_item_id}")
-
             # Validate required attributes are available
-            self.logging.info(f"Validating required attributes...")
-            self.logging.info(f"  experiment_id: {getattr(self, 'experiment_id', 'NOT SET')}")
-            self.logging.info(f"  account_id: {getattr(self, 'account_id', 'NOT SET')}")
-            self.logging.info(f"  scorecard_id: {getattr(self, 'scorecard_id', 'NOT SET')}")
-            
             if not hasattr(self, 'experiment_id') or not self.experiment_id:
                 raise ValueError("experiment_id is not set")
             if not hasattr(self, 'account_id') or not self.account_id:
@@ -2257,14 +2121,10 @@ Total cost:       ${expenses['total_cost']:.6f}
             score_id = None
             if hasattr(score_result, 'parameters') and hasattr(score_result.parameters, 'id'):
                 score_id = score_result.parameters.id
-                self.logging.info(f"Using score ID from score_result.parameters.id: {score_id}")
             elif hasattr(self, 'score_id') and self.score_id:
                 score_id = self.score_id
-                self.logging.info(f"Using score ID from self.score_id: {score_id}")
             else:
-                self.logging.warning("No score ID found - this will cause GraphQL error")
-                self.logging.info(f"score_result.parameters: {getattr(score_result, 'parameters', 'NOT FOUND')}")
-                self.logging.info(f"self.score_id: {getattr(self, 'score_id', 'NOT FOUND')}")
+                self.logging.warning("No score ID found")
             
             if score_id:
                 data['scoreId'] = score_id
@@ -2272,55 +2132,24 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Add feedback item ID if provided from the dataset
             if feedback_item_id:
                 data['feedbackItemId'] = feedback_item_id
-                logging.info(f"Linking score result to feedback item from dataset: {feedback_item_id}")
 
             # Add feedbackItemId as a direct field if available
             if feedback_item_id:
                 data['feedbackItemId'] = feedback_item_id
 
-            # Add trace data if available
-            logging.info("Checking for trace data to add to score result...")            
+            # Add trace data if available           
             if score_result.metadata and 'trace' in score_result.metadata:
-                logging.info(f"trace content: {score_result.metadata['trace']}")
                 data['trace'] = json.dumps(score_result.metadata['trace'])
-                logging.info("Added metadata trace to trace data")
-            else:
-                logging.info("No trace data found to add")
 
-            # Log the data being sent
-            self.logging.info("Preparing to create score result with data:")
-            for key, value in data.items():
-                self.logging.info(f"{key}: {truncate_dict_strings_inner(value)}")
+            # Prepare data for GraphQL mutation
 
-            # Check for and log feedback_item_id if present
+            # Validate feedback_item_id if present
             feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
-            if feedback_item_id:
-                self.logging.info(f"feedback_item_id: {feedback_item_id}")
-                # Check if it was included in final metadata
-                final_metadata = json.loads(data['metadata'])
-                if 'feedback_item_id' in final_metadata:
-                    self.logging.info(f"feedback_item_id included in final metadata: {final_metadata['feedback_item_id']}")
-                else:
-                    self.logging.info("feedback_item_id NOT included in final metadata")
-                # Check if it was set as direct field
-                if 'feedbackItemId' in data:
-                    self.logging.info(f"feedbackItemId set as direct field: {data['feedbackItemId']}")
-                else:
-                    self.logging.info("feedbackItemId NOT set as direct field")
-            else:
-                self.logging.info("feedback_item_id: None (not found in score_result.metadata)")
-                # Also log what keys are actually in metadata for debugging
-                if score_result.metadata:
-                    self.logging.info(f"Available metadata keys: {list(score_result.metadata.keys())}")
-                else:
-                    self.logging.info("score_result.metadata is None/empty")
 
             # Validate all required fields are present and not None
             required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code']
             missing_fields = [field for field in required_fields if not data.get(field)]
             if missing_fields:
-                self.logging.error(f"Missing required fields: {', '.join(missing_fields)}")
-                self.logging.error(f"Current data: {data}")
                 raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
             mutation = """
@@ -2345,53 +2174,21 @@ Total cost:       ${expenses['total_cost']:.6f}
                 "input": data
             }
             
-            # Log the exact mutation and variables being sent
-            self.logging.info("=== Sending CreateScoreResult GraphQL Mutation ===")
-            self.logging.info("Mutation data being sent:")
-            for key, value in data.items():
-                if key == 'metadata':
-                    self.logging.info(f"  {key}: {truncate_dict_strings_inner(value)}")
-                else:
-                    self.logging.info(f"  {key}: {value}")
-            
             # Execute the API call in a non-blocking way
-            self.logging.info("Executing GraphQL mutation...")
             response = await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
-            self.logging.info(f"GraphQL response received: {type(response)}")
             
             # Check for GraphQL errors in the response
             if 'errors' in response:
                 error_messages = [error.get('message', 'Unknown error') for error in response.get('errors', [])]
                 error_str = '; '.join(error_messages)
                 self.logging.error(f"GraphQL errors creating score result: {error_str}")
-                self.logging.error(f"Full error response: {response['errors']}")
-                # Log each error with more details
-                for i, error in enumerate(response.get('errors', [])):
-                    self.logging.error(f"  Error {i+1}:")
-                    self.logging.error(f"    Message: {error.get('message', 'No message')}")
-                    self.logging.error(f"    Path: {error.get('path', 'No path')}")
-                    self.logging.error(f"    Extensions: {error.get('extensions', 'No extensions')}")
                 raise Exception(f"Failed to create score result: {error_str}")
             
             if not response.get('createScoreResult'):
-                self.logging.error(f"No data returned from createScoreResult mutation.")
-                self.logging.error(f"Full response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}")
-                self.logging.error(f"Full response: {truncate_dict_strings_inner(response)}")
                 raise Exception("Failed to create score result - no data returned")
             
-            # Log the successful response
-            created_result = response.get('createScoreResult')
-            self.logging.info("=== Successfully Created ScoreResult ===")
-            self.logging.info(f"ScoreResult ID: {created_result.get('id', 'N/A')}")
-            self.logging.info(f"Evaluation ID: {created_result.get('evaluationId', 'N/A')}")
-            self.logging.info(f"Item ID: {created_result.get('itemId', 'N/A')}")
-            self.logging.info(f"Value: {created_result.get('value', 'N/A')}")
-            
         except Exception as e:
-            self.logging.error(f"=== ScoreResult Creation Failed ===")
-            self.logging.error(f"Error: {str(e)}")
-            self.logging.error(f"Error type: {type(e).__name__}")
-            self.logging.error(f"Full error details:", exc_info=True)
+            self.logging.error(f"ScoreResult creation failed: {str(e)}")
             raise
 
     # REMOVED: _create_or_upsert_item method
@@ -2439,7 +2236,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 logging.info(f"Found feedback item for content_id {content_id}: {feedback_item['id']}")
                 return feedback_item['id']
             else:
-                logging.debug(f"No feedback item found for content_id {content_id} and score {score_name}")
+                # No feedback item found
                 return None
                 
         except Exception as e:
@@ -2484,7 +2281,7 @@ Total cost:       ${expenses['total_cost']:.6f}
 
         except Exception as e:
             self.logging.error(f"Error during {self.__class__.__name__} cleanup: {e}")
-            self.logging.debug("Cleanup error details:", exc_info=True)
+            # Cleanup completed with errors
 
     async def __aenter__(self):
         return self
@@ -2843,9 +2640,9 @@ class AccuracyEvaluation(Evaluation):
                                                 self.override_data[form_id] = {}
                                             self.override_data[form_id][score_name] = str(answer_value).strip().lower()
                                     
-                                    self.logging.info(f"Loaded override data for score '{score_name}' from {item_list_filename}: {len([r for r in df.iterrows() if pd.notna(r[1][form_id_col])])} records")
+                                    # Override data loaded for score
                                 else:
-                                    self.logging.warning(f"CSV column '{csv_column}' not found in {item_list_filename}")
+                                    self.logging.warning(f"CSV column not found: {csv_column}")
                     
                     except Exception as e:
                         self.logging.warning(f"Failed to load override data from {item_list_filename}: {e}")
@@ -2860,10 +2657,7 @@ class AccuracyEvaluation(Evaluation):
             self.logging.warning(f"Failed to load override data: {e}")
 
     async def run(self, tracker, progress_callback=None, dry_run=False):
-        # --- BEGIN NEW LOGGING ---
-        print("\n\n--- AccuracyEvaluation run CALLED ---\n\n")
-        self.logging.info("--- AccuracyEvaluation run CALLED ---")
-        # --- END NEW LOGGING ---
+        # Starting accuracy evaluation
 
         """Modified run method to accept tracker argument"""
         self.progress_callback = progress_callback
@@ -2888,21 +2682,12 @@ class AccuracyEvaluation(Evaluation):
         # Scorecard and Score IDs are now set during initialization and should already be updated in the evaluation record
 
         try:
-            # --- BEGIN NEW LOGGING ---
-            self.logging.info("--- Calling _run_evaluation from AccuracyEvaluation.run ---")
-            # --- END NEW LOGGING ---
             returned_metrics = await self._run_evaluation(tracker)
-            # --- BEGIN NEW LOGGING ---
-            self.logging.info(f"--- _run_evaluation returned: {returned_metrics} ---")
-            # --- END NEW LOGGING ---
             return returned_metrics
         except Exception as e:
             self.logging.error(f"Error during AccuracyEvaluation.run: {e}", exc_info=True)
             raise e # Re-raise after logging
         finally:
-            # --- BEGIN NEW LOGGING ---
-            self.logging.info("--- Exiting AccuracyEvaluation.run (finally block) ---") 
-            # --- END NEW LOGGING ---
             self.should_stop = True
 
     async def _run_evaluation(self, tracker):
@@ -2967,9 +2752,12 @@ class AccuracyEvaluation(Evaluation):
             all_results = await asyncio.gather(*score_tasks)
             self.all_results = [result for score_results in all_results for result in score_results if not isinstance(result, Exception)]
 
-            # --- BEGIN NEW LOGGING ---
-            self.logging.info(f"--- Calling calculate_metrics from _run_evaluation with {len(self.all_results)} results ---")
-            # --- END NEW LOGGING ---
+            # Advance to Finalizing stage after all processing is complete
+            if tracker:
+                tracker.advance_stage()
+                self.logging.info("==== STAGE: Finalizing ====")
+
+            # Calculate metrics from results
             
             # Reset counters and mismatches
             self.total_correct = 0
@@ -3004,23 +2792,17 @@ class AccuracyEvaluation(Evaluation):
             # Calculate metrics from the results
             metrics = self.calculate_metrics(self.all_results)
 
-            # --- BEGIN NEW LOGGING ---
-            self.logging.info(f"--- calculate_metrics from _run_evaluation returned: {metrics} ---")
-            # --- END NEW LOGGING ---
+            # Metrics calculated
             
             # Log ScoreResult creation statistics
             attempts = getattr(self, 'scoreresult_creation_attempts', 0)
             successes = getattr(self, 'scoreresult_creation_successes', 0)
             failures = getattr(self, 'scoreresult_creation_failures', 0)
-            self.logging.info(f"=== ScoreResult Creation Summary ===")
-            self.logging.info(f"Total ScoreResult creation attempts: {attempts}")
-            self.logging.info(f"Successful ScoreResult creations: {successes}")
-            self.logging.info(f"Failed ScoreResult creations: {failures}")
             if attempts > 0:
                 success_rate = (successes / attempts) * 100
-                self.logging.info(f"ScoreResult creation success rate: {success_rate:.1f}%")
+                self.logging.info(f"ScoreResult creation: {successes}/{attempts} successful ({success_rate:.1f}%)")
             else:
-                self.logging.warning("No ScoreResult creation attempts were made!")
+                self.logging.warning("No ScoreResult creation attempts made")
 
             if hasattr(self, 'progress_callback') and self.progress_callback:
                 self.progress_callback(self.number_of_texts_to_sample)
@@ -3046,10 +2828,9 @@ class AccuracyEvaluation(Evaluation):
                     overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
                     
                     report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample)
-                    print("\n" + report + "\n")
+                    logging.info(f"\nEvaluation Report:\n{report}\n")
                 except ValueError as e:
                     if "not found" in str(e):
-                        self.logging.info(f"Skipping report generation - scorecard not found in registry: {e}")
                         # Calculate overall_accuracy anyway for logging
                         overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
                         self.logging.info(f"Overall accuracy: {overall_accuracy}%")
@@ -3064,7 +2845,6 @@ class AccuracyEvaluation(Evaluation):
                         report_folder_path = report_folder_path.rstrip('/')
                     except ValueError as e:
                         if "not found" in str(e):
-                            self.logging.info(f"Scorecard not found in registry, using default report folder: {e}")
                             # Use default report folder when scorecard not found in registry
                             scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
                             score_name = self.subset_of_score_names[0].replace(' ', '_')
