@@ -178,9 +178,10 @@ class Evaluation:
             
             self.account_id = account.id
             
-            # Initialize scorecard_id as None
+            # Initialize scorecard_id as None - will be set immediately below
             self.scorecard_id = None
             
+            # Look up BOTH scorecard and score IDs immediately to set them as early as possible
             # Get the actual scorecard name by calling the method if it exists
             scorecard_display_name = None
             if hasattr(self.scorecard, 'name') and callable(self.scorecard.name):
@@ -234,6 +235,106 @@ class Evaluation:
                 if scorecard_obj:
                     self.logging.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
                     self.scorecard_id = scorecard_obj.id
+                    
+                    # Look up Score ID IMMEDIATELY after Scorecard ID to set both as soon as possible
+                    if self.score_id:
+                        self.logging.info(f"Looking up score with identifier: {self.score_id}")
+                        self.logging.info(f"DEBUG: Initial score_id value: {self.score_id}, type: {type(self.score_id)}")
+                        try:
+                            # Validate score_id format - must be a DynamoDB UUID with hyphens for Amplify Gen2 schema association
+                            if isinstance(self.score_id, str) and '-' in self.score_id and len(self.score_id.split('-')) == 5:
+                                # Score ID is already in DynamoDB UUID format, use it directly
+                                self.logging.info(f"Score ID provided in correct DynamoDB UUID format: {self.score_id}")
+                                self.logging.info(f"DEBUG: Score ID is already valid UUID, keeping as-is: {self.score_id}")
+                            else:
+                                # Score ID might be an external ID, name, or key - need to resolve it
+                                self.logging.info(f"Score ID not in DynamoDB UUID format, attempting lookup: {self.score_id}")
+                                try:
+                                    score_obj = None
+                                    # Try lookup by name first
+                                    try:
+                                        score_obj = DashboardScore.get_by_name(self.score_id, self.scorecard_id, self.dashboard_client)
+                                        if score_obj:
+                                            self.logging.info(f"Found score by name: {score_obj.name} ({score_obj.id})")
+                                    except Exception:
+                                        pass
+                                    
+                                    # Try lookup by key if name didn't work
+                                    if not score_obj:
+                                        try:
+                                            score_obj = DashboardScore.get_by_key(self.score_id, self.scorecard_id, self.dashboard_client)
+                                            if score_obj:
+                                                self.logging.info(f"Found score by key: {score_obj.name} ({score_obj.id})")
+                                        except Exception:
+                                            pass
+                                    
+                                    # Try lookup by external ID if name and key didn't work
+                                    if not score_obj:
+                                        try:
+                                            score_obj = DashboardScore.get_by_external_id(self.score_id, self.scorecard_id, self.dashboard_client)
+                                            if score_obj:
+                                                self.logging.info(f"Found score by external ID: {score_obj.name} ({score_obj.id})")
+                                        except Exception:
+                                            pass
+                                    
+                                    if score_obj:
+                                        old_score_id = self.score_id
+                                        self.score_id = score_obj.id
+                                        self.logging.info(f"Resolved score identifier '{old_score_id}' to DynamoDB UUID: {self.score_id}")
+                                    else:
+                                        self.logging.warning(f"Could not resolve score identifier '{self.score_id}' to a DynamoDB UUID")
+                                        self.logging.warning(f"This will cause issues with Evaluation records. Expected format is UUID with hyphens.")
+                                        # Keep the original score_id but warn that it may cause issues
+                                except Exception as score_lookup_error:
+                                    self.logging.warning(f"Failed to lookup score '{self.score_id}': {score_lookup_error}")
+                                    self.logging.warning(f"Using original score_id, but this may cause issues if not in DynamoDB UUID format")
+                        except Exception as e:
+                            self.logging.error(f"Error processing score ID: {str(e)}")
+                            # Continue with the original score_id value
+                    else:
+                        self.logging.info("No score_id provided in initialization")
+                    
+                    # Update the evaluation record immediately with both IDs now that they're both set
+                    self.logging.info(f"DEBUG: About to check evaluation record update - evaluation_id: {getattr(self, 'evaluation_id', 'NOT_SET')}, score_id: {self.score_id}")
+                    if hasattr(self, 'evaluation_id') and self.evaluation_id:
+                        update_data = {'scorecardId': self.scorecard_id}
+                        
+                        # Add score_id if it's available and validated
+                        self.logging.info(f"DEBUG: Validating score_id for evaluation update: score_id={self.score_id}, type={type(self.score_id)}")
+                        if self.score_id and isinstance(self.score_id, str):
+                            self.logging.info(f"DEBUG: score_id is string, checking format: has_hyphen={'-' in self.score_id}, parts={len(self.score_id.split('-')) if '-' in self.score_id else 'NO_HYPHEN'}")
+                            if '-' in self.score_id and len(self.score_id.split('-')) == 5:
+                                update_data['scoreId'] = self.score_id
+                                self.logging.info(f"Adding Score ID to immediate evaluation update: {self.score_id}")
+                            else:
+                                self.logging.warning(f"Score ID format invalid for evaluation update: {self.score_id}")
+                        else:
+                            self.logging.warning(f"Score ID not available or not string for evaluation update: {self.score_id}")
+                        
+                        try:
+                            self.logging.info(f"Updating evaluation record {self.evaluation_id} immediately with: {update_data}")
+                            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                                updateEvaluation(input: $input) {
+                                    id
+                                    scorecardId
+                                    scoreId
+                                }
+                            }"""
+                            self.dashboard_client.execute(mutation, {
+                                'input': {
+                                    'id': self.evaluation_id,
+                                    **update_data
+                                }
+                            })
+                            if 'scoreId' in update_data:
+                                self.logging.info("Successfully updated evaluation record with BOTH scorecard and score IDs immediately after resolution")
+                            else:
+                                self.logging.info("Successfully updated evaluation record with scorecard ID only (score ID was not valid)")
+                        except Exception as e:
+                            self.logging.error(f"Failed to update evaluation record immediately: {str(e)}")
+                            # Continue initialization even if update fails
+                    else:
+                        self.logging.warning(f"Cannot update evaluation record - evaluation_id not available: hasattr={hasattr(self, 'evaluation_id')}, value={getattr(self, 'evaluation_id', 'NOT_SET')}")
                 else:
                     self.logging.error("Failed to find scorecard")
                     raise ValueError(f"Could not find scorecard with name: {self.scorecard.name}")
@@ -255,6 +356,7 @@ class Evaluation:
         self.mismatches = []
         self.total_correct = 0
         self.total_questions = 0
+
 
     def __enter__(self):
         return self
@@ -2655,15 +2757,6 @@ class AccuracyEvaluation(Evaluation):
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
         
-        # Validate score_id format - must be a DynamoDB UUID with hyphens for Amplify Gen2 schema association
-        if self.score_id:
-            if isinstance(self.score_id, str) and '-' in self.score_id:
-                self.logging.info(f"Score ID provided in correct DynamoDB UUID format: {self.score_id}")
-            else:
-                self.logging.warning(f"WARNING: Score ID must be a DynamoDB UUID format for Amplify Gen2 schema association: {self.score_id}")
-                self.logging.warning(f"Expected UUID format with hyphens. External IDs must be resolved to DynamoDB UUIDs before passing to AccuracyEvaluation.")
-                self.logging.warning(f"This will cause the evaluation record to be created without a Score ID, breaking the table association.")
-        
         self.score_version_id = score_version_id  # Store score version ID
         self.visualize = visualize
         self.task_id = task_id  # Store task ID
@@ -2792,48 +2885,7 @@ class AccuracyEvaluation(Evaluation):
         
         self.logging.info(f"Using evaluation record with ID: {self.experiment_id}")
         
-        # Update the evaluation record with scorecard and score IDs
-        if self.dashboard_client and not dry_run:
-            update_data = {}
-            if self.scorecard_id:
-                update_data['scorecardId'] = self.scorecard_id
-            
-            if self.score_id:
-                # Validate score_id format - must be a DynamoDB UUID with hyphens for Amplify Gen2 schema association
-                if isinstance(self.score_id, str) and '-' in self.score_id:
-                    update_data['scoreId'] = self.score_id
-                    self.logging.info(f"Adding Score ID to evaluation update: {self.score_id}")
-                else:
-                    self.logging.warning(f"WARNING: Score ID must be a DynamoDB UUID format for Amplify Gen2 schema association: {self.score_id}")
-                    self.logging.warning(f"Expected UUID format with hyphens. External IDs must be resolved to DynamoDB UUIDs before passing to AccuracyEvaluation.")
-                    self.logging.warning(f"Will not add this Score ID to the evaluation record update.")
-            
-            if hasattr(self, 'score_version_id') and self.score_version_id:
-                update_data['scoreVersionId'] = self.score_version_id
-            
-            if update_data:
-                try:
-                    self.logging.info(f"Updating evaluation record {self.experiment_id} with: {update_data}")
-                    mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                        updateEvaluation(input: $input) {
-                            id
-                            scorecardId
-                            scoreId
-                            scoreVersionId
-                        }
-                    }"""
-                    self.dashboard_client.execute(mutation, {
-                        'input': {
-                            'id': self.experiment_id,
-                            **update_data
-                        }
-                    })
-                    self.logging.info("Successfully updated evaluation record with scorecard and score IDs")
-                except Exception as e:
-                    self.logging.error(f"Failed to update evaluation record with IDs: {str(e)}")
-                    # Continue execution even if update fails
-        elif dry_run:
-            self.logging.info(f"[DRY RUN] Would update evaluation record with scorecard ID: {self.scorecard_id} and score ID: {self.score_id}")
+        # Scorecard and Score IDs are now set during initialization and should already be updated in the evaluation record
 
         try:
             # --- BEGIN NEW LOGGING ---
