@@ -95,6 +95,11 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   onDelete
 }: TaskDisplayProps) {
 
+  // Log for ALL evaluations to see what TaskDisplay is receiving
+  if (evaluationData && evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
+    console.log(`STAGE_TRACE: TaskDisplay render ${evaluationData.id} received task with stages: ${task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+  }
+
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay)
 
@@ -109,9 +114,89 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         setProcessedTask(null);
         return;
       }
+      
+      // Removed excessive logging
+      
+      // Check if task already has well-structured stage data (from subscription)
+      const hasDirectStageData = task.stages && 
+        typeof task.stages === 'object' && 
+        (task.stages.data?.items?.length > 0 || task.stages.items?.length > 0);
+      
+      if (hasDirectStageData) {
+        // Skip the transformAmplifyTask/processTask pipeline that strips stages
+        // Create a ProcessedTask directly from the good data we already have
+        // Using direct stage data - bypass transform pipeline
+        
+        const stageItems = task.stages.data?.items || task.stages.items || [];
+        const processedTask: ProcessedTask = {
+          task: {
+            id: task.id,
+            type: task.type || 'evaluation',
+            status: task.status || 'PENDING',
+            target: task.target || '',
+            command: task.command || '',
+            stages: {
+              items: stageItems.map((stage: any) => ({
+                id: stage.id || '',
+                name: stage.name || '',
+                order: stage.order || 0,
+                status: stage.status || 'PENDING',
+                statusMessage: stage.statusMessage,
+                startedAt: stage.startedAt,
+                completedAt: stage.completedAt,
+                estimatedCompletionAt: stage.estimatedCompletionAt,
+                processedItems: stage.processedItems,
+                totalItems: stage.totalItems
+              }))
+            },
+            startedAt: task.startedAt,
+            completedAt: task.completedAt,
+            estimatedCompletionAt: task.estimatedCompletionAt,
+            errorMessage: task.errorMessage,
+            errorDetails: task.errorDetails,
+            currentStageId: task.currentStageId
+          },
+          // Add the stages array that the later code expects
+          stages: stageItems.map((stage: any) => ({
+            id: stage.id || '',
+            name: stage.name || '',
+            order: stage.order || 0,
+            status: stage.status || 'PENDING',
+            statusMessage: stage.statusMessage,
+            startedAt: stage.startedAt,
+            completedAt: stage.completedAt,
+            estimatedCompletionAt: stage.estimatedCompletionAt,
+            processedItems: stage.processedItems,
+            totalItems: stage.totalItems
+          }))
+        };
+        
+        // Created ProcessedTask with stage data preserved
+        if (processedTask.stages?.length > 0) {
+          console.log(`STAGE_TRACE: TaskDisplay processTaskData direct path created ProcessedTask ${processedTask.task.id} with ${processedTask.stages.length} stages: ${processedTask.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
+        } else {
+          console.log(`STAGE_TRACE: TaskDisplay processTaskData direct path created ProcessedTask ${processedTask.task.id} with NO stages - hasDirectStageData=${hasDirectStageData}`);
+        }
+        
+        if (evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
+          console.log(`STAGE_TRACE: TaskDisplay setProcessedTask for ${evaluationData.id} with ${processedTask.stages?.length || 0} stages`);
+        }
+        
+        setProcessedTask(processedTask);
+        return;
+      }
+      
+      // Fallback to original processing for tasks without stage data
       try {
         const convertedTask = await transformAmplifyTask(task);
+        
         const result = await processTask(convertedTask);
+        if (result.stages?.length > 0) {
+          console.log(`STAGE_TRACE: TaskDisplay processTaskData fallback path created ProcessedTask ${result.task.id} with ${result.stages.length} stages: ${result.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
+        } else {
+          console.log(`STAGE_TRACE: TaskDisplay processTaskData fallback path lost stages for task ${task.id} - transformAmplifyTask/processTask stripped them`);
+        }
+        
         setProcessedTask(result);
       } catch (error) {
         console.error('Error processing task:', error);
@@ -119,7 +204,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
       }
     }
     processTaskData();
-  }, [task]);
+  }, [task, evaluationData?.id]);
 
   const transformedScoreResults = useMemo(() => {
     if (!evaluationData?.scoreResults) return [];
@@ -171,7 +256,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         totalItems: stage.totalItems,
         completed: isCompleted
       };
-    }) : undefined,
+    }) : (evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00' ? console.log(`STAGE_TRACE: TaskDisplay commonTaskProps creating stages undefined for ${displayId} - processedTask=${!!processedTask} stageCount=${processedTask?.stages?.length || 0}`) : null, undefined),
     title: displayTitle,
     command: processedTask?.command,
     description: processedTask?.description,
@@ -332,6 +417,10 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
       onDelete
     } as EvaluationTaskProps;
 
+    if (evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
+      console.log(`STAGE_TRACE: TaskDisplay about to render EvaluationTask for ${evaluationData.id} with task.stages=${evaluationTaskProps.task.data.task?.stages?.items?.length || 0} stages`);
+    }
+
     return <EvaluationTask {...evaluationTaskProps} variant={variant} />;
 
   } else if (reportData) {
@@ -374,7 +463,35 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
 }, (prevProps, nextProps) => {
   // Custom comparison function to prevent unnecessary re-renders
   // Only re-render if these specific props change
-  return (
+  
+  // DEBUG: Log all memo calls for the evaluation that should be getting stage updates
+  if (nextProps.evaluationData.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
+    console.log(`STAGE_TRACE: TaskDisplay memo called for ${nextProps.evaluationData.id} variant=${nextProps.variant} - checking for changes`);
+    console.log(`STAGE_TRACE: TaskDisplay memo - task object changed: ${prevProps.task !== nextProps.task}, evaluationData object changed: ${prevProps.evaluationData !== nextProps.evaluationData}`);
+  }
+  
+  // CRITICAL: Check if task stages have changed
+  const prevStages = prevProps.task?.stages?.data?.items || [];
+  const nextStages = nextProps.task?.stages?.data?.items || [];
+  const stagesChanged = prevStages.length !== nextStages.length || 
+    prevStages.some((stage, index) => {
+      const nextStage = nextStages[index];
+      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status;
+    });
+  
+  if (stagesChanged) {
+    console.log(`STAGE_TRACE: TaskDisplay memo ALLOWING re-render for ${nextProps.evaluationData.id} - stages changed`);
+    console.log(`STAGE_TRACE: TaskDisplay memo stage details - prev: ${prevStages.map(s => `${s.name}:${s.status}`).join(',')} next: ${nextStages.map(s => `${s.name}:${s.status}`).join(',')}`);
+    return false; // Allow re-render
+  }
+  
+  // FORCE UPDATE for our problem evaluation to debug what's happening
+  if (nextProps.evaluationData.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
+    console.log(`STAGE_TRACE: TaskDisplay memo FORCING re-render for ${nextProps.evaluationData.id} to debug`);
+    return false; // Allow re-render
+  }
+  
+  const shouldRerender = !(
     prevProps.variant === nextProps.variant &&
     prevProps.task?.id === nextProps.task?.id &&
     prevProps.task?.status === nextProps.task?.status &&
@@ -387,4 +504,10 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     prevProps.evaluationData.scorecard?.name === nextProps.evaluationData.scorecard?.name &&
     prevProps.evaluationData.score?.name === nextProps.evaluationData.score?.name
   );
+  
+  if (shouldRerender) {
+    console.log(`STAGE_TRACE: TaskDisplay memo ALLOWING re-render for ${nextProps.evaluationData.id} - other props changed`);
+  }
+  
+  return !shouldRerender; // Return true to BLOCK re-render, false to ALLOW
 }); 

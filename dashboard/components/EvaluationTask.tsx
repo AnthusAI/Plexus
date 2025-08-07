@@ -267,6 +267,8 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   isSelected?: boolean;
 }) => {
 
+  console.log(`🔍 TRACE_STAGES: GridContent render - ${data.id} - stages: ${data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+
   const progress = useMemo(() => 
     data.processedItems && data.totalItems ? 
       Math.round((data.processedItems / data.totalItems) * 100) : 0
@@ -303,8 +305,12 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   }, [data.scoreResults]);
 
 
-  const stages = useMemo(() => 
-    data.task?.stages?.items?.map(stage => ({
+  const stages = useMemo(() => {
+    const stageItems = data.task?.stages?.items || [];
+    
+    console.log(`🔍 TRACE_STAGES: GridContent useMemo stages - ${data.id} - creating TaskStatus configs for: ${stageItems.map(s => `${s.name}:${s.status}`).join(',')}`);
+    
+    return stageItems.map(stage => ({
       key: stage.name,
       label: stage.name,
       color: stage.name === 'Processing' ? 'bg-secondary' : (
@@ -321,29 +327,48 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
       startedAt: stage.startedAt || undefined,
       completedAt: stage.completedAt || undefined,
       estimatedCompletionAt: stage.estimatedCompletionAt || undefined
-    })) || []
-  , [data.task?.stages?.items]);
+    }));
+  }, [
+    data.task?.stages?.items, 
+    data.id,
+    // Force recomputation when any stage object changes by including a hash of stage data
+    JSON.stringify(data.task?.stages?.items?.map(s => ({ 
+      name: s.name, 
+      status: s.status, 
+      processedItems: s.processedItems, 
+      totalItems: s.totalItems,
+      statusMessage: s.statusMessage,
+      startedAt: s.startedAt,
+      completedAt: s.completedAt
+    })))
+  ]);
 
-  const taskStatus = useMemo(() => ({
-    showStages: true,
-    status: mapTaskStatus(data.task?.status || data.status),
-    stageConfigs: stages,
-    stages,
-    processedItems: data.processedItems,
-    totalItems: data.totalItems,
-    startedAt: data.task?.startedAt || data.startedAt || undefined,
-    completedAt: data.task?.completedAt || undefined,
-    estimatedCompletionAt: data.task?.estimatedCompletionAt || undefined,
-    errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
-    command: data.task?.command || data.command,
-    statusMessage: getStatusMessage(data),
-    variant: 'grid' as const,
-    extra,
-    isSelected,
-    commandDisplay: 'hide' as const,
-    elapsedSeconds: data.elapsedSeconds,
-    estimatedRemainingSeconds: data.estimatedRemainingSeconds
-  }), [
+  const taskStatus = useMemo(() => {
+    const statusObj = {
+      showStages: true,
+      status: mapTaskStatus(data.task?.status || data.status),
+      stageConfigs: stages,
+      stages,
+      processedItems: data.processedItems,
+      totalItems: data.totalItems,
+      startedAt: data.task?.startedAt || data.startedAt || undefined,
+      completedAt: data.task?.completedAt || undefined,
+      estimatedCompletionAt: data.task?.estimatedCompletionAt || undefined,
+      errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
+      command: data.task?.command || data.command,
+      statusMessage: getStatusMessage(data),
+      variant: 'grid' as const,
+      extra,
+      isSelected,
+      commandDisplay: 'hide' as const,
+      elapsedSeconds: data.elapsedSeconds,
+      estimatedRemainingSeconds: data.estimatedRemainingSeconds
+    };
+    
+    console.log(`🔍 TRACE_STAGES: GridContent useMemo taskStatus - ${data.id} - final TaskStatus props stages: ${statusObj.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
+    
+    return statusObj;
+  }, [
     data.task?.status,
     data.status,
     stages,
@@ -360,12 +385,16 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     extra,
     isSelected,
     data.elapsedSeconds,
-    data.estimatedRemainingSeconds
+    data.estimatedRemainingSeconds,
+    data.id
   ]);
 
   return (
     <div className="space-y-2">
-      <TaskStatus {...taskStatus} />
+      <TaskStatus 
+        {...taskStatus} 
+        key={`${data.id}-${JSON.stringify(stages.map(s => ({ name: s.name, status: s.status, processedItems: s.processedItems })))}`}
+      />
       {extra && (
         <EvaluationListAccuracyBar 
           progress={progress}
@@ -376,50 +405,26 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     </div>
   )
 }, (prevProps, nextProps) => {
-  // Custom comparison function to prevent unnecessary re-renders
-  if (prevProps.extra !== nextProps.extra || prevProps.isSelected !== nextProps.isSelected) {
-    return false;
+  const prevStages = prevProps.data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
+  const nextStages = nextProps.data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
+  
+  if (prevStages !== nextStages) {
+    console.log(`🔍 TRACE_STAGES: GridContent memo ALLOWING re-render - ${nextProps.data.id} - stage change: [${prevStages}] → [${nextStages}]`);
+    return false; // Allow re-render
   }
-
-  const prevData = prevProps.data;
-  const nextData = nextProps.data;
-
-  // Compare task stages
-  const prevStages = prevData.task?.stages?.items;
-  const nextStages = nextData.task?.stages?.items;
-  if (!isEqual(prevStages, nextStages)) {
-    return false;
+  
+  // Check other props quickly
+  const shouldRerender = prevProps.extra !== nextProps.extra || 
+                        prevProps.isSelected !== nextProps.isSelected ||
+                        !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults);
+  
+  if (shouldRerender) {
+    console.log(`🔍 TRACE_STAGES: GridContent memo ALLOWING re-render - ${nextProps.data.id} - other props changed`);
+    return false; // Allow re-render
   }
-
-  // Compare score results directly without parsing
-  if (!isEqual(prevData.scoreResults, nextData.scoreResults)) {
-    console.log('Score results changed:', {
-      prevCount: prevData.scoreResults?.length ?? 0,
-      nextCount: nextData.scoreResults?.length ?? 0
-    });
-    return false;
-  }
-
-  // Compare essential task data
-  if (
-    prevData.processedItems !== nextData.processedItems ||
-    prevData.totalItems !== nextData.totalItems ||
-    prevData.accuracy !== nextData.accuracy ||
-    prevData.status !== nextData.status ||
-    prevData.task?.status !== nextData.task?.status ||
-    prevData.task?.command !== nextData.task?.command ||
-    prevData.command !== nextData.command ||
-    prevData.errorMessage !== nextData.errorMessage ||
-    prevData.task?.errorMessage !== nextData.task?.errorMessage ||
-    prevData.startedAt !== nextData.startedAt ||
-    prevData.task?.startedAt !== nextData.task?.startedAt ||
-    prevData.task?.completedAt !== nextData.task?.completedAt ||
-    prevData.task?.estimatedCompletionAt !== nextData.task?.estimatedCompletionAt
-  ) {
-    return false;
-  }
-
-  return true;
+  
+  console.log(`🔍 TRACE_STAGES: GridContent memo BLOCKING re-render - ${nextProps.data.id} - no changes`);
+  return true; // Block re-render
 });
 
 interface ParsedScoreResult extends ScoreResultData {}
@@ -743,6 +748,7 @@ const DetailContent = React.memo(({
               <div className="space-y-3 p-1 overflow-visible">
                 <div className="mb-3">
                   <TaskStatus
+                    key={`detail-${data.id}-${JSON.stringify(data.task?.stages?.items?.map(s => ({ name: s.name, status: s.status, processedItems: s.processedItems })))}`}
                     variant="detail"
                     showStages={true}
                     status={mapTaskStatus(data.task?.status || data.status)}
@@ -932,6 +938,8 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
 
   const data = task.data ?? {} as EvaluationTaskData
+  
+  console.log(`🔍 TRACE_STAGES: EvaluationTask render - ${data.id} - stages: ${data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
   
 
   // Add more detailed logging for incoming data
@@ -1279,7 +1287,15 @@ evaluation:
 }, (prevProps, nextProps) => {
   // Custom comparison function to prevent unnecessary re-renders
   // Only re-render if these specific props change
-  return (
+  const stageComparison = isEqual(
+    prevProps.task.data?.task?.stages?.items,
+    nextProps.task.data?.task?.stages?.items
+  );
+  
+  // Check for task data changes more comprehensively
+  const taskDataChanged = !isEqual(prevProps.task.data, nextProps.task.data);
+  
+  const shouldNotRerender = (
     prevProps.variant === nextProps.variant &&
     prevProps.task.id === nextProps.task.id &&
     prevProps.task.status === nextProps.task.status &&
@@ -1288,8 +1304,23 @@ evaluation:
     prevProps.isFullWidth === nextProps.isFullWidth &&
     // CHECK FOR SCORECARD/SCORE CHANGES - CRITICAL FOR REALTIME UPDATES
     prevProps.task.scorecard === nextProps.task.scorecard &&
-    prevProps.task.score === nextProps.task.score
+    prevProps.task.score === nextProps.task.score &&
+    // CHECK FOR TASK STAGE CHANGES - CRITICAL FOR REALTIME STAGE UPDATES
+    stageComparison &&
+    // CHECK FOR ANY TASK DATA CHANGES
+    !taskDataChanged
   );
+  
+  const prevStages = prevProps.task.data?.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
+  const nextStages = nextProps.task.data?.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
+  
+  if (shouldNotRerender) {
+    console.log(`🔍 TRACE_STAGES: EvaluationTask memo BLOCKING re-render - ${nextProps.task.id} - stages: [${nextStages}]`);
+  } else {
+    console.log(`🔍 TRACE_STAGES: EvaluationTask memo ALLOWING re-render - ${nextProps.task.id} - stage change: [${prevStages}] → [${nextStages}]`);
+  }
+  
+  return shouldNotRerender;
 });
 
 export default EvaluationTask;

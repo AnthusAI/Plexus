@@ -371,29 +371,9 @@ export function observeScoreResults(client: any, evaluationId: string) {
             } = await client.models.ScoreResult.listScoreResultByEvaluationId({
               evaluationId,
               limit: 10000,
-              nextToken,
-              selectionSet: `
-                id
-                value
-                confidence
-                metadata
-                explanation
-                correct
-                itemId
-                accountId
-                scoringJobId
-                evaluationId
-                scorecardId
-                createdAt
-                feedbackItem {
-                  id
-                  editCommentValue
-                  initialAnswerValue
-                  finalAnswerValue
-                  editorName
-                  editedAt
-                }
-              `
+              nextToken
+              // Removed selectionSet to avoid the 'selectionSet.reduce is not a function' error
+              // The default selection should include all the fields we need
             })
             
             const pageSize = response?.data?.length || 0
