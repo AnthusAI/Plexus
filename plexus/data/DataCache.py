@@ -144,103 +144,32 @@ class DataCache(ABC):
 
     def debug_dataframe(self, df, context="DATAFRAME", logger=None):
         """
-        Comprehensive debug logging for any dataframe.
+        Essential debug logging for dataframes.
         
         Args:
             df: pandas DataFrame to analyze
             context: String identifier for the context (used in log messages)
             logger: Logger instance to use (defaults to module logger)
         """
-        import json
-        import pandas as pd
-        
         if logger is None:
             logger = logging
         
-        logger.info("=" * 80)
-        logger.info(f"DATASET DEBUG: {context} - COMPREHENSIVE ANALYSIS")
-        logger.info("=" * 80)
+        # Essential dataset info
+        logger.info(f"{context}: {df.shape[0]} rows x {df.shape[1]} columns")
+        logger.info(f"Columns: {list(df.columns)}")
         
-        # 1. Dataset shape
-        logger.info(f"{context}_SHAPE: {df.shape} (rows x columns)")
-        
-        # 2. Column headers and data types
-        logger.info(f"{context}_COLUMNS: {list(df.columns)}")
-        logger.info(f"{context}_COLUMN_TYPES:")
-        for col in df.columns:
-            dtype = df[col].dtype
-            logger.info(f"  {col}: {dtype}")
-        
-        # 3. First few rows of data
+        # Show first 3 rows sample
         if len(df) > 0:
-            logger.info(f"{context}_FIRST_FEW_ROWS:")
+            logger.info("Sample data (first 3 rows):")
             for i in range(min(3, len(df))):
-                logger.info(f"  Row {i}:")
+                row_data = {}
                 for col in df.columns:
                     value = df.iloc[i][col]
-                    # Truncate long values for readability
                     if isinstance(value, str) and len(value) > 100:
-                        display_value = value[:97] + "..."
+                        row_data[col] = value[:97] + "..."
                     else:
-                        display_value = value
-                    logger.info(f"    {col}: '{display_value}'")
-        else:
-            logger.info(f"{context}_FIRST_FEW_ROWS: Dataset is empty")
-        
-        # 4. Data quality checks
-        logger.info(f"{context}_QUALITY_CHECK:")
-        quality_issues = []
-        
-        if len(df) > 0:
-            # Check for null/empty data in key columns
-            key_columns = ['text', 'content_id', 'feedback_item_id']
-            for col in key_columns:
-                if col in df.columns:
-                    null_count = df[col].isnull().sum()
-                    empty_count = (df[col] == '').sum() if df[col].dtype == 'object' else 0
-                    if null_count > 0:
-                        quality_issues.append(f"Column '{col}' has {null_count} null values")
-                    if empty_count > 0:
-                        quality_issues.append(f"Column '{col}' has {empty_count} empty string values")
-            
-            # Check for duplicates in content_id if it exists
-            if 'content_id' in df.columns:
-                duplicates = df['content_id'].duplicated().sum()
-                if duplicates > 0:
-                    quality_issues.append(f"Found {duplicates} duplicate content_id values")
-            
-            # Check for potential score columns and their distributions
-            potential_score_columns = [col for col in df.columns if col not in ['text', 'content_id', 'feedback_item_id', 'metadata', 'IDs']]
-            if potential_score_columns:
-                logger.info(f"{context}_SCORE_COLUMNS: Found {len(potential_score_columns)} potential score columns: {potential_score_columns}")
-                for col in potential_score_columns:
-                    value_counts = df[col].value_counts(dropna=False)
-                    # Removed verbose value distribution logging to improve performance
-        
-        if quality_issues:
-            logger.warning(f"{context}_QUALITY_ISSUES:")
-            for issue in quality_issues:
-                logger.warning(f"  - {issue}")
-        else:
-            logger.info(f"{context}_QUALITY_ISSUES: None - dataset looks healthy")
-        
-        # 5. Memory and statistical analysis
-        if len(df) > 0:
-            logger.info(f"{context}_STATISTICS:")
-            logger.info(f"  Total rows: {len(df)}")
-            logger.info(f"  Total columns: {len(df.columns)}")
-            memory_usage = df.memory_usage(deep=True).sum()
-            logger.info(f"  Memory usage: {memory_usage} bytes ({memory_usage / 1024 / 1024:.2f} MB)")
-            
-            # Count non-null values per column
-            logger.info("  Non-null counts per column:")
-            for col in df.columns:
-                non_null_count = df[col].notna().sum()
-                logger.info(f"    {col}: {non_null_count}/{len(df)} ({100*non_null_count/len(df):.1f}%)")
-        
-        logger.info("=" * 80)
-        logger.info(f"END {context} DEBUG")
-        logger.info("=" * 80)
+                        row_data[col] = value
+                logger.info(f"  Row {i}: {row_data}")
 
     @abstractmethod
     def load_dataframe(self, *args, **kwargs):

@@ -89,7 +89,7 @@ class FeedbackItems(DataCache):
         if self.parameters.identifier_extractor:
             self.identifier_extractor = self._load_identifier_extractor(self.parameters.identifier_extractor)
         
-        logger.info(f"Initialized FeedbackItems cache for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
+        logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
 
     def _normalize_value(self, value: Optional[str]) -> Optional[str]:
         """
@@ -462,8 +462,8 @@ class FeedbackItems(DataCache):
         Returns:
             DataFrame with properly formatted rows matching CallCriteriaDBCache format
         """
-        print(f"DEBUG: _create_dataset_rows called with {len(feedback_items)} items, score_name='{score_name}'")
-        print(f"DEBUG: This is the NEW implementation that should only create 8 columns (including feedback_item_id and edit comment)")
+        logger.debug(f"FeedbackItems: Creating dataset with {len(feedback_items)} items for score: {score_name}")
+        # Create properly formatted dataset rows
         rows = []
         
         for i, feedback_item in enumerate(feedback_items):
@@ -494,12 +494,7 @@ class FeedbackItems(DataCache):
                 # Convert None to empty string
                 text = text or ""
                 
-                if text:
-                    print(f"DEBUG: Item.text has {len(text)} characters")
-                else:
-                    print(f"DEBUG: Item.text is empty/None")
-            else:
-                print(f"DEBUG: No item object available")
+                # Text content retrieved for processing
             
             # metadata: Create JSON string of metadata structure
             metadata = self._create_metadata_structure(feedback_item)
@@ -531,10 +526,7 @@ class FeedbackItems(DataCache):
             rows.append(row)
             
             # Only debug first few items to avoid too much output
-            if i < 3:
-                print(f"DEBUG: Processed item {i+1}")
-            elif i == 3:
-                print(f"DEBUG: Stopping debug output for remaining {len(feedback_items)-3} items")
+            # Processing feedback items for dataset creation
         
         # Create DataFrame with proper column structure even when empty
         if not rows:

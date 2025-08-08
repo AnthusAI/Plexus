@@ -52,12 +52,10 @@ def fetch_and_cache_single_score(
     Raises:
         ValueError: If scorecard or score cannot be found
     """
+    # Simplified verbose logging
     if verbose:
-        logging.info(f"Fetching score configuration for '{score_identifier}' in scorecard '{scorecard_identifier}'")
-        if use_cache:
-            logging.info("Cache mode: Will check local cache first, fetching from API only if needed")
-        else:
-            logging.info("Cache mode: Always fetching from API (will still update local cache)")
+        mode = "cache-first" if use_cache else "API-first"
+        logging.info(f"Fetching score '{score_identifier}' from scorecard '{scorecard_identifier}' (mode: {mode})")
     
     # 1. Resolve the scorecard identifier to an ID
     scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)
@@ -66,8 +64,6 @@ def fetch_and_cache_single_score(
         logging.error(error_msg)
         raise ValueError(error_msg)
     
-    if verbose:
-        logging.info(f"Resolved scorecard ID: {scorecard_id}")
     
     # 2. Fetch scorecard structure
     try:
@@ -137,8 +133,6 @@ def fetch_and_cache_single_score(
                 config['id'] = str(config['id'])
             
             from_cache = True
-            if verbose:
-                logging.info(f"Loaded configuration from cache: {yaml_path}")
             
             return config, yaml_path, from_cache
         except Exception as e:
@@ -210,8 +204,6 @@ def fetch_and_cache_single_score(
             with open(yaml_path, 'w') as f:
                 yaml.dump(config, f)
             
-            if verbose:
-                logging.info(f"Fetched from API and saved to: {yaml_path}")
             
             return config, yaml_path, from_cache
             

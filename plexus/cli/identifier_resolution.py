@@ -158,7 +158,8 @@ def resolve_scorecard_identifier(client, identifier):
                     console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
                 console.print(f"[yellow]Using the first match: {ext_id_matches[0].get('name')} (ID: {ext_id_matches[0].get('id')})[/yellow]")
             else:
-                console.print(f"[dim]Found scorecard by exact externalId match: {ext_id_matches[0]['id']} (externalId: {ext_id_matches[0].get('externalId')})[/dim]")
+                # Found scorecard by externalId match
+                pass
             return ext_id_matches[0]['id']
         
         # Then try exact match on name

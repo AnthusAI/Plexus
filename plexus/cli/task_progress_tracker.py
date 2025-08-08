@@ -309,7 +309,7 @@ class TaskProgressTracker:
 
         # Always update the tracker's overall count
         self.current_items = current_items
-        logging.info(f"Updating progress with count: {current_items}/{self.total_items}")
+        logging.debug(f"Updating progress with count: {current_items}/{self.total_items}")
 
         # Only update the current stage if it has total_items set (i.e., it's showing a progress bar)
         if self.current_stage and self.current_stage.total_items is not None:
@@ -356,7 +356,7 @@ class TaskProgressTracker:
             )
             if next_api_stage:
                 self.api_task.advance_stage(next_api_stage)
-            self._update_api_task_progress()
+            self._update_api_task_progress(force_critical=True)
 
     def complete(self):
         """Complete tracking and update API task if we have one."""
@@ -537,7 +537,7 @@ class TaskProgressTracker:
         
         logging.error(f"Task failed with error: {error_message}")
 
-    def _update_api_task_progress(self):
+    def _update_api_task_progress(self, force_critical: bool = False):
         """Update API task record with current progress asynchronously."""
         if not self.api_task:
             logging.debug("No API task available, skipping progress update")
@@ -548,8 +548,9 @@ class TaskProgressTracker:
             logging.debug(f"Skipping update for {self.api_task.status} task")
             return
 
-        # Check if this is a critical update (completion, failure, or all items processed)
+        # Check if this is a critical update (completion, failure, all items processed, or forced)
         is_critical_update = (
+            force_critical or
             self.is_complete or 
             self.is_failed or
             (self.current_items == self.total_items) or
@@ -643,11 +644,7 @@ class TaskProgressTracker:
             # Compute a JSON string of stage_configs to detect duplicate updates
             config_str = json.dumps(stage_configs, sort_keys=True)
             if self._last_stage_configs_str == config_str and not is_critical_update:
-                logging.info(json.dumps({
-                    "type": "skip_update",
-                    "reason": "configs_unchanged",
-                    "is_critical": is_critical_update
-                }))
+                logging.debug("Skipping task progress update - configs unchanged")
                 return
             else:
                 self._last_stage_configs_str = config_str
@@ -927,16 +924,10 @@ class TaskProgressTracker:
         if not self.api_task:
             return
 
-        client = self._get_client() # Get the client instance
         try:
-            # Pass client correctly if get_stages supports it, otherwise omit
-            # Assuming get_stages uses self._client if available or creates default
-            existing_api_stages = {s.name: s for s in self.api_task.get_stages(client=client)}
+            # get_stages() uses the task's client internally
+            existing_api_stages = {s.name: s for s in self.api_task.get_stages()}
             logging.debug(f"Found existing API stages: {list(existing_api_stages.keys())}")
-        except TypeError:
-             # Fallback if get_stages doesn't accept client kwarg
-             logging.warning("Task.get_stages does not accept 'client', using default client resolution.")
-             existing_api_stages = {s.name: s for s in self.api_task.get_stages()}
         except Exception as e:
             logging.error(f"Failed to get existing stages for task {self.api_task.id}: {e}", exc_info=True)
             existing_api_stages = {}
@@ -979,7 +970,7 @@ class TaskProgressTracker:
                     self._stage_ids[stage.name] = stage.id
                     logging.debug(f"Successfully created API stage '{stage.name}' with ID: {stage.id}")
                 
-                logging.info(f"Successfully created {len(created_stages)} stages in batch")
+                logging.debug(f"Task progress tracker: created {len(created_stages)} stages")
                 
             except Exception as e:
                 logging.error(f"Error creating stages in batch: {e}", exc_info=True)
