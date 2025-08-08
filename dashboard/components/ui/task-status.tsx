@@ -232,7 +232,8 @@ export const TaskStatus = React.memo(({
   }, [currentStageName, status, stageConfigs]);
 
   // Convert TaskStageConfig to SegmentConfig for the progress bar
-  const segments = useMemo(() => {
+  // Not memoized to ensure updates when callers mutate the same array instance in place
+  const segments = (() => {
     const orderedStages = stageConfigs
       .sort((a, b) => a.order - b.order)  // Ensure stages are ordered
       .map(stage => {
@@ -266,7 +267,7 @@ export const TaskStatus = React.memo(({
     });
 
     return orderedStages;
-  }, [stageConfigs, status]);
+  })();
 
   // Update the progress calculation logic
   const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = useMemo(() => {
