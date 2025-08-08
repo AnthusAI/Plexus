@@ -25,6 +25,20 @@ import { observeRecentEvaluations } from '@/utils/data-operations';
 import { observeScoreResults } from '@/utils/amplify-helpers';
 import { isEqual } from 'lodash';
 
+// Helper to safely resolve stage items from LazyLoader or direct object
+const getStageItemsFromAny = (stages: any): TaskStageType[] => {
+  const resolved = getValueFromLazyLoader(stages as any);
+  if (resolved?.data?.items) {
+    return resolved.data.items as TaskStageType[];
+  }
+  if (stages && typeof stages === 'object') {
+    const dataItems = (stages as any).data?.items as TaskStageType[] | undefined;
+    const directItems = (stages as any).items as TaskStageType[] | undefined;
+    return (dataItems ?? directItems ?? []) as TaskStageType[];
+  }
+  return [] as TaskStageType[];
+};
+
 // Add type for score result
 type ScoreResult = {
   id: string;
@@ -201,8 +215,8 @@ export function useEvaluationData({
 
           // Only update if we have meaningful changes
           // Don't override stage data if the task update doesn't have stages
-          const hasIncomingStages = !!taskToStore.stages && taskToStore.stages.data?.items?.length > 0;
-          const hasExistingTaskStages = !!task.stages && (task.stages.data?.items?.length > 0 || task.stages.items?.length > 0);
+          const hasIncomingStages = getStageItemsFromAny(taskToStore.stages).length > 0;
+          const hasExistingTaskStages = getStageItemsFromAny(task.stages).length > 0;
           const hasStageMapData = stageItems.length > 0;
           
           // Preserve existing task stages if:
@@ -211,7 +225,7 @@ export function useEvaluationData({
           const shouldPreserveExistingTaskStages = !hasIncomingStages && hasExistingTaskStages;
           const shouldUseStageMapData = !hasIncomingStages && !hasExistingTaskStages && hasStageMapData;
           
-          console.log(`STAGE_TRACE: handleTaskUpdate eval ${evaluation.id} preserve=${shouldPreserveExistingTaskStages} useMap=${shouldUseStageMapData} existing=${hasExistingTaskStages ? (task.stages?.data?.items?.length || task.stages?.items?.length || 0) : 0} stageMap=${hasStageMapData ? stageItems.length : 0}`);
+          console.log(`STAGE_TRACE: handleTaskUpdate eval ${evaluation.id} preserve=${shouldPreserveExistingTaskStages} useMap=${shouldUseStageMapData} existing=${hasExistingTaskStages ? getStageItemsFromAny(task.stages).length : 0} stageMap=${hasStageMapData ? stageItems.length : 0}`);
 
           // Update the task with new data, but preserve stages intelligently
           const updatedTask: AmplifyTask = {
@@ -223,7 +237,7 @@ export function useEvaluationData({
                    task.stages // Fallback to existing
           };
 
-          const finalStageCount = updatedTask.stages?.data?.items?.length || updatedTask.stages?.items?.length || 0;
+           const finalStageCount = getStageItemsFromAny(updatedTask.stages).length;
           console.log(`STAGE_TRACE: handleTaskUpdate created updatedTask for ${updateTaskId} with ${finalStageCount} stages`);
 
           return {
@@ -390,10 +404,12 @@ export function useEvaluationData({
             const existingEval = prevEvaluations.find(e => e.id === newEval.id);
             
             // If we have an existing evaluation with good stage data, preserve it
-            if (existingEval && existingEval.task?.stages?.data?.items?.length > 0) {
+            if (existingEval) {
+              const existingItems = getStageItemsFromAny(existingEval.task?.stages);
+              if (existingItems.length > 0) {
               // Keep the existing stage data, but update other fields
-              const preservedStageData = existingEval.task.stages;
-              console.log(`🔍 TRACE_STAGES: Preserving existing stage data for ${newEval.id}: ${preservedStageData.data.items.map(s => `${s.name}:${s.status}`).join(',')}`);
+              const preservedStageData = { data: { items: existingItems } };
+              console.log(`🔍 TRACE_STAGES: Preserving existing stage data for ${newEval.id}: ${existingItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
               
               return {
                 ...newEval,
@@ -402,9 +418,10 @@ export function useEvaluationData({
                 score: newEval.score || existingEval.score,
                 task: newEval.task ? {
                   ...newEval.task,
-                  stages: preservedStageData
+                  stages: preservedStageData as any
                 } : newEval.task
               };
+              }
             }
             
             return {
@@ -450,10 +467,12 @@ export function useEvaluationData({
               const existingEval = prevEvaluations.find(e => e.id === newEval.id);
               
               // If we have an existing evaluation with good stage data, preserve it
-              if (existingEval && existingEval.task?.stages?.data?.items?.length > 0) {
+              if (existingEval) {
+                const existingItems = getStageItemsFromAny(existingEval.task?.stages);
+                if (existingItems.length > 0) {
                 // Keep the existing stage data, but update other fields
-                const preservedStageData = existingEval.task.stages;
-                console.log(`🔍 TRACE_STAGES: Preserving existing stage data (direct load) for ${newEval.id}: ${preservedStageData.data.items.map(s => `${s.name}:${s.status}`).join(',')}`);
+                const preservedStageData = { data: { items: existingItems } };
+                console.log(`🔍 TRACE_STAGES: Preserving existing stage data (direct load) for ${newEval.id}: ${existingItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
                 
                 return {
                   ...newEval,
@@ -461,9 +480,10 @@ export function useEvaluationData({
                   score: newEval.score || existingEval.score,
                   task: newEval.task ? {
                     ...newEval.task,
-                    stages: preservedStageData
+                    stages: preservedStageData as any
                   } : newEval.task
                 };
+                }
               }
               
               return {
@@ -1007,29 +1027,30 @@ export function useEvaluationData({
                 if (e.id === transformedEvaluation.id) {
                   // Preserve existing task data if the update doesn't contain good task information
                   const shouldPreserveExistingTask = !transformedEvaluation.task && !!e.task;
-                  const shouldPreserveExistingTaskStages = transformedEvaluation.task && 
-                    e.task && 
-                    (!transformedEvaluation.task.stages?.data?.items || transformedEvaluation.task.stages.data.items.length === 0) &&
-                    (e.task.stages?.data?.items && e.task.stages.data.items.length > 0);
+                  const shouldPreserveExistingTaskStages = Boolean(transformedEvaluation.task) && 
+                    Boolean(e.task) &&
+                    (getStageItemsFromAny(transformedEvaluation.task?.stages).length === 0) &&
+                    (getStageItemsFromAny(e.task?.stages).length > 0);
 
                   console.log(`STAGE_TRACE: Evaluation update preserve=${shouldPreserveExistingTask} preserveStages=${shouldPreserveExistingTaskStages} for ${transformedEvaluation.id}`);
 
                   // Preserve existing score results and scorecard/score names when updating evaluation
-                  const updatedEval = {
+                  const updatedEval: ProcessedEvaluation = {
                     ...transformedEvaluation,
                     scoreResults: e.scoreResults || transformedEvaluation.scoreResults,
                     scorecard: transformedEvaluation.scorecard || e.scorecard,
                     score: transformedEvaluation.score || e.score,
                     // Preserve task data if needed
                     task: shouldPreserveExistingTask ? e.task :
-                          shouldPreserveExistingTaskStages ? {
-                            ...transformedEvaluation.task,
-                            stages: e.task.stages
-                          } : transformedEvaluation.task
+                          shouldPreserveExistingTaskStages ? ({
+                            ...(transformedEvaluation.task as AmplifyTask),
+                            stages: e.task!.stages
+                          } as AmplifyTask) : transformedEvaluation.task
                   };
 
-                  if (updatedEval.task?.stages?.data?.items?.length > 0) {
-                    console.log(`STAGE_TRACE: Evaluation update preserved ${updatedEval.id} with ${updatedEval.task.stages.data.items.length} stages: ${updatedEval.task.stages.data.items.map(s => `${s.name}:${s.status}`).join(',')}`);
+                  const updatedItems = getStageItemsFromAny(updatedEval.task?.stages);
+                  if (updatedItems.length > 0) {
+                    console.log(`STAGE_TRACE: Evaluation update preserved ${updatedEval.id} with ${updatedItems.length} stages: ${updatedItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
                   } else {
                     console.log(`STAGE_TRACE: Evaluation update ${updatedEval.id} has no stages after preservation`);
                   }
@@ -1040,7 +1061,7 @@ export function useEvaluationData({
               });
 
               // If this evaluation is now running and is the most recent, set up subscription
-              if (isNowRunning && isMostRecent(updatedEvaluations)) {
+              if (isNowRunning && isMostRecent(updatedEvaluations as ProcessedEvaluation[])) {
                 const scoreResults = getValueFromLazyLoader(transformedEvaluation.scoreResults);
 
                 // Clean up existing subscription if any
@@ -1158,8 +1179,9 @@ export function useEvaluationData({
               }
 
               const finalEval = updatedEvaluations.find(e => e.id === transformedEvaluation.id);
-              if (finalEval?.task?.stages?.data?.items?.length > 0) {
-                console.log(`STAGE_TRACE: setEvaluations final eval ${transformedEvaluation.id} has ${finalEval.task.stages.data.items.length} stages`);
+              const finalItems = getStageItemsFromAny(finalEval?.task?.stages);
+              if (finalItems.length > 0) {
+                console.log(`STAGE_TRACE: setEvaluations final eval ${transformedEvaluation.id} has ${finalItems.length} stages`);
               } else {
                 console.log(`STAGE_TRACE: setEvaluations final eval ${transformedEvaluation.id} has no stages`);
               }
@@ -1336,7 +1358,7 @@ console.error('STAGE_TRACE: Error in task stage update subscription:', error.mes
             console.log(`🔍 TRACE_STAGES: After transformEvaluation for item ${index}:`, {
               hasTask: !!transformed?.task,
               taskId: transformed?.task?.id,
-              taskStageCount: transformed?.task?.stages?.data?.items?.length || 0
+              taskStageCount: getStageItemsFromAny(transformed?.task?.stages).length || 0
             });
             
             return transformed;
@@ -1348,7 +1370,7 @@ console.error('STAGE_TRACE: Error in task stage update subscription:', error.mes
           firstItemId: transformedItems[0]?.id,
           firstItemTask: transformedItems[0]?.task,
           firstItemTaskId: transformedItems[0]?.task?.id,
-          firstItemTaskStages: transformedItems[0]?.task?.stages?.data?.items?.length || 0
+          firstItemTaskStages: getStageItemsFromAny(transformedItems[0]?.task?.stages).length || 0
         });
         
           // CRITICAL FIX: Merge with existing evaluations to preserve stage data and names (refetch version)
@@ -1357,10 +1379,12 @@ console.error('STAGE_TRACE: Error in task stage update subscription:', error.mes
             const existingEval = prevEvaluations.find(e => e.id === newEval.id);
             
             // If we have an existing evaluation with good stage data, preserve it
-            if (existingEval && existingEval.task?.stages?.data?.items?.length > 0) {
+            if (existingEval) {
+              const existingItems = getStageItemsFromAny(existingEval.task?.stages);
+              if (existingItems.length > 0) {
               // Keep the existing stage data, but update other fields
-              const preservedStageData = existingEval.task.stages;
-              console.log(`🔍 TRACE_STAGES: Preserving existing stage data (refetch) for ${newEval.id}: ${preservedStageData.data.items.map(s => `${s.name}:${s.status}`).join(',')}`);
+              const preservedStageData = { data: { items: existingItems } };
+              console.log(`🔍 TRACE_STAGES: Preserving existing stage data (refetch) for ${newEval.id}: ${existingItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
               
               return {
                 ...newEval,
@@ -1368,9 +1392,10 @@ console.error('STAGE_TRACE: Error in task stage update subscription:', error.mes
                   score: newEval.score || existingEval.score,
                 task: newEval.task ? {
                   ...newEval.task,
-                  stages: preservedStageData
+                  stages: preservedStageData as any
                 } : newEval.task
               };
+              }
             }
             
               return {
@@ -1416,10 +1441,12 @@ console.error('STAGE_TRACE: Error in task stage update subscription:', error.mes
                 const existingEval = prevEvaluations.find(e => e.id === newEval.id);
                 
                 // If we have an existing evaluation with good stage data, preserve it
-                if (existingEval && existingEval.task?.stages?.data?.items?.length > 0) {
+            if (existingEval) {
+              const existingItems = getStageItemsFromAny(existingEval.task?.stages);
+              if (existingItems.length > 0) {
                   // Keep the existing stage data, but update other fields
-                  const preservedStageData = existingEval.task.stages;
-                  console.log(`🔍 TRACE_STAGES: Preserving existing stage data (refetch fallback) for ${newEval.id}: ${preservedStageData.data.items.map(s => `${s.name}:${s.status}`).join(',')}`);
+              const preservedStageData = { data: { items: existingItems } };
+              console.log(`🔍 TRACE_STAGES: Preserving existing stage data (refetch fallback) for ${newEval.id}: ${existingItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
                   
                   return {
                     ...newEval,
@@ -1427,9 +1454,10 @@ console.error('STAGE_TRACE: Error in task stage update subscription:', error.mes
                   score: newEval.score || existingEval.score,
                     task: newEval.task ? {
                       ...newEval.task,
-                      stages: preservedStageData
+                  stages: preservedStageData as any
                     } : newEval.task
                   };
+              }
                 }
                 
               return {

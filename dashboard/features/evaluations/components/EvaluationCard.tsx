@@ -149,8 +149,8 @@ export const EvaluationCard = React.memo(({
               } : undefined
             }
             
-            if (transformedTask.stages?.items?.length > 0) {
-              console.log(`STAGE_TRACE: EvaluationCard transformed function task ${transformedTask.id} with ${transformedTask.stages.items.length} stages: ${transformedTask.stages.items.map(s => `${s.name}:${s.status}`).join(',')}`);
+            if ((transformedTask.stages?.items?.length ?? 0) > 0) {
+              console.log(`STAGE_TRACE: EvaluationCard transformed function task ${transformedTask.id} with ${transformedTask.stages?.items?.length} stages: ${(transformedTask.stages?.items ?? []).map(s => `${s.name}:${s.status}`).join(',')}`);
             }
             
             // Always update to ensure latest stage status changes are reflected
@@ -226,8 +226,8 @@ export const EvaluationCard = React.memo(({
           } : undefined
         }
         
-        if (transformedTask.stages?.items?.length > 0) {
-          console.log(`STAGE_TRACE: EvaluationCard transformed direct task ${transformedTask.id} with ${transformedTask.stages.items.length} stages: ${transformedTask.stages.items.map(s => `${s.name}:${s.status}`).join(',')}`);
+        if ((transformedTask.stages?.items?.length ?? 0) > 0) {
+          console.log(`STAGE_TRACE: EvaluationCard transformed direct task ${transformedTask.id} with ${transformedTask.stages?.items?.length} stages: ${(transformedTask.stages?.items ?? []).map(s => `${s.name}:${s.status}`).join(',')}`);
         }
         
         // Always update to ensure latest stage status changes are reflected
