@@ -18,7 +18,7 @@ import jinja2
 try:
     from plexus.reports.s3_utils import upload_report_block_file, get_bucket_name
     logger = logging.getLogger(__name__)
-    logger.info("Successfully imported S3 utils at module level")
+    logger.debug("Successfully imported S3 utils at module level")
     S3_UTILS_AVAILABLE = True
 except Exception as e:
     logger = logging.getLogger(__name__)

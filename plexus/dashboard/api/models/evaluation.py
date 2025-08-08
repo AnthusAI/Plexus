@@ -183,7 +183,7 @@ class Evaluation(BaseModel):
         """ % cls.fields()
         
         result = client.execute(mutation, {'input': input_data})
-        logger.info(f"Create Evaluation response: {result}")
+        logger.debug(f"Create Evaluation response: {result}")
         
         if not result or 'createEvaluation' not in result:
             raise Exception(f"Failed to create Evaluation. Response: {result}")

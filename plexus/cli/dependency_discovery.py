@@ -101,9 +101,7 @@ def discover_dependencies(
         else:
             logging.debug(f"Score '{score_name}' has no dependencies")
     
-    # Log summary
-    logging.info(f"Dependency discovery found {len(all_required_ids)} required scores "
-                f"(started with {len(target_score_ids)} targets)")
+    # Dependency discovery complete
     
     return all_required_ids
 

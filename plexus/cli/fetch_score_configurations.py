@@ -74,7 +74,7 @@ def fetch_score_configurations(
         logging.info("No score configurations to fetch.")
         return configurations
     
-    logging.info(f"Fetching {len(needs_fetch)} missing score configurations from API")
+    # Fetching missing score configurations from API
     
     # Set up YAML formatter for consistent formatting
     yaml = YAML()
@@ -101,9 +101,7 @@ def fetch_score_configurations(
         score_name = score.get('name')
         champion_version_id = score.get('championVersionId')
         
-        logging.info(f"Score Name: {score_name}")
-        logging.info(f"Score ID: {score_id}")
-        logging.info(f"Champion Version ID: {champion_version_id}")
+        logging.debug(f"Processing score: {score_name} (ID: {score_id})")
         
         if not score_id or not score_name or not champion_version_id:
             logging.error(f"Missing required properties for score: {score}")
@@ -256,11 +254,11 @@ def load_cached_configurations(
         score_name = score.get('name')
         champion_version_id = score.get('championVersionId')
         
-        logging.info(f"===== LOADING CACHED CONFIGURATION =====")
-        logging.info(f"Score Name: {score_name}")
-        logging.info(f"Score ID: {score_id}")
-        logging.info(f"Champion Version ID from API: {champion_version_id}")
-        logging.info(f"======================================")
+        logging.debug(f"Loading cached configuration")
+        logging.debug(f"Score: {score_name}")
+        # Score ID for debug: {score_id}
+        # Champion version: {champion_version_id}
+        # End debug info
         
         # Validate score_id format - should be a UUID with hyphens
         if score_id and not (isinstance(score_id, str) and '-' in score_id):
