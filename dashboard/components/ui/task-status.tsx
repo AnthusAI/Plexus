@@ -253,17 +253,16 @@ export const TaskStatus = React.memo(({
         };
       });
 
-    // Always add completion segment with appropriate color based on status
+    // Completion segment should only become active after last stage completes
+    const hasStages = orderedStages.length > 0;
+    const lastStageCompleted = hasStages && orderedStages[orderedStages.length - 1].status === 'COMPLETED';
+    const completionActive = status === 'COMPLETED' && lastStageCompleted;
     orderedStages.push({
       key: 'completion',
       label: 'Complete',
-      color: status === 'COMPLETED' ? 'bg-true' :
-             status === 'FAILED' ? 'bg-false' :
-             'bg-neutral',
-      status: status === 'COMPLETED' ? 'COMPLETED' :
-              status === 'FAILED' ? 'FAILED' :
-              'PENDING',
-      completed: status === 'COMPLETED'
+      color: completionActive ? 'bg-true' : (status === 'FAILED' ? 'bg-false' : 'bg-neutral'),
+      status: completionActive ? 'COMPLETED' : (status === 'FAILED' ? 'FAILED' : 'PENDING'),
+      completed: completionActive
     });
 
     return orderedStages;
@@ -271,59 +270,47 @@ export const TaskStatus = React.memo(({
 
   // Update the progress calculation logic
   const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = useMemo(() => {
-    // First try to get progress from stages
-    if (stages?.length > 0) {
-      // First try to find a RUNNING stage with progress info
-      const runningStage = stages.find(stage => {
-        return stage.status === 'RUNNING';
-      });
+    // 1) Prefer direct processed/total counts (they tend to update most frequently)
+    const directProcessed = Number(processedItems);
+    const directTotal = Number(totalItems);
+    if (!isNaN(directProcessed) && !isNaN(directTotal) && directTotal > 0) {
+      return { processedItems: directProcessed, totalItems: directTotal };
+    }
 
+    // 2) Try a RUNNING stage that provides processed/total
+    if (stages?.length > 0) {
+      const runningStage = stages.find(stage => stage.status === 'RUNNING');
       if (runningStage) {
         const proc = Number(runningStage.processedItems);
         const tot = Number(runningStage.totalItems);
-        // Only use the stage's progress if it has valid numbers
         if (!isNaN(proc) && !isNaN(tot) && tot > 0) {
-          return {
-            processedItems: proc,
-            totalItems: tot
-          };
+          return { processedItems: proc, totalItems: tot };
         }
       }
 
-      // If no running stage found with progress, fall back to the last stage with progress
-      const sortedStages = [...stages].sort((a, b) => (b.order || 0) - (a.order || 0));
-      const stageWithProgress = sortedStages.find(stage => {
+      // 3) Any stage with processed/total
+      const stageWithProgress = stages.find(stage => {
         const proc = Number(stage.processedItems);
         const tot = Number(stage.totalItems);
         return !isNaN(proc) && !isNaN(tot) && tot > 0;
       });
-
       if (stageWithProgress) {
         const proc = Number(stageWithProgress.processedItems);
         const tot = Number(stageWithProgress.totalItems);
-        return {
-          processedItems: proc,
-          totalItems: tot
-        };
+        return { processedItems: proc, totalItems: tot };
       }
     }
-    
-    // If no stages have progress info, fall back to direct processedItems/totalItems
-    const directProcessed = Number(processedItems);
-    const directTotal = Number(totalItems);
-    
-    if (!isNaN(directProcessed) && !isNaN(directTotal) && directTotal > 0) {
-      return {
-        processedItems: directProcessed,
-        totalItems: directTotal
-      };
+
+    // 4) Fallback: derive from stage completion count
+    if (stages?.length > 0) {
+      const total = stages.length;
+      const completed = stages.filter(s => s.status === 'COMPLETED').length;
+      if (total > 0 && completed > 0) {
+        return { processedItems: completed, totalItems: total };
+      }
     }
-    
-    // If no valid progress info found anywhere, return zeros
-    return {
-      processedItems: 0,
-      totalItems: 0
-    };
+
+    return { processedItems: 0, totalItems: 0 };
   }, [stages, processedItems, totalItems]);
 
   // Calculate progress percentage

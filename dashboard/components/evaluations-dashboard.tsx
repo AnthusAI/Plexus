@@ -582,7 +582,8 @@ export default function EvaluationsDashboard({
     const runningEvaluations = evaluations.filter(e => e.status === 'RUNNING' || e.task?.status === 'RUNNING');
     if (runningEvaluations.length > 0) {
       runningEvaluations.forEach(e => {
-        const stages = e.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
+        const stages = (Array.isArray((e.task as any)?.stages?.items) ? (e.task as any).stages.items : (e.task as any)?.stages?.data?.items || [])
+          .map((s: any) => `${s.name}:${s.status}`).join(',') || 'none';
         console.log(`STAGE_TRACE: EvaluationsDashboard received eval ${e.id} with stages: ${stages}`);
       });
     }
@@ -663,7 +664,7 @@ export default function EvaluationsDashboard({
 
     // Special logging for the evaluation that's having stage update issues
     if (selectedEvaluationId === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
-      console.log(`STAGE_TRACE: renderSelectedTask for ${selectedEvaluationId} - task stages: ${evaluation.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+      console.log(`STAGE_TRACE: renderSelectedTask for ${selectedEvaluationId} - task stages: ${((evaluation.task as any)?.stages?.items || (evaluation.task as any)?.stages?.data?.items || []).map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
     }
     
     // CRITICAL DEBUG: Always log which evaluation is selected vs which is getting updates
@@ -675,7 +676,7 @@ export default function EvaluationsDashboard({
     // DEBUG: Check if the evaluation that got stage updates is in the evaluations array
     const evalWithStageUpdates = evaluations.find(e => e.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c');
     if (evalWithStageUpdates) {
-      console.log(`STAGE_TRACE: Evaluation ff9cecfb-b568-4715-bc7a-8be6c763028c in evaluations array with stages: ${evalWithStageUpdates.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+      console.log(`STAGE_TRACE: Evaluation ff9cecfb-b568-4715-bc7a-8be6c763028c in evaluations array with stages: ${(((evalWithStageUpdates.task as any)?.stages?.items) || ((evalWithStageUpdates.task as any)?.stages?.data?.items) || []).map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
     } else {
       console.log(`STAGE_TRACE: Evaluation ff9cecfb-b568-4715-bc7a-8be6c763028c NOT FOUND in evaluations array`);
     }
@@ -902,9 +903,9 @@ export default function EvaluationsDashboard({
                     
                     // Log for ALL evaluations that match our problem evaluation, and all running evaluations
                     if (evaluation.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
-                      console.log(`STAGE_TRACE: EvaluationsDashboard rendering TARGET ${evaluation.id} status=${evaluation.status} taskStatus=${evaluation.task?.status} with stages: ${evaluation.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+                      console.log(`STAGE_TRACE: EvaluationsDashboard rendering TARGET ${evaluation.id} status=${evaluation.status} taskStatus=${evaluation.task?.status} with stages: ${(((evaluation.task as any)?.stages?.items) || ((evaluation.task as any)?.stages?.data?.items) || []).map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
                     } else if (evaluation.status === 'RUNNING' || evaluation.task?.status === 'RUNNING') {
-                      console.log(`STAGE_TRACE: EvaluationsDashboard rendering ${evaluation.id} with stages: ${evaluation.task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+                      console.log(`STAGE_TRACE: EvaluationsDashboard rendering ${evaluation.id} with stages: ${(((evaluation.task as any)?.stages?.items) || ((evaluation.task as any)?.stages?.data?.items) || []).map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
                     }
                     
                     return (
