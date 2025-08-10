@@ -26,6 +26,7 @@ export interface EvaluationTaskScoreResultsProps {
   onResultSelect?: (result: any) => void
   selectedScoreResult?: any | null
   navigationControls?: React.ReactNode
+  isLoading?: boolean
 }
 
 export function EvaluationTaskScoreResults({ 
@@ -35,7 +36,8 @@ export function EvaluationTaskScoreResults({
   selectedActualValue,
   onResultSelect,
   selectedScoreResult,
-  navigationControls
+  navigationControls,
+  isLoading = false
 }: EvaluationTaskScoreResultsProps) {
   console.log('EvaluationTaskScoreResults render:', {
     resultCount: results.length,
@@ -165,7 +167,7 @@ export function EvaluationTaskScoreResults({
       <div className="flex justify-between items-center mb-2 flex-shrink-0">
         <div className="flex items-center">
           <Split className="w-4 h-4 mr-1 text-foreground shrink-0" />
-          <span className="text-sm text-foreground">Score Results ({filteredResults.length})</span>
+          <span className="text-sm text-foreground">Score Results</span>
         </div>
         <div className="flex items-center gap-2">
           {navigationControls}
@@ -231,16 +233,25 @@ export function EvaluationTaskScoreResults({
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full overflow-y-auto">
           <div className="space-y-2 pb-4">
-            {filteredResults.map((result) => (
-              <div key={result.id}>
-                <ScoreResultComponent
-                  result={result}
-                  variant="list"
-                  isFocused={selectedScoreResult?.id === result.id}
-                  onSelect={() => onResultSelect?.(result)}
-                />
-              </div>
-            ))}
+            {isLoading ? (
+              Array.from({ length: 8 }).map((_, idx) => (
+                <div key={`skeleton-${idx}`} className="animate-pulse rounded-lg bg-card-light px-2 py-3">
+                  <div className="h-4 w-40 bg-muted rounded mb-2" />
+                  <div className="h-3 w-24 bg-muted rounded" />
+                </div>
+              ))
+            ) : (
+              filteredResults.map((result) => (
+                <div key={result.id}>
+                  <ScoreResultComponent
+                    result={result}
+                    variant="list"
+                    isFocused={selectedScoreResult?.id === result.id}
+                    onSelect={() => onResultSelect?.(result)}
+                  />
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

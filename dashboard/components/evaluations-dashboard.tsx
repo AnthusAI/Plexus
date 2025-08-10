@@ -431,6 +431,37 @@ export default function EvaluationsDashboard({
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(initialSelectedScoreResultId)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
+  // Silence extremely noisy debug logs to keep console readable during troubleshooting
+  useEffect(() => {
+    const originalLog = console.log
+    const originalDebug = console.debug
+    const originalError = console.error
+    const filterFn = (fn: (...args: any[]) => void) => (...args: any[]) => {
+      try {
+        const first = args[0]
+        const msg = typeof first === 'string' ? first : ''
+        if (msg.includes('STAGE_TRACE') || msg.includes('TRACE_STAGES') || msg.includes('📋 DEBUG')) {
+          return
+        }
+      } catch {}
+      fn(...args)
+    }
+    console.log = filterFn(originalLog)
+    console.debug = filterFn(originalDebug)
+    console.error = filterFn(originalError)
+    return () => {
+      console.log = originalLog
+      console.debug = originalDebug
+      console.error = originalError
+    }
+  }, [])
+  // Lazy-loaded score results for the currently selected evaluation
+  const [selectedEvaluationScoreResults, setSelectedEvaluationScoreResults] = useState<any[] | null>(null)
+  const scoreResultsSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null)
+  // Cache score results per evaluation to avoid refetch thrash and enable instant restore
+  const evaluationResultsCacheRef = useRef<Map<string, any[]>>(new Map())
+  // Guard against late-arriving responses from previous selections
+  const evaluationFetchGenerationRef = useRef<number>(0)
   
   // Ref map to track evaluation elements for scroll-to-view functionality
   const evaluationRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map())
@@ -468,60 +499,49 @@ export default function EvaluationsDashboard({
     setIsShareModalOpen(true);
   }
 
-  // Handle deep linking - check if we're on the main evaluations page or a specific evaluation page
+  // Handle deep linking once on first mount only to avoid re-overwriting selection
+  const didInitFromParamsRef = useRef(false)
   useEffect(() => {
-    // If we have an ID in the URL and we're on the main evaluations page
+    if (didInitFromParamsRef.current) return
     if (params && 'id' in params) {
-      // Set the evaluation ID
-      setSelectedEvaluationId(params.id as string);
-      
-      // If we also have a score result ID, set that too
+      setSelectedEvaluationId(params.id as string)
       if ('scoreResultId' in params) {
-        setSelectedScoreResultId(params.scoreResultId as string);
+        setSelectedScoreResultId(params.scoreResultId as string)
       }
     }
-  }, [params]);
+    didInitFromParamsRef.current = true
+  }, [params])
 
-  // Handle browser back/forward navigation with popstate event
+  // Sync selection when browser back/forward changes the URL (without full rerender)
   useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      // Extract evaluation ID from URL if present
-      const evalMatch = window.location.pathname.match(/\/lab\/evaluations\/([^\/]+)/);
-      const idFromUrl = evalMatch ? evalMatch[1] : null;
-      
-      // Extract score result ID from URL if present
-      const scoreResultMatch = window.location.pathname.match(/\/lab\/evaluations\/[^\/]+\/score-results\/([^\/]+)/);
-      const scoreResultIdFromUrl = scoreResultMatch ? scoreResultMatch[1] : null;
-      
-      // Update the selected evaluation ID based on the URL
-      setSelectedEvaluationId(idFromUrl);
-      
-      // Update the selected score result ID based on the URL
-      setSelectedScoreResultId(scoreResultIdFromUrl);
-    };
-
-    // Add event listener for popstate (browser back/forward)
-    window.addEventListener('popstate', handlePopState);
-    
-    // Clean up event listener on unmount
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, []);
+    const syncFromUrl = () => {
+      const evalMatch = window.location.pathname.match(/\/lab\/evaluations\/([^\/]+)/)
+      const idFromUrl = evalMatch ? (evalMatch[1] as string) : null
+      const scoreResultMatch = window.location.pathname.match(/\/lab\/evaluations\/[^\/]+\/score-results\/([^\/]+)/)
+      const scoreResultIdFromUrl = scoreResultMatch ? (scoreResultMatch[1] as string) : null
+      // Only sync on back/forward, not on programmatic changes immediately after click
+      setSelectedEvaluationId(prev => prev === idFromUrl ? prev : idFromUrl)
+      setSelectedScoreResultId(prev => prev === scoreResultIdFromUrl ? prev : scoreResultIdFromUrl)
+    }
+    syncFromUrl()
+    const handlePopState = () => syncFromUrl()
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   // Custom setter for selectedEvaluationId that handles both state and URL
   const handleSelectEvaluation = (id: string | null) => {
-    // Only update state if the selected evaluation has changed
-    if (id !== selectedEvaluationId) {
-      setSelectedEvaluationId(id);
-      
-      // Clear the selected score result when changing evaluations
-      setSelectedScoreResultId(null);
-      
-      // Update URL without triggering a navigation/re-render
-      const newPathname = id ? `/lab/evaluations/${id}` : '/lab/evaluations';
-      window.history.pushState(null, '', newPathname);
+    // Always run side-effects to avoid getting stuck when re-selecting same ID
+    setSelectedScoreResultId(null)
+    if (scoreResultsSubscriptionRef.current) {
+      try { scoreResultsSubscriptionRef.current.unsubscribe() } catch {}
+      scoreResultsSubscriptionRef.current = null
     }
+    // Update selection immediately
+    setSelectedEvaluationId(id)
+    // Update URL without causing full rerender
+    const newPathname = id ? `/lab/evaluations/${id}` : '/lab/evaluations'
+    window.history.pushState(null, '', newPathname)
   };
 
   // Handle closing the selected evaluation
@@ -530,6 +550,12 @@ export default function EvaluationsDashboard({
     setSelectedEvaluationId(null);
     setSelectedScoreResultId(null);
     setIsFullWidth(false);
+    // Clear score results and unsubscribe when closing detail view
+    setSelectedEvaluationScoreResults(null);
+    if (scoreResultsSubscriptionRef.current) {
+      try { scoreResultsSubscriptionRef.current.unsubscribe(); } catch {}
+      scoreResultsSubscriptionRef.current = null;
+    }
     
     // Update URL without triggering a navigation/re-render
     window.history.pushState(null, '', '/lab/evaluations');
@@ -578,16 +604,7 @@ export default function EvaluationsDashboard({
   }, [selectedScorecard, selectedScore, evaluations.length]);
 
   // Add logging to track evaluation updates
-  useEffect(() => {
-    const runningEvaluations = evaluations.filter(e => e.status === 'RUNNING' || e.task?.status === 'RUNNING');
-    if (runningEvaluations.length > 0) {
-      runningEvaluations.forEach(e => {
-        const stages = (Array.isArray((e.task as any)?.stages?.items) ? (e.task as any).stages.items : (e.task as any)?.stages?.data?.items || [])
-          .map((s: any) => `${s.name}:${s.status}`).join(',') || 'none';
-        console.log(`STAGE_TRACE: EvaluationsDashboard received eval ${e.id} with stages: ${stages}`);
-      });
-    }
-  }, [evaluations]);
+  // Reduced logging
 
   // Set dataHasLoadedOnce to true once data has loaded
   useEffect(() => {
@@ -608,6 +625,156 @@ export default function EvaluationsDashboard({
 
   // Combine errors from account fetching and evaluation data
   const combinedError = accountError || error;
+
+  // Effect: when a specific evaluation is selected, lazily load its score results with pagination
+  useEffect(() => {
+    // Bump generation to invalidate any in-flight handlers from previous selection
+    evaluationFetchGenerationRef.current += 1
+    const localGeneration = evaluationFetchGenerationRef.current
+
+    // Clean up existing subscription when selection changes or on unmount
+    if (scoreResultsSubscriptionRef.current) {
+      try { scoreResultsSubscriptionRef.current.unsubscribe(); } catch {}
+      scoreResultsSubscriptionRef.current = null;
+    }
+
+    if (!selectedEvaluationId) {
+      setSelectedEvaluationScoreResults(null);
+      return;
+    }
+
+    // Immediately hydrate from cache if available for better UX
+    const cached = evaluationResultsCacheRef.current.get(selectedEvaluationId)
+    if (cached && Array.isArray(cached)) {
+      setSelectedEvaluationScoreResults(cached)
+    } else {
+      // Indicate loading while fetching
+      setSelectedEvaluationScoreResults(null)
+    }
+
+    // Helper to transform raw items into UI-friendly format
+    const transformItems = (items: any[]): any[] => (items || []).map((item: any) => {
+      let parsedMetadata: any;
+      try {
+        if (typeof item.metadata === 'string') {
+          parsedMetadata = JSON.parse(item.metadata);
+          if (typeof parsedMetadata === 'string') {
+            parsedMetadata = JSON.parse(parsedMetadata);
+          }
+        } else {
+          parsedMetadata = item.metadata || {};
+        }
+      } catch (e) {
+        parsedMetadata = {};
+      }
+      const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
+      const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
+      return {
+        id: item.id,
+        value: item.value,
+        confidence: item.confidence ?? null,
+        explanation: item.explanation ?? scoreResult?.explanation ?? null,
+        metadata: {
+          human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? (typeof item.metadata === 'object' ? (item.metadata as any).human_label : null) ?? null,
+          correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct ?? (typeof item.metadata === 'object' ? (item.metadata as any).correct : null)),
+          human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? (typeof item.metadata === 'object' ? (item.metadata as any).human_explanation : null) ?? null,
+          text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? (typeof item.metadata === 'object' ? (item.metadata as any).text : null) ?? null
+        },
+        itemId: item.itemId ?? parsedMetadata.item_id?.toString() ?? null,
+        createdAt: item.createdAt || new Date().toISOString(),
+        trace: item.trace ?? null,
+        feedbackItem: item.feedbackItem ?? null,
+        itemIdentifiers: item.item?.itemIdentifiers?.items?.map((identifier: any) => ({
+          name: identifier.name,
+          value: identifier.value,
+          url: identifier.url || undefined
+        })) || undefined
+      };
+    });
+
+    // One-shot paginated fetch to populate immediately
+    (async () => {
+      try {
+        const client = getClient();
+        let nextToken: string | null = null;
+        let all: any[] = [];
+        let page = 0;
+        do {
+          page++;
+          const resp = await client.graphql({
+            query: `
+              query ($evaluationId: String!, $limit: Int, $nextToken: String) {
+                listScoreResultByEvaluationId(
+                  evaluationId: $evaluationId
+                  limit: $limit
+                  nextToken: $nextToken
+                ) {
+                  items {
+                    id
+                    value
+                    explanation
+                    confidence
+                    metadata
+                    trace
+                    itemId
+                    createdAt
+                    feedbackItem { id editCommentValue initialAnswerValue finalAnswerValue editorName editedAt }
+                    item { id itemIdentifiers { items { name value url position } } }
+                  }
+                  nextToken
+                }
+              }
+            `,
+            variables: { evaluationId: selectedEvaluationId, limit: 1000, nextToken }
+          }) as any;
+          const data = resp?.data?.listScoreResultByEvaluationId;
+          const items = Array.isArray(data?.items) ? data.items : [];
+          all = all.concat(items);
+          nextToken = data?.nextToken || null;
+        } while (nextToken && localGeneration === evaluationFetchGenerationRef.current);
+
+        // Dedupe and sort
+        const map = new Map<string, any>();
+        all.forEach(r => { if (r?.id) map.set(r.id, r) });
+        const sorted = Array.from(map.values()).sort((a, b) => {
+          const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bt - at;
+        });
+        const transformed = transformItems(sorted);
+        if (localGeneration === evaluationFetchGenerationRef.current) {
+          evaluationResultsCacheRef.current.set(selectedEvaluationId, transformed);
+          setSelectedEvaluationScoreResults(transformed);
+        }
+      } catch (err) {
+        console.error('Error fetching score results:', err);
+      }
+    })();
+
+    // Then attach subscription for live updates
+    const client = getClient();
+    const subscription = observeScoreResults(client as any, selectedEvaluationId);
+    const sub = subscription.subscribe({
+      next: (data: { items: any[]; isSynced: boolean }) => {
+        if (localGeneration !== evaluationFetchGenerationRef.current) return;
+        const transformedItems = transformItems(data.items || []);
+        evaluationResultsCacheRef.current.set(selectedEvaluationId, transformedItems)
+        setSelectedEvaluationScoreResults(transformedItems)
+      },
+      error: (e: Error) => {
+        console.error('Error observing score results:', e);
+      }
+    });
+
+    scoreResultsSubscriptionRef.current = { unsubscribe: sub.unsubscribe };
+
+    return () => {
+      if (scoreResultsSubscriptionRef.current) {
+        try { scoreResultsSubscriptionRef.current.unsubscribe(); } catch {}
+        scoreResultsSubscriptionRef.current = null;
+      }
+    };
+  }, [selectedEvaluationId]);
 
   const handleDelete = async (evaluationId: string) => {
     try {
@@ -662,24 +829,7 @@ export default function EvaluationsDashboard({
     const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId);
     if (!evaluation) return null;
 
-    // Special logging for the evaluation that's having stage update issues
-    if (selectedEvaluationId === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
-      console.log(`STAGE_TRACE: renderSelectedTask for ${selectedEvaluationId} - task stages: ${((evaluation.task as any)?.stages?.items || (evaluation.task as any)?.stages?.data?.items || []).map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
-    }
-    
-    // CRITICAL DEBUG: Always log which evaluation is selected vs which is getting updates
-    console.log(`STAGE_TRACE: renderSelectedTask - selectedEvaluationId: ${selectedEvaluationId}, evaluation found: ${evaluation?.id}`);
-    if (evaluation?.id !== selectedEvaluationId) {
-      console.error(`STAGE_TRACE: MISMATCH - selectedEvaluationId ${selectedEvaluationId} but found evaluation ${evaluation?.id}`);
-    }
-    
-    // DEBUG: Check if the evaluation that got stage updates is in the evaluations array
-    const evalWithStageUpdates = evaluations.find(e => e.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c');
-    if (evalWithStageUpdates) {
-      console.log(`STAGE_TRACE: Evaluation ff9cecfb-b568-4715-bc7a-8be6c763028c in evaluations array with stages: ${(((evalWithStageUpdates.task as any)?.stages?.items) || ((evalWithStageUpdates.task as any)?.stages?.data?.items) || []).map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
-    } else {
-      console.log(`STAGE_TRACE: Evaluation ff9cecfb-b568-4715-bc7a-8be6c763028c NOT FOUND in evaluations array`);
-    }
+    // Reduced logging
 
     console.log('Rendering selected task:', {
       evaluationId: evaluation.id,
@@ -700,8 +850,8 @@ export default function EvaluationsDashboard({
         task={evaluation.task}
         evaluationData={{
           ...evaluation,
-          // Pass the raw score results - they will be standardized in the components
-          scoreResults: evaluation.scoreResults
+          // Pass lazily loaded score results when available
+          scoreResults: selectedEvaluationScoreResults ?? null
         }}
 
         isFullWidth={isFullWidth}
@@ -713,7 +863,7 @@ export default function EvaluationsDashboard({
         onDelete={handleDelete}
       />
     );
-  }, [selectedEvaluationId, evaluations, isFullWidth, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
+  }, [selectedEvaluationId, evaluations, isFullWidth, selectedEvaluationScoreResults, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
 
   // Remove client-side filtering logic and use the filtered evaluations directly
   const filteredEvaluations = evaluations;
@@ -791,28 +941,21 @@ export default function EvaluationsDashboard({
         e.preventDefault();
       }
       
-      if (evaluationId !== selectedEvaluationId) {
-        // Update state first
-        setSelectedEvaluationId(evaluationId);
-        
-        // Clear the selected score result when changing evaluations
-        setSelectedScoreResultId(null);
-        
-        // Then update URL without triggering a navigation/re-render
-        const newPathname = `/lab/evaluations/${evaluationId}`;
-        window.history.pushState(null, '', newPathname);
-        
-        // Scroll to the selected evaluation after a brief delay to allow layout updates
-        setTimeout(() => {
-          scrollToSelectedEvaluation(evaluationId);
-        }, 100);
-        
-        if (isNarrowViewport) {
-          setIsFullWidth(true);
-        }
+      // Use robust setter that always performs cleanup and selection
+      // Ensure we exit full-width overlay so grid clicks are never blocked
+      setIsFullWidth(false)
+      // Small blur to drop focus from any nested buttons
+      try { (document.activeElement as HTMLElement | null)?.blur?.() } catch {}
+      handleSelectEvaluation(evaluationId)
+      // Scroll to the selected evaluation after a brief delay to allow layout updates
+      setTimeout(() => {
+        scrollToSelectedEvaluation(evaluationId);
+      }, 100);
+      if (isNarrowViewport) {
+        setIsFullWidth(true);
       }
     };
-  }, [selectedEvaluationId, isNarrowViewport, scrollToSelectedEvaluation]);
+  }, [isNarrowViewport, scrollToSelectedEvaluation]);
 
   if (showLoading) {
     return (
@@ -901,17 +1044,24 @@ export default function EvaluationsDashboard({
                   {filteredEvaluations.map((evaluation: any) => {
                     const clickHandler = getEvaluationClickHandler(evaluation.id);
                     
-                    // Log for ALL evaluations that match our problem evaluation, and all running evaluations
-                    if (evaluation.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
-                      console.log(`STAGE_TRACE: EvaluationsDashboard rendering TARGET ${evaluation.id} status=${evaluation.status} taskStatus=${evaluation.task?.status} with stages: ${(((evaluation.task as any)?.stages?.items) || ((evaluation.task as any)?.stages?.data?.items) || []).map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
-                    } else if (evaluation.status === 'RUNNING' || evaluation.task?.status === 'RUNNING') {
-                      console.log(`STAGE_TRACE: EvaluationsDashboard rendering ${evaluation.id} with stages: ${(((evaluation.task as any)?.stages?.items) || ((evaluation.task as any)?.stages?.data?.items) || []).map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
-                    }
+                    // Reduced logging
                     
                     return (
                       <div 
-                        key={evaluation.id} 
+                        key={evaluation.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={clickHandler}
+                        onClickCapture={clickHandler}
+                        onPointerDownCapture={clickHandler}
+                        onKeyDown={(ev) => {
+                          if (ev.key === 'Enter' || ev.key === ' ') {
+                            ev.preventDefault();
+                            clickHandler();
+                          }
+                        }}
+                        aria-pressed={evaluation.id === selectedEvaluationId}
+                        data-selected={evaluation.id === selectedEvaluationId ? 'true' : 'false'}
                         ref={(el) => {
                           evaluationRefsMap.current.set(evaluation.id, el);
                         }}
