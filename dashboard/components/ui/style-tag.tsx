@@ -1,3 +1,4 @@
+import React from 'react'
 const animations = `
 @keyframes jiggle {
   0%, 100% { transform: rotate(0deg); }

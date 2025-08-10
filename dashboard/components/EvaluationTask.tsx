@@ -405,26 +405,38 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     </div>
   )
 }, (prevProps, nextProps) => {
-  const prevStages = prevProps.data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
-  const nextStages = nextProps.data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
-  
-  if (prevStages !== nextStages) {
-    console.log(`🔍 TRACE_STAGES: GridContent memo ALLOWING re-render - ${nextProps.data.id} - stage change: [${prevStages}] → [${nextStages}]`);
-    return false; // Allow re-render
+  const prevStagesList = prevProps.data.task?.stages?.items || [];
+  const nextStagesList = nextProps.data.task?.stages?.items || [];
+  const stagesChanged = (
+    prevStagesList.length !== nextStagesList.length ||
+    prevStagesList.some((s, i) => {
+      const ns = nextStagesList[i];
+      return !ns || s.name !== ns.name || s.status !== ns.status || s.processedItems !== ns.processedItems || s.totalItems !== ns.totalItems;
+    })
+  );
+
+  const progressChanged = (
+    prevProps.data.processedItems !== nextProps.data.processedItems ||
+    prevProps.data.totalItems !== nextProps.data.totalItems ||
+    prevProps.data.accuracy !== nextProps.data.accuracy ||
+    prevProps.data.status !== nextProps.data.status ||
+    prevProps.data.elapsedSeconds !== nextProps.data.elapsedSeconds ||
+    prevProps.data.estimatedRemainingSeconds !== nextProps.data.estimatedRemainingSeconds
+  );
+
+  const otherChanged = (
+    prevProps.extra !== nextProps.extra ||
+    prevProps.isSelected !== nextProps.isSelected ||
+    !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults)
+  );
+
+  const allow = stagesChanged || progressChanged || otherChanged;
+  if (allow) {
+    console.log(`🔍 TRACE_STAGES: GridContent memo ALLOWING re-render - ${nextProps.data.id} - stagesChanged=${stagesChanged} progressChanged=${progressChanged} otherChanged=${otherChanged}`);
+    return false;
   }
-  
-  // Check other props quickly
-  const shouldRerender = prevProps.extra !== nextProps.extra || 
-                        prevProps.isSelected !== nextProps.isSelected ||
-                        !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults);
-  
-  if (shouldRerender) {
-    console.log(`🔍 TRACE_STAGES: GridContent memo ALLOWING re-render - ${nextProps.data.id} - other props changed`);
-    return false; // Allow re-render
-  }
-  
   console.log(`🔍 TRACE_STAGES: GridContent memo BLOCKING re-render - ${nextProps.data.id} - no changes`);
-  return true; // Block re-render
+  return true;
 });
 
 interface ParsedScoreResult extends ScoreResultData {}
@@ -896,12 +908,31 @@ const DetailContent = React.memo(({
   )
 }, (prevProps, nextProps) => {
   // Add logging for memo comparison
+  const stagesChanged = (() => {
+    const prevStages = prevProps.data.task?.stages?.items || [];
+    const nextStages = nextProps.data.task?.stages?.items || [];
+    if (prevStages.length !== nextStages.length) return true;
+    return prevStages.some((s, i) => {
+      const ns = nextStages[i];
+      return !ns || s.name !== ns.name || s.status !== ns.status || s.processedItems !== ns.processedItems || s.totalItems !== ns.totalItems;
+    });
+  })();
+
   const shouldUpdate = 
     prevProps.extra !== nextProps.extra || 
     prevProps.isSelected !== nextProps.isSelected ||
     prevProps.selectedScoreResultId !== nextProps.selectedScoreResultId ||
     prevProps.isFullWidth !== nextProps.isFullWidth ||
     prevProps.commandDisplay !== nextProps.commandDisplay ||
+    // progress / metrics / status changes
+    prevProps.data.processedItems !== nextProps.data.processedItems ||
+    prevProps.data.totalItems !== nextProps.data.totalItems ||
+    prevProps.data.accuracy !== nextProps.data.accuracy ||
+    prevProps.data.status !== nextProps.data.status ||
+    prevProps.data.elapsedSeconds !== nextProps.data.elapsedSeconds ||
+    prevProps.data.estimatedRemainingSeconds !== nextProps.data.estimatedRemainingSeconds ||
+    stagesChanged ||
+    // score results list changes
     prevProps.data.scoreResults?.length !== nextProps.data.scoreResults?.length ||
     !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults);
 
