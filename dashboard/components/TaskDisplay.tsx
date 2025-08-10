@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
 import { transformAmplifyTask, processTask } from '@/utils/data-operations'
 import type { EvaluationTaskProps } from '@/types/tasks/evaluation'
@@ -94,14 +94,35 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   onShare,
   onDelete
 }: TaskDisplayProps) {
+  const normalizeStatus = (value?: string | null): TaskStatus => {
+    if (!value) return 'pending';
+    const s = String(value).toLowerCase();
+    if (s === 'done') return 'completed';
+    if (s === 'error') return 'failed';
+    if (s === 'pending' || s === 'running' || s === 'completed' || s === 'failed') return s as TaskStatus;
+    return 'pending';
+  };
 
   // Log for ALL evaluations to see what TaskDisplay is receiving
   if (evaluationData && evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
-    console.log(`STAGE_TRACE: TaskDisplay render ${evaluationData.id} received task with stages: ${task?.stages?.data?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
+    const stageArr = ((task as any)?.stages?.items || (task as any)?.stages?.data?.items || []) as any[];
+    console.log(`STAGE_TRACE: TaskDisplay render ${evaluationData.id} received task with stages: ${stageArr.map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
   }
 
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay)
+  const lastStageItemsRef = useRef<any[]>([])
+  const getStageItemsFromTask = (t: any): any[] => {
+    if (!t) return [];
+    const s: any = (t as any).stages;
+    if (!s) return [];
+    if (Array.isArray(s)) return s;
+    const fromData = (s as any)?.data?.items;
+    if (Array.isArray(fromData)) return fromData;
+    const fromItems = (s as any)?.items;
+    if (Array.isArray(fromItems)) return fromItems;
+    return [];
+  };
 
 
   useEffect(() => {
@@ -118,64 +139,50 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
       // Removed excessive logging
       
       // Check if task already has well-structured stage data (from subscription)
-      const hasDirectStageData = task.stages && 
-        typeof task.stages === 'object' && 
-        (task.stages.data?.items?.length > 0 || task.stages.items?.length > 0);
+      const hasDirectStageData = (task as any)?.stages && 
+        typeof (task as any).stages === 'object' && 
+        (((task as any).stages.data?.items?.length ?? 0) > 0 || ((task as any).stages.items?.length ?? 0) > 0);
       
       if (hasDirectStageData) {
         // Skip the transformAmplifyTask/processTask pipeline that strips stages
         // Create a ProcessedTask directly from the good data we already have
         // Using direct stage data - bypass transform pipeline
         
-        const stageItems = task.stages.data?.items || task.stages.items || [];
+        const stageItems = ((task as any).stages?.data?.items || (task as any).stages?.items || []) as any[];
         const processedTask: ProcessedTask = {
-          task: {
-            id: task.id,
-            type: task.type || 'evaluation',
-            status: task.status || 'PENDING',
-            target: task.target || '',
-            command: task.command || '',
-            stages: {
-              items: stageItems.map((stage: any) => ({
-                id: stage.id || '',
-                name: stage.name || '',
-                order: stage.order || 0,
-                status: stage.status || 'PENDING',
-                statusMessage: stage.statusMessage,
-                startedAt: stage.startedAt,
-                completedAt: stage.completedAt,
-                estimatedCompletionAt: stage.estimatedCompletionAt,
-                processedItems: stage.processedItems,
-                totalItems: stage.totalItems
-              }))
-            },
-            startedAt: task.startedAt,
-            completedAt: task.completedAt,
-            estimatedCompletionAt: task.estimatedCompletionAt,
-            errorMessage: task.errorMessage,
-            errorDetails: task.errorDetails,
-            currentStageId: task.currentStageId
-          },
-          // Add the stages array that the later code expects
+          id: task.id,
+          command: task.command || '',
+          type: task.type || 'evaluation',
+          status: task.status || 'PENDING',
+          target: task.target || '',
           stages: stageItems.map((stage: any) => ({
             id: stage.id || '',
             name: stage.name || '',
             order: stage.order || 0,
-            status: stage.status || 'PENDING',
+            status: (stage.status || 'PENDING') as any,
             statusMessage: stage.statusMessage,
             startedAt: stage.startedAt,
             completedAt: stage.completedAt,
             estimatedCompletionAt: stage.estimatedCompletionAt,
             processedItems: stage.processedItems,
             totalItems: stage.totalItems
-          }))
+          })),
+          startedAt: task.startedAt || undefined,
+          completedAt: task.completedAt || undefined,
+          estimatedCompletionAt: task.estimatedCompletionAt || undefined,
+          errorMessage: task.errorMessage || undefined,
+          errorDetails: task.errorDetails || undefined,
+          currentStageId: task.currentStageId || undefined
         };
+        if (stageItems.length > 0) {
+          lastStageItemsRef.current = stageItems;
+        }
         
         // Created ProcessedTask with stage data preserved
         if (processedTask.stages?.length > 0) {
-          console.log(`STAGE_TRACE: TaskDisplay processTaskData direct path created ProcessedTask ${processedTask.task.id} with ${processedTask.stages.length} stages: ${processedTask.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
+          console.log(`STAGE_TRACE: TaskDisplay processTaskData direct path created ProcessedTask ${processedTask.id} with ${processedTask.stages.length} stages: ${processedTask.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
         } else {
-          console.log(`STAGE_TRACE: TaskDisplay processTaskData direct path created ProcessedTask ${processedTask.task.id} with NO stages - hasDirectStageData=${hasDirectStageData}`);
+          console.log(`STAGE_TRACE: TaskDisplay processTaskData direct path created ProcessedTask ${processedTask.id} with NO stages - hasDirectStageData=${hasDirectStageData}`);
         }
         
         if (evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
@@ -192,7 +199,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         
         const result = await processTask(convertedTask);
         if (result.stages?.length > 0) {
-          console.log(`STAGE_TRACE: TaskDisplay processTaskData fallback path created ProcessedTask ${result.task.id} with ${result.stages.length} stages: ${result.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
+          console.log(`STAGE_TRACE: TaskDisplay processTaskData fallback path created ProcessedTask ${result.id} with ${result.stages.length} stages: ${result.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
         } else {
           console.log(`STAGE_TRACE: TaskDisplay processTaskData fallback path lost stages for task ${task.id} - transformAmplifyTask/processTask stripped them`);
         }
@@ -224,6 +231,23 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   const displayTitle = reportData?.name || (evaluationData ? `${evaluationData.scorecard?.name || '-'} - ${evaluationData.score?.name || '-'}` : 'Report');
 
   // Construct props common to both EvaluationTask and ReportTask
+  // Determine status with a fallback: if all stages completed, mark as COMPLETED
+  const rawStatus = normalizeStatus(evaluationData?.status || task?.status || processedTask?.status || 'PENDING');
+  const stageSourceRaw: any[] = processedTask?.stages?.length ? processedTask.stages : getStageItemsFromTask(task);
+  const stageSource: any[] = stageSourceRaw.length > 0 ? stageSourceRaw : lastStageItemsRef.current;
+  const allStagesCompleted = stageSource.length > 0 && stageSource.every((s: any) => (String(s?.status || '').toUpperCase()) === 'COMPLETED');
+  const effectiveStatus = (rawStatus === 'completed' || (rawStatus !== 'failed' && allStagesCompleted)) ? 'completed' : rawStatus;
+  const displayStatusUC = (effectiveStatus === 'pending') ? 'PENDING'
+    : (effectiveStatus === 'running') ? 'RUNNING'
+    : (effectiveStatus === 'completed') ? 'COMPLETED'
+    : (effectiveStatus === 'failed') ? 'FAILED'
+    : 'PENDING';
+
+  const rawStageItemsForDisplay: any[] = stageSourceRaw.length > 0 ? stageSourceRaw : lastStageItemsRef.current;
+  if (rawStageItemsForDisplay.length > 0) {
+    lastStageItemsRef.current = rawStageItemsForDisplay;
+  }
+
   const commonTaskProps = {
     id: displayId,
     type: displayType,
@@ -231,8 +255,8 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     startedAt: (processedTask?.startedAt || task?.startedAt || evaluationData?.startedAt) ?? undefined,
     completedAt: (processedTask?.completedAt || task?.completedAt) ?? undefined,
     estimatedCompletionAt: (processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt) ?? undefined,
-    status: (processedTask?.status || task?.status || evaluationData?.status || 'PENDING') as TaskStatus,
-    stages: processedTask ? processedTask.stages.map((stage: ProcessedTaskStage) => {
+    status: displayStatusUC as any,
+    stages: rawStageItemsForDisplay.map((stage: any) => {
       const isCompleted = stage.status === 'COMPLETED';
       const isRunning = stage.status === 'RUNNING';
       const isFailed = stage.status === 'FAILED';
@@ -256,7 +280,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         totalItems: stage.totalItems,
         completed: isCompleted
       };
-    }) : (evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00' ? console.log(`STAGE_TRACE: TaskDisplay commonTaskProps creating stages undefined for ${displayId} - processedTask=${!!processedTask} stageCount=${processedTask?.stages?.length || 0}`) : null, undefined),
+    }),
     title: displayTitle,
     command: processedTask?.command,
     description: processedTask?.description,
@@ -327,7 +351,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
               accountId: '',
               type: processedTask.type || displayType,
               command: processedTask.command,
-              status: processedTask.status,
+              status: displayStatusUC as any,
               target: processedTask.target,
               description: processedTask.description,
               dispatchStatus: processedTask.dispatchStatus,
@@ -336,9 +360,31 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
               estimatedCompletionAt: processedTask.estimatedCompletionAt,
               celeryTaskId: processedTask.celeryTaskId,
               workerNodeId: processedTask.workerNodeId,
-              stages: commonTaskProps.stages ? {
-                items: commonTaskProps.stages
-              } : { items: [] },
+              stages: { items: (commonTaskProps.stages && commonTaskProps.stages.length > 0) ? commonTaskProps.stages : lastStageItemsRef.current.map((stage: any) => {
+                const isCompleted = (stage.status || '').toUpperCase() === 'COMPLETED';
+                const isRunning = (stage.status || '').toUpperCase() === 'RUNNING';
+                const isFailed = (stage.status || '').toUpperCase() === 'FAILED';
+                return {
+                  id: stage.id || stage.name,
+                  key: stage.name,
+                  label: stage.name,
+                  color: isCompleted ? 'bg-primary' : (
+                    isRunning ? 'bg-secondary' : (
+                      isFailed ? 'bg-false' : 'bg-neutral'
+                    )
+                  ),
+                  name: stage.name,
+                  order: stage.order || 0,
+                  status: (stage.status || 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                  processedItems: stage.processedItems,
+                  totalItems: stage.totalItems,
+                  statusMessage: stage.statusMessage,
+                  startedAt: stage.startedAt,
+                  completedAt: stage.completedAt,
+                  estimatedCompletionAt: stage.estimatedCompletionAt,
+                  completed: isCompleted
+                };
+              }) },
               errorMessage: commonTaskProps.errorMessage,
               errorDetails: commonTaskProps.errorDetails
           } : {
@@ -346,7 +392,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
               accountId: '',
               type: displayType,
               command: task?.command,
-              status: task?.status || evaluationData?.status || 'PENDING',
+              status: displayStatusUC as any,
               target: task?.target,
               description: task?.description,
               dispatchStatus: task?.dispatchStatus,
@@ -359,26 +405,10 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
                 // Try to extract stages from the original task data
                 
                 // Handle different possible structures for stages
-                let stageItems: any[] = [];
-                if (task?.stages) {
-                  if (Array.isArray(task.stages)) {
-                    stageItems = task.stages;
-                  } else if (typeof task.stages === 'function') {
-                    // This is a lazy loader, we can't process it synchronously
-                  } else {
-                    // Try to access data or items properties safely
-                    const stagesData = (task.stages as any);
-                    if (stagesData?.data?.items) {
-                      stageItems = stagesData.data.items;
-                    } else if (stagesData?.items) {
-                      stageItems = stagesData.items;
-                    }
-                  }
-                }
+                const stageItems: any[] = getStageItemsFromTask(task);
                 
                 
-                return {
-                  items: stageItems.map((stage: any) => ({
+                const items = stageItems.map((stage: any) => ({
                     id: stage.id || stage.name,
                     key: stage.name,
                     label: stage.name,
@@ -396,8 +426,8 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
                     processedItems: stage.processedItems,
                     totalItems: stage.totalItems,
                     completed: stage.status === 'COMPLETED'
-                  }))
-                };
+                  }));
+                return { items: items.length > 0 ? items : (commonTaskProps.stages || []) };
               })(),
               errorMessage: task?.errorMessage || evaluationData?.errorMessage,
               errorDetails: task?.errorDetails || evaluationData?.errorDetails,
@@ -417,9 +447,9 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
       onDelete
     } as EvaluationTaskProps;
 
-    if (evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
-      console.log(`STAGE_TRACE: TaskDisplay about to render EvaluationTask for ${evaluationData.id} with task.stages=${evaluationTaskProps.task.data.task?.stages?.items?.length || 0} stages`);
-    }
+  if (evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
+    console.log(`STAGE_TRACE: TaskDisplay about to render EvaluationTask for ${evaluationData.id}`);
+  }
 
     return <EvaluationTask {...evaluationTaskProps} variant={variant} />;
 
@@ -471,17 +501,17 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   }
   
   // CRITICAL: Check if task stages have changed
-  const prevStages = prevProps.task?.stages?.data?.items || [];
-  const nextStages = nextProps.task?.stages?.data?.items || [];
+  const prevStages = (prevProps.task as any)?.stages?.data?.items || (prevProps.task as any)?.stages?.items || [];
+  const nextStages = (nextProps.task as any)?.stages?.data?.items || (nextProps.task as any)?.stages?.items || [];
   const stagesChanged = prevStages.length !== nextStages.length || 
-    prevStages.some((stage, index) => {
-      const nextStage = nextStages[index];
+    prevStages.some((stage: any, index: number) => {
+      const nextStage: any = nextStages[index];
       return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status;
     });
   
   if (stagesChanged) {
     console.log(`STAGE_TRACE: TaskDisplay memo ALLOWING re-render for ${nextProps.evaluationData.id} - stages changed`);
-    console.log(`STAGE_TRACE: TaskDisplay memo stage details - prev: ${prevStages.map(s => `${s.name}:${s.status}`).join(',')} next: ${nextStages.map(s => `${s.name}:${s.status}`).join(',')}`);
+    console.log(`STAGE_TRACE: TaskDisplay memo stage details - prev: ${prevStages.map((s: any) => `${s.name}:${s.status}`).join(',')} next: ${nextStages.map((s: any) => `${s.name}:${s.status}`).join(',')}`);
     return false; // Allow re-render
   }
   
@@ -494,9 +524,13 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   const shouldRerender = !(
     prevProps.variant === nextProps.variant &&
     prevProps.task?.id === nextProps.task?.id &&
-    prevProps.task?.status === nextProps.task?.status &&
-    prevProps.evaluationData.id === nextProps.evaluationData.id &&
     prevProps.evaluationData.status === nextProps.evaluationData.status &&
+    prevProps.evaluationData.id === nextProps.evaluationData.id &&
+    prevProps.evaluationData.processedItems === nextProps.evaluationData.processedItems &&
+    prevProps.evaluationData.totalItems === nextProps.evaluationData.totalItems &&
+    prevProps.evaluationData.accuracy === nextProps.evaluationData.accuracy &&
+    prevProps.evaluationData.elapsedSeconds === nextProps.evaluationData.elapsedSeconds &&
+    prevProps.evaluationData.estimatedRemainingSeconds === nextProps.evaluationData.estimatedRemainingSeconds &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.selectedScoreResultId === nextProps.selectedScoreResultId &&
     prevProps.isFullWidth === nextProps.isFullWidth &&
