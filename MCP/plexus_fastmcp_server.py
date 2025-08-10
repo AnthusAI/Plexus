@@ -3200,7 +3200,7 @@ async def plexus_feedback_find(
         if not client:
             return "Error: Could not create dashboard client."
 
-        # Find the scorecard
+        # Find the scorecard (accept id, key, name, externalId)
         scorecard_id = resolve_scorecard_identifier(client, scorecard_name)
         if not scorecard_id:
             return f"Error: Scorecard '{scorecard_name}' not found."
@@ -3445,27 +3445,61 @@ async def plexus_predict(
         if not scorecard_data:
             return f"Error: Could not retrieve scorecard data for '{scorecard_name}'."
 
-        # Find the specific score
-        found_score = None
+        # Resolve the specific score using CLI resolver (accept id, key, name, externalId)
+        resolved_score = None
+        try:
+            from plexus.cli.identifier_resolution import resolve_score_identifier as _resolve_score_identifier
+            resolved_score_id = _resolve_score_identifier(client, scorecard_id, score_name)
+        except Exception:
+            resolved_score_id = None
+
+        # Scan scorecard to select the resolved score (or match by flexible fields if resolver unavailable)
         for section in scorecard_data.get('sections', {}).get('items', []):
             for score in section.get('scores', {}).get('items', []):
-                if (score.get('name') == score_name or 
-                    score.get('key') == score_name or 
-                    score.get('id') == score_name or 
-                    score.get('externalId') == score_name):
-                    found_score = score
+                if (
+                    (resolved_score_id and score.get('id') == resolved_score_id) or
+                    score.get('id') == score_name or
+                    score.get('externalId') == score_name or
+                    score.get('key') == score_name or
+                    score.get('name') == score_name
+                ):
+                    resolved_score = score
                     break
-            if found_score:
+            if resolved_score:
                 break
 
-        if not found_score:
+        if not resolved_score:
             return f"Error: Score '{score_name}' not found within scorecard '{scorecard_name}'."
 
-        # Prepare item IDs list
+        # Prepare item IDs list (raw identifiers)
         if item_id:
             target_item_ids = [item_id]
         else:
             target_item_ids = [id.strip() for id in item_ids.split(',')]
+
+        # Resolve raw identifiers to canonical item UUIDs using CLI resolver (accepts UUID, externalId, or other identifiers)
+        try:
+            from plexus.dashboard.api.models.account import Account as _Account
+            from plexus.cli.identifier_resolution import resolve_item_identifier as _resolve_item_identifier
+            # Derive account_id once (prefer env account key when available)
+            account_id = None
+            try:
+                account = _Account.list_by_key(key="call-criteria", client=client)
+                if account:
+                    account_id = account.id
+            except Exception:
+                account_id = None
+
+            resolved_ids = []
+            for raw_id in target_item_ids:
+                try:
+                    resolved_id = _resolve_item_identifier(client, raw_id, account_id)
+                except Exception:
+                    resolved_id = None
+                resolved_ids.append(resolved_id or raw_id)
+            target_item_ids = resolved_ids
+        except Exception as _resolve_err:
+            logger.warning(f"Item identifier resolution skipped due to error: {_resolve_err}")
 
         # Validate that all items exist and get their data
         prediction_results_list = []
@@ -3521,20 +3555,22 @@ async def plexus_predict(
                         
                         # Use the canonical Scorecard dependency system for all predictions
                         # This ensures consistent behavior with CLI, evaluations, and production
-                        from plexus.Scorecard import Scorecard
-                        
+                        # IMPORTANT: Do not call Scorecard.load() here (not available in this branch).
+                        # Instead, reuse the CLI loaders that support API-first and YAML-only modes.
+
                         use_cache = not no_cache
                         cache_mode = "YAML-only" if yaml_only else ("no-cache" if no_cache else "default")
                         logger.info(f"Using canonical Scorecard system to predict '{score_name}' from '{scorecard_name}' with {cache_mode} mode")
-                        
+
+                        # Defer imports to runtime to avoid heavy module import on server startup
                         if yaml_only:
-                            # For YAML-only mode, load scorecard from local files
-                            logger.info("Loading scorecard from YAML files for dependency resolution")
-                            scorecard_instance = Scorecard.load(scorecard_name, use_cache=use_cache, yaml_only=yaml_only)
+                            logger.info("Loading scorecard from YAML files for dependency resolution (CLI-compatible path)")
+                            from plexus.cli.EvaluationCommands import load_scorecard_from_yaml_files
+                            scorecard_instance = load_scorecard_from_yaml_files(scorecard_name, score_names=[score_name])
                         else:
-                            # For normal mode, use API data with caching
-                            logger.info("Loading scorecard with API data for dependency resolution")
-                            scorecard_instance = Scorecard.load(scorecard_name, use_cache=use_cache)
+                            logger.info("Loading scorecard from API for dependency resolution (CLI-compatible path)")
+                            from plexus.cli.EvaluationCommands import load_scorecard_from_api
+                            scorecard_instance = load_scorecard_from_api(scorecard_name, score_names=[score_name], use_cache=use_cache)
                         
                         # Use the battle-tested score_entire_text method which handles all dependency logic:
                         # - Builds dependency graphs automatically
@@ -3544,20 +3580,120 @@ async def plexus_predict(
                         # - Handles async processing with proper error handling
                         logger.info(f"Running scorecard evaluation with canonical dependency resolution for score '{score_name}'")
                         
+                        # Resolve requested score identifier to the actual score name for subset matching
+                        resolved_score_name = score_name
+                        try:
+                            if hasattr(scorecard_instance, 'scores') and isinstance(scorecard_instance.scores, list):
+                                for s in scorecard_instance.scores:
+                                    s_name = s.get('name')
+                                    if not s_name:
+                                        continue
+                                    if (
+                                        s_name == score_name or
+                                        str(s.get('id', '')) == str(score_name) or
+                                        str(s.get('key', '')) == str(score_name) or
+                                        str(s.get('externalId', '')) == str(score_name) or
+                                        str(s.get('originalExternalId', '')) == str(score_name)
+                                    ):
+                                        resolved_score_name = s_name
+                                        break
+                            if resolved_score_name != score_name:
+                                logger.info(f"Resolved score identifier '{score_name}' to score name '{resolved_score_name}' for subset matching")
+                        except Exception as _resolve_err:
+                            logger.warning(f"Could not resolve score identifier '{score_name}' to name: {_resolve_err}")
+
+                        # Build name->id map to extract result by ID later
+                        try:
+                            _, name_to_id = scorecard_instance.build_dependency_graph([resolved_score_name])
+                        except Exception:
+                            name_to_id = {}
+
                         results = await scorecard_instance.score_entire_text(
                             text=item_text,
                             metadata=metadata,
                             modality=None,
-                            subset_of_score_names=[score_name]  # This automatically includes dependencies
+                            subset_of_score_names=[resolved_score_name]  # This automatically includes dependencies
                         )
                         
                         # Extract the result for our target score
-                        if results and score_name in results:
-                            scorecard_result = results[score_name]
+                        # Extract by ID when available; fall back to name
+                        score_result_obj = None
+                        target_result_id = name_to_id.get(resolved_score_name)
+                        if results:
+                            if target_result_id and target_result_id in results:
+                                score_result_obj = results[target_result_id]
+                            elif resolved_score_name in results:
+                                score_result_obj = results[resolved_score_name]
+                        if score_result_obj is not None:
+                            scorecard_result = score_result_obj
                             prediction_result = scorecard_result
                             logger.info(f"Successfully got result from canonical scorecard system for '{score_name}'")
                         else:
-                            raise Exception(f"No result found for score '{score_name}' in scorecard evaluation. Available results: {list(results.keys()) if results else 'None'}")
+                            # Fallback: load and run the single score directly (CLI-compatible path)
+                            logger.warning(
+                                f"No result found for score '{resolved_score_name}' via scorecard. "
+                                f"Falling back to single-score execution."
+                            )
+                            try:
+                                from plexus.scores.Score import Score as _Score
+                                score_instance = _Score.load(scorecard_name, score_name, use_cache=use_cache, yaml_only=yaml_only)
+                                # Build Score.Input
+                                score_input = _Score.Input(text=item_text, metadata=metadata)
+                                async with score_instance:
+                                    await score_instance.async_setup()
+                                    single_result = await score_instance.predict(context=None, model_input=score_input)
+
+                                # Collect costs if available
+                                costs = {}
+                                try:
+                                    if hasattr(score_instance, 'get_accumulated_costs'):
+                                        costs = score_instance.get_accumulated_costs() or {}
+                                except Exception as _cost_err:
+                                    logger.warning(f"Failed to collect costs: {_cost_err}")
+                                # Fallback to result-attached costs if the accumulator is empty or zeroed
+                                try:
+                                    if (not costs) or (isinstance(costs, dict) and costs.get('total_cost') in (None, 0, 0.0, '0')):
+                                        if hasattr(single_result, 'cost') and single_result.cost:
+                                            costs = single_result.cost
+                                        elif getattr(single_result, 'metadata', None):
+                                            meta_cost = single_result.metadata.get('cost')
+                                            if meta_cost:
+                                                costs = meta_cost
+                                except Exception as _cost_fallback_err:
+                                    logger.warning(f"Failed to extract costs from result metadata: {_cost_fallback_err}")
+
+                                # Normalize to Score.Result
+                                if hasattr(single_result, 'value'):
+                                    value = single_result.value
+                                    explanation = (
+                                        getattr(single_result, 'explanation', None) or
+                                        (single_result.metadata.get('explanation') if getattr(single_result, 'metadata', None) else None)
+                                    )
+                                    prediction_result = {
+                                        "item_id": target_id,
+                                        "scores": [
+                                            {
+                                                "name": score_name,
+                                                "value": value,
+                                                "explanation": explanation,
+                                                "cost": costs
+                                            }
+                                        ]
+                                    }
+                                    # Attach trace if present
+                                    trace = None
+                                    if hasattr(single_result, 'trace'):
+                                        trace = single_result.trace
+                                    elif getattr(single_result, 'metadata', None):
+                                        trace = single_result.metadata.get('trace')
+                                    if trace:
+                                        prediction_result["scores"][0]["trace"] = trace
+                                else:
+                                    raise Exception("Single-score execution did not return a valid result")
+                            except Exception as _single_err:
+                                raise Exception(
+                                    f"Prediction failed: no scorecard result and single-score fallback failed: {_single_err}"
+                                )
                         
                         # Process results from canonical Scorecard system
                         # All results now come from scorecard_instance.score_entire_text()
@@ -3659,7 +3795,7 @@ async def plexus_predict(
                     "description": "Output from plexus predict command",
                     "command": " ".join(command_parts),
                     "scorecard_id": scorecard_id,
-                    "score_id": found_score['id'],
+                    "score_id": resolved_score['id'],
                     "item_count": len(target_item_ids)
                 },
                 "predictions": prediction_results_list
@@ -3673,8 +3809,8 @@ async def plexus_predict(
                 "scorecard_name": scorecard_name,
                 "score_name": score_name,
                 "scorecard_id": scorecard_id,
-                "score_id": found_score['id'],
-                "score_version_id": found_score.get('championVersionId'),
+                "score_id": resolved_score['id'],
+                "score_version_id": resolved_score.get('championVersionId'),
                 "item_count": len(target_item_ids),
                 "options": {
                     "include_input": include_input,
