@@ -144,7 +144,7 @@ export function useEvaluationData({
 
     const updateTaskId = taskData.id;
     
-    console.log(`STAGE_TRACE: handleTaskUpdate received task ${updateTaskId} status=${taskData.status} hasStages=${!!taskData.stages}`);
+    // Reduced logging
 
     // Store task data in map
     const taskToStore: AmplifyTask = {

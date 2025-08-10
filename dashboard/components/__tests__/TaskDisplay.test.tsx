@@ -1,6 +1,7 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { TaskDisplay } from '@/components/TaskDisplay'
+import userEvent from '@testing-library/user-event'
 
 const baseEval = {
   id: 'e1',
@@ -107,5 +108,77 @@ describe('TaskDisplay', () => {
     const complete = items[items.length - 1]
     // In selected/detail contexts, neutral background may be themed; accept either neutral or progress background
     expect(complete.className).toMatch(/bg-neutral|bg-progress-background/)
+  })
+
+  test('score results loading skeleton appears when scoreResults=null and hides when array arrives', async () => {
+    const user = userEvent.setup()
+    const evalLoading = { ...baseEval, scoreResults: null } as any
+
+    const { rerender } = render(
+      <TaskDisplay
+        variant="detail"
+        task={makeTask({ items: [] })}
+        evaluationData={evalLoading}
+      />
+    )
+
+    // Loading skeletons should render
+    // Look for multiple skeleton rows by their pulse class container
+    const skeletons = document.querySelectorAll('.animate-pulse')
+    expect(skeletons.length).toBeGreaterThan(0)
+
+    const resultsHeader = screen.getByText('Score Results')
+    expect(resultsHeader).toBeInTheDocument()
+
+    // Now provide results
+    const results = [
+      { id: 'r1', value: 'yes', confidence: 0.9, metadata: { correct: true, human_label: 'yes' } },
+      { id: 'r2', value: 'no', confidence: 0.2, metadata: { correct: false, human_label: 'no' } },
+    ]
+
+    rerender(
+      <TaskDisplay
+        variant="detail"
+        task={makeTask({ items: [] })}
+        evaluationData={{ ...baseEval, scoreResults: results } as any}
+      />
+    )
+
+    // Skeletons should disappear, and two results should render
+    const afterSkeletons = document.querySelectorAll('.animate-pulse')
+    expect(afterSkeletons.length).toBe(0)
+    // ScoreResultComponent renders result values; assert presence via text
+    expect(screen.getByText('yes')).toBeInTheDocument()
+    expect(screen.getByText('no')).toBeInTheDocument()
+  })
+
+  test('result list updates when scoreResults reference changes', () => {
+    const first = [{ id: 'r1', value: 'yes', metadata: { correct: true, human_label: 'yes' } }]
+    const second = [
+      { id: 'r1', value: 'yes', metadata: { correct: true, human_label: 'yes' } },
+      { id: 'r2', value: 'no', metadata: { correct: false, human_label: 'no' } },
+    ]
+
+    const { rerender } = render(
+      <TaskDisplay
+        variant="detail"
+        task={makeTask({ items: [] })}
+        evaluationData={{ ...baseEval, scoreResults: first } as any}
+      />
+    )
+
+    expect(screen.getByText('yes')).toBeInTheDocument()
+    expect(screen.queryByText('no')).toBeNull()
+
+    rerender(
+      <TaskDisplay
+        variant="detail"
+        task={makeTask({ items: [] })}
+        evaluationData={{ ...baseEval, scoreResults: second } as any}
+      />
+    )
+
+    expect(screen.getByText('yes')).toBeInTheDocument()
+    expect(screen.getByText('no')).toBeInTheDocument()
   })
 })
