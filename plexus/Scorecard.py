@@ -98,6 +98,9 @@ class Scorecard:
         self.output_cost = Decimal('0.0')
         self.total_cost =  Decimal('0.0')
         self.scorecard_total_cost = Decimal('0.0')
+        self.cost_per_text = Decimal('0.0')
+        # Track how many texts have been processed by this scorecard instance
+        self.number_of_texts_processed = 0
 
         self.cloudwatch_logger = CloudWatchLogger()
         
@@ -455,6 +458,7 @@ class Scorecard:
                 self.output_cost += score_total_cost.get('output_cost', 0)
                 self.total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
                 self.scorecard_total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
+                self.cost_per_text += Decimal(str(score_total_cost.get('cost_per_text', 0)))
 
                 # Log CloudWatch metrics for this individual score
                 total_tokens = score_total_cost.get('prompt_tokens', 0) + score_total_cost.get('completion_tokens', 0)
@@ -507,6 +511,13 @@ class Scorecard:
             subset_of_score_names = self.score_names_to_process()
         
         logging.info(f"Starting to process scores: {subset_of_score_names}")
+
+        # Increment processed text counter for cost-per-text calculations
+        try:
+            self.number_of_texts_processed += 1
+        except Exception:
+            # Be resilient if attribute not set for any reason
+            self.number_of_texts_processed = 1
 
         # Calculate content item length in tokens using a general-purpose encoding
         encoding = tiktoken.get_encoding("cl100k_base")
@@ -633,6 +644,7 @@ class Scorecard:
                 self.output_cost += score_total_cost.get('output_cost', 0)
                 self.total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
                 self.scorecard_total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
+                self.cost_per_text += Decimal(str(score_total_cost.get('cost_per_text', 0)))
 
                 # Log CloudWatch metrics for this individual score
                 score_config = score_config if 'score_config' in locals() else self.score_registry.get_properties(score_name)
@@ -665,6 +677,9 @@ class Scorecard:
                 self.cloudwatch_logger.log_metric('CachedTokensByScorecard', score_total_cost.get('cached_tokens', 0), scorecard_dimensions)
                 self.cloudwatch_logger.log_metric('ExternalAIRequestsByScorecard', score_total_cost.get('llm_calls', 0), scorecard_dimensions)
                 self.cloudwatch_logger.log_metric('ItemTokensByScorecard', item_tokens, scorecard_dimensions)
+                # Use aggregated scorecard costs for CostPerText instead of per-score value
+                aggregated_costs = self.get_accumulated_costs()
+                self.cloudwatch_logger.log_metric('CostPerText', aggregated_costs.get('cost_per_text', 0), scorecard_dimensions)
                     
                 results_by_score_id[score_id] = result
                 results.append({
@@ -723,6 +738,12 @@ class Scorecard:
         return results_by_score_id
 
     def get_accumulated_costs(self):
+        from decimal import Decimal
+        cost_per_text = Decimal('0')
+        if getattr(self, 'number_of_texts_processed', 0):
+            # Avoid division by zero and ensure Decimal division
+            cost_per_text = (self.total_cost / Decimal(str(self.number_of_texts_processed)))
+
         return {
             'prompt_tokens': self.prompt_tokens,
             'completion_tokens': self.completion_tokens,
@@ -730,7 +751,8 @@ class Scorecard:
             'llm_calls': self.llm_calls,
             'input_cost': self.input_cost,
             'output_cost': self.output_cost,
-            'total_cost': self.total_cost
+            'total_cost': self.total_cost,
+            'cost_per_text': cost_per_text
         }
 
     def get_model_name(self, name=None, id=None, key=None):

@@ -928,7 +928,8 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
       stageItems = stageResponse?.data?.items || [];
   } else {
       // Handle direct object format (new structure)
-      stageItems = (taskData.stages as any)?.data?.items || (taskData.stages as any)?.items || [];
+      const direct: any = taskData.stages as unknown as { data?: { items?: any[] }, items?: any[] };
+      stageItems = direct?.data?.items || direct?.items || [];
     }
   }
 
