@@ -38,6 +38,20 @@ describe('AdHocCostAnalysis', () => {
       expect(screen.getByText('Score Two')).toBeInTheDocument()
     })
   })
+
+  it('uses 250 limit for per-score view', async () => {
+    const { fetchCostAnalysisScoreResults } = require('../../utils/cost-analysis')
+    render(<AdHocCostAnalysis scoreId="S1" />)
+    await waitFor(() => expect(fetchCostAnalysisScoreResults).toHaveBeenCalled())
+    expect(fetchCostAnalysisScoreResults).toHaveBeenCalledWith(expect.objectContaining({ limit: 250 }))
+  })
+
+  it('uses 1000 limit for scorecard view', async () => {
+    const { fetchCostAnalysisScoreResults } = require('../../utils/cost-analysis')
+    render(<AdHocCostAnalysis scorecardId="SC1" />)
+    await waitFor(() => expect(fetchCostAnalysisScoreResults).toHaveBeenCalled())
+    expect(fetchCostAnalysisScoreResults).toHaveBeenCalledWith(expect.objectContaining({ limit: 1000 }))
+  })
 })
 
 

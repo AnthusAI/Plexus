@@ -386,6 +386,10 @@ export default function ScorecardsComponent({
     // Only update state if the selected scorecard has changed
     if (scorecard?.id !== selectedScorecard?.id) {
       console.log('🔵 Scorecard selection changed, updating state...');
+      // Close any open Cost Analysis when selecting a new scorecard
+      if (costAnalysisPanel?.isOpen) {
+        setCostAnalysisPanel(null);
+      }
       
       setSelectedScorecard(scorecard);
       // Conditionally reset selected score:
@@ -573,6 +577,10 @@ export default function ScorecardsComponent({
       // Reset item selection when selecting a score
       setSelectedItem(null);
       setIsCreatingItem(false);
+      // Close any open Cost Analysis when selecting a new score
+      if (costAnalysisPanel?.isOpen) {
+        setCostAnalysisPanel(null);
+      }
       
       // Close feedback analysis if open when selecting a score
       if (feedbackAnalysisPanel?.isOpen) {

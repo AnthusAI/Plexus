@@ -73,13 +73,16 @@ function buildQuery(params: { accountId?: string; scorecardId?: string; scoreId?
   topKey: string
   variableNames: string[]
 } {
+  const includeScoreIdFilter = !!params.scoreId
   if (params.scorecardId) {
     const topKey = 'listScoreResultByScorecardIdAndUpdatedAt'
+    const filterLine = includeScoreIdFilter ? `,\n          filter: { scoreId: { eq: $scoreId } }` : ''
     const query = `
-      query GetScoreResultsByScorecard($scorecardId: String!, $startTime: String!, $endTime: String!, $nextToken: String, $limit: Int) {
+      query GetScoreResultsByScorecard($scorecardId: String!, $startTime: String!, $endTime: String!, $nextToken: String, $limit: Int${includeScoreIdFilter ? ', $scoreId: String' : ''}) {
         ${topKey}(
           scorecardId: $scorecardId,
-          updatedAt: { between: [$startTime, $endTime] },
+          sortDirection: DESC,
+          updatedAt: { between: [$startTime, $endTime] }${filterLine},
           nextToken: $nextToken,
           limit: $limit
         ) {
@@ -93,15 +96,17 @@ function buildQuery(params: { accountId?: string; scorecardId?: string; scoreId?
         }
       }
     `
-    return { query, topKey, variableNames: ['scorecardId'] }
+    return { query, topKey, variableNames: includeScoreIdFilter ? ['scorecardId', 'scoreId'] : ['scorecardId'] }
   }
   // Default by account
   const topKey = 'listScoreResultByAccountIdAndUpdatedAt'
+  const filterLine = includeScoreIdFilter ? `,\n        filter: { scoreId: { eq: $scoreId } }` : ''
   const query = `
-    query GetScoreResultsByAccount($accountId: String!, $startTime: String!, $endTime: String!, $nextToken: String, $limit: Int) {
+    query GetScoreResultsByAccount($accountId: String!, $startTime: String!, $endTime: String!, $nextToken: String, $limit: Int${includeScoreIdFilter ? ', $scoreId: String' : ''}) {
       ${topKey}(
         accountId: $accountId,
-        updatedAt: { between: [$startTime, $endTime] },
+        sortDirection: DESC,
+        updatedAt: { between: [$startTime, $endTime] }${filterLine},
         nextToken: $nextToken,
         limit: $limit
       ) {
@@ -115,7 +120,7 @@ function buildQuery(params: { accountId?: string; scorecardId?: string; scoreId?
       }
     }
   `
-  return { query, topKey, variableNames: ['accountId'] }
+  return { query, topKey, variableNames: includeScoreIdFilter ? ['accountId', 'scoreId'] : ['accountId'] }
 }
 
 /**
@@ -189,6 +194,14 @@ export interface CostSummary {
 
 export interface CostGroupSummary extends CostSummary {
   group: { scoreId?: string; scorecardId?: string; scoreName?: string }
+  // Box plot distribution for per-score costs
+  min_cost?: number
+  q1_cost?: number
+  median_cost?: number
+  q3_cost?: number
+  max_cost?: number
+  // Raw values for single-score histogram views
+  values?: number[]
 }
 
 export interface CostAnalysisAggregates {
@@ -197,7 +210,7 @@ export interface CostAnalysisAggregates {
 }
 
 export function aggregateCostByScore(items: ScoreResultRecord[]): CostAnalysisAggregates {
-  const perScore: Record<string, { name?: string; count: number; total: number; calls: number }> = {}
+  const perScore: Record<string, { name?: string; count: number; total: number; calls: number; values: number[] }> = {}
   let overallCount = 0
   let overallTotal = 0
   let overallCalls = 0
@@ -208,24 +221,55 @@ export function aggregateCostByScore(items: ScoreResultRecord[]): CostAnalysisAg
     const total = Number((cost as any).total_cost ?? 0)
     const calls = Number((cost as any).llm_calls ?? 0)
     const sId = String(sr.scoreId || '')
-    if (!perScore[sId]) perScore[sId] = { name: sr.score?.name || undefined, count: 0, total: 0, calls: 0 }
+    if (!perScore[sId]) perScore[sId] = { name: sr.score?.name || undefined, count: 0, total: 0, calls: 0, values: [] }
     perScore[sId].count += 1
     perScore[sId].total += Number.isFinite(total) ? total : 0
     perScore[sId].calls += Number.isFinite(calls) ? calls : 0
+    if (Number.isFinite(total)) perScore[sId].values.push(total)
     overallCount += 1
     overallTotal += Number.isFinite(total) ? total : 0
     overallCalls += Number.isFinite(calls) ? calls : 0
   }
 
-  const groups: CostGroupSummary[] = Object.entries(perScore).map(([scoreId, stats]) => ({
-    group: { scoreId, scoreName: stats.name },
-    count: stats.count,
-    total_cost: stats.total,
-    average_cost: stats.count ? stats.total / stats.count : 0,
-    average_calls: stats.count ? stats.calls / stats.count : 0,
-  }))
+  function quantiles(values: number[]): { min: number; q1: number; median: number; q3: number; max: number } {
+    if (values.length === 0) return { min: 0, q1: 0, median: 0, q3: 0, max: 0 }
+    const arr = [...values].sort((a, b) => a - b)
+    const nth = (p: number) => {
+      if (arr.length === 1) return arr[0]
+      const pos = (arr.length - 1) * p
+      const base = Math.floor(pos)
+      const rest = pos - base
+      if (arr[base + 1] !== undefined) return arr[base] + rest * (arr[base + 1] - arr[base])
+      return arr[base]
+    }
+    return {
+      min: arr[0],
+      q1: nth(0.25),
+      median: nth(0.5),
+      q3: nth(0.75),
+      max: arr[arr.length - 1],
+    }
+  }
 
-  groups.sort((a, b) => (a.group.scoreId || '').localeCompare(b.group.scoreId || ''))
+  const groups: CostGroupSummary[] = Object.entries(perScore).map(([scoreId, stats]) => {
+    const { min, q1, median, q3, max } = quantiles(stats.values)
+    return {
+      group: { scoreId, scoreName: stats.name },
+      count: stats.count,
+      total_cost: stats.total,
+      average_cost: stats.count ? stats.total / stats.count : 0,
+      average_calls: stats.count ? stats.calls / stats.count : 0,
+      min_cost: min,
+      q1_cost: q1,
+      median_cost: median,
+      q3_cost: q3,
+      max_cost: max,
+      values: stats.values,
+    }
+  })
+
+  // Sort by highest average cost, to match the text table intent
+  groups.sort((a, b) => (Number(b.average_cost || 0) - Number(a.average_cost || 0)))
 
   const summary: CostSummary = {
     count: overallCount,

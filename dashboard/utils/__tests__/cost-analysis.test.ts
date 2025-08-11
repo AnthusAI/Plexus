@@ -1,3 +1,23 @@
+import { __testUtils as utils } from '../../utils/cost-analysis'
+
+describe('cost-analysis buildQuery', () => {
+  it('uses scorecard GSI with sort DESC and optional score filter', () => {
+    const { query, topKey, variableNames } = (utils as any).buildQuery({ scorecardId: 'SC1', scoreId: 'S1' })
+    expect(topKey).toBe('listScoreResultByScorecardIdAndUpdatedAt')
+    expect(query).toMatch(/sortDirection:\s*DESC/)
+    expect(query).toMatch(/filter:\s*\{\s*scoreId:\s*\{\s*eq:\s*\$scoreId\s*\}\s*\}/)
+    expect(variableNames).toEqual(['scorecardId', 'scoreId'])
+  })
+
+  it('uses account GSI fallback with optional score filter', () => {
+    const { query, topKey, variableNames } = (utils as any).buildQuery({ accountId: 'A1', scoreId: 'S1' })
+    expect(topKey).toBe('listScoreResultByAccountIdAndUpdatedAt')
+    expect(query).toMatch(/sortDirection:\s*DESC/)
+    expect(query).toMatch(/filter:\s*\{\s*scoreId:\s*\{\s*eq:\s*\$scoreId\s*\}\s*\}/)
+    expect(variableNames).toEqual(['accountId', 'scoreId'])
+  })
+})
+
 import { fetchCostAnalysisScoreResults, __testUtils } from '../cost-analysis'
 import { graphqlRequest } from '../amplify-client'
 
