@@ -639,12 +639,6 @@ export function useEvaluationTaskMetrics(): UseUnifiedMetricsResult {
         type: 'tasks' as const,
         taskType: 'evaluation', // Filter for evaluation-related tasks
         accountId: '', // Will be filled by the hook
-      },
-      // For score results, we track score results with evaluation type
-      scoreResults: {
-        type: 'scoreResults' as const,
-        scoreResultType: 'evaluation',
-        accountId: '', // Will be filled by the hook
       }
     },
     transformations: {
