@@ -18,7 +18,7 @@ def cost():
 @click.option("--scorecard", type=str, default=None, help="Optional scorecard ID to filter")
 @click.option("--score", type=str, default=None, help="Optional score ID to filter")
 @click.option("--output", type=click.Choice(["json"], case_sensitive=False), default="json")
-def analyze(days: int, hours: int, scorecard: str | None, score: str | None, output: str):
+def analyze(days: int = 0, hours: int = 1, scorecard: str | None = None, score: str | None = None, output: str = "json"):
     client = create_client()
     account_id = resolve_account_id_for_command(client, None)
     analyzer = ScoreResultCostAnalyzer(
