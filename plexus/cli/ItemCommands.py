@@ -138,6 +138,7 @@ def get_score_results_for_item(item_id: str, client) -> List[ScoreResult]:
                 {ScoreResult.fields()}
                 updatedAt
                 createdAt
+                cost
             }}
         }}
     }}
@@ -150,6 +151,14 @@ def get_score_results_for_item(item_id: str, client) -> List[ScoreResult]:
     score_results = []
     for sr_data in score_results_data:
         score_result = ScoreResult.from_dict(sr_data, client)
+        # Attach cost if API returns it or embed from metadata
+        try:
+            if 'cost' in sr_data and sr_data['cost'] is not None:
+                setattr(score_result, 'cost', sr_data['cost'])
+            elif isinstance(score_result.metadata, dict) and 'cost' in score_result.metadata:
+                setattr(score_result, 'cost', score_result.metadata['cost'])
+        except Exception:
+            pass
         # Manually add timestamp fields that aren't in the standard fields
         if 'updatedAt' in sr_data:
             if isinstance(sr_data['updatedAt'], str):
@@ -220,6 +229,18 @@ def format_score_results_content(score_results: List[ScoreResult]) -> Text:
         if sr.evaluationId:
             content.append(f"    Evaluation ID: {sr.evaluationId[:8]}...\n", style="dim")
         
+        # Add cost if available
+        cost_value = getattr(sr, 'cost', None)
+        if cost_value is None and isinstance(sr.metadata, dict):
+            cost_value = sr.metadata.get('cost')
+        if cost_value is not None:
+            content.append("    Cost:\n", style="bold blue")
+            try:
+                import json as _json
+                content.append("      " + _json.dumps(cost_value, indent=2) + "\n", style="dim")
+            except Exception:
+                content.append(f"      {cost_value}\n", style="dim")
+
         # Add explanation if available
         if sr.explanation and sr.explanation.strip():
             content.append("    Explanation:\n", style="bold blue")
