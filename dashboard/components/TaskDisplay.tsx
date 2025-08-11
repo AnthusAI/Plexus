@@ -201,14 +201,12 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   }, [task, evaluationData?.id]);
 
   const transformedScoreResults = useMemo(() => {
-    if (!evaluationData?.scoreResults) return [];
-
+    if (!('scoreResults' in (evaluationData || {}))) return [];
+    const sr = evaluationData?.scoreResults;
+    if (sr === null) return null as any; // preserve null to indicate loading state downstream
+    if (!sr) return [];
     // All score results come pre-transformed with itemIdentifiers included
-    return Array.isArray(evaluationData.scoreResults) ? 
-      evaluationData.scoreResults : 
-      (evaluationData.scoreResults && typeof evaluationData.scoreResults === 'object' && 'items' in evaluationData.scoreResults ? 
-        evaluationData.scoreResults.items : 
-        []);
+    return Array.isArray(sr) ? sr : ((typeof sr === 'object' && 'items' in sr) ? (sr as any).items : []);
   }, [evaluationData]);
 
   // Define base properties, prefer reportData if available
@@ -332,7 +330,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
           predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ?
             JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
           isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
-          scoreResults: transformedScoreResults,
+           scoreResults: transformedScoreResults as any,
           task: processedTask ? { 
               id: processedTask.id,
               accountId: '',

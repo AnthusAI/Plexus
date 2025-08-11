@@ -1080,7 +1080,7 @@ evaluation:
     variant === 'detail' ? (
       <div className="flex items-center space-x-2">
         <DropdownMenu>
-          <DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild>
             <CardButton
               icon={MoreHorizontal}
               onClick={() => {
