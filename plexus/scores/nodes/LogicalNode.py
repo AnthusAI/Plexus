@@ -1,18 +1,21 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 from pydantic import Field
 from langgraph.graph import StateGraph, END
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
+from plexus.scores.nodes.LuaRuntime import get_lua_runtime, is_lua_available
+import json
 
 class LogicalNode(BaseNode):
     """
-    A node that executes arbitrary Python code without requiring Score.Result objects.
+    A node that executes arbitrary Python or Lua code without requiring Score.Result objects.
     Enables flexible state updates and custom output field mapping for general-purpose tasks.
     """
     
     class Parameters(BaseNode.Parameters):
-        code: str = Field(description="Python code string defining the execution function")
+        code: str = Field(description="Code string defining the execution function")
+        language: str = Field(default="lua", description="Programming language: 'lua' or 'python'")
         function_name: str = Field(default="execute", description="Name of function to call in the code")
         output_mapping: Optional[Dict[str, str]] = Field(default=None, description="Map function results to state fields")
 
@@ -24,13 +27,34 @@ class LogicalNode(BaseNode):
         # Skip both BaseNode.__init__ and LangChainUser.__init__ since LogicalNode doesn't need LLM functionality
         # Initialize only the essential parts manually
         
+        # Handle node_name parameter mapping to name for BaseNode compatibility
+        if 'node_name' in parameters:
+            parameters['name'] = parameters.pop('node_name')
+        
         # Set up parameters directly without calling parent __init__
         self.parameters = self.Parameters(**parameters)
         
         # Initialize model to None since we don't need LLM functionality
         self.model = None
         
-        # Compile the code string into a function
+        # Validate language parameter
+        if self.parameters.language not in ['python', 'lua']:
+            raise ValueError(f"Unsupported language: {self.parameters.language}. Must be 'lua' or 'python'")
+        
+        # Check Lua availability for default case
+        if self.parameters.language == 'lua' and not is_lua_available():
+            raise ValueError("Lua runtime not available. Install with: pip install lupa>=2.0\n" +
+                           "Lua is the default language for security reasons. " +
+                           "To use Python instead, specify language='python' explicitly.")
+        
+        # Prepare the execution function based on language
+        if self.parameters.language == 'python':
+            self._prepare_python_function()
+        else:
+            self._prepare_lua_function()
+    
+    def _prepare_python_function(self):
+        """Prepare Python function for execution."""
         namespace = {}
         exec(self.parameters.code, namespace)
         
@@ -38,7 +62,13 @@ class LogicalNode(BaseNode):
         function_name = self.parameters.function_name
         self.execute_function = namespace.get(function_name)
         if not self.execute_function:
-            raise ValueError(f"Code must define a '{function_name}' function")
+            raise ValueError(f"Python code must define a '{function_name}' function")
+    
+    def _prepare_lua_function(self):
+        """Prepare Lua function for execution."""
+        self.lua_runtime = get_lua_runtime()
+        # Validation will happen during execution
+        self.execute_function = None  # Will be resolved at runtime
 
     def get_execute_node(self, graph_state_class=None):
         """Node that executes the user-defined function."""
@@ -75,9 +105,16 @@ class LogicalNode(BaseNode):
 
             logging.info(f"LogicalNode context: {context}")
 
-            # Execute the user function
+            # Execute the user function based on language
             try:
-                result = execute_function(context)
+                if self.parameters.language == 'python':
+                    result = execute_function(context)
+                else:  # lua
+                    result = self.lua_runtime.execute_function(
+                        self.parameters.code,
+                        self.parameters.function_name,
+                        context
+                    )
                 logging.info(f"LogicalNode function result: {result}")
             except Exception as e:
                 logging.error(f"Error executing LogicalNode function: {str(e)}")
