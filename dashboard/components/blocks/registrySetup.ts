@@ -13,6 +13,7 @@ import FeedbackAnalysis from './FeedbackAnalysis';
 import ScorecardReport from './ScorecardReport';
 import ScoreInfo from './ScoreInfo';
 import TopicAnalysis from './TopicAnalysis';
+import CostAnalysis from './CostAnalysis';
 
 // Register all block components
 // Register the default block handler first
@@ -24,3 +25,4 @@ registerBlock('FeedbackAnalysis', FeedbackAnalysis as BlockComponent);
 registerBlock('text', TextBlock as BlockComponent);
 registerBlock('ScoreInfo', ScoreInfo as BlockComponent);
 registerBlock('TopicAnalysis', TopicAnalysis as BlockComponent); 
+registerBlock('CostAnalysis', CostAnalysis as BlockComponent);

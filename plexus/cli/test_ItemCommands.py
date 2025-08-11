@@ -1,3 +1,56 @@
+import pytest
+from unittest.mock import patch, Mock
+
+
+def build_score_result(cost=None):
+    return {
+        'id': 'sr-1',
+        'value': 'YES',
+        'explanation': 'ok',
+        'itemId': 'item-1',
+        'accountId': 'acct-1',
+        'scorecardId': 'card-1',
+        'score': {'id': 'score-1', 'name': 'Test Score'},
+        'metadata': {'cost': cost} if cost is not None else {},
+        'trace': None,
+        'updatedAt': '2025-01-01T00:00:00Z',
+        'createdAt': '2025-01-01T00:00:00Z'
+    }
+
+
+@pytest.mark.asyncio
+async def test_mcp_item_last_includes_cost_in_score_results(monkeypatch):
+    # Patch client creation and Item/ScoreResult models used by MCP
+    from MCP import plexus_fastmcp_server as server
+
+    mock_client = Mock()
+    monkeypatch.setenv('PLEXUS_API_URL', 'https://x')
+    monkeypatch.setenv('PLEXUS_API_KEY', 'y')
+
+    with patch('plexus.cli.client_utils.create_client', return_value=mock_client), \
+         patch('plexus.cli.reports.utils.resolve_account_id_for_command', return_value='acct-1'):
+
+        # listItemByAccountIdAndCreatedAt returns one item, with all Item.fields
+        mock_client.execute.side_effect = [
+            { 'listItemByAccountIdAndCreatedAt': { 'items': [
+                { 'id': 'item-1', 'accountId': 'acct-1', 'evaluationId': 'prediction-default',
+                  'scoreId': None, 'description': 'desc', 'externalId': 'ext-1', 'isEvaluation': False,
+                  'createdByType': 'prediction', 'metadata': '{}', 'identifiers': '[]', 'attachedFiles': None,
+                  'createdAt': '2025-01-01T00:00:00Z', 'updatedAt': '2025-01-01T00:00:00Z' }
+            ]}},
+            # listScoreResultByItemId for score results
+            { 'listScoreResultByItemId': { 'items': [ build_score_result(cost={'total_cost': 0.123}) ] } }
+        ]
+
+        # Patch helpers to use our mock client data
+        with patch('MCP.plexus_fastmcp_server._get_feedback_items_for_item', return_value=[]):
+            result = await server.plexus_item_last.fn(minimal=False)
+
+        assert isinstance(result, dict)
+        assert result.get('scoreResults')
+        sr = result['scoreResults'][0]
+        assert 'cost' in sr and isinstance(sr['cost'], dict)
+
 """
 Comprehensive tests for ItemCommands CLI functionality.
 
