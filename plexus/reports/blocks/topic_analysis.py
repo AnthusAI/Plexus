@@ -1237,7 +1237,7 @@ class TopicAnalysis(BaseReportBlock):
         """
         try:
             from langchain_openai import ChatOpenAI
-            from langchain.prompts import ChatPromptTemplate
+            from langchain_core.prompts import ChatPromptTemplate
             
             # Check if we have an API key
             if not openai_api_key:

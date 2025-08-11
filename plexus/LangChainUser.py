@@ -6,8 +6,9 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from langchain_aws import ChatBedrock
-from langchain_community.chat_models import ChatOpenAI, AzureChatOpenAI
-from langchain_community.chat_models import ChatOpenAI
+
+from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import OpenAICallbackHandler
 
 from plexus.CustomLogging import logging
@@ -117,23 +118,31 @@ class LangChainUser:
             self.openai_callback = OpenAICallbackHandler()
             callbacks = [self.openai_callback, self.token_counter]
             
+            # Models starting with or containing "gpt-5" do not support temperature/top_p
+            is_gpt5 = (params.model_name or "").lower().find("gpt-5") != -1
+
             if params.model_provider == "AzureChatOpenAI":
-                base_model = AzureChatOpenAI(
-                    azure_endpoint=os.getenv("AZURE_API_BASE"),
-                    api_version=os.getenv("AZURE_API_VERSION"),
-                    api_key=os.getenv("AZURE_API_KEY"),
-                    model=params.model_name,
-                    temperature=params.temperature,
-                    max_tokens=max_tokens
-                )
+                azure_kwargs = {
+                    "azure_endpoint": os.getenv("AZURE_API_BASE"),
+                    "api_version": os.getenv("AZURE_API_VERSION"),
+                    "api_key": os.getenv("AZURE_API_KEY"),
+                    "model": params.model_name,
+                    "max_tokens": max_tokens,
+                }
+                if not is_gpt5 and params.temperature is not None:
+                    azure_kwargs["temperature"] = params.temperature
+                base_model = AzureChatOpenAI(**azure_kwargs)
             else:  # ChatOpenAI
-                base_model = ChatOpenAI(
-                    model=params.model_name,
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    max_tokens=max_tokens,
-                    model_kwargs={"top_p": params.top_p},
-                    temperature=params.temperature
-                )
+                chat_kwargs = {
+                    "model": params.model_name,
+                    "api_key": os.getenv("OPENAI_API_KEY"),
+                    "max_tokens": max_tokens,
+                }
+                if not is_gpt5 and params.top_p is not None:
+                    chat_kwargs["model_kwargs"] = {"top_p": params.top_p}
+                if not is_gpt5 and params.temperature is not None:
+                    chat_kwargs["temperature"] = params.temperature
+                base_model = ChatOpenAI(**chat_kwargs)
         elif params.model_provider == "BedrockChat":
             base_model = ChatBedrock(
                 model_id=params.model_name or "anthropic.claude-3-haiku-20240307-v1:0",
@@ -169,19 +178,25 @@ class LangChainUser:
         Asynchronously initialize the language model.
         """
         if self.parameters.model_provider == "ChatOpenAI":
-            model = ChatOpenAI(
-                model_name=self.parameters.model_name,
-                temperature=self.parameters.temperature,
-                max_tokens=self.parameters.max_tokens
-            )
+            is_gpt5 = (self.parameters.model_name or "").lower().find("gpt-5") != -1
+            kwargs = {
+                "model": self.parameters.model_name,
+                "max_tokens": self.parameters.max_tokens,
+            }
+            if not is_gpt5 and self.parameters.temperature is not None:
+                kwargs["temperature"] = self.parameters.temperature
+            model = ChatOpenAI(**kwargs)
             await model.agenerate([])  # Initialize the async client
             return model
         elif self.parameters.model_provider == "AzureChatOpenAI":
-            model = AzureChatOpenAI(
-                deployment_name=self.parameters.model_name,
-                temperature=self.parameters.temperature,
-                max_tokens=self.parameters.max_tokens
-            )
+            is_gpt5 = (self.parameters.model_name or "").lower().find("gpt-5") != -1
+            kwargs = {
+                "deployment_name": self.parameters.model_name,
+                "max_tokens": self.parameters.max_tokens,
+            }
+            if not is_gpt5 and self.parameters.temperature is not None:
+                kwargs["temperature"] = self.parameters.temperature
+            model = AzureChatOpenAI(**kwargs)
             await model.agenerate([])  # Initialize the async client
             return model
         # ... other model providers ...

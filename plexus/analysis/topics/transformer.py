@@ -13,8 +13,8 @@ import time
 import asyncio
 import gc
 from tqdm.asyncio import tqdm
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, ValidationError
 from langchain.output_parsers.retry import RetryWithErrorOutputParser
 from langchain.globals import set_llm_cache
