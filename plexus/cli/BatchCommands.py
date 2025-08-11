@@ -10,7 +10,7 @@ import json
 import pandas as pd
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 import concurrent.futures
 from functools import partial
 from typing import List, Dict, Any, Optional
