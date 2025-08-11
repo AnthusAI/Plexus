@@ -317,44 +317,7 @@ const EVALUATION_FIELDS = `
       }
     }
   }
-  scoreResults {
-    items {
-      id
-      value
-      confidence
-      metadata
-      explanation
-      trace
-      itemId
-      createdAt
-      item {
-        id
-        externalId
-        identifiers
-        itemIdentifiers {
-          items {
-            name
-            value
-            url
-            position
-          }
-        }
-      }
-      feedbackItem {
-        id
-        editCommentValue
-        initialAnswerValue
-        finalAnswerValue
-        editorName
-        editedAt
-      }
-      scoringJob {
-        id
-        status
-        metadata
-      }
-    }
-  }
+  # scoreResults intentionally omitted; will be lazy-loaded per selected evaluation
 `;
 
 export async function listFromModel<T>(
@@ -773,31 +736,7 @@ export function observeRecentEvaluations(
             task {
               ...TaskFields
             }
-            scoreResults {
-              items {
-                id
-                value
-                confidence
-                metadata
-                explanation
-                trace
-                itemId
-                createdAt
-                item {
-                  id
-                  externalId
-                  identifiers
-                  itemIdentifiers {
-                    items {
-                      name
-                      value
-                      url
-                      position
-                    }
-                  }
-                }
-              }
-            }
+            # scoreResults intentionally omitted; will be lazy-loaded per selected evaluation
           }
         }
         ${TASK_FIELDS_FRAGMENT}
@@ -846,31 +785,7 @@ export function observeRecentEvaluations(
             task {
               ...TaskFields
             }
-            scoreResults {
-              items {
-                id
-                value
-                confidence
-                metadata
-                explanation
-                trace
-                itemId
-                createdAt
-                item {
-                  id
-                  externalId
-                  identifiers
-                  itemIdentifiers {
-                    items {
-                      name
-                      value
-                      url
-                      position
-                    }
-                  }
-                }
-              }
-            }
+            # scoreResults intentionally omitted; will be lazy-loaded per selected evaluation
           }
         }
         ${TASK_FIELDS_FRAGMENT}
@@ -1011,7 +926,7 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     if (typeof taskData.stages === 'function') {
       const stageResponse = getValueFromLazyLoader(taskData.stages);
       stageItems = stageResponse?.data?.items || [];
-    } else {
+  } else {
       // Handle direct object format (new structure)
       const direct: any = taskData.stages as unknown as { data?: { items?: any[] }, items?: any[] };
       stageItems = direct?.data?.items || direct?.items || [];

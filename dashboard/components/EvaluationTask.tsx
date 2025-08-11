@@ -279,7 +279,18 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   // Use already-transformed score results directly
   const parsedScoreResults = useMemo(() => {
     // data.scoreResults is already transformed by transformEvaluation
-    const scoreResults = data.scoreResults || [];
+    const rawResults = Array.isArray(data.scoreResults) ? data.scoreResults : [];
+    // Dedupe by id to avoid duplicates and ensure stable list when re-rendering
+    const uniqueMap = new Map<string, any>();
+    for (const r of rawResults) {
+      if (r && r.id && !uniqueMap.has(r.id)) uniqueMap.set(r.id, r);
+    }
+    // Maintain stable descending time ordering (if present)
+    const scoreResults = Array.from(uniqueMap.values()).sort((a: any, b: any) => {
+      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bt - at;
+    });
     
     if (!scoreResults.length) {
       return [];
@@ -288,7 +299,7 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     // The results are already transformed, just map them to ScoreResultData format
     return scoreResults.map((result: any) => ({
       id: result.id,
-      value: result.value,
+      value: String(result.value ?? ''),
       confidence: result.confidence,
       explanation: result.explanation,
       metadata: result.metadata || {
@@ -303,6 +314,9 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
       feedbackItem: result.feedbackItem
     }));
   }, [data.scoreResults]);
+
+  // Determine loading state for score results
+  const isResultsLoading = useMemo(() => !Array.isArray(data.scoreResults), [data.scoreResults])
 
 
   const stages = useMemo(() => {
@@ -601,6 +615,9 @@ const DetailContent = React.memo(({
     }));
   }, [data.scoreResults]);
 
+  // Local loading flag for this detail panel scope
+  const isResultsLoading = useMemo(() => !Array.isArray(data.scoreResults), [data.scoreResults])
+
   useResizeObserver(containerRef, (entry) => {
     setContainerWidth(entry.contentRect.width)
   })
@@ -860,8 +877,8 @@ const DetailContent = React.memo(({
           </div>
         )}
 
-        {/* Only show score results list if not showing score result in narrow view */}
-        {showResultsList && !showScoreResultInNarrowView && (
+        {/* Show score results panel during loading or when results exist, hidden only in narrow detail mode */}
+        {(!showScoreResultInNarrowView) && (isResultsLoading || showResultsList) && (
           <div className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
             <div className="h-full overflow-y-auto">
               <EvaluationTaskScoreResults 
@@ -871,6 +888,7 @@ const DetailContent = React.memo(({
                 selectedActualValue={selectedPredictedActual.actual}
                 onResultSelect={handleScoreResultSelect}
                 selectedScoreResult={selectedScoreResult}
+                isLoading={isResultsLoading}
               />
             </div>
           </div>
@@ -924,6 +942,8 @@ const DetailContent = React.memo(({
     prevProps.selectedScoreResultId !== nextProps.selectedScoreResultId ||
     prevProps.isFullWidth !== nextProps.isFullWidth ||
     prevProps.commandDisplay !== nextProps.commandDisplay ||
+    // evaluation identity changed
+    prevProps.data.id !== nextProps.data.id ||
     // progress / metrics / status changes
     prevProps.data.processedItems !== nextProps.data.processedItems ||
     prevProps.data.totalItems !== nextProps.data.totalItems ||
@@ -936,14 +956,7 @@ const DetailContent = React.memo(({
     prevProps.data.scoreResults?.length !== nextProps.data.scoreResults?.length ||
     !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults);
 
-  console.log('DetailContent memo comparison:', {
-    shouldUpdate,
-    prevScoreResultCount: prevProps.data.scoreResults?.length ?? 0,
-    nextScoreResultCount: nextProps.data.scoreResults?.length ?? 0,
-    scoreResultsChanged: !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults),
-    prevFirstResult: prevProps.data.scoreResults?.[0],
-    nextFirstResult: nextProps.data.scoreResults?.[0]
-  });
+  // Reduced logging
 
   return !shouldUpdate;
 });
@@ -1067,7 +1080,7 @@ evaluation:
     variant === 'detail' ? (
       <div className="flex items-center space-x-2">
         <DropdownMenu>
-          <DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild>
             <CardButton
               icon={MoreHorizontal}
               onClick={() => {

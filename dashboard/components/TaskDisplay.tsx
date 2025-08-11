@@ -104,10 +104,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   };
 
   // Log for ALL evaluations to see what TaskDisplay is receiving
-  if (evaluationData && evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
-    const stageArr = ((task as any)?.stages?.items || (task as any)?.stages?.data?.items || []) as any[];
-    console.log(`STAGE_TRACE: TaskDisplay render ${evaluationData.id} received task with stages: ${stageArr.map((s: any) => `${s.name}:${s.status}`).join(',') || 'none'}`);
-  }
+  // Debug logging reduced
 
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay)
@@ -179,15 +176,9 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         }
         
         // Created ProcessedTask with stage data preserved
-        if (processedTask.stages?.length > 0) {
-          console.log(`STAGE_TRACE: TaskDisplay processTaskData direct path created ProcessedTask ${processedTask.id} with ${processedTask.stages.length} stages: ${processedTask.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
-        } else {
-          console.log(`STAGE_TRACE: TaskDisplay processTaskData direct path created ProcessedTask ${processedTask.id} with NO stages - hasDirectStageData=${hasDirectStageData}`);
-        }
+        // Reduced logging
         
-        if (evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
-          console.log(`STAGE_TRACE: TaskDisplay setProcessedTask for ${evaluationData.id} with ${processedTask.stages?.length || 0} stages`);
-        }
+        // Reduced logging
         
         setProcessedTask(processedTask);
         return;
@@ -198,11 +189,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         const convertedTask = await transformAmplifyTask(task);
         
         const result = await processTask(convertedTask);
-        if (result.stages?.length > 0) {
-          console.log(`STAGE_TRACE: TaskDisplay processTaskData fallback path created ProcessedTask ${result.id} with ${result.stages.length} stages: ${result.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
-        } else {
-          console.log(`STAGE_TRACE: TaskDisplay processTaskData fallback path lost stages for task ${task.id} - transformAmplifyTask/processTask stripped them`);
-        }
+        // Reduced logging
         
         setProcessedTask(result);
       } catch (error) {
@@ -214,14 +201,12 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   }, [task, evaluationData?.id]);
 
   const transformedScoreResults = useMemo(() => {
-    if (!evaluationData?.scoreResults) return [];
-
+    if (!('scoreResults' in (evaluationData || {}))) return [];
+    const sr = evaluationData?.scoreResults;
+    if (sr === null) return null as any; // preserve null to indicate loading state downstream
+    if (!sr) return [];
     // All score results come pre-transformed with itemIdentifiers included
-    return Array.isArray(evaluationData.scoreResults) ? 
-      evaluationData.scoreResults : 
-      (evaluationData.scoreResults && typeof evaluationData.scoreResults === 'object' && 'items' in evaluationData.scoreResults ? 
-        evaluationData.scoreResults.items : 
-        []);
+    return Array.isArray(sr) ? sr : ((typeof sr === 'object' && 'items' in sr) ? (sr as any).items : []);
   }, [evaluationData]);
 
   // Define base properties, prefer reportData if available
@@ -345,7 +330,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
           predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ?
             JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
           isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
-          scoreResults: transformedScoreResults,
+           scoreResults: transformedScoreResults as any,
           task: processedTask ? { 
               id: processedTask.id,
               accountId: '',
@@ -434,7 +419,10 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
           }
         }
       },
-      onClick,
+      onClick: (e?: any) => {
+        try { e?.preventDefault?.() } catch {}
+        onClick?.()
+      },
       controlButtons,
       isFullWidth,
       onToggleFullWidth,
@@ -447,10 +435,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
       onDelete
     } as EvaluationTaskProps;
 
-  if (evaluationData.id === '6ee38d94-63b4-40ee-b53b-8131ab340a00') {
-    console.log(`STAGE_TRACE: TaskDisplay about to render EvaluationTask for ${evaluationData.id}`);
-  }
-
+    // Avoid full remounts; rely on isSelected visual state
     return <EvaluationTask {...evaluationTaskProps} variant={variant} />;
 
   } else if (reportData) {
@@ -496,8 +481,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   
   // DEBUG: Log all memo calls for the evaluation that should be getting stage updates
   if (nextProps.evaluationData.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
-    console.log(`STAGE_TRACE: TaskDisplay memo called for ${nextProps.evaluationData.id} variant=${nextProps.variant} - checking for changes`);
-    console.log(`STAGE_TRACE: TaskDisplay memo - task object changed: ${prevProps.task !== nextProps.task}, evaluationData object changed: ${prevProps.evaluationData !== nextProps.evaluationData}`);
+  // Reduced logging
   }
   
   // CRITICAL: Check if task stages have changed
@@ -510,14 +494,13 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     });
   
   if (stagesChanged) {
-    console.log(`STAGE_TRACE: TaskDisplay memo ALLOWING re-render for ${nextProps.evaluationData.id} - stages changed`);
-    console.log(`STAGE_TRACE: TaskDisplay memo stage details - prev: ${prevStages.map((s: any) => `${s.name}:${s.status}`).join(',')} next: ${nextStages.map((s: any) => `${s.name}:${s.status}`).join(',')}`);
+    // Reduced logging
     return false; // Allow re-render
   }
   
   // FORCE UPDATE for our problem evaluation to debug what's happening
   if (nextProps.evaluationData.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
-    console.log(`STAGE_TRACE: TaskDisplay memo FORCING re-render for ${nextProps.evaluationData.id} to debug`);
+  // Reduced logging
     return false; // Allow re-render
   }
   
@@ -536,11 +519,13 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     prevProps.isFullWidth === nextProps.isFullWidth &&
     // CHECK FOR SCORECARD/SCORE CHANGES - CRITICAL FOR REALTIME UPDATES
     prevProps.evaluationData.scorecard?.name === nextProps.evaluationData.scorecard?.name &&
-    prevProps.evaluationData.score?.name === nextProps.evaluationData.score?.name
+    prevProps.evaluationData.score?.name === nextProps.evaluationData.score?.name &&
+    // CRITICAL: re-render when scoreResults reference changes (lazy-loaded updates)
+    prevProps.evaluationData.scoreResults === nextProps.evaluationData.scoreResults
   );
   
   if (shouldRerender) {
-    console.log(`STAGE_TRACE: TaskDisplay memo ALLOWING re-render for ${nextProps.evaluationData.id} - other props changed`);
+    // Reduced logging
   }
   
   return !shouldRerender; // Return true to BLOCK re-render, false to ALLOW
