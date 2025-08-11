@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -109,6 +109,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   isFullWidth?: boolean
   onSave?: () => void
   onFeedbackAnalysis?: () => void
+  onCostAnalysis?: () => void
   exampleItems?: Array<{
     id: string
     displayValue: string
@@ -126,6 +127,7 @@ interface DetailContentProps {
   onSave?: () => void
   onCancel?: () => void
   onFeedbackAnalysis?: () => void
+  onCostAnalysis?: () => void
   hasChanges?: boolean
   versions?: ScoreVersion[]
   championVersionId?: string
@@ -253,6 +255,7 @@ const DetailContent = React.memo(({
   onSave,
   onCancel,
   onFeedbackAnalysis,
+  onCostAnalysis,
   hasChanges,
   versions,
   championVersionId,
@@ -716,6 +719,12 @@ const DetailContent = React.memo(({
                     Analyze Feedback
                   </DropdownMenuItem>
                 )}
+                {onCostAnalysis && (
+                  <DropdownMenuItem onClick={onCostAnalysis}>
+                    <Coins className="mr-2 h-4 w-4" />
+                    Analyze Cost
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </ShadcnDropdownMenu>
             {onToggleFullWidth && (
@@ -783,6 +792,12 @@ const DetailContent = React.memo(({
                   <DropdownMenuItem onClick={onFeedbackAnalysis}>
                     <MessageCircleMore className="mr-2 h-4 w-4" />
                     Analyze Feedback
+                  </DropdownMenuItem>
+                )}
+                {onCostAnalysis && (
+                  <DropdownMenuItem onClick={onCostAnalysis}>
+                    <Coins className="mr-2 h-4 w-4" />
+                    Analyze Cost
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
@@ -1100,6 +1115,7 @@ export function ScoreComponent({
   isFullWidth = false,
   onSave,
   onFeedbackAnalysis,
+  onCostAnalysis,
   exampleItems = [],
   scorecardName,
   onTaskCreated,
@@ -1749,6 +1765,7 @@ export function ScoreComponent({
               onSave={handleSave}
               onCancel={handleCancel}
               onFeedbackAnalysis={onFeedbackAnalysis}
+              onCostAnalysis={onCostAnalysis}
               hasChanges={hasChanges}
               versions={versions}
               championVersionId={championVersionId}

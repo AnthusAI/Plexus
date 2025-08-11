@@ -52,32 +52,12 @@ const formatNumber = (v?: string | number) => {
 };
 
 export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) => {
-  const windowText = data?.window
-    ? [
-        data.window.hours ? `${data.window.hours}h` : undefined,
-        data.window.days ? `${data.window.days}d` : undefined,
-      ]
-        .filter(Boolean)
-        .join(' ')
-    : undefined;
-
   const overall = data?.summary || {};
   const groups = data?.groups || [];
 
-  // Build compact header line without the generic block description.
-  const headerParts: string[] = [];
-  if (data?.scorecardName) headerParts.push(data.scorecardName);
-  if (windowText) headerParts.push(`Window: ${windowText}`);
-  if (groups.length > 0) headerParts.push('With Breakdowns');
-
   return (
     <div className="space-y-4">
-      <div className="flex items-baseline justify-between">
-        <div>
-          {/* Title removed to avoid duplicate heading; page-level already shows block name */}
-          <p className="text-sm text-muted-foreground">{headerParts.join(' • ')}</p>
-        </div>
-      </div>
+      {/* Header intentionally minimal to avoid redundancy with selectors */}
 
       {/* Overall summary */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
