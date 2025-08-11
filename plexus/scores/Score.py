@@ -28,6 +28,7 @@ from plexus.Registries import scorecard_registry
 from plexus.scores.core.ScoreData import ScoreData
 from plexus.scores.core.ScoreVisualization import ScoreVisualization
 from plexus.scores.core.utils import ensure_report_directory_exists
+from plexus.scores.core.CostAccumulator import CostAccumulator
 
 class Score(ABC,
     # Core Score functionality.   
@@ -275,6 +276,8 @@ class Score(ABC,
             self.parameters = self.Parameters(**parameters)
             self._is_multi_class = None
             self._number_of_classes = None
+            # Generic cost accumulator available to all score types
+            self._cost_accumulator: CostAccumulator = CostAccumulator()
         except ValidationError as e:
             Score.log_validation_errors(e)
             raise
@@ -574,13 +577,25 @@ class Score(ABC,
         Get the expenses that have been accumulated over all the computed elements.
 
         Returns:
-            dict: A dictionary containing only one accumulated expense:
-                  'total_cost'
+            dict: Aggregated cost information with totals and components
         """
-
-        return {
-            "total_cost":  0
-        }
+        # Prefer any costs accumulated by implementations via the shared accumulator
+        if hasattr(self, "_cost_accumulator") and isinstance(self._cost_accumulator, CostAccumulator):
+            costs_dict = self._cost_accumulator.to_dict()
+            # Backward-compatibility: if accumulator is effectively empty, return the minimal legacy shape
+            if (
+                (not costs_dict.get("total_cost")) and
+                costs_dict.get("prompt_tokens", 0) == 0 and
+                costs_dict.get("completion_tokens", 0) == 0 and
+                costs_dict.get("cached_tokens", 0) == 0 and
+                costs_dict.get("api_calls", 0) == 0 and
+                costs_dict.get("duration_ms", 0) == 0 and
+                not costs_dict.get("components")
+            ):
+                return {"total_cost": 0}
+            return costs_dict
+        # Backward compatibility fallback
+        return {"total_cost": 0}
 
     def get_label_score_name(self):
         """

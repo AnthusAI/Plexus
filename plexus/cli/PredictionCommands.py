@@ -1376,6 +1376,11 @@ def output_yaml_prediction_results(
             if explanation:
                 score_data['explanation'] = explanation
             
+            # Include cost if available
+            cost_data = result.get(f'{score_name}_cost')
+            if cost_data is not None:
+                score_data['cost'] = cost_data
+
             # Include trace if requested and available
             if include_trace:
                 trace_data = result.get(f'{score_name}_trace')
