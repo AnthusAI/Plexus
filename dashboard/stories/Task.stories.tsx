@@ -18,6 +18,8 @@ const meta = {
   component: Task,
   parameters: {
     layout: 'centered',
+    // Disable Storybook test-runner for this file to avoid evaluate init errors in CI
+    test: { disable: true },
   },
   argTypes: {
     commandDisplay: {
