@@ -4,7 +4,7 @@ import pandas as pd
 from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain.output_parsers import ResponseSchema, StructuredOutputParser
 from pyairtable import Api
 from pyairtable.formulas import match
@@ -398,9 +398,9 @@ def test_ollama(
                 if not api_key:
                     logging.error("OpenAI API key not provided. Set OPENAI_API_KEY environment variable or pass --openai-api-key")
                     return
-                
-                from langchain.prompts import ChatPromptTemplate
-                
+
+                from langchain_core.prompts import ChatPromptTemplate
+
                 # Create a simple prompt
                 prompt_template = ChatPromptTemplate.from_template("{text}")
                 
