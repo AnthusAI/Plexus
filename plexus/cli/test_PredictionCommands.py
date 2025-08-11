@@ -285,10 +285,11 @@ class TestPredictImpl:
             mock_score_load.return_value = Mock()
             
             # Create a more explicit Mock that ensures hasattr() works correctly
-            mock_prediction = Mock(spec=['value', 'explanation', 'trace'])
+            mock_prediction = Mock(spec=['value', 'explanation', 'trace', 'metadata'])
             mock_prediction.value = 8.5
             mock_prediction.explanation = "Test explanation"
             mock_prediction.trace = "test-trace"
+            mock_prediction.metadata = {'cost': {'total_cost': 0.12}}
             mock_predict_score.return_value = (Mock(), mock_prediction, Decimal('0.05'))
             
             await predict_impl(
@@ -306,6 +307,38 @@ class TestPredictImpl:
             assert parsed_json[0]['item_id'] == 'item-123'
             assert parsed_json[0]['scores'][0]['name'] == 'test-score'
             assert parsed_json[0]['scores'][0]['value'] == 8.5
+            # cost should be present either from result metadata or fallback
+            assert 'cost' in parsed_json[0]['scores'][0]
+
+    @pytest.mark.asyncio
+    async def test_predict_impl_json_without_cost_in_metadata_uses_fallback(self, mock_scorecard_registry, sample_scorecard_class):
+        """When the score result has no cost in metadata, JSON should still include a fallback cost payload."""
+        # Mock the new individual score loading pipeline
+        with patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score_with_individual_loading') as mock_predict_score, \
+             patch('plexus.scores.Score.Score.load') as mock_score_load, \
+             patch('builtins.print') as mock_print:
+            
+            mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            mock_score_load.return_value = Mock()
+            
+            mock_prediction = Mock(spec=['value', 'explanation', 'trace', 'metadata'])
+            mock_prediction.value = 7.0
+            mock_prediction.explanation = "Test explanation"
+            mock_prediction.trace = None
+            mock_prediction.metadata = {}  # no cost
+            mock_predict_score.return_value = (Mock(), mock_prediction, Decimal('0.00'))
+            
+            await predict_impl(
+                scorecard_identifier='test-scorecard',
+                score_names=['test-score'],
+                format='json'
+            )
+            
+            call_args = mock_print.call_args[0][0]
+            parsed_json = json.loads(call_args)
+            # Fallback path should include a cost field (e.g., {'total_cost': 0} or similar)
+            assert 'cost' in parsed_json[0]['scores'][0]
 
     @pytest.mark.asyncio
     async def test_predict_impl_success_yaml_format(self, mock_scorecard_registry, sample_scorecard_class):
@@ -324,6 +357,7 @@ class TestPredictImpl:
             mock_prediction.value = 8.5
             mock_prediction.explanation = "Test explanation"
             mock_prediction.trace = "test-trace"
+            mock_prediction.metadata = {'cost': {'total_cost': 0.25}}
             mock_predict_score.return_value = (Mock(), mock_prediction, Decimal('0.05'))
             
             await predict_impl(
@@ -343,6 +377,9 @@ class TestPredictImpl:
                 include_input=True,
                 include_trace=True
             )
+            # Verify the results passed into YAML output include cost when present
+            passed_results = mock_yaml_output.call_args[1]['results']
+            assert passed_results[0].get('test-score_cost') is not None
     
     @pytest.mark.asyncio
     async def test_predict_impl_excel_output(self, mock_scorecard_registry, sample_scorecard_class):

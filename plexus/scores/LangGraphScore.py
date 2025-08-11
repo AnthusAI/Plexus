@@ -1469,6 +1469,14 @@ class LangGraphScore(Score, LangChainUser):
             if 'metadata' in graph_result and graph_result['metadata'] is not None:
                 # Merge the existing metadata with the graph_result metadata
                 result.metadata.update(graph_result['metadata'])
+
+            # Attach cost information to the result for persistence and downstream reporting
+            try:
+                costs = self.get_accumulated_costs()
+                if isinstance(costs, dict):
+                    result.metadata['cost'] = costs
+            except Exception as cost_err:
+                logging.warning(f"Failed to attach cost to result: {cost_err}")
             
             return result
         except BatchProcessingPause:
