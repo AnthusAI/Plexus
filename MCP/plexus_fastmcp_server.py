@@ -3950,6 +3950,21 @@ async def _get_score_results_for_item(item_id: str, client) -> List[Dict[str, An
                 'metadata': score_result.metadata,
                 'trace': getattr(score_result, 'trace', None)
             }
+
+            # Extract and surface cost if present (stored in metadata or as top-level field)
+            try:
+                cost_payload = None
+                # Prefer explicit field if API starts returning it
+                if isinstance(sr_data, dict) and 'cost' in sr_data and sr_data['cost'] is not None:
+                    cost_payload = sr_data['cost']
+                # Fallback to metadata.cost
+                if cost_payload is None and isinstance(sr_dict.get('metadata'), dict):
+                    cost_payload = sr_dict['metadata'].get('cost')
+                if cost_payload is not None:
+                    sr_dict['cost'] = cost_payload
+            except Exception:
+                # Do not fail item fetch on cost extraction failure
+                pass
             
             # Add timestamp fields
             if 'updatedAt' in sr_data:
