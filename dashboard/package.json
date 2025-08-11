@@ -110,6 +110,7 @@
     "tailwindcss-animate": "^1.0.7",
     "unist-util-visit": "^5.0.0",
     "vaul": "^1.1.2",
+    "victory": "^37.3.6",
     "zen-observable-ts": "^1.1.0"
   },
   "devDependencies": {

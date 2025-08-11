@@ -52,7 +52,8 @@ export const AdHocCostAnalysis: React.FC<AdHocCostAnalysisProps> = ({ scorecardI
         scoreId,
         hours: hours ?? undefined,
         days: days ?? undefined,
-        limit: 1000,
+        // Use a lower default for per-score (more focused view)
+        limit: scoreId ? 250 : 1000,
       })
       setRecords(res.items)
     } catch (e: any) {
@@ -84,6 +85,12 @@ export const AdHocCostAnalysis: React.FC<AdHocCostAnalysisProps> = ({ scorecardI
         total_cost: String(g.total_cost),
         average_cost: String(g.average_cost),
         average_calls: g.average_calls,
+        min_cost: g.min_cost,
+        q1_cost: g.q1_cost,
+        median_cost: g.median_cost,
+        q3_cost: g.q3_cost,
+        max_cost: g.max_cost,
+        values: g.values,
       })),
       window: { hours: hours ?? undefined, days: days ?? undefined },
       filters: { scorecardId, scoreId }
