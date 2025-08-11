@@ -1,4 +1,4 @@
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 @tool
 def list_plexus_report_configurations(accountId: str = None) -> str:

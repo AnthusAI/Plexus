@@ -6,8 +6,9 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from langchain_aws import ChatBedrock
-from langchain_community.chat_models import ChatOpenAI, AzureChatOpenAI
-from langchain_community.chat_models import ChatOpenAI
+
+from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import OpenAICallbackHandler
 
 from plexus.CustomLogging import logging

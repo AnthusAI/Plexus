@@ -39,7 +39,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # LangChain imports
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import LLMChain
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import ChatOpenAI
