@@ -50,7 +50,8 @@ const formatMoney = (v?: string | number) => {
   if (v === undefined || v === null) return '-';
   const n = Number(v);
   if (Number.isNaN(n)) return String(v);
-  return `$${n.toFixed(6)}`;
+  const truncated = Math.trunc(n * 100000) / 100000; // 5 decimal places, truncate not round
+  return `$${truncated.toFixed(5)}`;
 };
 
 const formatNumber = (v?: string | number) => {
