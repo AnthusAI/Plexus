@@ -61,6 +61,17 @@ const formatNumber = (v?: string | number) => {
   return n.toLocaleString();
 };
 
+function resolveCssVarColor(varName: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const probe = document.createElement('span');
+  probe.style.color = `var(${varName})`;
+  // Ensure probe is attached to get computed styles
+  document.body.appendChild(probe);
+  const computed = getComputedStyle(probe).color;
+  document.body.removeChild(probe);
+  return computed || fallback;
+}
+
 export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) => {
   const overall = data?.summary || {};
   const groups = data?.groups || [];
@@ -80,6 +91,24 @@ export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) 
     .slice(0, 100);
   // Dynamically scale chart height by number of scores to avoid label overlap
   const chartHeight = Math.min(8000, Math.max(140, boxData.length * 28 + 100));
+  const chartTextColor = React.useMemo(() => {
+    if (typeof window === 'undefined') return '#6b7280';
+    const isDark = document.documentElement.classList.contains('dark');
+    // In light mode, prefer a stronger foreground token for better contrast
+    const preferredVar = isDark ? '--foreground' : '--primary-selected-foreground';
+    const fallback = isDark ? '#e5e7eb' : '#111827';
+    return resolveCssVarColor(preferredVar, fallback);
+  }, []);
+
+  const chartFontFamily = React.useMemo(() => {
+    if (typeof window === 'undefined') return 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif';
+    // Prefer font from <html> (Next/font often applies here), then fall back to body
+    const htmlFam = getComputedStyle(document.documentElement).fontFamily;
+    if (htmlFam && htmlFam.trim().length > 0) return htmlFam;
+    const bodyFam = getComputedStyle(document.body).fontFamily;
+    if (bodyFam && bodyFam.trim().length > 0) return bodyFam;
+    return 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif';
+  }, []);
   const singleHistogramData = isSingleScore
     ? ((groups?.[0] as any)?.values || []).filter((v: any) => typeof v === 'number' && isFinite(v)).map((v: number) => ({ x: v }))
     : [];
@@ -209,14 +238,25 @@ export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) 
                   orientation="left"
                   tickValues={boxData.map(d => d.x as any)}
                   tickFormat={(t) => splitLabelToTwoLines(String(t))}
-                  tickLabelComponent={<VictoryLabel lineHeight={1.1} style={{ fontSize: 10 }} />}
-                  style={{ tickLabels: { fontSize: 10 } }}
+                  tickLabelComponent={<VictoryLabel lineHeight={1.1} style={{ fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily }} />}
+                  style={{
+                    axis: { stroke: chartTextColor },
+                    tickLabels: { fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily },
+                    ticks: { stroke: chartTextColor },
+                    grid: { stroke: 'transparent' },
+                  }}
                 />
                 {/* Bottom numeric axis for value ticks */}
                 <VictoryAxis
                   dependentAxis
                   orientation="bottom"
                   tickFormat={(t) => `$${Number(t).toFixed(2)}`}
+                  style={{
+                    axis: { stroke: chartTextColor },
+                    tickLabels: { fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily },
+                    ticks: { stroke: chartTextColor },
+                    grid: { stroke: 'transparent' },
+                  }}
                 />
                 <VictoryBoxPlot
                   data={boxData}
@@ -232,35 +272,35 @@ export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) 
                     <VictoryTooltip
                       constrainToVisibleArea
                       flyoutStyle={{ fill: 'var(--card)', stroke: 'var(--muted-foreground)' }}
-                      style={{ fontSize: 10 }}
+                      style={{ fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily }}
                     />
                   }
                   q1LabelComponent={
                     <VictoryTooltip
                       constrainToVisibleArea
                       flyoutStyle={{ fill: 'var(--card)', stroke: 'var(--muted-foreground)' }}
-                      style={{ fontSize: 10 }}
+                      style={{ fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily }}
                     />
                   }
                   medianLabelComponent={
                     <VictoryTooltip
                       constrainToVisibleArea
                       flyoutStyle={{ fill: 'var(--card)', stroke: 'var(--muted-foreground)' }}
-                      style={{ fontSize: 10 }}
+                      style={{ fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily }}
                     />
                   }
                   q3LabelComponent={
                     <VictoryTooltip
                       constrainToVisibleArea
                       flyoutStyle={{ fill: 'var(--card)', stroke: 'var(--muted-foreground)' }}
-                      style={{ fontSize: 10 }}
+                      style={{ fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily }}
                     />
                   }
                   maxLabelComponent={
                     <VictoryTooltip
                       constrainToVisibleArea
                       flyoutStyle={{ fill: 'var(--card)', stroke: 'var(--muted-foreground)' }}
-                      style={{ fontSize: 10 }}
+                      style={{ fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily }}
                     />
                   }
                   style={{
@@ -317,8 +357,20 @@ export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) 
                 <VictoryAxis
                   orientation="bottom"
                   tickFormat={(t) => `$${Number(t).toFixed(2)}`}
+                  style={{
+                    axis: { stroke: chartTextColor },
+                    tickLabels: { fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily },
+                    ticks: { stroke: chartTextColor },
+                  }}
                 />
-                <VictoryAxis dependentAxis />
+                <VictoryAxis
+                  dependentAxis
+                  style={{
+                    axis: { stroke: chartTextColor },
+                    tickLabels: { fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily },
+                    ticks: { stroke: chartTextColor },
+                  }}
+                />
                 <VictoryHistogram
                   data={singleHistogramData}
                   bins={histogramBins}
