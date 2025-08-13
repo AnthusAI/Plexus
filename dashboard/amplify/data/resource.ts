@@ -879,6 +879,7 @@ const schema = a.schema({
             status: a.enum(['RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']),
             rootNodeId: a.id().required(),
             currentGeneration: a.integer().required(),
+            nodes: a.hasMany('ExperimentNode', 'experimentId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -916,7 +917,6 @@ const schema = a.schema({
     ExperimentNodeVersion: a
         .model({
             experimentId: a.id().required(),
-            experiment: a.belongsTo('Experiment', 'experimentId'),
             nodeId: a.id().required(),
             node: a.belongsTo('ExperimentNode', 'nodeId'),
             versionNumber: a.integer().required(),
