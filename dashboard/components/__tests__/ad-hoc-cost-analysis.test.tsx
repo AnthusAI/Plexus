@@ -22,6 +22,12 @@ jest.mock('../../utils/cost-analysis', () => ({
         { group: { scoreId: 'S1', scoreName: 'Score One' }, count: 1, total_cost: 0.01, average_cost: 0.01, average_calls: 0 },
         { group: { scoreId: 'S2', scoreName: 'Score Two' }, count: 1, total_cost: 0.02, average_cost: 0.02, average_calls: 0 },
       ],
+      itemAnalysis: {
+        count: 2,
+        total_cost: 0.03,
+        average_cost: 0.015,
+        average_calls: 0,
+      },
     }
   }
 }))
@@ -39,18 +45,18 @@ describe('AdHocCostAnalysis', () => {
     })
   })
 
-  it('uses 250 limit for per-score view', async () => {
+  it('uses 200 limit by default', async () => {
     const { fetchCostAnalysisScoreResults } = require('../../utils/cost-analysis')
     render(<AdHocCostAnalysis scoreId="S1" />)
     await waitFor(() => expect(fetchCostAnalysisScoreResults).toHaveBeenCalled())
-    expect(fetchCostAnalysisScoreResults).toHaveBeenCalledWith(expect.objectContaining({ limit: 250 }))
+    expect(fetchCostAnalysisScoreResults).toHaveBeenCalledWith(expect.objectContaining({ limit: 200 }))
   })
 
-  it('uses 1000 limit for scorecard view', async () => {
+  it('uses 200 limit for scorecard view', async () => {
     const { fetchCostAnalysisScoreResults } = require('../../utils/cost-analysis')
     render(<AdHocCostAnalysis scorecardId="SC1" />)
     await waitFor(() => expect(fetchCostAnalysisScoreResults).toHaveBeenCalled())
-    expect(fetchCostAnalysisScoreResults).toHaveBeenCalledWith(expect.objectContaining({ limit: 1000 }))
+    expect(fetchCostAnalysisScoreResults).toHaveBeenCalledWith(expect.objectContaining({ limit: 200 }))
   })
 })
 

@@ -25,11 +25,19 @@ export interface CostGroupSummary extends CostSummary {
   values?: number[];
 }
 
+export interface ItemSummary {
+  count: number;
+  total_cost: number;
+  average_cost: number;
+  average_calls: number;
+}
+
 export interface CostAnalysisDisplayData {
   block_description?: string;
   scorecardName?: string;
   summary: CostSummary;
   groups?: CostGroupSummary[];
+  itemAnalysis?: ItemSummary;
   window?: { hours?: number; days?: number };
   filters?: Record<string, any>;
 }
@@ -75,6 +83,7 @@ function resolveCssVarColor(varName: string, fallback: string): string {
 export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) => {
   const overall = data?.summary || {};
   const groups = data?.groups || [];
+  const itemAnalysis = data?.itemAnalysis || { count: 0, total_cost: 0, average_cost: 0, average_calls: 0 };
   const isSingleScore = !!(data?.filters && (data as any).filters?.scoreId) && groups.length === 1;
   // For a horizontal chart, Victory renders the first datum at the bottom.
   // Sort ASC so the highest average cost appears at the top visually.
@@ -167,23 +176,47 @@ export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) 
 
       
 
-      {/* Overall summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-        <div className="rounded-md bg-card p-3">
-          <div className="text-xs text-muted-foreground">Average cost</div>
-          <div className="text-lg font-medium">{formatMoney(overall.average_cost)}</div>
+      {/* Key Metrics - Container-based responsive 4-card grid */}
+      <div className="@container">
+        <div className="grid grid-cols-2 @[520px]:grid-cols-4 gap-3">
+          <div className="rounded-md bg-card p-3 flex flex-col">
+            <div className="text-xs text-muted-foreground mb-auto">Cost per score result</div>
+            <div className="text-lg font-medium font-mono mt-auto">{formatMoney(overall.average_cost)}</div>
+          </div>
+          <div className="rounded-md bg-card p-3 flex flex-col">
+            <div className="text-xs text-muted-foreground mb-auto">LLM calls per score result</div>
+            <div className="text-lg font-medium font-mono mt-auto">{formatNumber(overall.average_calls)}</div>
+          </div>
+          <div className="rounded-md bg-card p-3 flex flex-col">
+            <div className="text-xs text-muted-foreground mb-auto">Cost per item</div>
+            <div className="text-lg font-medium font-mono mt-auto">{formatMoney(itemAnalysis.average_cost)}</div>
+          </div>
+          <div className="rounded-md bg-card p-3 flex flex-col">
+            <div className="text-xs text-muted-foreground mb-auto">LLM calls per item</div>
+            <div className="text-lg font-medium font-mono mt-auto">{formatNumber(itemAnalysis.average_calls)}</div>
+          </div>
         </div>
-        <div className="rounded-md bg-card p-3">
-          <div className="text-xs text-muted-foreground">Total cost</div>
-          <div className="text-lg font-medium">{formatMoney(overall.total_cost)}</div>
-        </div>
-        <div className="rounded-md bg-card p-3">
-          <div className="text-xs text-muted-foreground">Score results</div>
-          <div className="text-lg font-medium">{formatNumber(overall.count)}</div>
-        </div>
-        <div className="rounded-md bg-card p-3">
-          <div className="text-xs text-muted-foreground">Avg LLM calls</div>
-          <div className="text-lg font-medium">{formatNumber(overall.average_calls)}</div>
+      </div>
+
+      {/* Summary Totals Card */}
+      <div className="rounded-md bg-card p-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <tbody>
+              <tr>
+                <td className="py-1 pr-4 text-muted-foreground">Total cost:</td>
+                <td className="py-1 font-mono">{formatMoney(overall.total_cost)}</td>
+                <td className="py-1 pl-6 pr-4 text-muted-foreground">Total LLM calls:</td>
+                <td className="py-1 font-mono">{formatNumber(Number(overall.average_calls || 0) * Number(overall.count || 0))}</td>
+              </tr>
+              <tr>
+                <td className="py-1 pr-4 text-muted-foreground">Score results:</td>
+                <td className="py-1 font-mono">{formatNumber(overall.count)}</td>
+                <td className="py-1 pl-6 pr-4 text-muted-foreground">Items analyzed:</td>
+                <td className="py-1 font-mono">{formatNumber(itemAnalysis.count)}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -237,7 +270,7 @@ export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) 
                 <VictoryAxis
                   orientation="left"
                   tickValues={boxData.map(d => d.x as any)}
-                  tickFormat={(t) => splitLabelToTwoLines(String(t))}
+                  tickFormat={(t: any) => splitLabelToTwoLines(String(t))}
                   tickLabelComponent={<VictoryLabel lineHeight={1.1} style={{ fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily }} />}
                   style={{
                     axis: { stroke: chartTextColor },
