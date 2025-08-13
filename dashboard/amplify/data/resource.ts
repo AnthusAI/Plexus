@@ -875,9 +875,11 @@ const schema = a.schema({
 
     Experiment: a
         .model({
-            name: a.string().required(),
+            name: a.string(),
+            notes: a.string(),
+            featured: a.boolean(),
             status: a.enum(['RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']),
-            rootNodeId: a.id().required(),
+            rootNodeId: a.id(),
             currentGeneration: a.integer().required(),
             nodes: a.hasMany('ExperimentNode', 'experimentId'),
         })
