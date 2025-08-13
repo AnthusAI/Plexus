@@ -1,7 +1,10 @@
 import pytest
 from unittest.mock import Mock
-from ..client import PlexusDashboardClient
+from typing import TYPE_CHECKING
 from .score_result import ScoreResult
+
+if TYPE_CHECKING:
+    from ..client import PlexusDashboardClient
 
 @pytest.fixture
 def mock_client():

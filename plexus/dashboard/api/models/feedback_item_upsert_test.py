@@ -1,7 +1,13 @@
 import pytest
 from unittest.mock import Mock, MagicMock, patch
+from typing import TYPE_CHECKING
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
+
+# Import for Mock usage in tests
 from plexus.dashboard.api.client import PlexusDashboardClient
+
+if TYPE_CHECKING:
+    pass
 
 
 class TestFeedbackItemUpsertByCacheKey:

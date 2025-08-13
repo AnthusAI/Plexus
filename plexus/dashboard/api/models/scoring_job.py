@@ -1,12 +1,14 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
 from .batch_job import BatchJob
-from ..client import _BaseAPIClient
 import json
 import logging
 from plexus.utils.dict_utils import truncate_dict_strings_inner
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 @dataclass
 class ScoringJob(BaseModel):
@@ -62,7 +64,7 @@ class ScoringJob(BaseModel):
         evaluationId: Optional[str] = None,
         scoreId: Optional[str] = None,
         batchId: Optional[str] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.accountId = accountId
@@ -102,7 +104,7 @@ class ScoringJob(BaseModel):
     @classmethod
     def create(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         accountId: str,
         scorecardId: str,
         itemId: str,
@@ -170,7 +172,7 @@ class ScoringJob(BaseModel):
             raise
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'ScoringJob':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'ScoringJob':
         """Creates a ScoringJob instance from dictionary data.
         
         :param data: Dictionary containing scoring job data
@@ -233,7 +235,7 @@ class ScoringJob(BaseModel):
         return self.from_dict(result['updateScoringJob'], self._client)
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'ScoringJob':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'ScoringJob':
         """Retrieves a scoring job by its identifier.
         
         :param id: Scoring job identifier
@@ -256,7 +258,7 @@ class ScoringJob(BaseModel):
         return cls.from_dict(result['getScoringJob'], client) 
 
     @classmethod
-    def find_by_item_id(cls, item_id: str, client: _BaseAPIClient) -> Optional['ScoringJob']:
+    def find_by_item_id(cls, item_id: str, client: '_BaseAPIClient') -> Optional['ScoringJob']:
         """Finds a scoring job by its associated item identifier.
         
         :param item_id: Item identifier to search for

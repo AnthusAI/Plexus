@@ -202,8 +202,8 @@ def register_scorecard_tools(mcp: FastMCP):
         try:
             # Import plexus CLI inside function to keep startup fast
             try:
-                from plexus.cli.client_utils import create_client as create_dashboard_client
-                from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
                 from plexus.dashboard.api.client import PlexusDashboardClient
             except ImportError as e:
                 logger.error(f"ImportError: {str(e)}", exc_info=True)
@@ -302,78 +302,99 @@ def register_scorecard_tools(mcp: FastMCP):
         scorecard_name: str = "",
         score_name: str = "",
         n_samples: int = 10,
-        ctx = None # Context is not used in this simplified background version
+        remote: bool = False,
+        yaml: bool = True,
+        ctx = None
     ) -> str:
         """
-        Dispatches a Plexus scorecard evaluation to run in the background.
-        The server does not track the status of this background process.
-        
+        Run a Plexus scorecard evaluation.
+
+        Defaults to LOCAL mode (blocking) to use the same logic as the CLI evaluation command,
+        with support for loading from local YAML when `yaml=True`.
+
+        If `remote=True`, dispatches a background remote evaluation (non-blocking) using the CLI dispatcher.
+
+        WARNING: Local evaluations can run for a long time; the caller should be prepared to wait for completion.
+
         Parameters:
-        - scorecard_name: The name of the scorecard to evaluate (e.g., 'CMG - EDU v1.0')
-        - score_name: The name of the specific score to evaluate (e.g., 'Pain Points')
+        - scorecard_name: The name of the scorecard to evaluate
+        - score_name: Optional specific score to evaluate
         - n_samples: Number of samples to evaluate
-        
-        Returns:
-        - A string confirming the evaluation has been dispatched.
+        - remote: If True, run via remote dispatch (non-blocking). If False (default), run locally (blocking).
+        - yaml: If True (default), load scorecard/score configs from local YAML files (equivalent to CLI --yaml)
         """
         import sys
         import asyncio
         import subprocess
-        # Validate inputs
+        import importlib.util
+        
         if not scorecard_name:
             return "Error: scorecard_name must be provided"
 
-        async def _run_evaluation_in_background():
-            """Helper to run the CLI command in the background and log basic info."""
+        if remote:
+            async def _run_evaluation_in_background():
+                try:
+                    python_executable = sys.executable
+                    plexus_spec = importlib.util.find_spec("plexus")
+                    if not plexus_spec:
+                        logger.error("Plexus module not found in Python path for background evaluation.")
+                        return
+                    plexus_dir = os.path.dirname(plexus_spec.origin)
+                    cli_dir = os.path.join(plexus_dir, "cli")
+                    cli_script = os.path.join(cli_dir, "CommandLineInterface.py")
+                    if not os.path.isfile(cli_script):
+                        logger.error(f"CommandLineInterface.py not found at {cli_script} for background evaluation.")
+                        return
+                    eval_cmd_str = f"evaluate accuracy --scorecard-name '{scorecard_name}'"
+                    if score_name:
+                        eval_cmd_str += f" --score-name '{score_name}'"
+                    eval_cmd_str += f" --number-of-samples {n_samples}"
+                    cmd_list = [python_executable, cli_script, "command", "dispatch", eval_cmd_str]
+                    env = os.environ.copy()
+                    process = await asyncio.create_subprocess_exec(
+                        *cmd_list,
+                        env=env,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    logger.info(f"Background evaluation process started (PID: {process.pid}) for scorecard: {scorecard_name}")
+                except Exception as e:
+                    logger.error(f"Error launching background evaluation for {scorecard_name}: {str(e)}", exc_info=True)
+            asyncio.create_task(_run_evaluation_in_background())
+            return (f"Plexus evaluation for scorecard '{scorecard_name}' has been dispatched to run in the background. "
+                    f"Monitor logs or Plexus Dashboard for status and results.")
+        else:
+            # LOCAL mode: run synchronously using core evaluation functions
             try:
-                import importlib.util
+                # Import CLI evaluation loader and core Evaluation orchestrator
+                from plexus.cli.evaluation.evaluations import load_scorecard_from_yaml_files
+                from plexus.Scorecard import Scorecard
+                from plexus.cli.evaluation.evaluations import accuracy as accuracy_command
+                from plexus.cli.evaluation.evaluations import load_scorecard_from_api
                 
-                python_executable = sys.executable
-                plexus_spec = importlib.util.find_spec("plexus")
-                if not plexus_spec:
-                    logger.error("Plexus module not found in Python path for background evaluation.")
-                    return
-                    
-                plexus_dir = os.path.dirname(plexus_spec.origin)
-                cli_dir = os.path.join(plexus_dir, "cli")
-                cli_script = os.path.join(cli_dir, "CommandLineInterface.py")
-                
-                if not os.path.isfile(cli_script):
-                    logger.error(f"CommandLineInterface.py not found at {cli_script} for background evaluation.")
-                    return
-                    
-                eval_cmd_str = f"evaluate accuracy --scorecard-name '{scorecard_name}'"
-                if score_name:
-                    eval_cmd_str += f" --score-name '{score_name}'"
-                eval_cmd_str += f" --number-of-samples {n_samples}"
-                
-                cmd_list = [python_executable, cli_script, "command", "dispatch", eval_cmd_str]
-                cmd_log_str = ' '.join(cmd_list)
-                logger.info(f"Dispatching background evaluation command: {cmd_log_str}")
-                
-                env = os.environ.copy()
-                if "AWS_DEFAULT_REGION" not in env:
-                    env["AWS_DEFAULT_REGION"] = "us-west-2"
-                    logger.info("Setting AWS_DEFAULT_REGION=us-west-2 for background evaluation command")
-                
-                # Launch the process in the background
-                # We are not capturing stdout/stderr here for simplicity, assuming the CLI script handles its own logging.
-                # The Popen object is not awaited, so it runs in the background.
-                process = await asyncio.create_subprocess_exec(
-                    *cmd_list,
-                    env=env,
-                    stdout=subprocess.DEVNULL, # Prevent output from interfering if not handled by CLI
-                    stderr=subprocess.DEVNULL  # Prevent output from interfering if not handled by CLI
+                # Build Scorecard instance from YAML or API, mirroring CLI behavior
+                if yaml:
+                    # When using YAML mode, we may optionally filter scores later inside the CLI accuracy flow
+                    scorecard_instance = load_scorecard_from_yaml_files(scorecard_name)
+                else:
+                    scorecard_instance, _ = load_scorecard_from_api(scorecard_name)
+
+                # Run evaluation using core Evaluation API directly to avoid duplicating CLI logic
+                from plexus.Evaluation import AccuracyEvaluation
+                eval_instance = AccuracyEvaluation(
+                    scorecard_name=scorecard_name,
+                    scorecard=scorecard_instance,
+                    number_of_texts_to_sample=n_samples,
+                    subset_of_score_names=[score_name] if score_name else None,
                 )
-                
-                logger.info(f"Background evaluation process started (PID: {process.pid}) for scorecard: {scorecard_name}")
-                # We don't wait for completion: await process.wait()
-
+                # Execute synchronously (this will block until complete)
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If we're already in an event loop, create a new task and wait
+                    result = await eval_instance.run()
+                else:
+                    result = loop.run_until_complete(eval_instance.run())
+                return f"Local evaluation completed for '{scorecard_name}'{' / ' + score_name if score_name else ''}."
             except Exception as e:
-                logger.error(f"Error launching background evaluation for {scorecard_name}: {str(e)}", exc_info=True)
-
-        # Create an asyncio task to run the helper function in the background
-        asyncio.create_task(_run_evaluation_in_background())
-        
-        return (f"Plexus evaluation for scorecard '{scorecard_name}' has been dispatched to run in the background. "
-                f"Monitor logs or Plexus Dashboard for status and results.")
+                logger.error(f"Local evaluation failed: {e}", exc_info=True)
+                return f"Error: Local evaluation failed: {e}"

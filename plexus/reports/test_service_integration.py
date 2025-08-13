@@ -16,7 +16,7 @@ from plexus.dashboard.api.models.report_configuration import ReportConfiguration
 from plexus.dashboard.api.models.report import Report
 from plexus.dashboard.api.models.report_block import ReportBlock
 from plexus.dashboard.api.models.task import Task
-from plexus.cli.task_progress_tracker import TaskProgressTracker
+from plexus.cli.shared.task_progress_tracker import TaskProgressTracker
 
 
 class TestGenerateReportCeleryTask:

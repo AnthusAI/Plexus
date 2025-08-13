@@ -10,7 +10,7 @@ import sys
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from plexus.cli.score_config_fetching import fetch_and_cache_single_score
+from plexus.cli.shared.score_config_fetching import fetch_and_cache_single_score
 
 
 class TestScoreConfigFetching(unittest.TestCase):
@@ -74,10 +74,10 @@ threshold: 0.5
         """Clean up test fixtures."""
         self.temp_dir.cleanup()
 
-    @patch('plexus.cli.score_config_fetching.direct_memoized_resolve_scorecard_identifier')
-    @patch('plexus.cli.score_config_fetching.direct_memoized_resolve_score_identifier')
-    @patch('plexus.cli.score_config_fetching.fetch_scorecard_structure')
-    @patch('plexus.cli.score_config_fetching.get_score_yaml_path')
+    @patch('plexus.cli.shared.score_config_fetching.direct_memoized_resolve_scorecard_identifier')
+    @patch('plexus.cli.shared.score_config_fetching.direct_memoized_resolve_score_identifier')
+    @patch('plexus.cli.shared.score_config_fetching.fetch_scorecard_structure')
+    @patch('plexus.cli.shared.score_config_fetching.get_score_yaml_path')
     def test_fetch_and_cache_happy_path(self, mock_get_path, mock_fetch_structure, 
                                         mock_resolve_score, mock_resolve_scorecard):
         """Test the happy path for fetch_and_cache_single_score."""
@@ -131,10 +131,10 @@ threshold: 0.5
         # Verify file was written
         self.assertTrue(temp_file.exists())
         
-    @patch('plexus.cli.score_config_fetching.direct_memoized_resolve_scorecard_identifier')
-    @patch('plexus.cli.score_config_fetching.direct_memoized_resolve_score_identifier')
-    @patch('plexus.cli.score_config_fetching.fetch_scorecard_structure')
-    @patch('plexus.cli.score_config_fetching.get_score_yaml_path')
+    @patch('plexus.cli.shared.score_config_fetching.direct_memoized_resolve_scorecard_identifier')
+    @patch('plexus.cli.shared.score_config_fetching.direct_memoized_resolve_score_identifier')
+    @patch('plexus.cli.shared.score_config_fetching.fetch_scorecard_structure')
+    @patch('plexus.cli.shared.score_config_fetching.get_score_yaml_path')
     def test_fetch_and_cache_from_cache(self, mock_get_path, mock_fetch_structure, 
                                        mock_resolve_score, mock_resolve_scorecard):
         """Test loading from cache when use_cache=True."""
@@ -169,7 +169,7 @@ threshold: 0.5
         # Verify mock session was not called (because we loaded from cache)
         self.mock_session.execute.assert_not_called()
         
-    @patch('plexus.cli.score_config_fetching.direct_memoized_resolve_scorecard_identifier')
+    @patch('plexus.cli.shared.score_config_fetching.direct_memoized_resolve_scorecard_identifier')
     def test_scorecard_not_found(self, mock_resolve_scorecard):
         """Test handling of scorecard not found."""
         # Set up mock to return None (scorecard not found)

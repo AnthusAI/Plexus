@@ -4,11 +4,13 @@ Report Model - Python representation of the GraphQL Report type.
 
 import json
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from .base import BaseModel
-from ..client import _BaseAPIClient
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ class Report(BaseModel):
         updatedAt: datetime,
         parameters: Optional[Dict[str, Any]] = None,
         output: Optional[str] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.reportConfigurationId = reportConfigurationId
@@ -62,7 +64,7 @@ class Report(BaseModel):
         """
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Report':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Report':
         """Create an instance from a dictionary of data."""
         # Parse datetime fields
         for date_field in ['createdAt', 'updatedAt']:
@@ -111,7 +113,7 @@ class Report(BaseModel):
     @classmethod
     def create(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         reportConfigurationId: str,
         accountId: str,
         taskId: str,
@@ -206,7 +208,7 @@ class Report(BaseModel):
             raise
 
     @classmethod
-    def get_by_name(cls, name: str, account_id: str, client: _BaseAPIClient) -> Optional['Report']:
+    def get_by_name(cls, name: str, account_id: str, client: '_BaseAPIClient') -> Optional['Report']:
         """Get a Report by its name within a specific account.
 
         Uses the 'listReportByAccountIdAndUpdatedAt' index and filters results 
@@ -268,7 +270,7 @@ class Report(BaseModel):
     def list_by_account_id(
         cls,
         account_id: str,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         limit: int = 100, # Default limit per request
         max_items: Optional[int] = None # Optional total max items to fetch
     ) -> list['Report']:
@@ -385,7 +387,7 @@ class Report(BaseModel):
             raise
     
     @classmethod
-    def delete_by_id(cls, report_id: str, client: _BaseAPIClient) -> bool:
+    def delete_by_id(cls, report_id: str, client: '_BaseAPIClient') -> bool:
         """Delete a Report by ID without first retrieving it.
         
         Args:
@@ -427,7 +429,7 @@ class Report(BaseModel):
             raise
             
     @classmethod
-    def delete_multiple(cls, report_ids: List[str], client: _BaseAPIClient) -> Dict[str, bool]:
+    def delete_multiple(cls, report_ids: List[str], client: '_BaseAPIClient') -> Dict[str, bool]:
         """Delete multiple Reports by IDs.
         
         Args:

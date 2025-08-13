@@ -50,8 +50,8 @@ def register_score_tools(mcp: FastMCP):
             # Try to import required modules directly
             try:
                 from plexus.dashboard.api.client import PlexusDashboardClient
-                from plexus.cli.client_utils import create_client as create_dashboard_client
-                from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
             except ImportError as e:
                 return f"Error: Could not import required modules: {e}. Core modules may not be available."
             

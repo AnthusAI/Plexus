@@ -17,9 +17,9 @@ Performance Characteristics:
 
 Usage Examples:
     from plexus.utils.identifier_search import find_item_by_identifier
-    from plexus.dashboard.api.client import PlexusDashboardClient
+    from plexus.dashboard.api.client import 'PlexusDashboardClient'
     
-    client = PlexusDashboardClient.for_account("my-account")
+    client = 'PlexusDashboardClient'.for_account("my-account")
     
     # Find single item by exact identifier value
     item = find_item_by_identifier("CUST-123456", "my-account", client)
@@ -35,15 +35,17 @@ Usage Examples:
     )
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from plexus.dashboard.api.models import Identifier, Item
-from plexus.dashboard.api.client import PlexusDashboardClient
+
+if TYPE_CHECKING:
+    from plexus.dashboard.api.client import PlexusDashboardClient
 
 
 def find_item_by_identifier(
     identifier_value: str, 
     account_id: str, 
-    client: PlexusDashboardClient
+    client: 'PlexusDashboardClient'
 ) -> Optional[Item]:
     """
     Find an item by exact identifier value within an account.
@@ -79,7 +81,7 @@ def find_item_by_identifier(
 def find_items_by_identifier_type(
     identifier_name: str,
     account_id: str, 
-    client: PlexusDashboardClient,
+    client: 'PlexusDashboardClient',
     limit: Optional[int] = None
 ) -> List[Item]:
     """
@@ -147,7 +149,7 @@ def find_items_by_identifier_type(
 def batch_find_items_by_identifiers(
     identifier_values: List[str],
     account_id: str,
-    client: PlexusDashboardClient
+    client: 'PlexusDashboardClient'
 ) -> Dict[str, Item]:
     """
     Efficiently find multiple items by their identifier values.
@@ -214,7 +216,7 @@ def find_item_by_typed_identifier(
     identifier_name: str,
     identifier_value: str,
     account_id: str,
-    client: PlexusDashboardClient
+    client: 'PlexusDashboardClient'
 ) -> Optional[Item]:
     """
     Find an item by identifier name and exact value.
@@ -252,7 +254,7 @@ def find_item_by_typed_identifier(
         return None
 
 
-def get_item_identifiers(item_id: str, client: PlexusDashboardClient) -> List[Dict[str, Any]]:
+def get_item_identifiers(item_id: str, client: 'PlexusDashboardClient') -> List[Dict[str, Any]]:
     """
     Get all identifiers for a specific item in a format compatible with the UI.
     
@@ -293,7 +295,7 @@ def create_identifiers_for_item(
     item_id: str,
     account_id: str,
     identifiers_data: List[Dict[str, Any]],
-    client: PlexusDashboardClient
+    client: 'PlexusDashboardClient'
 ) -> List[Identifier]:
     """
     Create identifier records for an item from JSON-style data.

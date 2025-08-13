@@ -1,10 +1,12 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
-from ..client import _BaseAPIClient
 import uuid
 import logging
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 @dataclass
 class BatchJob(BaseModel):
@@ -70,7 +72,7 @@ class BatchJob(BaseModel):
         errorDetails: Optional[Dict] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.accountId = accountId
@@ -117,7 +119,7 @@ class BatchJob(BaseModel):
     @classmethod
     def create(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         accountId: str,
         type: str,
         modelProvider: str,
@@ -170,7 +172,7 @@ class BatchJob(BaseModel):
         return cls.from_dict(result['createBatchJob'], client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'BatchJob':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'BatchJob':
         """Creates a BatchJob instance from dictionary data.
         
         :param data: Dictionary containing batch job data
@@ -243,7 +245,7 @@ class BatchJob(BaseModel):
         return self.from_dict(result['updateBatchJob'], self._client)
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'BatchJob':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'BatchJob':
         """Retrieves a batch job by its identifier.
         
         :param id: Batch job identifier

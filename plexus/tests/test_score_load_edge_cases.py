@@ -151,7 +151,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         self.content_ids_set = set()
     
     @patch('plexus.scores.Score.Score.load')
-    @patch('plexus.cli.EvaluationCommands.logging')
+    @patch('plexus.cli.evaluation.evaluations.logging')
     def test_score_instance_missing_dataframe(self, mock_logging, mock_score_load):
         """Test handling when score instance doesn't have dataframe attribute."""
         # Arrange
@@ -160,7 +160,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         del mock_score_instance.dataframe
         mock_score_load.return_value = mock_score_instance
         
-        from plexus.cli.EvaluationCommands import get_data_driven_samples
+        from plexus.cli.evaluation.evaluations import get_data_driven_samples
         
         # Act
         result = get_data_driven_samples(
@@ -175,7 +175,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         self.assertTrue(any("does not have a 'dataframe' attribute" in str(call) for call in error_calls))
     
     @patch('plexus.scores.Score.Score.load')
-    @patch('plexus.cli.EvaluationCommands.logging')
+    @patch('plexus.cli.evaluation.evaluations.logging')
     def test_score_instance_none_dataframe(self, mock_logging, mock_score_load):
         """Test handling when score instance has None dataframe."""
         # Arrange
@@ -183,7 +183,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         mock_score_instance.dataframe = None
         mock_score_load.return_value = mock_score_instance
         
-        from plexus.cli.EvaluationCommands import get_data_driven_samples
+        from plexus.cli.evaluation.evaluations import get_data_driven_samples
         
         # Act
         result = get_data_driven_samples(
@@ -198,7 +198,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         self.assertTrue(any("dataframe is None" in str(call) for call in error_calls))
     
     @patch('plexus.scores.Score.Score.load')
-    @patch('plexus.cli.EvaluationCommands.logging')
+    @patch('plexus.cli.evaluation.evaluations.logging')
     def test_score_instance_empty_dataframe(self, mock_logging, mock_score_load):
         """Test handling when score instance has empty dataframe."""
         # Arrange
@@ -207,7 +207,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         mock_score_instance.dataframe.__len__ = MagicMock(return_value=0)  # Empty dataframe
         mock_score_load.return_value = mock_score_instance
         
-        from plexus.cli.EvaluationCommands import get_data_driven_samples
+        from plexus.cli.evaluation.evaluations import get_data_driven_samples
         
         # Act
         result = get_data_driven_samples(
@@ -224,15 +224,15 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         self.assertTrue(any("No data matching the specified criteria" in str(call) for call in error_calls))
     
     @patch('plexus.scores.Score.Score.load')
-    @patch('plexus.cli.EvaluationCommands.importlib')
-    @patch('plexus.cli.EvaluationCommands.logging')
+    @patch('plexus.cli.evaluation.evaluations.importlib')
+    @patch('plexus.cli.evaluation.evaluations.logging')
     def test_fallback_import_error(self, mock_logging, mock_importlib, mock_score_load):
         """Test handling when both Score.load() and manual import fail."""
         # Arrange
         mock_score_load.side_effect = ValueError("Score.load() failed")
         mock_importlib.import_module.side_effect = ImportError("Module not found")
         
-        from plexus.cli.EvaluationCommands import get_data_driven_samples
+        from plexus.cli.evaluation.evaluations import get_data_driven_samples
         
         # Act
         result = get_data_driven_samples(
