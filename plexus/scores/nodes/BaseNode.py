@@ -105,6 +105,23 @@ class BaseNode(ABC, LangChainUser):
         # Create and return a new state object
         return self.GraphState(**state_dict)
 
+    # Centralized helper to normalize any AIMessage.content to a plain string
+    # Use this in nodes before assigning to GraphState.completion.
+    def normalize_text_output(self, response_or_text: Any) -> str:
+        try:
+            # If it's already a string, return as-is
+            if isinstance(response_or_text, str):
+                return response_or_text
+            # If it's an object with 'content', normalize that
+            if hasattr(response_or_text, 'content'):
+                return self.normalize_response_text(response_or_text)
+            # If it's a list/dict (Responses API blocks), convert via LangChainUser helper
+            if isinstance(response_or_text, (list, dict)):
+                return self._normalize_content_to_text(response_or_text)
+        except Exception as ex:
+            logging.error(f"Error normalizing text output: {ex}")
+        return str(response_or_text)
+
     def get_prompt_templates(self):
         """
         Get a list of prompt templates for the node, by looking for the "system_message" parameter for

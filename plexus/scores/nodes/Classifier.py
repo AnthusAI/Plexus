@@ -533,14 +533,16 @@ class Classifier(BaseNode):
 
                     response = await model.ainvoke(messages)
                     
+                    # Normalize completion text (handles Responses API content blocks)
+                    completion_text = self.normalize_text_output(response)
                     # Create the initial result state
                     result_state = self.GraphState(
                         **{k: v for k, v in state.model_dump().items() if k not in ['completion']},
-                        completion=response.content
+                        completion=completion_text
                     )
                     
                     output_state = {
-                        "explanation": response.content
+                        "explanation": completion_text
                     }
                     
                     # Log the state and get a new state object with updated node_results
@@ -612,10 +614,11 @@ class Classifier(BaseNode):
 
         model = self.model
         response = model.invoke(state.messages)
+        completion_text = self.normalize_text_output(response)
         
         return {
             **state.dict(),
-            "completion": response.content,
+            "completion": completion_text,
             "messages": state.messages  # Keep messages for retry scenarios
         }
 
