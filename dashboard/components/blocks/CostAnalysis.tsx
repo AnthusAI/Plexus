@@ -48,3 +48,4 @@ const CostAnalysis: React.FC<ReportBlockProps> = (props) => {
 export default CostAnalysis;
 
 
+

@@ -2,7 +2,10 @@ from typing import Optional, Dict, Any, List, Tuple, Union
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
-from ..client import _BaseAPIClient
+# Lazy import to avoid circular dependency
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 import json
 import logging
 
@@ -38,7 +41,7 @@ class Item(BaseModel):
         description: Optional[str] = None,
         scoreId: Optional[str] = None,
         attachedFiles: Optional[list] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.evaluationId = evaluationId
@@ -77,7 +80,7 @@ class Item(BaseModel):
     @classmethod
     def list(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         filter: Optional[Dict[str, Any]] = None,
         sort: Optional[Dict[str, str]] = None,
         limit: Optional[int] = None,
@@ -177,7 +180,7 @@ class Item(BaseModel):
         return [cls.from_dict(item_data, client) for item_data in items_data]
 
     @classmethod
-    def get_by_id(cls, item_id: str, client: _BaseAPIClient) -> Optional['Item']:
+    def get_by_id(cls, item_id: str, client: '_BaseAPIClient') -> Optional['Item']:
         """
         Get a single item by its ID.
         
@@ -204,7 +207,7 @@ class Item(BaseModel):
         return None
 
     @classmethod
-    def create(cls, client: _BaseAPIClient, evaluationId: str, text: Optional[str] = None, 
+    def create(cls, client: '_BaseAPIClient', evaluationId: str, text: Optional[str] = None, 
                metadata: Optional[Dict] = None, createdByType: Optional[str] = None, **kwargs) -> 'Item':
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         
@@ -252,7 +255,7 @@ class Item(BaseModel):
         return cls.from_dict(result['createItem'], client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Item':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Item':
         for date_field in ['createdAt', 'updatedAt']:
             if data.get(date_field):
                 data[date_field] = datetime.fromisoformat(
@@ -314,7 +317,7 @@ class Item(BaseModel):
     @classmethod
     def upsert_by_identifiers(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         account_id: str,
         identifiers: Dict[str, Any],
         external_id: Optional[str] = None,
@@ -504,7 +507,7 @@ class Item(BaseModel):
     @classmethod
     def _lookup_item_by_identifiers(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         account_id: str,
         identifiers: Dict[str, Any],
         debug: bool = False
@@ -633,7 +636,7 @@ class Item(BaseModel):
     @classmethod
     def _lookup_item_by_external_id(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         account_id: str,
         external_id: str,
         debug: bool = False
@@ -694,7 +697,7 @@ class Item(BaseModel):
     @classmethod  
     def _find_missing_identifiers(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         account_id: str,
         item_id: str,
         identifiers: Dict[str, Any],
@@ -765,7 +768,7 @@ class Item(BaseModel):
     @classmethod
     def _create_identifier_records(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         item_id: str,
         account_id: str,
         identifiers: Dict[str, Any],
@@ -937,7 +940,7 @@ class Item(BaseModel):
     @classmethod
     def find_by_identifier(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         account_id: str,
         identifier_key: str,
         identifier_value: str,

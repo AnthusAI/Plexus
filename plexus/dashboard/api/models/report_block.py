@@ -4,11 +4,13 @@ ReportBlock Model - Python representation of the GraphQL ReportBlock type.
 
 import json
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from .base import BaseModel
-from ..client import _BaseAPIClient
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,7 @@ class ReportBlock(BaseModel):
         """
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'ReportBlock':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'ReportBlock':
         """Create an instance from a dictionary of data (typically from API response)."""
         # Parse datetime fields if they exist and are strings
         for date_field in ['createdAt', 'updatedAt']:
@@ -118,7 +120,7 @@ class ReportBlock(BaseModel):
     @classmethod
     def create(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         reportId: str,
         position: int,
         type: str,  # Add required type parameter
@@ -193,7 +195,7 @@ class ReportBlock(BaseModel):
     def list_by_report_id(
         cls,
         report_id: str,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         limit: int = 100,
         max_items: Optional[int] = None
     ) -> list['ReportBlock']:
@@ -268,7 +270,7 @@ class ReportBlock(BaseModel):
 
         return blocks 
 
-    def update(self, client: Optional[_BaseAPIClient] = None, **kwargs) -> 'ReportBlock':
+    def update(self, client: Optional['_BaseAPIClient'] = None, **kwargs) -> 'ReportBlock':
         """Update an existing ReportBlock record via GraphQL mutation."""
         if not self.id:
             raise ValueError("Cannot update ReportBlock without an ID.")

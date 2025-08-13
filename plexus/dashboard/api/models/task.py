@@ -3,13 +3,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from .base import BaseModel
 from .account import Account
-from ..client import _BaseAPIClient
 import logging
 import uuid
 import json
 
 if TYPE_CHECKING:
     from .task_stage import TaskStage
+    from ..client import _BaseAPIClient
 
 @dataclass
 class Task(BaseModel):
@@ -67,7 +67,7 @@ class Task(BaseModel):
         dispatchStatus: Optional[str] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.accountId = accountId
@@ -520,7 +520,7 @@ class Task(BaseModel):
             return None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Task':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Task':
         # Convert datetime fields
         for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt', 'estimatedCompletionAt']:
             if date_field in data:
@@ -585,7 +585,7 @@ class Task(BaseModel):
         return self.from_dict(result['updateTask'], self._client)
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Task':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'Task':
         query = """
         query GetTask($id: ID!) {
             getTask(id: $id) {
@@ -1031,7 +1031,7 @@ class Task(BaseModel):
         self.update(lock_token=None, lock_expires=None)
 
     @classmethod
-    def list_tasks(cls, client: _BaseAPIClient, updated_at: str = "", limit: int = 100) -> List['Task']:
+    def list_tasks(cls, client: '_BaseAPIClient', updated_at: str = "", limit: int = 100) -> List['Task']:
         """List tasks using the listTaskByUpdatedAt query for proper pagination.
         
         Args:

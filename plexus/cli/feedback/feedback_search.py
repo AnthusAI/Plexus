@@ -11,10 +11,10 @@ from datetime import datetime, timezone, timedelta
 import yaml
 import json
 
-from plexus.cli.console import console
-from plexus.cli.client_utils import create_client
-from plexus.cli.reports.utils import resolve_account_id_for_command
-from plexus.cli.memoized_resolvers import memoized_resolve_scorecard_identifier, memoized_resolve_score_identifier
+from plexus.cli.shared.console import console
+from plexus.cli.shared.client_utils import create_client
+from plexus.cli.report.utils import resolve_account_id_for_command
+from plexus.cli.shared.memoized_resolvers import memoized_resolve_scorecard_identifier, memoized_resolve_score_identifier
 from plexus.cli.feedback.feedback_service import FeedbackService
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
 

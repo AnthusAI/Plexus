@@ -10,13 +10,15 @@ Represents a scoring method within a scorecard section, tracking:
 
 import logging
 import yaml
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass
 from pathlib import Path
 from .base import BaseModel
 from .scorecard import Scorecard
-from ..client import _BaseAPIClient
 from plexus.cli.shared import get_score_yaml_path
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,7 @@ class Score(BaseModel):
         version: Optional[str] = None,
         aiProvider: Optional[str] = None,
         aiModel: Optional[str] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.name = name
@@ -77,7 +79,7 @@ class Score(BaseModel):
         """
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Score':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Score':
         return cls(
             id=data['id'],
             name=data['name'],
@@ -94,7 +96,7 @@ class Score(BaseModel):
         )
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Score':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'Score':
         query = """
         query GetScore($id: ID!) {
             getScore(id: $id) {
@@ -110,7 +112,7 @@ class Score(BaseModel):
         return cls.from_dict(result['getScore'], client)
 
     @classmethod
-    def get_by_name(cls, name: str, scorecard_id: str, client: _BaseAPIClient) -> Optional['Score']:
+    def get_by_name(cls, name: str, scorecard_id: str, client: '_BaseAPIClient') -> Optional['Score']:
         """Get a score by its name"""
         query = """
         query GetScoreByName($name: String!) {
@@ -129,7 +131,7 @@ class Score(BaseModel):
         return cls.from_dict(result['listScoreByName']['items'][0], client)
 
     @classmethod
-    def get_by_key(cls, key: str, scorecard_id: str, client: _BaseAPIClient) -> Optional['Score']:
+    def get_by_key(cls, key: str, scorecard_id: str, client: '_BaseAPIClient') -> Optional['Score']:
         """Get a score by its key"""
         query = """
         query GetScoreByKey($key: String!) {
@@ -149,7 +151,7 @@ class Score(BaseModel):
 
     @classmethod
     def get_by_external_id(cls, external_id: str, scorecard_id: str, 
-                          client: _BaseAPIClient) -> Optional['Score']:
+                          client: '_BaseAPIClient') -> Optional['Score']:
         """Get a score by its external ID"""
         query = """
         query GetScoreByExternalId($externalId: String!) {
@@ -168,7 +170,7 @@ class Score(BaseModel):
         return cls.from_dict(result['listScoreByExternalId']['items'][0], client)
 
     @classmethod
-    def list_by_section_id(cls, section_id: str, client: _BaseAPIClient, 
+    def list_by_section_id(cls, section_id: str, client: '_BaseAPIClient', 
                           next_token: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
         """
         Get all scores for a section with pagination support

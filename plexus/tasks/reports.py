@@ -2,7 +2,7 @@ from celery import shared_task
 from plexus.reports.service import generate_report
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.task import Task
-from plexus.cli.task_progress_tracker import TaskProgressTracker
+from plexus.cli.shared.task_progress_tracker import TaskProgressTracker
 import logging
 import traceback
 

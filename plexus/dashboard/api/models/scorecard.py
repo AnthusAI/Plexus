@@ -10,10 +10,12 @@ Each scorecard belongs to an account and contains sections with scores.
 """
 
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass
 from .base import BaseModel
-from ..client import _BaseAPIClient
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,7 @@ class Scorecard(BaseModel):
         externalId: str,
         accountId: str,
         description: Optional[str] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.name = name
@@ -54,7 +56,7 @@ class Scorecard(BaseModel):
         """
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Scorecard':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Scorecard':
         return cls(
             id=data['id'],
             name=data['name'],
@@ -66,7 +68,7 @@ class Scorecard(BaseModel):
         )
 
     @classmethod
-    def get_by_key(cls, key: str, client: _BaseAPIClient) -> 'Scorecard':
+    def get_by_key(cls, key: str, client: '_BaseAPIClient') -> 'Scorecard':
         logger.debug(f"Looking up scorecard by key: {key}")
         query = """
         query GetScorecardByKey($key: String!) {
@@ -86,7 +88,7 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
-    def list_by_key(cls, key: str, client: _BaseAPIClient) -> Optional['Scorecard']:
+    def list_by_key(cls, key: str, client: '_BaseAPIClient') -> Optional['Scorecard']:
         """Get a scorecard by its key.
         
         Args:
@@ -104,7 +106,7 @@ class Scorecard(BaseModel):
     @classmethod
     def create(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         name: str,
         key: str,
         externalId: str,
@@ -147,7 +149,7 @@ class Scorecard(BaseModel):
         return cls.from_dict(result['createScorecard'], client)
 
     @classmethod
-    def get_by_name(cls, name: str, client: _BaseAPIClient) -> 'Scorecard':
+    def get_by_name(cls, name: str, client: '_BaseAPIClient') -> 'Scorecard':
         logger.debug(f"Looking up scorecard by name: {name}")
         query = """
         query GetScorecardByName($name: String!) {
@@ -167,7 +169,7 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
-    def list_by_name(cls, name: str, client: _BaseAPIClient) -> Optional['Scorecard']:
+    def list_by_name(cls, name: str, client: '_BaseAPIClient') -> Optional['Scorecard']:
         """Get a scorecard by its name.
         
         Args:
@@ -183,7 +185,7 @@ class Scorecard(BaseModel):
             return None
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Scorecard':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'Scorecard':
         logger.debug(f"Looking up scorecard by ID: {id}")
         query = """
         query GetScorecardById($id: ID!) {
@@ -200,7 +202,7 @@ class Scorecard(BaseModel):
         return cls.from_dict(result['getScorecard'], client)
 
     @classmethod
-    def get_by_external_id(cls, external_id: str, client: _BaseAPIClient) -> 'Scorecard':
+    def get_by_external_id(cls, external_id: str, client: '_BaseAPIClient') -> 'Scorecard':
         logger.debug(f"Looking up scorecard by external ID: {external_id}")
         query = """
         query GetScorecardByExternalId($externalId: String!) {
@@ -220,7 +222,7 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
-    def list_by_external_id(cls, external_id: str, client: _BaseAPIClient) -> Optional['Scorecard']:
+    def list_by_external_id(cls, external_id: str, client: '_BaseAPIClient') -> Optional['Scorecard']:
         """Get a scorecard by its external ID.
         
         Args:

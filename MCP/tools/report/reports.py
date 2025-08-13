@@ -40,7 +40,7 @@ def register_report_tools(mcp: FastMCP):
         try:
             # Import plexus CLI inside function to keep startup fast
             try:
-                from plexus.cli.client_utils import create_client as create_dashboard_client
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
                 from plexus.dashboard.api.client import PlexusDashboardClient
             except ImportError as e:
                 logger.error(f"ImportError: {str(e)}", exc_info=True)
@@ -203,7 +203,7 @@ def register_report_tools(mcp: FastMCP):
         try:
             # Import plexus CLI inside function to keep startup fast
             try:
-                from plexus.cli.client_utils import create_client as create_dashboard_client
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
                 from plexus.dashboard.api.client import PlexusDashboardClient
             except ImportError as e:
                 logger.error(f"ImportError: {str(e)}", exc_info=True)
@@ -274,5 +274,185 @@ def register_report_tools(mcp: FastMCP):
             captured_output = temp_stdout.getvalue()
             if captured_output:
                 logger.warning(f"Captured unexpected stdout during get_plexus_report_details: {captured_output}")
+            # Restore original stdout
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_report_last(
+        report_configuration_id: Optional[str] = None
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Gets full details for the most recent report, optionally filtered by report configuration ID.
+        
+        Parameters:
+        - report_configuration_id: Optional ID of the report configuration to filter by
+        
+        Returns:
+        - Detailed information about the most recent report
+        """
+        # Temporarily redirect stdout to capture any unexpected output
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        
+        try:
+            # First, list reports to find the latest one's ID
+            reports = await plexus_reports_list(
+                report_configuration_id=report_configuration_id,
+                limit=1
+            )
+            
+            # Handle error string response
+            if isinstance(reports, str) and reports.startswith("Error:"):
+                return reports
+                
+            # Handle empty response
+            if not reports or (isinstance(reports, list) and len(reports) == 0):
+                return "No reports found to determine the latest one."
+                
+            # Parse JSON if we got a JSON string
+            if isinstance(reports, str):
+                try:
+                    reports = json.loads(reports)
+                except:
+                    return f"Error: Unexpected response format from list_plexus_reports: {reports}"
+            
+            # Get the latest report ID
+            if not isinstance(reports, list) or len(reports) == 0 or not reports[0].get('id'):
+                return "Error: Could not extract ID from the latest report."
+            
+            latest_report_id = reports[0]['id']
+            logger.info(f"Found latest report ID: {latest_report_id}")
+            
+            # Get the full report details
+            report_details = await plexus_report_info(report_id=latest_report_id)
+            
+            # If report_details is already a string (error message), return it directly
+            if isinstance(report_details, str):
+                return report_details
+                
+            # Add the URL if not already present
+            if isinstance(report_details, dict) and 'url' not in report_details:
+                report_details['url'] = get_report_url(latest_report_id)
+                
+            return report_details
+            
+        except Exception as e:
+            logger.error(f"Error getting latest report: {str(e)}", exc_info=True)
+            return f"Error getting latest report: {str(e)}"
+        finally:
+            # Check if anything was written to stdout
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(f"Captured unexpected stdout during get_latest_plexus_report: {captured_output}")
+            # Restore original stdout
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_report_configurations_list() -> Union[str, List[Dict]]:
+        """
+        List all report configurations in reverse chronological order.
+        
+        Returns:
+        - Array of report configuration objects with name, id, description, and updatedAt fields
+        """
+        # Temporarily redirect stdout to capture any unexpected output
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        
+        try:
+            # Import plexus CLI inside function to keep startup fast
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.dashboard.api.client import PlexusDashboardClient
+            except ImportError as e:
+                logger.error(f"ImportError: {str(e)}", exc_info=True)
+                return f"Error: Failed to import Plexus modules: {str(e)}"
+            
+            # Get the client
+            client = create_dashboard_client()
+            if not client:
+                return "Error: Could not create dashboard client."
+            
+            # Get the default account ID
+            actual_account_id = get_default_account_id()
+            if not actual_account_id:
+                return "Error: Could not determine default account ID. Please check that PLEXUS_ACCOUNT_KEY is set in environment."
+                
+            logger.info("Listing report configurations")
+            
+            # Build and execute the query
+            query = f"""
+            query MyQuery {{
+              listReportConfigurationByAccountIdAndUpdatedAt(
+                accountId: "{actual_account_id}"
+                sortDirection: DESC
+              ) {{
+                items {{
+                  description
+                  name
+                  id
+                  updatedAt
+                }}
+                nextToken
+              }}
+            }}
+            """
+            
+            response = client.execute(query)
+            
+            if 'errors' in response:
+                error_details = json.dumps(response['errors'], indent=2)
+                logger.error(f"Dashboard query for report configurations returned errors: {error_details}")
+                return f"Error from Dashboard query for report configurations: {error_details}"
+            
+            # Extract data from response
+            configs_data = response.get('listReportConfigurationByAccountIdAndUpdatedAt', {}).get('items', [])
+            
+            # If no configurations found, try a different approach
+            if not configs_data:
+                # Try with slightly different parameters as a fallback
+                retry_query = f"""
+                query RetryQuery {{
+                  listReportConfigurations(filter: {{ accountId: {{ eq: "{actual_account_id}" }} }}, limit: 20) {{
+                    items {{
+                      id
+                      name
+                      description
+                      updatedAt
+                    }}
+                  }}
+                }}
+                """
+                retry_response = client.execute(retry_query)
+                
+                if 'listReportConfigurations' in retry_response:
+                    configs_data = retry_response['listReportConfigurations'].get('items', [])
+                    
+            # Format each configuration
+            if not configs_data:
+                return "No report configurations found."
+            
+            formatted_configs = []
+            for config in configs_data:
+                formatted_configs.append({
+                    "id": config.get("id"),
+                    "name": config.get("name"),
+                    "description": config.get("description"),
+                    "updatedAt": config.get("updatedAt")
+                })
+            
+            logger.info(f"Successfully retrieved {len(formatted_configs)} report configurations")
+            return formatted_configs
+        
+        except Exception as e:
+            logger.error(f"Error listing report configurations: {str(e)}", exc_info=True)
+            return f"Error listing report configurations: {str(e)}"
+        finally:
+            # Check if anything was written to stdout
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(f"Captured unexpected stdout during list_plexus_report_configurations: {captured_output}")
             # Restore original stdout
             sys.stdout = old_stdout

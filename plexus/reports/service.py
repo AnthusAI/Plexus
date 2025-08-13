@@ -34,7 +34,7 @@ from plexus.dashboard.api.models.report_configuration import ReportConfiguration
 from plexus.dashboard.api.models.report import Report # Added Report model
 from plexus.dashboard.api.models.report_block import ReportBlock # Import ReportBlock for later
 from plexus.dashboard.api.models.task import Task # Added Task model
-from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig # Added Tracker and StageConfig
+from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageConfig # Added Tracker and StageConfig
 
 # Configure logging
 logger = logging.getLogger(__name__)

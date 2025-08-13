@@ -10,7 +10,7 @@ from plexus.reports.blocks.score_info import ScoreInfo # Import for mocking late
 from plexus.dashboard.api.models.report import Report
 from plexus.dashboard.api.models.report_block import ReportBlock
 from plexus.dashboard.api.models.task import Task # Added for mocking
-from plexus.cli.task_progress_tracker import TaskProgressTracker # Added for mocking
+from plexus.cli.shared.task_progress_tracker import TaskProgressTracker # Added for mocking
 
 # Disable logging noise during tests
 logging.disable(logging.CRITICAL)
