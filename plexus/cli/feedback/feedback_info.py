@@ -11,10 +11,10 @@ from rich.text import Text
 from rich import box
 from datetime import datetime
 
-from plexus.cli.console import console
-from plexus.cli.client_utils import create_client
+from plexus.cli.shared.console import console
+from plexus.cli.shared.client_utils import create_client
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
-from plexus.cli.reports.utils import resolve_account_id_for_command
+from plexus.cli.report.utils import resolve_account_id_for_command
 
 logger = logging.getLogger(__name__)
 

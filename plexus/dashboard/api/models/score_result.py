@@ -1,9 +1,11 @@
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from datetime import datetime
 from .base import BaseModel
-from ..client import _BaseAPIClient
 import json
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 # Forward declaration for Score to handle circular dependency if Score is in another file or defined later
 class Score: # Basic placeholder, ideally import the actual Score model
@@ -105,7 +107,7 @@ class ScoreResult(BaseModel):
         type: Optional[str] = None,
         createdAt: Optional[datetime] = None,
         updatedAt: Optional[datetime] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.value = value
@@ -171,7 +173,7 @@ class ScoreResult(BaseModel):
         """
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'ScoreResult':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'ScoreResult':
         """Create a ScoreResult instance from API response data."""
         # Parse metadata JSON if it's a string
         metadata = data.get('metadata')
@@ -240,7 +242,7 @@ class ScoreResult(BaseModel):
     @classmethod
     def create(
         cls, 
-        client: _BaseAPIClient, 
+        client: '_BaseAPIClient', 
         value: float, 
         itemId: str, 
         accountId: str, 
@@ -332,7 +334,7 @@ class ScoreResult(BaseModel):
         return self.from_dict(result['updateScoreResult'], self._client)
 
     @classmethod
-    def batch_create(cls, client: _BaseAPIClient, items: List[Dict]) -> List['ScoreResult']:
+    def batch_create(cls, client: '_BaseAPIClient', items: List[Dict]) -> List['ScoreResult']:
         """Create multiple score results in a single API request."""
         # Prepare all items, handling metadata JSON conversion
         mutations = []
@@ -372,7 +374,7 @@ class ScoreResult(BaseModel):
     @classmethod
     def find_by_cache_key(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         item_id: str,
         scorecard_id: str,
         score_id: str,
@@ -460,7 +462,7 @@ class ScoreResult(BaseModel):
     @classmethod
     def _resolve_ids_for_cache_key(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         item_external_id: str = None,
         item_id: str = None,
         scorecard_external_id: str = None,

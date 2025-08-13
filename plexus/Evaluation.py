@@ -40,7 +40,7 @@ from plexus.scores.Score import Score
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
-from plexus.cli.CommandProgress import CommandProgress
+from plexus.cli.shared.CommandProgress import CommandProgress
 
 from sklearn.metrics import confusion_matrix
 
@@ -53,10 +53,11 @@ from plexus.dashboard.api.models.score_result import ScoreResult
 from plexus.dashboard.api.models.task import Task
 
 from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
+import inspect
 from plexus.utils.dict_utils import truncate_dict_strings_inner
 from plexus.CustomLogging import logging, setup_logging, set_log_group
 
-from plexus.cli.task_progress_tracker import StageConfig, TaskProgressTracker
+from plexus.cli.shared.task_progress_tracker import StageConfig, TaskProgressTracker
 
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
@@ -179,130 +180,68 @@ class Evaluation:
             # Initialize scorecard_id as None - will be set immediately below
             self.scorecard_id = None
             
-            # Look up BOTH scorecard and score IDs immediately to set them as early as possible
-            # Get the actual scorecard name by calling the method if it exists
+            # Prefer deterministic ID resolution shared with CLI helpers
+            # Determine a display identifier to resolve the scorecard ID
             scorecard_display_name = None
             if hasattr(self.scorecard, 'name') and callable(self.scorecard.name):
                 scorecard_display_name = self.scorecard.name()
             elif hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
-                scorecard_display_name = self.scorecard.properties.get('name')
+                scorecard_display_name = self.scorecard.properties.get('name') or self.scorecard.properties.get('key')
             else:
                 scorecard_display_name = str(self.scorecard_name)
-                
+
             try:
-                # Try different lookup methods in order of preference
-                scorecard_obj = None
+                # Use the same identifier resolution helpers as the CLI to get DynamoDB IDs
+                from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+                resolved_scorecard_id = resolve_scorecard_identifier(self.dashboard_client, scorecard_display_name or self.scorecard_name)
+                if not resolved_scorecard_id:
+                    # As a backup, try the raw scorecard_name
+                    resolved_scorecard_id = resolve_scorecard_identifier(self.dashboard_client, self.scorecard_name)
+                if not resolved_scorecard_id:
+                    self.logging.error("Failed to resolve scorecard ID via identifier resolution")
+                    raise ValueError(f"Could not resolve scorecard ID for: {scorecard_display_name or self.scorecard_name}")
+                self.scorecard_id = resolved_scorecard_id
+
+                # Resolve score ID if a single target score is specified
+                single_score_name = None
+                if self.subset_of_score_names and isinstance(self.subset_of_score_names, (list, tuple)) and len(self.subset_of_score_names) == 1:
+                    single_score_name = self.subset_of_score_names[0]
                 
-                # First try by key from properties (API-loaded scorecards)
-                if hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
-                    scorecard_key = self.scorecard.properties.get('key')
-                    if scorecard_key:
-                        try:
-                            scorecard_obj = DashboardScorecard.get_by_key(scorecard_key, self.dashboard_client)
-                        except ValueError:
-                            pass
-                
-                # If not found by key, try by display name
-                if not scorecard_obj and scorecard_display_name:
+                if single_score_name:
                     try:
-                        scorecard_obj = DashboardScorecard.get_by_name(scorecard_display_name, self.dashboard_client)
-                    except ValueError:
-                        pass
-                
-                # If still not found, try with the scorecard_name parameter
-                if not scorecard_obj:
+                        resolved_score_id = resolve_score_identifier(self.dashboard_client, self.scorecard_id, single_score_name)
+                        if resolved_score_id:
+                            self.score_id = resolved_score_id
+                            self.logging.info(f"Resolved score identifier to UUID: {self.score_id}")
+                        else:
+                            self.logging.warning(f"Could not resolve score identifier for score: {single_score_name}")
+                    except Exception as score_lookup_error:
+                        self.logging.warning(f"Failed to lookup score: {score_lookup_error}")
+
+                # Update the evaluation record immediately with both IDs now that they're both set
+                if hasattr(self, 'evaluation_id') and self.evaluation_id:
+                    update_data = {'scorecardId': self.scorecard_id}
+                    if getattr(self, 'score_id', None) and isinstance(self.score_id, str) and '-' in self.score_id and len(self.score_id.split('-')) == 5:
+                        update_data['scoreId'] = self.score_id
                     try:
-                        scorecard_obj = DashboardScorecard.get_by_name(self.scorecard_name, self.dashboard_client)
-                    except ValueError:
-                        pass
-                
-                # If still not found, try by external ID if available
-                if not scorecard_obj and hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
-                    external_id = self.scorecard.properties.get('externalId')
-                    if external_id:
-                        try:
-                            scorecard_obj = DashboardScorecard.get_by_id(external_id, self.dashboard_client)
-                        except ValueError:
-                            pass
-                
-                if scorecard_obj:
-                    self.logging.info(f"Found scorecard: {scorecard_obj.name}")
-                    self.scorecard_id = scorecard_obj.id
-                    
-                    # Look up Score ID IMMEDIATELY after Scorecard ID to set both as soon as possible
-                    if self.score_id:
-                        try:
-                            # Validate score_id format - must be a DynamoDB UUID with hyphens for Amplify Gen2 schema association
-                            if isinstance(self.score_id, str) and '-' in self.score_id and len(self.score_id.split('-')) == 5:
-                                # Score ID is already in DynamoDB UUID format, use it directly
-                                pass
-                            else:
-                                # Score ID might be an external ID, name, or key - need to resolve it
-                                try:
-                                    score_obj = None
-                                    # Try lookup by name first
-                                    try:
-                                        score_obj = DashboardScore.get_by_name(self.score_id, self.scorecard_id, self.dashboard_client)
-                                    except Exception:
-                                        pass
-                                    
-                                    # Try lookup by key if name didn't work
-                                    if not score_obj:
-                                        try:
-                                            score_obj = DashboardScore.get_by_key(self.score_id, self.scorecard_id, self.dashboard_client)
-                                        except Exception:
-                                            pass
-                                    
-                                    # Try lookup by external ID if name and key didn't work
-                                    if not score_obj:
-                                        try:
-                                            score_obj = DashboardScore.get_by_external_id(self.score_id, self.scorecard_id, self.dashboard_client)
-                                        except Exception:
-                                            pass
-                                    
-                                    if score_obj:
-                                        self.score_id = score_obj.id
-                                        self.logging.info(f"Resolved score identifier to UUID: {self.score_id}")
-                                    else:
-                                        self.logging.warning(f"Could not resolve score identifier: {self.score_id}")
-                                except Exception as score_lookup_error:
-                                    self.logging.warning(f"Failed to lookup score: {score_lookup_error}")
-                        except Exception as e:
-                            self.logging.error(f"Error processing score ID: {str(e)}")
-                    
-                    # Update the evaluation record immediately with both IDs now that they're both set
-                    if hasattr(self, 'evaluation_id') and self.evaluation_id:
-                        update_data = {'scorecardId': self.scorecard_id}
-                        
-                        # Add score_id if it's available and validated
-                        if self.score_id and isinstance(self.score_id, str):
-                            if '-' in self.score_id and len(self.score_id.split('-')) == 5:
-                                update_data['scoreId'] = self.score_id
-                            else:
-                                self.logging.warning(f"Score ID format invalid for evaluation update: {self.score_id}")
-                        
-                        try:
-                            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                                updateEvaluation(input: $input) {
-                                    id
-                                    scorecardId
-                                    scoreId
-                                }
-                            }"""
-                            self.dashboard_client.execute(mutation, {
-                                'input': {
-                                    'id': self.evaluation_id,
-                                    **update_data
-                                }
-                            })
-                        except Exception as e:
-                            self.logging.error(f"Failed to update evaluation record: {str(e)}")
-                            # Continue initialization even if update fails
-                else:
-                    self.logging.error("Failed to find scorecard")
-                    raise ValueError(f"Could not find scorecard with name: {self.scorecard.name}")
+                        mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                            updateEvaluation(input: $input) {
+                                id
+                                scorecardId
+                                scoreId
+                            }
+                        }"""
+                        self.dashboard_client.execute(mutation, {
+                            'input': {
+                                'id': self.evaluation_id,
+                                **update_data
+                            }
+                        })
+                    except Exception as e:
+                        self.logging.error(f"Failed to update evaluation record: {str(e)}")
+                        # Continue initialization even if update fails
             except Exception as e:
-                self.logging.error(f"Error looking up scorecard: {str(e)}")
+                self.logging.error(f"Error resolving IDs: {str(e)}")
                 raise
 
         except Exception as e:

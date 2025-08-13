@@ -2,13 +2,15 @@
 ReportConfiguration Model - Python representation of the GraphQL ReportConfiguration type.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime
 from .base import BaseModel
-from ..client import _BaseAPIClient
 import traceback
 import logging
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ class ReportConfiguration(BaseModel):
         description: Optional[str] = None,
         createdAt: Optional[datetime] = None,
         updatedAt: Optional[datetime] = None,
-        client: Optional[_BaseAPIClient] = None,
+        client: Optional['_BaseAPIClient'] = None,
     ):
         super().__init__(id, client)
         self.name = name
@@ -55,7 +57,7 @@ class ReportConfiguration(BaseModel):
         """
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'ReportConfiguration':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'ReportConfiguration':
         """Create an instance from a dictionary of data."""
         # Handle potential date parsing if needed, though often stored as strings from GraphQL
         # Example:
@@ -96,7 +98,7 @@ class ReportConfiguration(BaseModel):
     @classmethod
     def create(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         name: str,
         accountId: str,
         configuration: str,
@@ -135,7 +137,7 @@ class ReportConfiguration(BaseModel):
             raise
 
     @classmethod
-    def get_by_name(cls, name: str, account_id: str, client: _BaseAPIClient) -> Optional['ReportConfiguration']:
+    def get_by_name(cls, name: str, account_id: str, client: '_BaseAPIClient') -> Optional['ReportConfiguration']:
         """Get a ReportConfiguration by its name within a specific account.
 
         Uses the GSI 'byAccountIdAndName'. Returns the first match found.
@@ -161,7 +163,7 @@ class ReportConfiguration(BaseModel):
     def list_by_account_id(
         cls,
         account_id: str,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         limit: int = 50,
         next_token: Optional[str] = None # Added for potential pagination
     ) -> Dict[str, Any]: # Returns a dict like {'items': [...], 'nextToken': ...}
@@ -215,7 +217,7 @@ class ReportConfiguration(BaseModel):
         cls,
         account_id: str,
         name: str,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         limit: int = 50,
         next_token: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -268,7 +270,7 @@ class ReportConfiguration(BaseModel):
 
     def update(
         self,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         name: str,
         accountId: str,
         configuration: str,

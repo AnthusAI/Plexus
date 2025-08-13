@@ -24,7 +24,7 @@ import pandas as pd
 from unittest.mock import MagicMock, patch, AsyncMock, call
 from decimal import Decimal
 
-from plexus.cli.PredictionCommands import (
+from plexus.cli.prediction.predictions import (
     create_score_input,
     predict_score,
     predict_score_impl,
@@ -130,7 +130,7 @@ class TestScoreInputCreation:
     
     def test_basic_score_input_creation(self, mock_scorecard, sample_pandas_row):
         """Test basic Score.Input creation from sample data"""
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -150,7 +150,7 @@ class TestScoreInputCreation:
     
     def test_score_input_with_complex_metadata(self, mock_scorecard, sample_row_with_complex_metadata):
         """Test Score.Input creation with complex nested metadata"""
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -172,7 +172,7 @@ class TestScoreInputCreation:
         """Test Score.Input creation with empty text"""
         empty_data = pd.DataFrame([{'text': '', 'metadata': '{}'}])
         
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -193,7 +193,7 @@ class TestScoreInputCreation:
             'metadata': '{"invalid": json, syntax}'  # Invalid JSON
         }])
         
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -208,7 +208,7 @@ class TestScoreInputCreation:
     
     def test_score_input_with_none_sample_row(self, mock_scorecard):
         """Test Score.Input creation when sample_row is None (fallback case)"""
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -224,7 +224,7 @@ class TestScoreInputCreation:
     
     def test_score_input_with_missing_input_class(self, mock_scorecard, sample_pandas_row):
         """Test fallback to Score.Input when custom Input class is not available"""
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             # Create a mock score without Input class
             mock_score = MagicMock()
             mock_score.Input = None  # No custom Input class
@@ -248,7 +248,7 @@ class TestScoreInputCreation:
             'metadata': json.dumps({'item_id': 'existing_item_789', 'other': 'data'})
         }])
         
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -270,8 +270,8 @@ class TestPredictionOrchestration:
     @pytest.mark.asyncio
     async def test_successful_predict_score(self, mock_scorecard, sample_pandas_row):
         """Test successful prediction with proper async orchestration"""
-        with patch('plexus.cli.PredictionCommands.predict_score_impl') as mock_predict_impl, \
-             patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.predict_score_impl') as mock_predict_impl, \
+             patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             
             # Mock the score class used in create_score_input
             mock_score = MockScore()
@@ -308,8 +308,8 @@ class TestPredictionOrchestration:
     @pytest.mark.asyncio
     async def test_predict_score_with_batch_processing_pause(self, mock_scorecard, sample_pandas_row):
         """Test that BatchProcessingPause exceptions are properly propagated"""
-        with patch('plexus.cli.PredictionCommands.predict_score_impl') as mock_predict_impl, \
-             patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.predict_score_impl') as mock_predict_impl, \
+             patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
@@ -326,8 +326,8 @@ class TestPredictionOrchestration:
     @pytest.mark.asyncio
     async def test_predict_score_with_general_exception(self, mock_scorecard, sample_pandas_row):
         """Test error handling for general exceptions during prediction"""
-        with patch('plexus.cli.PredictionCommands.predict_score_impl') as mock_predict_impl, \
-             patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.predict_score_impl') as mock_predict_impl, \
+             patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
@@ -344,8 +344,8 @@ class TestPredictionOrchestration:
     @pytest.mark.asyncio
     async def test_predict_score_with_empty_result(self, mock_scorecard, sample_pandas_row):
         """Test handling when prediction returns None or empty result"""
-        with patch('plexus.cli.PredictionCommands.predict_score_impl') as mock_predict_impl, \
-             patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.predict_score_impl') as mock_predict_impl, \
+             patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
@@ -369,7 +369,7 @@ class TestPredictScoreImpl:
         """Test successful prediction implementation with proper setup and cleanup"""
         mock_score = MockScore()
         
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_from_name.return_value = mock_score
             
             input_data = Score.Input(
@@ -427,7 +427,7 @@ class TestPredictScoreImpl:
         
         mock_score = MockScoreNoCosts()
         
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_from_name.return_value = mock_score
             
             input_data = Score.Input(text="Test", metadata={})
@@ -470,7 +470,7 @@ class TestPredictScoreImpl:
         
         mock_score = MockScoreFailingCosts()
         
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_from_name.return_value = mock_score
             
             input_data = Score.Input(text="Test", metadata={})
@@ -556,7 +556,7 @@ class TestEdgeCasesAndErrorHandling:
             'metadata': json.dumps({'source': 'long_call'})
         }])
         
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -579,7 +579,7 @@ class TestEdgeCasesAndErrorHandling:
             'metadata': json.dumps({'language': 'mixed', 'encoding': 'utf-8'})
         }])
         
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -595,7 +595,7 @@ class TestEdgeCasesAndErrorHandling:
     
     def test_score_input_with_numeric_item_id(self, mock_scorecard, sample_pandas_row):
         """Test Score.Input creation with numeric item_id (should be converted to string)"""
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -621,7 +621,7 @@ class TestEdgeCasesAndErrorHandling:
             'metadata': json.dumps(decimal_metadata, default=str)  # Convert Decimal to string
         }])
         
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -643,7 +643,7 @@ class TestIntegrationWithScoreRegistry:
     
     def test_score_from_name_integration(self, mock_scorecard, sample_pandas_row):
         """Test that create_score_input properly integrates with Score.from_name"""
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
             
@@ -663,7 +663,7 @@ class TestIntegrationWithScoreRegistry:
     
     def test_score_from_name_error_handling(self, mock_scorecard, sample_pandas_row):
         """Test error handling when Score.from_name fails"""
-        with patch('plexus.cli.PredictionCommands.Score.from_name') as mock_from_name:
+        with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_from_name.side_effect = ValueError("Score 'nonexistent_score' not found")
             
             with pytest.raises(ValueError, match="Score 'nonexistent_score' not found"):

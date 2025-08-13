@@ -127,7 +127,7 @@ class TestEvaluationCommandsDataDrivenSamples(unittest.TestCase):
         self.content_ids_set = set()
     
     @patch('plexus.scores.Score.Score.load')
-    @patch('plexus.cli.EvaluationCommands.logging')
+    @patch('plexus.cli.evaluation.evaluations.logging')
     def test_successful_score_load(self, mock_logging, mock_score_load):
         """Test successful score loading using Score.load()."""
         # Arrange
@@ -138,7 +138,7 @@ class TestEvaluationCommandsDataDrivenSamples(unittest.TestCase):
         mock_score_load.return_value = mock_score_instance
         
         # Import the function to test
-        from plexus.cli.EvaluationCommands import get_data_driven_samples
+        from plexus.cli.evaluation.evaluations import get_data_driven_samples
         
         # Act
         result = get_data_driven_samples(
@@ -165,7 +165,7 @@ class TestEvaluationCommandsDataDrivenSamples(unittest.TestCase):
         mock_score_load.side_effect = ValueError("Score.load() failed")
         
         # Import the function to test
-        from plexus.cli.EvaluationCommands import get_data_driven_samples
+        from plexus.cli.evaluation.evaluations import get_data_driven_samples
         
         # Act
         result = get_data_driven_samples(
@@ -338,7 +338,7 @@ class TestBackwardCompatibility(unittest.TestCase):
         # Arrange - Score.load() fails
         mock_score_load.side_effect = ValueError("Score.load() failed")
         
-        from plexus.cli.EvaluationCommands import get_data_driven_samples
+        from plexus.cli.evaluation.evaluations import get_data_driven_samples
         
         score_config = {"class": "TestScore", "data": {}}
         

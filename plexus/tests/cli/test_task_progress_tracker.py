@@ -2,7 +2,7 @@ import pytest
 import time
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
-from plexus.cli.task_progress_tracker import TaskProgressTracker, Stage, StageConfig
+from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, Stage, StageConfig
 
 # Add a DummyAPITask class for mocking that includes is_local attribute
 class DummyAPITask:

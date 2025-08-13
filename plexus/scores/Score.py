@@ -633,7 +633,7 @@ class Score(ABC,
         """
         from pathlib import Path
         from ruamel.yaml import YAML
-        from plexus.cli.client_utils import create_client
+        from plexus.cli.shared.client_utils import create_client
         from plexus.cli.shared import get_score_yaml_path
         
         logging.info(f"Loading score '{score_name}' from scorecard '{scorecard_identifier}' (use_cache={use_cache}, yaml_only={yaml_only})")
@@ -654,8 +654,8 @@ class Score(ABC,
                     raise ValueError("API client unavailable and caching disabled")
             
             # Import API resolution functions
-            from plexus.cli.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
-            from plexus.cli.fetch_scorecard_structure import fetch_scorecard_structure
+            from plexus.cli.shared.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
+            from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
             
             # Resolve scorecard identifier
             scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)

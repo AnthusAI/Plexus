@@ -21,9 +21,9 @@ from pydantic import Field, validator
 
 from plexus.data.DataCache import DataCache
 from plexus.cli.feedback.feedback_service import FeedbackService
-from plexus.cli.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
-from plexus.cli.client_utils import create_client
-from plexus.cli.reports.utils import resolve_account_id_for_command
+from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+from plexus.cli.shared.client_utils import create_client
+from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
 
 logger = logging.getLogger(__name__)
