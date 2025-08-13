@@ -48,7 +48,7 @@ describe('cost-analysis utilities', () => {
   test('when only scoreId provided (no scorecardId), defaults to account query and relies on client-side filtering', () => {
     const q = __testUtils.buildQuery({ accountId: 'A1', scoreId: 'S1' })
     expect(q.topKey).toBe('listScoreResultByAccountIdAndUpdatedAt')
-    expect(q.variableNames).toEqual(['accountId'])
+    expect(q.variableNames).toEqual(['accountId', 'scoreId'])
   })
 
   test('buildQuery selects scorecard-based GSI when scorecardId provided', () => {

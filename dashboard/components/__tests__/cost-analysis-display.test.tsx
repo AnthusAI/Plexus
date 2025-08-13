@@ -22,7 +22,7 @@ describe('CostAnalysisDisplay', () => {
     const data: CostAnalysisDisplayData = {
       summary: baseSummary,
       groups: [
-        { group: { scoreId: 'S1', scoreName: 'Score One' }, min_cost: 0.01, q1_cost: 0.01, median_cost: 0.015, q3_cost: 0.02, max_cost: 0.02, },
+        { group: { scoreId: 'S1', scoreName: 'Score One' }, min_cost: 0.01, q1_cost: 0.01, median_cost: 0.015, q3_cost: 0.02, max_cost: 0.02, values: [0.01, 0.015, 0.02] },
       ],
       filters: { scoreId: 'S1' }
     }

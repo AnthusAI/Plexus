@@ -250,7 +250,7 @@ export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) 
                 <VictoryAxis
                   dependentAxis
                   orientation="bottom"
-                  tickFormat={(t) => `$${Number(t).toFixed(2)}`}
+                  tickFormat={(t: any) => `$${Number(t).toFixed(2)}`}
                   style={{
                     axis: { stroke: chartTextColor },
                     tickLabels: { fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily },
@@ -356,7 +356,7 @@ export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) 
               >
                 <VictoryAxis
                   orientation="bottom"
-                  tickFormat={(t) => `$${Number(t).toFixed(2)}`}
+                  tickFormat={(t: any) => `$${Number(t).toFixed(2)}`}
                   style={{
                     axis: { stroke: chartTextColor },
                     tickLabels: { fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily },
