@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube, MessageCircleMore } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube, MessageCircleMore, Coins } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -62,6 +62,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onEdit?: () => void
   onViewData?: () => void
   onFeedbackAnalysis?: () => void
+  onCostAnalysis?: () => void
   isSelected?: boolean
   onClick?: () => void
   isFullWidth?: boolean
@@ -115,6 +116,7 @@ interface DetailContentProps {
   onClose?: () => void
   onViewData?: () => void
   onFeedbackAnalysis?: () => void
+  onCostAnalysis?: () => void
   onEdit?: () => void
   onEditChange?: (changes: Partial<ScorecardData>) => void
   onAddSection?: () => void
@@ -139,6 +141,7 @@ export const DetailContent = React.memo(function DetailContent({
   onClose,
   onViewData,
   onFeedbackAnalysis,
+  onCostAnalysis,
   onEditChange,
   onAddSection,
   onMoveSection,
@@ -568,6 +571,17 @@ export const DetailContent = React.memo(function DetailContent({
                     Analyze Feedback
                   </DropdownMenu.Item>
                 )}
+                {onCostAnalysis && (
+                  <DropdownMenu.Item 
+                    className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    onSelect={() => {
+                      onCostAnalysis();
+                    }}
+                  >
+                    <Coins className="mr-2 h-4 w-4" />
+                    Analyze Cost
+                  </DropdownMenu.Item>
+                )}
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
@@ -941,6 +955,7 @@ export default function ScorecardComponent({
   onEdit, 
   onViewData, 
   onFeedbackAnalysis,
+  onCostAnalysis,
   variant = 'grid', 
   isSelected,
   onClick,
@@ -1098,6 +1113,7 @@ export default function ScorecardComponent({
               onClose={onClose}
               onViewData={onViewData}
               onFeedbackAnalysis={onFeedbackAnalysis}
+              onCostAnalysis={onCostAnalysis}
               onEditChange={handleEditChange}
               onAddSection={handleAddSection}
               onMoveSection={handleMoveSection}
