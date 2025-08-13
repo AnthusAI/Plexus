@@ -112,6 +112,7 @@ const schema = a.schema({
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scorecardId'),
             dataSources: a.hasMany('DataSource', 'scorecardId'),
             dataSets: a.hasMany('DataSet', 'scorecardId'),
+            experiments: a.hasMany('Experiment', 'scorecardId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -171,7 +172,8 @@ const schema = a.schema({
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required(),
             isDisabled: a.boolean(),
-            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scoreId')
+            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scoreId'),
+            experiments: a.hasMany('Experiment', 'scoreId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
