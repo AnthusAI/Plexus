@@ -48,7 +48,7 @@ type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "r
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ExperimentIndexFields = "name" | "status" | "rootNodeId" | "currentGeneration";
+type ExperimentIndexFields = "status" | "rootNodeId";
 type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "versionNumber" | "status" | "childrenCount";
 type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "versionNumber" | "seq" | "status";
 
@@ -875,11 +875,9 @@ const schema = a.schema({
 
     Experiment: a
         .model({
-            name: a.string(),
             featured: a.boolean(),
             status: a.enum(['RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']),
             rootNodeId: a.id(),
-            currentGeneration: a.integer().required(),
             nodes: a.hasMany('ExperimentNode', 'experimentId'),
         })
         .authorization((allow) => [
@@ -887,10 +885,8 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: ExperimentIndexFields) => any) => [
-            idx("name"),
             idx("status"),
-            idx("rootNodeId"),
-            idx("currentGeneration")
+            idx("rootNodeId")
         ]),
 
     ExperimentNode: a
