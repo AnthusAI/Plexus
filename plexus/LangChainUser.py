@@ -29,6 +29,7 @@ class LangChainUser:
         model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
         base_model_name: Optional[str] = None
+        reasoning_effort: Optional[str] = "low"
         model_region: Optional[str] = None
         temperature: Optional[float] = 0
         top_p: Optional[float] = 0.03
@@ -89,6 +90,14 @@ class LangChainUser:
                     prompt_tokens_details = usage.get("prompt_tokens_details", {})
                     self.cached_tokens += prompt_tokens_details.get("cached_tokens", 0)
 
+            def on_llm_error(self, error, **kwargs):
+                try:
+                    logging.error(
+                        f"LLM error: {type(error).__name__}: {error} | context_keys={list(kwargs.keys())}"
+                    )
+                except Exception:
+                    pass
+
             def on_chain_end(self, outputs, **kwargs):
                 logging.info(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}, Cached: {self.cached_tokens}")
 
@@ -119,7 +128,10 @@ class LangChainUser:
             callbacks = [self.openai_callback, self.token_counter]
             
             # Models starting with or containing "gpt-5" do not support temperature/top_p
-            is_gpt5 = (params.model_name or "").lower().find("gpt-5") != -1
+            model_lc = (params.model_name or "").lower()
+            is_gpt5 = model_lc.find("gpt-5") != -1
+            # Reasoning/Responses API support for OpenAI models (o*/gpt-5*)
+            supports_reasoning = model_lc.startswith("gpt-5") or model_lc.startswith("o")
 
             if params.model_provider == "AzureChatOpenAI":
                 azure_kwargs = {
@@ -131,18 +143,49 @@ class LangChainUser:
                 }
                 if not is_gpt5 and params.temperature is not None:
                     azure_kwargs["temperature"] = params.temperature
-                base_model = AzureChatOpenAI(**azure_kwargs)
+                try:
+                    base_model = AzureChatOpenAI(**azure_kwargs)
+                except TypeError as e:
+                    logging.error(f"AzureChatOpenAI init TypeError: {e}.")
+                    raise
+                except Exception as e:
+                    logging.error(f"AzureChatOpenAI init unexpected error: {type(e).__name__}: {e}")
+                    raise
             else:  # ChatOpenAI
+                # Resolve reasoning effort (guard invalid values)
+                allowed_efforts = {"low", "medium", "high", "auto"}
+                effort = (params.reasoning_effort or "low").lower()
+                if effort not in allowed_efforts:
+                    logging.info(f"Invalid reasoning_effort '{params.reasoning_effort}', defaulting to 'low'")
+                    effort = "low"
+                reasoning = {"effort": effort}
+
                 chat_kwargs = {
                     "model": params.model_name,
                     "api_key": os.getenv("OPENAI_API_KEY"),
                     "max_tokens": max_tokens,
                 }
+                if supports_reasoning:
+                    # Use the Responses API for models that support reasoning
+                    chat_kwargs["use_responses_api"] = True
+                    # Accumulate model_kwargs rather than replace later
+                    chat_kwargs.setdefault("model_kwargs", {})
+                    chat_kwargs["model_kwargs"]["reasoning"] = reasoning
+                else:
+                    pass
                 if not is_gpt5 and params.top_p is not None:
-                    chat_kwargs["model_kwargs"] = {"top_p": params.top_p}
+                    chat_kwargs.setdefault("model_kwargs", {})
+                    chat_kwargs["model_kwargs"]["top_p"] = params.top_p
                 if not is_gpt5 and params.temperature is not None:
                     chat_kwargs["temperature"] = params.temperature
-                base_model = ChatOpenAI(**chat_kwargs)
+                try:
+                    base_model = ChatOpenAI(**chat_kwargs)
+                except TypeError as e:
+                    logging.error(f"ChatOpenAI init TypeError: {e}.")
+                    raise
+                except Exception as e:
+                    logging.error(f"ChatOpenAI init unexpected error: {type(e).__name__}: {e}")
+                    raise
         elif params.model_provider == "BedrockChat":
             base_model = ChatBedrock(
                 model_id=params.model_name or "anthropic.claude-3-haiku-20240307-v1:0",
@@ -239,6 +282,44 @@ class LangChainUser:
                     if 'azure' in str(thread._target).lower():
                         thread.name = f"AzureCredential-{thread.ident}"
         return self._credential
+
+    # === Normalization helpers for Responses API outputs ===
+    def _normalize_content_to_text(self, content) -> str:
+        """
+        Normalize AIMessage.content which can be a string or a list of content blocks
+        (as returned by the OpenAI Responses API) into a plain string.
+        """
+        try:
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                collected_parts = []
+                for block in content:
+                    if isinstance(block, dict):
+                        # Prefer 'text', fall back to 'content'
+                        text_val = block.get('text') or block.get('content') or ''
+                        if isinstance(text_val, str) and text_val:
+                            collected_parts.append(text_val)
+                    else:
+                        try:
+                            collected_parts.append(str(block))
+                        except Exception:
+                            pass
+                return "\n".join(part for part in collected_parts if part)
+        except Exception as ex:
+            logging.error(f"Error normalizing content to text: {ex}")
+        return str(content)
+
+    def normalize_response_text(self, response) -> str:
+        """
+        Extract a plain text string from a LangChain AIMessage-like response.
+        """
+        try:
+            content = getattr(response, 'content', response)
+            return self._normalize_content_to_text(content)
+        except Exception as ex:
+            logging.error(f"Error normalizing response: {ex}")
+            return str(getattr(response, 'content', ''))
 
     async def cleanup(self):
         """Clean up Azure credentials and any associated threads."""

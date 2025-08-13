@@ -14,7 +14,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from plexus.cli.memoized_resolvers import (
+from plexus.cli.shared.memoized_resolvers import (
     memoized_resolve_scorecard_identifier,
     memoized_resolve_score_identifier,
     clear_resolver_caches,

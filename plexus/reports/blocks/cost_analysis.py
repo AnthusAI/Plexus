@@ -54,7 +54,7 @@ class CostAnalysis(BaseReportBlock):
             if scorecard_identifier:
                 try:
                     # Reuse CLI resolver for consistency if available
-                    from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+                    from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
                     resolved_scorecard_id = resolve_scorecard_identifier(client, str(scorecard_identifier))
                 except Exception as e:
                     self._log(f"Resolver error for scorecard: {e}", level="WARNING")

@@ -17,7 +17,7 @@ logging.basicConfig(
 
 def test_load_scorecard_from_api():
     """Test the load_scorecard_from_api function with a known scorecard."""
-    from plexus.cli.EvaluationCommands import load_scorecard_from_api
+    from plexus.cli.evaluation.evaluations import load_scorecard_from_api
     
     # Use a known scorecard from the dashboard
     scorecard_key = "cs3dealsaver"

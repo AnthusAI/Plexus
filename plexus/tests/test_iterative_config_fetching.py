@@ -17,8 +17,8 @@ from typing import Dict, List, Any
 # Add the plexus module to the path for testing
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from plexus.cli.iterative_config_fetching import iteratively_fetch_configurations
-from plexus.cli.dependency_discovery import build_name_id_mappings
+from plexus.cli.shared.iterative_config_fetching import iteratively_fetch_configurations
+from plexus.cli.shared.dependency_discovery import build_name_id_mappings
 
 
 class TestIterativeConfigFetching:

@@ -113,9 +113,9 @@ def setup_plexus_imports():
             # Attempt to import Plexus modules for core functionality
             from plexus.dashboard.api.client import PlexusDashboardClient
             # Assign imported functions to pre-defined names
-            from plexus.cli.client_utils import create_client as _create_dashboard_client
-            from plexus.cli.ScorecardCommands import resolve_account_identifier as _resolve_account_identifier
-            from plexus.cli.identifier_resolution import resolve_scorecard_identifier as _resolve_scorecard_identifier
+            from plexus.cli.shared.client_utils import create_client as _create_dashboard_client
+            from plexus.cli.scorecard.scorecards import resolve_account_identifier as _resolve_account_identifier
+            from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier as _resolve_scorecard_identifier
             
             # Create a wrapper around create_dashboard_client to add better error logging
             def enhanced_create_dashboard_client():

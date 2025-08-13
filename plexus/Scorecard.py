@@ -103,6 +103,9 @@ class Scorecard:
         self.number_of_texts_processed = 0
 
         self.cloudwatch_logger = CloudWatchLogger()
+        # Optional preference to load only from local YAML files (no API)
+        # Can be set by callers (e.g., CLI/MCP) after construction as well
+        self.yaml_only = False
         
         # For API-first loading
         if api_data is not None:
@@ -524,23 +527,97 @@ class Scorecard:
         item_tokens = len(encoding.encode(text))
         logging.info(f"Item tokens for scorecard: {item_tokens}")
 
-        # Add dependend scores to the subset of score names.
+        # Helper: ensure a score is loaded/registered (API/YAML on-demand)
+        def ensure_score_loaded(score_name: str) -> bool:
+            # Already registered
+            if self.score_registry.get_properties(score_name):
+                return True
+            try:
+                logging.info(f"Attempting on-demand load for missing score '{score_name}'")
+                # Prefer provided identifier; fallback to display name if needed
+                scorecard_identifier = self.scorecard_identifier or (
+                    self.name() if callable(self.name) else self.name
+                )
+                # Use the standardized loader which pulls champion config from API or YAML cache
+                # Honor yaml-only preference when loading scores on-demand
+                yaml_only_prefer = getattr(self, 'yaml_only', False)
+                loaded_instance = Score.load(
+                    scorecard_identifier=scorecard_identifier,
+                    score_name=score_name,
+                    use_cache=True,
+                    yaml_only=yaml_only_prefer
+                )
+                if not loaded_instance:
+                    logging.warning(f"Failed to load score instance for '{score_name}'")
+                    return False
+
+                # Build properties from the loaded instance's parameters
+                parameters_dict = loaded_instance.parameters.model_dump()
+                # Ensure required metadata is present
+                parameters_dict['name'] = parameters_dict.get('name') or score_name
+                parameters_dict['class'] = loaded_instance.__class__.__name__
+
+                # Register into this instance's registry
+                self.score_registry.register(
+                    cls=loaded_instance.__class__,
+                    properties=parameters_dict,
+                    name=parameters_dict.get('name'),
+                    key=parameters_dict.get('key'),
+                    id=parameters_dict.get('id')
+                )
+
+                # Maintain self.scores list so dependency graph builder can see it
+                try:
+                    if not hasattr(self, 'scores') or not isinstance(self.scores, list):
+                        # Start from class scores if available
+                        base_scores = getattr(self.__class__, 'scores', [])
+                        self.scores = list(base_scores) if isinstance(base_scores, list) else []
+                    # Avoid duplicates by name
+                    existing_names = {s.get('name') for s in self.scores if isinstance(s, dict)}
+                    if parameters_dict.get('name') not in existing_names:
+                        self.scores.append(dict(parameters_dict))
+                except Exception as append_err:
+                    logging.warning(f"Could not append loaded score '{score_name}' to self.scores: {append_err}")
+
+                logging.info(f"On-demand loaded and registered score '{score_name}'")
+                return True
+            except Exception as e:
+                logging.warning(f"On-demand load failed for score '{score_name}': {e}")
+                return False
+
+        # Ensure requested scores themselves are loaded first
+        for requested_score in list(subset_of_score_names):
+            if not self.score_registry.get_properties(requested_score):
+                loaded_ok = ensure_score_loaded(requested_score)
+                if not loaded_ok:
+                    logging.warning(f"No properties found for score: {requested_score}")
+
+        # Add dependent scores to the subset of score names, loading any that are missing
         dependent_scores_added = []
         for score_name in subset_of_score_names:
             score_info = self.score_registry.get_properties(score_name)
             if score_info is None:
-                logging.warning(f"No properties found for score: {score_name}")
-                continue
+                # Try on-demand load before giving up
+                if not ensure_score_loaded(score_name):
+                    logging.warning(f"No properties found for score: {score_name}")
+                    continue
+                score_info = self.score_registry.get_properties(score_name)
                 
             if 'depends_on' in score_info:
                 deps = score_info['depends_on']
                 if isinstance(deps, list):
                     for dependency in deps:
+                        # Ensure dependency is registered/loaded
+                        if not self.score_registry.get_properties(dependency):
+                            ensure_score_loaded(dependency)
                         if dependency not in subset_of_score_names:
                             dependent_scores_added.append(dependency)
                             subset_of_score_names.append(dependency)
                 elif isinstance(deps, dict):
                     for dependency in deps.keys():
+                        # Ensure dependency is registered/loaded
+                        if not self.score_registry.get_properties(dependency):
+                            ensure_score_loaded(dependency)
                         if dependency not in subset_of_score_names:
                             dependent_scores_added.append(dependency)
                             subset_of_score_names.append(dependency)

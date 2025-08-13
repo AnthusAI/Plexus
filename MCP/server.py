@@ -10,7 +10,9 @@ from shared.setup import setup_plexus_imports, restore_stdout, redirect_stdout_t
 from shared.utils import load_env_file, initialize_default_account, get_default_account_id
 
 # Import tool registration functions
-from tools.util.debug import register_debug_tools
+from tools.util.think import register_think_tool
+from tools.util.docs import register_docs_tool
+from tools.util.think import register_think_tool
 from tools.scorecard.scorecards import register_scorecard_tools
 from tools.score.management import register_score_tools
 
@@ -73,8 +75,9 @@ def register_all_tools():
     logger.info("Registering MCP tools...")
     
     # Register utility tools
-    register_debug_tools(mcp)
-    logger.info("Registered debug/utility tools")
+    register_think_tool(mcp)
+    register_docs_tool(mcp)
+    logger.info("Registered utility tools")
     
     # Register scorecard tools
     register_scorecard_tools(mcp)
