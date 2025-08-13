@@ -5,6 +5,7 @@ import { useAccount } from '@/app/contexts/AccountContext'
 import { fetchCostAnalysisScoreResults, aggregateCostByScore, type ScoreResultRecord } from '@/utils/cost-analysis'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { CostAnalysisDisplay, type CostAnalysisDisplayData } from '@/components/ui/cost-analysis-display'
@@ -37,6 +38,7 @@ export const AdHocCostAnalysis: React.FC<AdHocCostAnalysisProps> = ({ scorecardI
   const { selectedAccount } = useAccount()
   const [hours, setHours] = useState<number | null>(defaultHours)
   const [days, setDays] = useState<number | null>(defaultDays)
+  const [limit, setLimit] = useState<number>(200)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [records, setRecords] = useState<ScoreResultRecord[] | null>(null)
@@ -52,8 +54,7 @@ export const AdHocCostAnalysis: React.FC<AdHocCostAnalysisProps> = ({ scorecardI
         scoreId,
         hours: hours ?? undefined,
         days: days ?? undefined,
-        // Use a lower default for per-score (more focused view)
-        limit: scoreId ? 250 : 1000,
+        limit: limit,
       })
       setRecords(res.items)
     } catch (e: any) {
@@ -66,11 +67,11 @@ export const AdHocCostAnalysis: React.FC<AdHocCostAnalysisProps> = ({ scorecardI
 
   useEffect(() => { load() // initial
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAccount?.id, scorecardId, scoreId])
+  }, [selectedAccount?.id, scorecardId, scoreId, limit])
 
   const data: CostAnalysisDisplayData | null = useMemo(() => {
     if (!records) return null
-    const { summary, groups } = aggregateCostByScore(records)
+    const { summary, groups, itemAnalysis } = aggregateCostByScore(records)
 
     return {
       summary: {
@@ -92,6 +93,12 @@ export const AdHocCostAnalysis: React.FC<AdHocCostAnalysisProps> = ({ scorecardI
         max_cost: g.max_cost,
         values: g.values,
       })),
+      itemAnalysis: {
+        count: itemAnalysis.count,
+        total_cost: itemAnalysis.total_cost,
+        average_cost: itemAnalysis.average_cost,
+        average_calls: itemAnalysis.average_calls,
+      },
       window: { hours: hours ?? undefined, days: days ?? undefined },
       filters: { scorecardId, scoreId }
     }
@@ -112,6 +119,19 @@ export const AdHocCostAnalysis: React.FC<AdHocCostAnalysisProps> = ({ scorecardI
             <SelectItem value="48">Last 48 hours</SelectItem>
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-1">
+          <label htmlFor="limit-input" className="text-sm text-muted-foreground">Limit:</label>
+          <Input
+            id="limit-input"
+            type="number"
+            value={limit}
+            onChange={(e) => setLimit(Math.max(1, Math.min(1000, parseInt(e.target.value) || 200)))}
+            disabled={loading}
+            className="w-20 h-8"
+            min="1"
+            max="1000"
+          />
+        </div>
         <Button variant="ghost" size="icon" onClick={load} disabled={loading} className="h-8 w-8 rounded-md border-0 shadow-none bg-border" aria-label="Refresh cost analysis">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
         </Button>

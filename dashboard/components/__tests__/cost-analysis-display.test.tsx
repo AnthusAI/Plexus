@@ -4,10 +4,12 @@ import { CostAnalysisDisplay, type CostAnalysisDisplayData } from '../ui/cost-an
 
 describe('CostAnalysisDisplay', () => {
   const baseSummary = { count: 2, total_cost: '0.03', average_cost: '0.015', average_calls: 1 }
+  const baseItemAnalysis = { count: 2, total_cost: 0.03, average_cost: 0.015, average_calls: 1 }
 
   it('renders scorecard view with box plot heading only', () => {
     const data: CostAnalysisDisplayData = {
       summary: baseSummary,
+      itemAnalysis: baseItemAnalysis,
       groups: [
         { group: { scoreId: 'S1', scoreName: 'Score One' }, min_cost: 0.01, q1_cost: 0.01, median_cost: 0.015, q3_cost: 0.02, max_cost: 0.02 },
         { group: { scoreId: 'S2', scoreName: 'Score Two' }, min_cost: 0.005, q1_cost: 0.01, median_cost: 0.02, q3_cost: 0.03, max_cost: 0.04 },
@@ -21,6 +23,7 @@ describe('CostAnalysisDisplay', () => {
   it('renders single-score view with Box Plot and Histogram headings', () => {
     const data: CostAnalysisDisplayData = {
       summary: baseSummary,
+      itemAnalysis: baseItemAnalysis,
       groups: [
         { group: { scoreId: 'S1', scoreName: 'Score One' }, min_cost: 0.01, q1_cost: 0.01, median_cost: 0.015, q3_cost: 0.02, max_cost: 0.02, values: [0.01, 0.015, 0.02] },
       ],
