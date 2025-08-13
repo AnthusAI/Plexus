@@ -237,7 +237,7 @@ export const CostAnalysisDisplay: React.FC<Props> = ({ data, title, subtitle }) 
                 <VictoryAxis
                   orientation="left"
                   tickValues={boxData.map(d => d.x as any)}
-                  tickFormat={(t) => splitLabelToTwoLines(String(t))}
+                  tickFormat={(t: any) => splitLabelToTwoLines(String(t))}
                   tickLabelComponent={<VictoryLabel lineHeight={1.1} style={{ fontSize: 10, fill: chartTextColor, fontFamily: chartFontFamily }} />}
                   style={{
                     axis: { stroke: chartTextColor },
