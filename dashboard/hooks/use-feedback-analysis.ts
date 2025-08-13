@@ -133,7 +133,7 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
       // For scorecard analysis, we need to fetch scoreIds first, then query each one
       if (config.scorecardId && !config.scoreId && config.accountId) {
         console.log(`🚀 Using GSI for scorecard analysis: scorecardId=${config.scorecardId}`);
-        console.log(`📅 Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+          console.log(`📅 Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
         try {
           // First, get all scores in this scorecard directly from the Scorecard
@@ -193,25 +193,25 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
               do {
                 scorePageCount++;
                 
-                const gsiParams = {
-                  accountId: config.accountId,
-                  scorecardIdScoreIdUpdatedAt: {
-                    between: [
-                      {
-                        scorecardId: config.scorecardId,
-                        scoreId: scoreId,
-                        updatedAt: startDate.toISOString()
-                      },
-                      {
-                        scorecardId: config.scorecardId,
-                        scoreId: scoreId,
-                        updatedAt: endDate.toISOString()
-                      }
-                    ]
-                  },
-                  limit: 1000,
-                  nextToken: scoreNextToken
-                };
+              const gsiParams = {
+                accountId: config.accountId,
+                scorecardIdScoreIdEditedAt: {
+                  between: [
+                    {
+                      scorecardId: config.scorecardId,
+                      scoreId: scoreId,
+                      editedAt: startDate.toISOString()
+                    },
+                    {
+                      scorecardId: config.scorecardId,
+                      scoreId: scoreId,
+                      editedAt: endDate.toISOString()
+                    }
+                  ]
+                },
+                limit: 1000,
+                nextToken: scoreNextToken
+              };
                 
                 console.log(`🔍 Score ${scoreId} Page ${scorePageCount} query with nextToken: ${scoreNextToken ? 'yes' : 'no'}`);
                 
@@ -264,23 +264,45 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
         console.log(`📅 Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
         try {
+          // Try to resolve the score name to avoid showing IDs in headers
+          try {
+            const getScoreQuery = `
+              query GetScore($id: ID!) {
+                getScore(id: $id) {
+                  id
+                  name
+                }
+              }
+            `;
+            const getScoreResp = await client.graphql({
+              query: getScoreQuery,
+              variables: { id: config.scoreId }
+            }) as any;
+            const foundName = getScoreResp?.data?.getScore?.name;
+            if (foundName) {
+              scoreNameLookup[config.scoreId] = foundName;
+            }
+          } catch (nameErr) {
+            console.warn('⚠️ Unable to resolve score name from API, will fall back to provided config.scoreName', nameErr);
+          }
+
           // Use the byAccountScorecardScoreEditedAt GSI for efficient per-score queries
           do {
             pageCount++;
             
             const gsiParams = {
               accountId: config.accountId,
-              scorecardIdScoreIdUpdatedAt: {
+              scorecardIdScoreIdEditedAt: {
                 between: [
                   {
                     scorecardId: config.scorecardId,
                     scoreId: config.scoreId,
-                    updatedAt: startDate.toISOString()
+                    editedAt: startDate.toISOString()
                   },
                   {
                     scorecardId: config.scorecardId,
                     scoreId: config.scoreId,
-                    updatedAt: endDate.toISOString()
+                    editedAt: endDate.toISOString()
                   }
                 ]
               },
@@ -398,20 +420,14 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
         } : undefined
       }));
 
-      // Apply client-side date filtering if needed (GSI queries already filter by date)
-      let filteredItems = transformedItems;
-      if ((config.startDate || config.days) && !config.scoreId && !config.scorecardId) {
-        // Only apply client-side date filtering for non-GSI queries (scorecard queries)
-        const startDate = config.startDate || new Date(Date.now() - (config.days || 30) * 24 * 60 * 60 * 1000);
-        const endDate = config.endDate || new Date();
-        filteredItems = filterFeedbackByDateRange(transformedItems, startDate, endDate);
-        
-        console.log(`📅 Client-side date filtering: ${transformedItems.length} → ${filteredItems.length} items`);
-        console.log(`📅 Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-      } else if (config.scoreId || config.scorecardId) {
-        console.log(`📅 GSI already filtered by date: ${transformedItems.length} items`);
-        console.log(`📅 Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-      }
+      // Always apply client-side date filtering to ensure correct period, regardless of query path
+      const filteredItems = filterFeedbackByDateRange(
+        transformedItems,
+        startDate,
+        endDate
+      );
+      console.log(`📅 Client-side date filtering applied: ${transformedItems.length} → ${filteredItems.length} items`);
+      console.log(`📅 Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
       console.log(`📋 Final filtered items: ${filteredItems.length}`);
 

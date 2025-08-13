@@ -27,7 +27,8 @@ import {
   Columns2,
   Square,
   X,
-  MessageCircleMore
+  MessageCircleMore,
+  Coins
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "./CardButton"
@@ -45,6 +46,7 @@ import { ScorecardDashboardSkeleton } from "./loading-skeleton"
 import { Task, TaskHeader, TaskContent } from "./Task"
 import { observeTaskUpdates, observeTaskStageUpdates } from "@/utils/subscriptions"
 import { AdHocFeedbackAnalysis } from "@/components/ui/ad-hoc-feedback-analysis"
+import { AdHocCostAnalysis } from "@/components/ui/ad-hoc-cost-analysis"
 import { motion, AnimatePresence } from 'framer-motion'
 
 const ACCOUNT_KEY = 'call-criteria'
@@ -107,6 +109,12 @@ export default function ScorecardsComponent({
     scorecardId?: string;
     scoreId?: string;
     scoreName?: string;
+    type: 'scorecard' | 'score';
+  } | null>(null)
+  const [costAnalysisPanel, setCostAnalysisPanel] = useState<{
+    isOpen: boolean;
+    scorecardId?: string;
+    scoreId?: string;
     type: 'scorecard' | 'score';
   } | null>(null)
   const router = useRouter()
@@ -325,6 +333,23 @@ export default function ScorecardsComponent({
     }
   };
 
+  // Handle opening cost analysis for a scorecard
+  const handleScorecardCostAnalysis = (scorecardId: string) => {
+    console.log('Opening cost analysis for scorecard:', scorecardId);
+    setCostAnalysisPanel({ isOpen: true, scorecardId, type: 'scorecard' });
+    setIsTaskViewActive(false);
+    if (selectedScore) {
+      setSelectedScore(null);
+      setMaximizedScoreId(null);
+    }
+  };
+
+  const handleScoreCostAnalysis = (scoreId: string, scorecardId?: string) => {
+    console.log('Opening cost analysis for score:', scoreId);
+    setCostAnalysisPanel({ isOpen: true, scoreId, scorecardId, type: 'score' });
+    setIsTaskViewActive(false);
+  };
+
   // Handle opening feedback analysis for a specific score
   const handleScoreFeedbackAnalysis = (scoreId: string, scoreName?: string, scorecardId?: string) => {
     console.log('Opening feedback analysis for score:', scoreId);
@@ -361,6 +386,10 @@ export default function ScorecardsComponent({
     // Only update state if the selected scorecard has changed
     if (scorecard?.id !== selectedScorecard?.id) {
       console.log('🔵 Scorecard selection changed, updating state...');
+      // Close any open Cost Analysis when selecting a new scorecard
+      if (costAnalysisPanel?.isOpen) {
+        setCostAnalysisPanel(null);
+      }
       
       setSelectedScorecard(scorecard);
       // Conditionally reset selected score:
@@ -548,6 +577,10 @@ export default function ScorecardsComponent({
       // Reset item selection when selecting a score
       setSelectedItem(null);
       setIsCreatingItem(false);
+      // Close any open Cost Analysis when selecting a new score
+      if (costAnalysisPanel?.isOpen) {
+        setCostAnalysisPanel(null);
+      }
       
       // Close feedback analysis if open when selecting a score
       if (feedbackAnalysisPanel?.isOpen) {
@@ -1103,6 +1136,7 @@ export default function ScorecardsComponent({
             // TODO: Implement data source view
           }}
           onFeedbackAnalysis={() => handleScorecardFeedbackAnalysis(selectedScorecard.id)}
+          onCostAnalysis={() => handleScorecardCostAnalysis(selectedScorecard.id)}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
           onClose={handleCloseScorecard}
@@ -1225,6 +1259,7 @@ export default function ScorecardsComponent({
             }
           }}
           onFeedbackAnalysis={() => handleScoreFeedbackAnalysis(selectedScore.id, selectedScore.name, selectedScorecard?.id)}
+          onCostAnalysis={() => handleScoreCostAnalysis(selectedScore.id, selectedScorecard?.id)}
           exampleItems={scorecardExamples.map(example => {
             // Extract item ID from "item:uuid" format
             const itemId = example.replace('item:', '');
@@ -1415,6 +1450,7 @@ export default function ScorecardsComponent({
                           onClick={() => handleSelectScorecard(scorecard)}
                           onEdit={() => handleEdit(scorecard)}
                           onFeedbackAnalysis={() => handleScorecardFeedbackAnalysis(scorecard.id)}
+                          onCostAnalysis={() => handleScorecardCostAnalysis(scorecard.id)}
                         />
                       </div>
                     )
@@ -1439,9 +1475,9 @@ export default function ScorecardsComponent({
         <div className="flex-1 flex overflow-hidden">
           {/* When we have a selected score and feedback analysis, show score + feedback layout */}
           <AnimatePresence mode="wait">
-            {selectedScore && feedbackAnalysisPanel?.isOpen ? (
+            {selectedScore && (feedbackAnalysisPanel?.isOpen || costAnalysisPanel?.isOpen) ? (
               <motion.div
-                key="score-feedback-layout"
+                key="score-analysis-layout"
                 initial={{ opacity: 0, x: '100%' }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: '100%' }}
@@ -1496,40 +1532,52 @@ export default function ScorecardsComponent({
                     group-hover:bg-accent" />
                 </motion.div>
                 
-                {/* Feedback Analysis Panel (Right Column) - Take remaining space */}
+                {/* Analysis Panel (Right Column) - Take remaining space */}
                 <div className="flex-1 overflow-hidden">
                 <div className="h-full overflow-y-auto overflow-x-hidden w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors bg-card-selected flex flex-col">
                   <div className="p-4 w-full flex-1 flex flex-col min-h-0">
                     <div className="w-full h-full flex flex-col min-h-0">
                       <div className="flex justify-between items-center mb-4 flex-shrink-0">
                         <div className="flex items-center gap-2">
-                          <MessageCircleMore className="h-5 w-5 text-foreground" />
-                          <h2 className="text-lg font-semibold">Feedback Analysis</h2>
+                          {feedbackAnalysisPanel?.isOpen ? (
+                            <MessageCircleMore className="h-5 w-5 text-foreground" />
+                          ) : (
+                            <Coins className="h-5 w-5 text-foreground" />
+                          )}
+                          <h2 className="text-lg font-semibold">{feedbackAnalysisPanel?.isOpen ? 'Feedback Analysis' : 'Cost Analysis'}</h2>
                         </div>
                         <CardButton
                           icon={X}
-                          onClick={handleCloseFeedbackAnalysis}
-                          aria-label="Close feedback analysis"
+                          onClick={() => { setFeedbackAnalysisPanel(null); setCostAnalysisPanel(null); }}
+                          aria-label="Close analysis"
                         />
                       </div>
                       <div className="flex-1 overflow-y-auto min-h-0">
-                        <AdHocFeedbackAnalysis
-                          scorecardId={feedbackAnalysisPanel.scorecardId}
-                          scoreId={feedbackAnalysisPanel.scoreId}
-                          scoreName={feedbackAnalysisPanel.scoreName}
-                          showHeader={false}
-                          showConfiguration={true}
-                          defaultDays={7}
-                        />
+                        {feedbackAnalysisPanel?.isOpen ? (
+                          <AdHocFeedbackAnalysis
+                            scorecardId={feedbackAnalysisPanel.scorecardId}
+                            scoreId={feedbackAnalysisPanel.scoreId}
+                            scoreName={feedbackAnalysisPanel.scoreName}
+                            showHeader={false}
+                            showConfiguration={true}
+                            defaultDays={7}
+                          />
+                        ) : (
+                          <AdHocCostAnalysis
+                            scorecardId={costAnalysisPanel?.type === 'scorecard' ? costAnalysisPanel?.scorecardId : undefined}
+                            scoreId={costAnalysisPanel?.type === 'score' ? costAnalysisPanel?.scoreId : undefined}
+                            defaultHours={24}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
                 </div>
               </motion.div>
-            ) : selectedScorecard && feedbackAnalysisPanel?.isOpen && !selectedScore ? (
+            ) : selectedScorecard && (feedbackAnalysisPanel?.isOpen || costAnalysisPanel?.isOpen) && !selectedScore ? (
               <motion.div
-                key="scorecard-feedback-layout"
+                key="scorecard-analysis-layout"
                 initial={{ opacity: 0, x: '100%' }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: '100%' }}
@@ -1584,30 +1632,42 @@ export default function ScorecardsComponent({
                     group-hover:bg-accent" />
                 </motion.div>
                 
-                {/* Feedback Analysis Panel (Right Column) - Take remaining space */}
+                {/* Analysis Panel (Right Column) - Take remaining space */}
                 <div className="flex-1 overflow-hidden">
                 <div className="h-full overflow-y-auto overflow-x-hidden w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors bg-card-selected flex flex-col">
                   <div className="p-4 w-full flex-1 flex flex-col min-h-0">
                     <div className="w-full h-full flex flex-col min-h-0">
                       <div className="flex justify-between items-center mb-4 flex-shrink-0">
                         <div className="flex items-center gap-2">
-                          <MessageCircleMore className="h-5 w-5 text-foreground" />
-                          <h2 className="text-lg font-semibold">Feedback Analysis</h2>
+                          {feedbackAnalysisPanel?.isOpen ? (
+                            <MessageCircleMore className="h-5 w-5 text-foreground" />
+                          ) : (
+                            <Coins className="h-5 w-5 text-foreground" />
+                          )}
+                          <h2 className="text-lg font-semibold">{feedbackAnalysisPanel?.isOpen ? 'Feedback Analysis' : 'Cost Analysis'}</h2>
                         </div>
                         <CardButton
                           icon={X}
-                          onClick={handleCloseFeedbackAnalysis}
-                          aria-label="Close feedback analysis"
+                          onClick={() => { setFeedbackAnalysisPanel(null); setCostAnalysisPanel(null); }}
+                          aria-label="Close analysis"
                         />
                       </div>
                       <div className="flex-1 overflow-y-auto min-h-0">
-                        <AdHocFeedbackAnalysis
-                          scorecardId={feedbackAnalysisPanel.scorecardId}
-                          scoreId={feedbackAnalysisPanel.scoreId}
-                          showHeader={false}
-                          showConfiguration={true}
-                          defaultDays={7}
-                        />
+                        {feedbackAnalysisPanel?.isOpen ? (
+                          <AdHocFeedbackAnalysis
+                            scorecardId={feedbackAnalysisPanel.scorecardId}
+                            scoreId={feedbackAnalysisPanel.scoreId}
+                            showHeader={false}
+                            showConfiguration={true}
+                            defaultDays={7}
+                          />
+                        ) : (
+                          <AdHocCostAnalysis
+                            scorecardId={costAnalysisPanel?.type === 'scorecard' ? costAnalysisPanel?.scorecardId : undefined}
+                            scoreId={costAnalysisPanel?.type === 'score' ? costAnalysisPanel?.scoreId : undefined}
+                            defaultHours={24}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
