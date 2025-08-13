@@ -48,9 +48,6 @@ type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "r
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "status" | "rootNodeId" | "updatedAt" | "createdAt";
-type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "versionNumber" | "status" | "childrenCount";
-type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "versionNumber" | "seq" | "status";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -80,7 +77,7 @@ const schema = a.schema({
             identifiers: a.hasMany('Identifier', 'accountId'),
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'accountId'),
             dataSources: a.hasMany('DataSource', 'accountId'),
-            dataSets: a.hasMany('DataSet', 'accountId'),
+            dataSets: a.hasMany('DataSet', 'accountId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -873,73 +870,6 @@ const schema = a.schema({
             idx("dataSourceVersionId").sortKeys(["createdAt"])
         ]),
 
-    Experiment: a
-        .model({
-            featured: a.boolean(),
-            status: a.enum(['RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']),
-            rootNodeId: a.id(),
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
-            accountId: a.string().required(),
-            account: a.belongsTo('Account', 'accountId'),
-            scorecardId: a.string(),
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            scoreId: a.string(),
-            score: a.belongsTo('Score', 'scoreId'),
-            nodes: a.hasMany('ExperimentNode', 'experimentId'),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: ExperimentIndexFields) => any) => [
-            idx("accountId").sortKeys(["updatedAt"]),
-            idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"]),
-            idx("status"),
-            idx("rootNodeId")
-        ]),
-
-    ExperimentNode: a
-        .model({
-            experimentId: a.id().required(),
-            experiment: a.belongsTo('Experiment', 'experimentId'),
-            parentNodeId: a.id(),
-            parentNode: a.belongsTo('ExperimentNode', 'parentNodeId'),
-            childNodes: a.hasMany('ExperimentNode', 'parentNodeId'),
-            versionNumber: a.integer().required(),
-            status: a.enum(['ACTIVE', 'EXPANDED', 'STOPPED']),
-            isFrontier: a.boolean().required(),
-            childrenCount: a.integer().required(),
-            versions: a.hasMany('ExperimentNodeVersion', 'nodeId'),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: ExperimentNodeIndexFields) => any) => [
-            idx("experimentId").sortKeys(["versionNumber"]).name("nodesByExperimentVersionNumber"),
-            idx("parentNodeId").name("nodesByParent")
-        ]),
-
-    ExperimentNodeVersion: a
-        .model({
-            experimentId: a.id().required(),
-            nodeId: a.id().required(),
-            node: a.belongsTo('ExperimentNode', 'nodeId'),
-            versionNumber: a.integer().required(),
-            seq: a.integer().required(),
-            status: a.enum(['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED']),
-            yaml: a.string().required(),
-            value: a.json().required(),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: ExperimentNodeVersionIndexFields) => any) => [
-            idx("nodeId").sortKeys(["seq"]).name("versionsByNode")
-        ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
