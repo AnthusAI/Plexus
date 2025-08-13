@@ -864,7 +864,8 @@ def register_score_tools(mcp: FastMCP):
                 "versionNote": version_note or "Updated via MCP pull/push workflow",
                 "configurationLength": config_length,
                 "createdAt": created_at,
-                "championUpdated": push_result.get("champion_updated", True),
+                # Enforce never promoting champion from MCP push
+                "championUpdated": False,
                 "skipped": push_result.get("skipped", False),
                 "message": push_result["message"],
                 "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
@@ -991,7 +992,8 @@ def register_score_tools(mcp: FastMCP):
                 "versionNote": version_note or "Updated via MCP server",
                 "configurationLength": len(yaml_configuration),
                 "createdAt": created_at,
-                "championUpdated": result.get("champion_updated", True),
+                # Enforce never promoting champion from MCP update
+                "championUpdated": False,
                 "skipped": result.get("skipped", False),
                 "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
             }
