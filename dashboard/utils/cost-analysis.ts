@@ -126,11 +126,11 @@ function buildQuery(params: { accountId?: string; scorecardId?: string; scoreId?
 /**
  * Fetch ScoreResults for cost analysis using GSIs with pagination.
  * - Defaults to last 24 hours
- * - Hard caps total returned records to 1000
+ * - Hard caps total returned records to 1000, defaults to 200
  * - Filters out records with no cost information (zero is valid information)
  */
 export async function fetchCostAnalysisScoreResults(options: FetchCostAnalysisOptions = {}): Promise<FetchCostAnalysisResult> {
-  const hardLimit = options.limit && options.limit > 0 ? Math.min(options.limit, 1000) : 1000
+  const hardLimit = options.limit && options.limit > 0 ? Math.min(options.limit, 1000) : 200
   const window = computeWindow(options.days, options.hours ?? 24)
 
   const { query, topKey, variableNames } = buildQuery({
@@ -204,13 +204,22 @@ export interface CostGroupSummary extends CostSummary {
   values?: number[]
 }
 
+export interface ItemSummary {
+  count: number
+  total_cost: number
+  average_cost: number
+  average_calls: number
+}
+
 export interface CostAnalysisAggregates {
   summary: CostSummary
   groups: CostGroupSummary[]
+  itemAnalysis: ItemSummary
 }
 
 export function aggregateCostByScore(items: ScoreResultRecord[]): CostAnalysisAggregates {
   const perScore: Record<string, { name?: string; count: number; total: number; calls: number; values: number[] }> = {}
+  const perItem: Record<string, { count: number; total: number; calls: number }> = {}
   let overallCount = 0
   let overallTotal = 0
   let overallCalls = 0
@@ -220,12 +229,22 @@ export function aggregateCostByScore(items: ScoreResultRecord[]): CostAnalysisAg
     if (!cost) continue
     const total = Number((cost as any).total_cost ?? 0)
     const calls = Number((cost as any).llm_calls ?? 0)
+    
+    // Per-score aggregation (existing logic)
     const sId = String(sr.scoreId || '')
     if (!perScore[sId]) perScore[sId] = { name: sr.score?.name || undefined, count: 0, total: 0, calls: 0, values: [] }
     perScore[sId].count += 1
     perScore[sId].total += Number.isFinite(total) ? total : 0
     perScore[sId].calls += Number.isFinite(calls) ? calls : 0
     if (Number.isFinite(total)) perScore[sId].values.push(total)
+    
+    // Per-item aggregation (new logic)
+    const itemId = String(sr.itemId || '')
+    if (!perItem[itemId]) perItem[itemId] = { count: 0, total: 0, calls: 0 }
+    perItem[itemId].count += 1
+    perItem[itemId].total += Number.isFinite(total) ? total : 0
+    perItem[itemId].calls += Number.isFinite(calls) ? calls : 0
+    
     overallCount += 1
     overallTotal += Number.isFinite(total) ? total : 0
     overallCalls += Number.isFinite(calls) ? calls : 0
@@ -278,7 +297,19 @@ export function aggregateCostByScore(items: ScoreResultRecord[]): CostAnalysisAg
     average_calls: overallCount ? overallCalls / overallCount : 0,
   }
 
-  return { summary, groups }
+  // Calculate item-based metrics
+  const itemCount = Object.keys(perItem).length
+  const totalItemCost = Object.values(perItem).reduce((sum, item) => sum + item.total, 0)
+  const totalItemCalls = Object.values(perItem).reduce((sum, item) => sum + item.calls, 0)
+  
+  const itemAnalysis: ItemSummary = {
+    count: itemCount,
+    total_cost: totalItemCost,
+    average_cost: itemCount ? totalItemCost / itemCount : 0,
+    average_calls: itemCount ? totalItemCalls / itemCount : 0,
+  }
+
+  return { summary, groups, itemAnalysis }
 }
 
 

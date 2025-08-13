@@ -48,7 +48,7 @@ describe('cost-analysis utilities', () => {
   test('when only scoreId provided (no scorecardId), defaults to account query and relies on client-side filtering', () => {
     const q = __testUtils.buildQuery({ accountId: 'A1', scoreId: 'S1' })
     expect(q.topKey).toBe('listScoreResultByAccountIdAndUpdatedAt')
-    expect(q.variableNames).toEqual(['accountId'])
+    expect(q.variableNames).toEqual(['accountId', 'scoreId'])
   })
 
   test('buildQuery selects scorecard-based GSI when scorecardId provided', () => {
@@ -82,23 +82,23 @@ describe('cost-analysis utilities', () => {
     expect(res.items.map(r => r.id)).toEqual(['1', '3'])
   })
 
-  test('paginates until hard cap of 1000', async () => {
+  test('paginates until hard cap, defaults to 200', async () => {
     const page = (start: number, count: number) => Array.from({ length: count }, (_, i) => ({
       id: String(start + i), itemId: 'i', accountId: 'A', createdAt: 'x', updatedAt: 'x', cost: { total_cost: 0 }
     }))
 
     mockedRequest
       .mockResolvedValueOnce({
-        data: { listScoreResultByAccountIdAndUpdatedAt: { items: page(1, 600), nextToken: 't1' } }
+        data: { listScoreResultByAccountIdAndUpdatedAt: { items: page(1, 200), nextToken: 't1' } }
       })
       .mockResolvedValueOnce({
-        data: { listScoreResultByAccountIdAndUpdatedAt: { items: page(601, 600), nextToken: null } }
+        data: { listScoreResultByAccountIdAndUpdatedAt: { items: page(201, 200), nextToken: null } }
       })
 
     const res = await fetchCostAnalysisScoreResults({ accountId: 'A', hours: 24 })
-    expect(res.items.length).toBe(1000)
+    expect(res.items.length).toBe(200)
     expect(res.items[0].id).toBe('1')
-    expect(res.items[999].id).toBe('1000')
+    expect(res.items[199].id).toBe('200')
   })
 
   test('requires required variable based on query selection', async () => {
