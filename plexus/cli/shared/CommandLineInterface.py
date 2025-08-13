@@ -11,19 +11,19 @@ import logging
 from plexus.cli.task.tasks import tasks, task
 from plexus.cli.item.items import items, item
 from plexus.cli.score.scores import score, scores
-from plexus.cli.CommandDispatch import command
+from plexus.cli.shared.CommandDispatch import command
 from plexus.cli.batch.operations import batch
 from plexus.cli.evaluation.evaluations import evaluate, evaluations
 from plexus.cli.prediction.predictions import predict
 from plexus.cli.analyze.analysis import analyze
-from plexus.cli.tuning.tuning import tuning
-from plexus.cli.training.training import train
+from plexus.cli.tuning.operations import tuning
+from plexus.cli.training.operations import train
 from plexus.cli.result.results import score_results, score_result, result, results
 from plexus.cli.report.reports import report
 from plexus.cli.data.operations import data
 from plexus.cli.dataset.datasets import dataset
-from plexus.cli.score_chat.commands import score_chat
-from plexus.cli.data_lake.lake import lake_group
+from plexus.cli.score_chat.chat import score_chat
+from plexus.cli.data_lake.operations import lake_group
 from plexus.cli.feedback.commands import feedback
 from plexus.cli.scorecard.scorecards import scorecards, scorecard
 from plexus.cli.record_count.counting import count

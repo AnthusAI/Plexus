@@ -145,10 +145,9 @@ class TestGlobalState:
     
     def test_initial_state(self):
         """Test initial global state"""
-        from shared.setup import PLEXUS_CORE_AVAILABLE, DEFAULT_ACCOUNT_ID, ACCOUNT_CACHE
+        from shared.setup import DEFAULT_ACCOUNT_ID, ACCOUNT_CACHE
         
         # These should be properly initialized
-        assert isinstance(PLEXUS_CORE_AVAILABLE, bool)
         assert DEFAULT_ACCOUNT_ID is None or isinstance(DEFAULT_ACCOUNT_ID, str)
         assert isinstance(ACCOUNT_CACHE, dict)
     

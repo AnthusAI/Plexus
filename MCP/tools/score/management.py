@@ -13,7 +13,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from shared.setup import logger, PLEXUS_CORE_AVAILABLE
+from shared.setup import logger
 from shared.utils import (
     get_default_account_id, get_plexus_url, find_score_instance
 )
@@ -378,9 +378,7 @@ def register_score_tools(mcp: FastMCP):
         sys.stdout = temp_stdout
         
         try:
-            # Check if Plexus core modules are available
-            if not PLEXUS_CORE_AVAILABLE:
-                return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+            # Core availability is enforced at server startup
             
             # Ensure project root is in Python path for ScoreService import
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

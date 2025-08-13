@@ -58,6 +58,7 @@ from plexus.utils.dict_utils import truncate_dict_strings_inner
 from plexus.CustomLogging import logging, setup_logging, set_log_group
 
 from plexus.cli.shared.task_progress_tracker import StageConfig, TaskProgressTracker
+from typing import Optional
 
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
@@ -1242,8 +1243,10 @@ class Evaluation:
                         self.processed_items = sum(self.processed_items_by_score.values())
                         
                         # Update tracker with actual count of processed items
-                        tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
-                        tracker.update(current_items=self.processed_items)
+                        if tracker and tracker.current_stage:
+                            tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
+                        if tracker:
+                            tracker.update(current_items=self.processed_items)
                         
                         # Start metrics task if needed
                         is_final_result = processed_counter == total_rows
@@ -2484,7 +2487,7 @@ class ConsistencyEvaluation(Evaluation):
         super().log_parameters()
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):
+    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):
         # Store scorecard_id before calling super().__init__
         self.scorecard_id = scorecard_id
         super().__init__(**kwargs)
@@ -2595,10 +2598,14 @@ class AccuracyEvaluation(Evaluation):
         except Exception as e:
             self.logging.warning(f"Failed to load override data: {e}")
 
-    async def run(self, tracker, progress_callback=None, dry_run=False):
+    async def run(self, tracker=None, progress_callback=None, dry_run=False):
         # Starting accuracy evaluation
 
-        """Modified run method to accept tracker argument"""
+        """Run the accuracy evaluation.
+
+        tracker is optional to maintain backward compatibility with callers that
+        did not pass a tracker. When None, stage/progress updates are skipped.
+        """
         self.progress_callback = progress_callback
         self.dry_run = dry_run  # Store dry_run flag for use in ScoreResult creation
         
@@ -2631,36 +2638,44 @@ class AccuracyEvaluation(Evaluation):
 
     async def _run_evaluation(self, tracker):
         try:
-            # Load the labeled samples
+            # Prefer dataset specified in score YAML (data section). Fallback to labeled_samples only if provided explicitly.
             import pandas as pd
-            if self.labeled_samples:
-                df = pd.DataFrame(self.labeled_samples)
-            elif self.labeled_samples_filename:
-                df = pd.read_csv(self.labeled_samples_filename)
-            else:
-                # Handle the case where labeled_samples is empty/None and no filename provided
-                if self.labeled_samples is not None:
-                    # labeled_samples was provided but is empty
-                    error_msg = f"No labeled samples data available. The labeled_samples list is empty ({len(self.labeled_samples)} items). This usually indicates a data loading issue."
+            df = None
+            try:
+                # New path: use the data cache specified in score YAML directly
+                from plexus.data.FeedbackItems import FeedbackItems
+                target_scores = self.get_scores_to_process(self.scorecard.get_score_names())
+                primary_score_name = target_scores[0] if target_scores else None
+                score_config = None
+                for sc in self.scorecard.scores:
+                    if sc.get('name') == primary_score_name:
+                        score_config = sc
+                        break
+                if not score_config:
+                    score_config = self.scorecard.scores[0] if self.scorecard.scores else {}
+
+                data_section = score_config.get('data') or {}
+                if data_section:
+                    cls = data_section.get('class')
+                    params = data_section.get('parameters') or {}
+                    # Support shorthand where params are at root
+                    if not params:
+                        params = {k: v for k, v in data_section.items() if k != 'class'}
+
+                    # Map known aliases to fully-qualified class
+                    if cls in ['FeedbackItems', 'plexus.data.FeedbackItems']:
+                        data_cache = FeedbackItems(**params)
+                        df = data_cache.load_dataframe(data=params, fresh=True)
+            except Exception as e:
+                self.logging.warning(f"Falling back from score YAML dataset load: {e}")
+
+            if df is None:
+                if self.labeled_samples:
+                    df = pd.DataFrame(self.labeled_samples)
+                elif self.labeled_samples_filename:
+                    df = pd.read_csv(self.labeled_samples_filename)
                 else:
-                    # Neither labeled_samples nor filename provided
-                    error_msg = "No labeled samples data available. Both labeled_samples and labeled_samples_filename are None."
-                
-                self.logging.error(error_msg)
-                self.logging.error("This error typically occurs when:")
-                self.logging.error("1. The --fresh flag causes data cache issues")
-                self.logging.error("2. The score configuration doesn't have proper data sources")
-                self.logging.error("3. Database connectivity issues prevent data loading")
-                self.logging.error("4. No matching data is found for the specified criteria")
-                
-                # Provide troubleshooting suggestions
-                self.logging.error("Troubleshooting suggestions:")
-                self.logging.error("- Try running without the --fresh flag to use cached data")
-                self.logging.error("- Verify the scorecard configuration has proper data sources")
-                self.logging.error("- Check database connectivity and credentials")
-                self.logging.error("- Verify that data exists for the specified score criteria")
-                
-                raise ValueError(error_msg)
+                    raise ValueError("Dataset not found. Score YAML lacks a usable 'data' section and no labeled samples were provided.")
 
             # Adjust the sample size if necessary
             self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
@@ -2679,8 +2694,10 @@ class AccuracyEvaluation(Evaluation):
                 selected_sample_rows = df
 
             # Update tracker status without advancing stage
-            tracker.current_stage.status_message = "Generating predictions..."
-            tracker.update(current_items=0)
+            if tracker and tracker.current_stage:
+                tracker.current_stage.status_message = "Generating predictions..."
+            if tracker:
+                tracker.update(current_items=0)
 
             # Process all scores concurrently
             score_tasks = []

@@ -25,18 +25,45 @@ def register_think_tool(mcp: FastMCP):
         - Find specific information within Plexus data
         - Plan a sequence of Plexus tool calls
 
+        BEFORE YOU START FEEDBACK ALIGNMENT:
+        - Open the documentation: get_plexus_documentation(filename="feedback-alignment").
+        - Follow the baseline-first workflow below. Do NOT edit YAML until a baseline is captured.
+
         CRITICAL WORKFLOW POLICY (Score YAML work):
         - Always work from a LOCAL YAML file. Pull with the score pull tool and edit the file in `scorecards/<Scorecard>/<Score>.yaml`.
         - During iteration, DO NOT push new versions. Keep all changes local.
-        - Never promote a champion version unless the user explicitly instructs it after thorough evaluation.
-        - For predictions/evaluations while iterating, always load from local YAML using the MCP tools. Do NOT run CLI commands from the MCP context.
-          - Use MCP prediction/evaluation tools which are designed to be token-efficient and avoid verbose logging.
-          - If you need YAML mode, set the MCP tool parameters accordingly (local YAML should be the default where available).
-        - Typical flow:
-          1) Pull config → local edit → lint locally if needed
-          2) Test via MCP predictions/evaluations in LOCAL mode
-          3) Repeat until approved
-          4) Only then push a new version (and do NOT set champion without explicit user approval)
+        - DO NOT PROMOTE CHAMPION. Champion promotion is disabled for agents and must not be attempted.
+        - Forbidden during iteration: plexus_score_push, plexus_score_update, any champion/promotion action.
+
+        REQUIRED BASELINE STEPS (no edits yet):
+        1) Pull champion YAML locally (score pull). Confirm the local path.
+        2) Collect recent metrics: plexus_feedback_summary (e.g., 30 days) and plexus_feedback_find for FP (Yes→No) and FN (No→Yes).
+        3) Run a LOCAL baseline evaluation using ONLY local YAML:
+           - Evaluations must set remote=false and yaml=true.
+           - Path overrides are handled automatically; you do not need to pass any folder parameters.
+           - Record AC1, accuracy, and confusion matrix.
+
+        EDIT-AND-TEST LOOP:
+        4) Make minimal YAML edits targeting the observed error patterns.
+        5) Re-run the same LOCAL evaluation and compare against baseline.
+           - If metrics regress, revert edits.
+
+        PREDICTIONS (sanity checks):
+        - Predictions must use LOCAL YAML only: yaml_only=true.
+        - Prefer testing on recent FP/FN item_ids gathered from feedback_find.
+
+        Typical flow:
+          A) Pull config → run baseline (summary + FP/FN + local evaluation) → then edit locally
+          B) Test via MCP predictions/evaluations in LOCAL mode (yaml_only / yaml)
+          C) Iterate until improvement is demonstrated
+          D) Only after explicit written approval, a human may push a new version (never auto-promote)
+
+        APPROVAL GATE (disabled by default):
+        - The agent may NOT perform any push or promotion.
+        - Only if the user types the exact lines below in this session may a release persona proceed:
+            APPROVE PUSH: YES
+            APPROVE CHAMPION: YES
+        - This Think tool should remind the agent that champion promotion is not available from MCP tools.
 
         IMPORTANT: Do NOT shell out to CLI tools (e.g., `python -m plexus.cli...`) from the MCP environment.
         The CLI produces excessive log output, which is not token-efficient for MCP usage. Always prefer MCP tools.
