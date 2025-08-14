@@ -51,6 +51,8 @@ type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersio
 type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "rootNodeId" | "updatedAt" | "createdAt";
 type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "versionNumber" | "status" | "childrenCount";
 type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "versionNumber" | "seq" | "status";
+type ChatSessionIndexFields = "accountId" | "scorecardId" | "scoreId" | "experimentId" | "status";
+type ChatMessageIndexFields = "sessionId" | "experimentId" | "role";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -82,6 +84,7 @@ const schema = a.schema({
             dataSources: a.hasMany('DataSource', 'accountId'),
             dataSets: a.hasMany('DataSet', 'accountId'),
             experiments: a.hasMany('Experiment', 'accountId'),
+            chatSessions: a.hasMany('ChatSession', 'accountId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -889,6 +892,7 @@ const schema = a.schema({
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
             nodes: a.hasMany('ExperimentNode', 'experimentId'),
+            chatSessions: a.hasMany('ChatSession', 'experimentId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -940,6 +944,53 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ExperimentNodeVersionIndexFields) => any) => [
             idx("nodeId").sortKeys(["seq"]).name("versionsByNode")
+        ]),
+
+    ChatSession: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            experimentId: a.string(),
+            experiment: a.belongsTo('Experiment', 'experimentId'),
+            status: a.enum(['ACTIVE', 'COMPLETED', 'ERROR']),
+            metadata: a.json(),
+            messages: a.hasMany('ChatMessage', 'sessionId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["createdAt"]),
+            idx("scorecardId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["updatedAt"]),
+            idx("experimentId").sortKeys(["updatedAt"]),
+            idx("experimentId").sortKeys(["createdAt"]),
+            idx("status").sortKeys(["updatedAt"])
+        ]),
+
+    ChatMessage: a
+        .model({
+            sessionId: a.string().required(),
+            session: a.belongsTo('ChatSession', 'sessionId'),
+            experimentId: a.string(),
+            experiment: a.belongsTo('Experiment', 'experimentId'),
+            role: a.enum(['USER', 'ASSISTANT', 'SYSTEM']),
+            content: a.string().required(),
+            metadata: a.json(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("sessionId"),
+            idx("experimentId").sortKeys(["createdAt"])
         ]),
 });
 
