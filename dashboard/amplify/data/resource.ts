@@ -956,20 +956,22 @@ const schema = a.schema({
             experiment: a.belongsTo('Experiment', 'experimentId'),
             status: a.enum(['ACTIVE', 'COMPLETED', 'ERROR']),
             metadata: a.json(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
             messages: a.hasMany('ChatMessage', 'sessionId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((index) => [
-            index("accountId").sortKeys(["updatedAt"]),
-            index("accountId").sortKeys(["createdAt"]),
-            index("scorecardId").sortKeys(["updatedAt"]),
-            index("scoreId").sortKeys(["updatedAt"]),
-            index("experimentId").sortKeys(["updatedAt"]),
-            index("experimentId").sortKeys(["createdAt"]),
-            index("status").sortKeys(["updatedAt"])
+        .secondaryIndexes((idx) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["createdAt"]),
+            idx("scorecardId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["updatedAt"]),
+            idx("experimentId").sortKeys(["updatedAt"]),
+            idx("experimentId").sortKeys(["createdAt"]),
+            idx("status").sortKeys(["updatedAt"])
         ]),
 
     ChatMessage: a
@@ -981,14 +983,15 @@ const schema = a.schema({
             role: a.enum(['USER', 'ASSISTANT', 'SYSTEM']),
             content: a.string().required(),
             metadata: a.json(),
+            createdAt: a.datetime().required(),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((index) => [
-            index("sessionId"),
-            index("experimentId").sortKeys(["createdAt"])
+        .secondaryIndexes((idx) => [
+            idx("sessionId"),
+            idx("experimentId").sortKeys(["createdAt"])
         ]),
 });
 
