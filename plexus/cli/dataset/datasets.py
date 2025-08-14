@@ -118,10 +118,16 @@ def dataset():
 @dataset.command()
 @click.option('--source', 'source_identifier', required=True, help='Identifier (ID, key, or name) of the DataSource to load.')
 @click.option('--fresh', is_flag=True, help='Force a fresh load, ignoring any caches.')
-def load(source_identifier: str, fresh: bool):
+@click.option('--reload', is_flag=True, help='Reload existing dataset by refreshing values for current records only.')
+def load(source_identifier: str, fresh: bool, reload: bool):
     """Loads a dataset from a DataSource, generates a Parquet file, and attaches it to a new DataSet record."""
 
     async def _load():
+        # Validate options - can't use both fresh and reload
+        if fresh and reload:
+            logging.error("Cannot use both --fresh and --reload options. Choose one.")
+            return
+            
         client = create_client()
 
         # 1. Fetch the DataSource
@@ -209,9 +215,21 @@ def load(source_identifier: str, fresh: bool):
         data_cache_params = data_config.get('parameters', {})
         data_cache = data_cache_class(**data_cache_params)
 
+        # Check if the data cache's load_dataframe method supports the update parameter
+        import inspect
+        load_dataframe_signature = inspect.signature(data_cache.load_dataframe)
+        
+        # Build kwargs based on what the data cache supports
+        kwargs = {'data': data_cache_params, 'fresh': fresh}
+        if 'reload' in load_dataframe_signature.parameters:
+            kwargs['reload'] = reload
+        elif reload:
+            # Log a warning if reload was requested but not supported
+            logging.warning(f"The data cache {data_cache_class.__name__} does not support the 'reload' parameter. Ignoring --reload flag.")
+        
         # Pass the parameters (which contain queries, searches, etc.) to load_dataframe
         # not the entire data_config which includes class information
-        dataframe = data_cache.load_dataframe(data=data_cache_params, fresh=fresh)
+        dataframe = data_cache.load_dataframe(**kwargs)
         
         # COMPREHENSIVE DATASET DEBUG LOGGING FOR DATASET GENERATION
         logging.info("=" * 80)
