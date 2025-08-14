@@ -298,7 +298,7 @@ def register_tasks(app):
                 sys.argv = ['plexus'] + args
                 
                 # Import the main CLI function
-                from plexus.cli.CommandLineInterface import cli
+                from plexus.cli.shared.CommandLineInterface import cli
                 
                 # Execute the command with output capture
                 with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):

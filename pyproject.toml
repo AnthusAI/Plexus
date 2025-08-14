@@ -76,7 +76,7 @@ dependencies = [
 ]
 
 [project.scripts]
-plexus = "plexus.cli.CommandLineInterface:main"
+plexus = "plexus.cli.shared.CommandLineInterface:main"
 plexus-dashboard = "plexus.dashboard.cli:cli"
 
 [tool.setuptools]
