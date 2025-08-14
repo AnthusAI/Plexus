@@ -13,7 +13,7 @@ from plexus.CustomLogging import logging, console
 
 class ScoreData:
 
-    def load_data(self, *, data=None, excel=None, fresh=False):
+    def load_data(self, *, data=None, excel=None, fresh=False, update=False):
         """
         Load the specified data from the training data lake, with caching, into a combined DataFrame in the class instance.
 
@@ -23,10 +23,26 @@ class ScoreData:
             Dictionary of data to load from the training data lake.
         excel : str, optional
             Path to an Excel file to load data from.
+        fresh : bool, optional
+            If True, bypass cache and fetch fresh data.
+        update : bool, optional
+            If True, update existing dataset by refreshing values for current records only.
         """
         data_cache = self._load_data_cache()
 
-        self.dataframe = data_cache.load_dataframe(data=data, fresh=fresh)
+        # Check if the data cache's load_dataframe method supports the update parameter
+        import inspect
+        load_dataframe_signature = inspect.signature(data_cache.load_dataframe)
+        
+        # Build kwargs based on what the data cache supports
+        kwargs = {'data': data, 'fresh': fresh}
+        if 'update' in load_dataframe_signature.parameters:
+            kwargs['update'] = update
+        elif update:
+            # Log a warning if update was requested but not supported
+            logging.warning(f"The data cache {data_cache.__class__.__name__} does not support the 'update' parameter. Ignoring --update flag.")
+        
+        self.dataframe = data_cache.load_dataframe(**kwargs)
 
         # Essential dataset information
         logging.info(f"Dataset loaded: {self.dataframe.shape[0]} rows x {self.dataframe.shape[1]} columns")

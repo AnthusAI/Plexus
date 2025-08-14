@@ -790,6 +790,7 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
 @click.option('--score', 'score', default='', type=str, help='Score identifier (ID, name, key, or external ID). Can be comma-separated for multiple scores.')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
+@click.option('--update', is_flag=True, help='Update existing dataset by refreshing values for current records only.')
 @click.option('--visualize', is_flag=True, default=False, help='Generate PNG visualization of LangGraph scores')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 @click.option('--dry-run', is_flag=True, help='Skip database operations (for testing API loading)')
@@ -808,6 +809,7 @@ def accuracy(
     score: str,
     experiment_label: str,
     fresh: bool,
+    update: bool,
     visualize: bool,
     task_id: Optional[str],
     dry_run: bool,
@@ -821,6 +823,12 @@ def accuracy(
     """
     logging.info("Starting accuracy evaluation")
     logging.info(f"Scorecard: {scorecard}, Score: {score}, Samples: {number_of_samples}, Dry run: {dry_run}")
+    
+    # Validate that fresh and update are not both specified
+    if fresh and update:
+        logging.error("Cannot use both --fresh and --update options. Choose one.")
+        console.print("[bold red]Error: Cannot use both --fresh and --update options. Choose one.[/bold red]")
+        return
     
     # If dry-run is enabled, provide a simplified successful execution path
     if dry_run:
@@ -1584,7 +1592,7 @@ def get_data_driven_samples(
 
         # Load and process the data
         logging.info("Loading data...")
-        score_instance.load_data(data=score_config['data'], fresh=fresh)
+        score_instance.load_data(data=score_config['data'], fresh=fresh, update=update)
         
         # Basic dataset info after loading
         if hasattr(score_instance, 'dataframe') and score_instance.dataframe is not None:
