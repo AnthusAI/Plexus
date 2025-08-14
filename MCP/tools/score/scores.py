@@ -1047,7 +1047,7 @@ def register_score_tools(mcp: FastMCP):
             
             try:
                 # Use the shared score service
-                from plexus.cli.score import ScoreService
+                from plexus.cli.score.scores import ScoreService
                 logger.info("Successfully imported ScoreService")
                 
                 score_service = ScoreService()
