@@ -48,7 +48,7 @@ type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "r
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "status" | "rootNodeId" | "updatedAt" | "createdAt";
+type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "rootNodeId" | "updatedAt" | "createdAt";
 type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "versionNumber" | "status" | "childrenCount";
 type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "versionNumber" | "seq" | "status";
 
@@ -879,7 +879,6 @@ const schema = a.schema({
     Experiment: a
         .model({
             featured: a.boolean(),
-            status: a.enum(['RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']),
             rootNodeId: a.id(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -899,7 +898,6 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
-            idx("status"),
             idx("rootNodeId")
         ]),
 

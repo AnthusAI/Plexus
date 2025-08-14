@@ -1,7 +1,7 @@
 import React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Square, Columns2, X, Activity, FlaskConical, FlaskRound, TestTubes, FileText, FileBarChart } from 'lucide-react'
+import { Square, Columns2, X, Activity, FlaskConical, FlaskRound, TestTubes, FileText, FileBarChart, Waypoints } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
@@ -88,6 +88,10 @@ const getTaskIcon = (type: string) => {
       return <TestTubes className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
     }
     return <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+  }
+  
+  if (taskType.toLowerCase().includes('experiment')) {
+    return <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
   }
   
   return <Activity className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
@@ -226,8 +230,17 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
         <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
           {variant === 'detail' && (
             <div className="flex items-center gap-2 mb-3">
-              <Activity className="h-5 w-5 text-muted-foreground" />
-              <span className="text-lg font-semibold text-muted-foreground">Task</span>
+              {task.type.toLowerCase().includes('experiment') ? (
+                <>
+                  <Waypoints className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-semibold text-muted-foreground">Experiment</span>
+                </>
+              ) : (
+                <>
+                  <Activity className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-semibold text-muted-foreground">Task</span>
+                </>
+              )}
             </div>
           )}
           {task.name && (
