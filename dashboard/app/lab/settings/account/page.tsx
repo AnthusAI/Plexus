@@ -7,7 +7,6 @@ import { generateClient } from "@aws-amplify/api"
 import type { Schema } from "@/amplify/data/resource"
 import type { AccountSettings } from "@/types/account-config"
 import { isValidAccountSettings } from "@/types/account-config"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -27,15 +26,17 @@ const accountApi = {
 }
 
 const MENU_ITEMS = [
-    "Activity",
-    "Scorecards",
-    "Sources",
-    "Evaluations",
     "Items",
-    "Batches",
     "Feedback",
     "Reports",
-    "Alerts"
+    "Evaluations",
+    "Experiments",
+    "Scorecards",
+    "Sources",
+    "Batches",
+    "Activity",
+    "Alerts",
+    "Help"
 ]
 
 export default function LabAccountSettings() {
@@ -122,34 +123,32 @@ export default function LabAccountSettings() {
                 </p>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Menu Visibility for {selectedAccount.name}</CardTitle>
-                    <CardDescription>
+            <div className="bg-card p-6 space-y-6 rounded-lg">
+                <div>
+                    <h2 className="text-xl font-semibold">Menu Visibility for {selectedAccount.name}</h2>
+                    <p className="text-muted-foreground">
                         Choose which menu items to show or hide in the sidebar.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                        {MENU_ITEMS.map((item) => (
-                            <div key={item} className="flex items-center space-x-4">
-                                <Switch 
-                                    id={`menu-${item}`}
-                                    checked={!hiddenItems.includes(item)}
-                                    onCheckedChange={() => handleToggleMenuItem(item)}
-                                />
-                                <Label htmlFor={`menu-${item}`}>{item}</Label>
-                            </div>
-                        ))}
-                    </div>
-                    <Button 
-                        onClick={handleSave} 
-                        disabled={isSaving}
-                    >
-                        {isSaving ? "Saving..." : "Save Changes"}
-                    </Button>
-                </CardContent>
-            </Card>
+                    </p>
+                </div>
+                <div className="space-y-4">
+                    {MENU_ITEMS.map((item) => (
+                        <div key={item} className="flex items-center space-x-4">
+                            <Switch 
+                                id={`menu-${item}`}
+                                checked={!hiddenItems.includes(item)}
+                                onCheckedChange={() => handleToggleMenuItem(item)}
+                            />
+                            <Label htmlFor={`menu-${item}`}>{item}</Label>
+                        </div>
+                    ))}
+                </div>
+                <Button 
+                    onClick={handleSave} 
+                    disabled={isSaving}
+                >
+                    {isSaving ? "Saving..." : "Save Changes"}
+                </Button>
+            </div>
         </div>
     )
 } 

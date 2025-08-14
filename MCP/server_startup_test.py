@@ -94,28 +94,15 @@ class TestEnvironmentHandling:
     """Test environment variable handling"""
     
     @patch('server.setup_plexus_imports')
-    @patch('server.initialize_default_account')
-    def test_plexus_core_available_true(self, mock_init_account, mock_setup_imports):
-        """Test behavior when Plexus core is available"""
-        mock_setup_imports.return_value = True
-        
-        # Import after mocking
-        from server import PLEXUS_CORE_AVAILABLE
-        
-        assert PLEXUS_CORE_AVAILABLE is True
-    
-    @patch('server.setup_plexus_imports')
-    def test_plexus_core_available_false(self, mock_setup_imports):
-        """Test behavior when Plexus core is not available"""
-        mock_setup_imports.return_value = False
-        
-        # Need to reload the module to test the other path
+    def test_fail_fast_when_core_import_fails(self, mock_setup_imports):
+        """Server should raise at import time if core import setup fails."""
+        mock_setup_imports.side_effect = RuntimeError("core import failed")
         if 'server' in sys.modules:
             del sys.modules['server']
-        
-        from server import PLEXUS_CORE_AVAILABLE
-        
-        assert PLEXUS_CORE_AVAILABLE is False
+        with pytest.raises(RuntimeError):
+            import server  # noqa: F401
+    
+    
 
 class TestMainEntryPoint:
     """Test main.py entry point"""

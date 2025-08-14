@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import json
 import click
-from .DataLakeCommands import lake_group
+from ..data_lake.operations import lake_group
 import plexus
 import nltk
 from nltk.corpus import stopwords
@@ -36,7 +36,7 @@ from imblearn.under_sampling import RandomUnderSampler
 from dotenv import load_dotenv
 response = load_dotenv('./.env')
 
-# data.add_command(lake_group)
+# Placeholder; lake_group will be attached after the group is defined
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -52,6 +52,9 @@ class NumpyEncoder(json.JSONEncoder):
 def data():
     """Profiling the data available for each score in the scorecard."""
     pass
+
+# Attach lake group subcommands
+data.add_command(lake_group)
 
 class VectorizerLogger:
     def __init__(self, analyzer):

@@ -989,7 +989,8 @@ def push(scorecard: str, score: str):
                 'configuration': cleaned_yaml_content,
                 'parentVersionId': parent_version_id,
                 'note': 'Updated via CLI push command',
-                'isFeatured': True
+                # Never auto-promote to champion via CLI push
+                'isFeatured': False
             }
         }
         
@@ -1001,7 +1002,7 @@ def push(scorecard: str, score: str):
             console.print(f"[green]Successfully created new version for score: {score_name}[/green]")
             console.print(f"[green]New version ID: {new_version_id}[/green]")
             
-            # Update the local YAML file with the new version information
+            # Update the local YAML file with the new version information only; do NOT promote champion
             name_match = re.search(r'^name:\s*[^\n]+\n', yaml_content, re.MULTILINE)
             id_match = re.search(r'^id:\s*[^\n]+\n', yaml_content, re.MULTILINE)
             key_match = re.search(r'^key:\s*[^\n]+\n', yaml_content, re.MULTILINE)

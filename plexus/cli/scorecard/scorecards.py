@@ -1844,7 +1844,8 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                             createScoreVersion(input: {{
                                 scoreId: "{score_id}"
                                 configuration: {json.dumps(yaml_config_str)}
-                                isFeatured: true
+                                # Never auto-promote when creating versions from scorecard push
+                                isFeatured: false
                                 createdAt: "{now}"
                                 updatedAt: "{now}"
                                 {parent_version_field}
@@ -1977,7 +1978,8 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                         createScoreVersion(input: {{
                             scoreId: "{new_score_id}"
                             configuration: {json.dumps(yaml_config_str)}
-                            isFeatured: true
+                            # Never auto-promote when creating initial score version
+                            isFeatured: false
                             createdAt: "{now}"
                             updatedAt: "{now}"
                             {note_field}

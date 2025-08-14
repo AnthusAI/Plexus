@@ -532,7 +532,7 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
     from plexus.cli.shared.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
     from plexus.cli.shared.iterative_config_fetching import iteratively_fetch_configurations
     from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
-    from plexus.cli.identify_target_scores import identify_target_scores
+    from plexus.cli.shared.identify_target_scores import identify_target_scores
     import logging
     
     
@@ -1431,6 +1431,7 @@ def accuracy(
             # Run the evaluation using the AccuracyEvaluation instance
             logging.info("Running accuracy evaluation...")
             try:
+                # Pass tracker when available; method tolerates None
                 final_metrics = await accuracy_eval.run(tracker=tracker)
             except Exception as e:
                 error_msg = f"Error during execution: {str(e)}"

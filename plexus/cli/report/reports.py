@@ -35,7 +35,7 @@ from rich.text import Text # Add Text import
 
 # Import the refactored service function and tracker
 from plexus.reports.service import _generate_report_core
-from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageConfig # Restore full import
+from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageConfig
 
 from plexus.cli.shared.utils import parse_kv_pairs # Assume this exists
 
@@ -51,8 +51,8 @@ from plexus.cli.report.utils import (
     resolve_report # Add the missing import
 )
 
-from .reports.config_commands import config as config_group
-from .reports.report_commands import (
+from .config_commands import config as config_group
+from .report_commands import (
     run as run_command,
     list_reports as list_reports_command,
     show_report as show_report_command,
@@ -68,13 +68,11 @@ def report():
     """Commands for managing and running reports."""
     pass
 
-# Register imported command groups
+# Register imported command groups and commands
 report.add_command(config_group)
-
-# Register imported individual commands
 report.add_command(run_command)
-report.add_command(list_reports_command, name="list") # Explicitly name list
-report.add_command(show_report_command, name="show") # Explicitly name show
-report.add_command(show_last_command, name="last") # Explicitly name last
-report.add_command(delete_command, name="delete") # Register delete command
-report.add_command(purge_command, name="purge") # Register purge command
+report.add_command(list_reports_command, name="list")
+report.add_command(show_report_command, name="show")
+report.add_command(show_last_command, name="last")
+report.add_command(delete_command, name="delete")
+report.add_command(purge_command, name="purge")

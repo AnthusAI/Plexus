@@ -10,10 +10,10 @@ import time
 from typing import List, Tuple, Dict, Any, Optional
 import pandas as pd
 import numpy as np
-from bertopic import BERTopic
+# Lazy import: from bertopic import BERTopic
 import plotly.express as px
-from umap import UMAP
-from bertopic.representation import OpenAI, LangChain
+# Lazy import: from umap import UMAP
+# Lazy import: from bertopic.representation import OpenAI, LangChain
 import openai
 from pathlib import Path
 import json
@@ -119,7 +119,7 @@ def create_topics_per_class_visualization(
     Create a visualization showing topic distribution across different classes.
     
     Args:
-        topic_model: Fitted BERTopic model
+        topic_model: Fitted BERTopic model (Any)
         topics: List of topic assignments
         docs: List of documents
         output_dir: Directory to save the visualization
@@ -230,7 +230,7 @@ def analyze_topics(
     diversity: float = 0.1,
     doc_length: int = 500,
     tokenizer: str = "whitespace"
-) -> Optional[Tuple[BERTopic, pd.DataFrame, List[int], List[str]]]:
+) -> Optional[Tuple[Any, pd.DataFrame, List[int], List[str]]]:
     """
     Perform BERTopic analysis on transformed transcripts.
     
@@ -257,6 +257,11 @@ def analyze_topics(
     Returns:
         BERTopic: The fitted topic model with discovered topics, or None if analysis fails
     """
+    # Lazy imports to avoid loading PyTorch unless actually needed
+    from bertopic import BERTopic
+    from umap import UMAP
+    from bertopic.representation import OpenAI, LangChain
+    
     # Create output directory if it doesn't exist
     ensure_directory(output_dir)
     

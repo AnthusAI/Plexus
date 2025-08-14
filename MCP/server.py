@@ -14,10 +14,11 @@ from tools.util.think import register_think_tool
 from tools.util.docs import register_docs_tool
 from tools.util.think import register_think_tool
 from tools.scorecard.scorecards import register_scorecard_tools
+from tools.evaluation.evaluations import register_evaluation_tools
 from tools.score.management import register_score_tools
 
 # Setup Plexus imports and core functionality
-PLEXUS_CORE_AVAILABLE = setup_plexus_imports()
+setup_plexus_imports()
 
 # Create FastMCP instance
 mcp = FastMCP(
@@ -87,6 +88,10 @@ def register_all_tools():
     register_score_tools(mcp)
     logger.info("Registered score management tools")
     
+    # Register evaluation tools
+    register_evaluation_tools(mcp)
+    logger.info("Registered evaluation tools")
+    
     # TODO: Register additional tool modules here as they are created
     # register_report_tools(mcp)
     # register_item_tools(mcp)
@@ -107,11 +112,8 @@ def run_server(args):
     
     # Initialize default account as early as possible after env vars are loaded
     # but after the Plexus core is available
-    if PLEXUS_CORE_AVAILABLE:
-        logger.info("Initializing default account from environment...")
-        initialize_default_account()
-    else:
-        logger.warning("Plexus core not available, skipping default account initialization")
+    logger.info("Initializing default account from environment...")
+    initialize_default_account()
     
     # Run the server with appropriate transport
     try:

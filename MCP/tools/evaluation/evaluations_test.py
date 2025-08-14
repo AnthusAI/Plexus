@@ -19,7 +19,8 @@ class TestEvaluationInfoTool:
         def validate_evaluation_info_params(evaluation_id=None, use_latest=False, 
                                            account_key='call-criteria', evaluation_type="",
                                            include_score_results=False, include_examples=False, 
-                                           quadrant="", limit=10, output_format="json"):
+                                           predicted_value=None, actual_value=None,
+                                           limit=10, output_format="json"):
             # If evaluation_id is provided, it cannot be empty
             if evaluation_id is not None and not evaluation_id.strip():
                 return False, "evaluation_id cannot be empty"
@@ -52,10 +53,11 @@ class TestEvaluationInfoTool:
             if output_format not in ["json", "yaml", "text"]:
                 return False, "output_format must be 'json', 'yaml', or 'text'"
             
-            # Test quadrant parameter
-            valid_quadrants = ["", "tp", "tn", "fp", "fn"]
-            if quadrant not in valid_quadrants:
-                return False, f"quadrant must be one of: {valid_quadrants}"
+            # Test predicted_value and actual_value parameters
+            if predicted_value is not None and not isinstance(predicted_value, str):
+                return False, "predicted_value must be a string or None"
+            if actual_value is not None and not isinstance(actual_value, str):
+                return False, "actual_value must be a string or None"
             
             return True, None
         
@@ -71,13 +73,31 @@ class TestEvaluationInfoTool:
         
         # Test with all optional parameters for specific ID
         valid, error = validate_evaluation_info_params(evaluation_id="eval-123", include_score_results=True, 
-                                                      include_examples=True, quadrant="tp", limit=20, output_format="yaml")
+                                                      include_examples=True, predicted_value="yes", actual_value="no", limit=20, output_format="yaml")
         assert valid is True
         assert error is None
         
         # Test with all optional parameters for latest
         valid, error = validate_evaluation_info_params(use_latest=True, account_key="test-account", 
                                                       evaluation_type="accuracy", output_format="text")
+        assert valid is True
+        assert error is None
+        
+        # Test with confusion matrix parameters
+        valid, error = validate_evaluation_info_params(evaluation_id="eval-123", include_examples=True,
+                                                      predicted_value="medium", actual_value="high")
+        assert valid is True
+        assert error is None
+        
+        # Test with only predicted_value
+        valid, error = validate_evaluation_info_params(evaluation_id="eval-123", include_examples=True,
+                                                      predicted_value="yes")
+        assert valid is True
+        assert error is None
+        
+        # Test with only actual_value
+        valid, error = validate_evaluation_info_params(evaluation_id="eval-123", include_examples=True,
+                                                      actual_value="no")
         assert valid is True
         assert error is None
         
@@ -126,10 +146,15 @@ class TestEvaluationInfoTool:
         assert valid is False
         assert "output_format must be 'json', 'yaml', or 'text'" in error
         
-        # Test invalid quadrant
-        valid, error = validate_evaluation_info_params(evaluation_id="eval-123", quadrant="invalid")
+        # Test invalid predicted_value type
+        valid, error = validate_evaluation_info_params(evaluation_id="eval-123", predicted_value=123)
         assert valid is False
-        assert "quadrant must be one of:" in error
+        assert "predicted_value must be a string or None" in error
+        
+        # Test invalid actual_value type
+        valid, error = validate_evaluation_info_params(evaluation_id="eval-123", actual_value=123)
+        assert valid is False
+        assert "actual_value must be a string or None" in error
     
     def test_evaluation_import_patterns(self):
         """Test evaluation import patterns"""
