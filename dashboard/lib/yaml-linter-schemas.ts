@@ -498,6 +498,255 @@ export function createDataSourceValidationRules(): ValidationRule[] {
   ]
 }
 
+// Experiment Configuration Schema
+export const EXPERIMENT_YAML_SCHEMA = {
+  type: 'object',
+  required: ['name', 'class', 'value_function', 'exploration', 'budget', 'dataset'],
+  properties: {
+    name: {
+      type: 'string',
+      minLength: 1,
+      description: 'Human-readable name for the experiment'
+    },
+    description: {
+      type: 'string',
+      description: 'Detailed description of what this experiment tests'
+    },
+    class: {
+      type: 'object',
+      required: ['field', 'values'],
+      properties: {
+        field: {
+          type: 'string',
+          description: 'The field name to classify'
+        },
+        values: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 2,
+          description: 'Possible classification values'
+        }
+      },
+      description: 'Classification configuration'
+    },
+    value_function: {
+      type: 'object',
+      required: ['type'],
+      properties: {
+        type: {
+          type: 'string',
+          enum: ['f1_macro', 'f1_micro', 'accuracy', 'precision', 'recall', 'roc_auc'],
+          description: 'Type of value function to optimize'
+        },
+        weight: {
+          type: 'number',
+          minimum: 0,
+          maximum: 1,
+          description: 'Weight for this value function (0-1)'
+        }
+      },
+      description: 'How we measure success'
+    },
+    exploration: {
+      type: 'object',
+      required: ['method'],
+      properties: {
+        method: {
+          type: 'string',
+          enum: ['beam_search', 'random_search', 'grid_search', 'genetic'],
+          description: 'Exploration method to use'
+        },
+        beam_width: {
+          type: 'number',
+          minimum: 1,
+          description: 'Beam width for beam search'
+        },
+        max_depth: {
+          type: 'number',
+          minimum: 1,
+          description: 'Maximum depth for exploration'
+        },
+        population_size: {
+          type: 'number',
+          minimum: 1,
+          description: 'Population size for genetic algorithms'
+        }
+      },
+      description: 'Exploration method configuration'
+    },
+    budget: {
+      type: 'object',
+      properties: {
+        max_versions: {
+          type: 'number',
+          minimum: 1,
+          description: 'Maximum number of versions to try'
+        },
+        max_cost_usd: {
+          type: 'number',
+          minimum: 0,
+          description: 'Maximum cost in USD'
+        },
+        timeout_minutes: {
+          type: 'number',
+          minimum: 1,
+          description: 'Timeout in minutes'
+        }
+      },
+      description: 'Budget constraints'
+    },
+    dataset: {
+      type: 'object',
+      required: ['source'],
+      properties: {
+        source: {
+          type: 'string',
+          enum: ['items', 'feedback', 'evaluations'],
+          description: 'Source of the dataset'
+        },
+        filters: {
+          type: 'object',
+          description: 'Filters to apply to the dataset'
+        },
+        sample_size: {
+          type: 'number',
+          minimum: 1,
+          description: 'Number of samples to use'
+        }
+      },
+      description: 'Dataset configuration'
+    }
+  },
+  additionalProperties: true
+}
+
+// Experiment validation rules
+export function createExperimentValidationRules(): ValidationRule[] {
+  return [
+    // Required fields
+    new RequiredFieldRule('name'),
+    new RequiredFieldRule('class'),
+    new RequiredFieldRule('value_function'),
+    new RequiredFieldRule('exploration'),
+    new RequiredFieldRule('budget'),
+    new RequiredFieldRule('dataset'),
+
+    // Type validation
+    new TypeValidationRule('name', 'string'),
+    new TypeValidationRule('description', 'string'),
+
+    // Class validation
+    {
+      rule_id: 'EXPERIMENT_CLASS_STRUCTURE',
+      description: 'Class configuration must have field and values',
+      severity: 'error',
+      validate: (data: Record<string, any>) => {
+        const messages = []
+        if (data.class && typeof data.class === 'object') {
+          if (!data.class.field) {
+            messages.push({
+              level: 'error' as const,
+              code: 'EXPERIMENT_CLASS_MISSING_FIELD',
+              title: 'Missing Class Field',
+              message: 'Class configuration is missing required "field" property.',
+              suggestion: 'Add a "field" property specifying the classification field name.',
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/experiments#class',
+              context: { field_path: 'class.field' }
+            })
+          }
+          if (!data.class.values || !Array.isArray(data.class.values) || data.class.values.length < 2) {
+            messages.push({
+              level: 'error' as const,
+              code: 'EXPERIMENT_CLASS_INVALID_VALUES',
+              title: 'Invalid Class Values',
+              message: 'Class configuration must have at least 2 values in the "values" array.',
+              suggestion: 'Add a "values" array with at least 2 classification options (e.g., ["positive", "negative"]).',
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/experiments#class',
+              context: { field_path: 'class.values', current_length: data.class.values?.length || 0 }
+            })
+          }
+        }
+        return messages
+      }
+    },
+
+    // Value function validation
+    {
+      rule_id: 'EXPERIMENT_VALUE_FUNCTION_STRUCTURE',
+      description: 'Value function must have valid type',
+      severity: 'error',
+      validate: (data: Record<string, any>) => {
+        const messages = []
+        if (data.value_function && typeof data.value_function === 'object') {
+          const validTypes = ['f1_macro', 'f1_micro', 'accuracy', 'precision', 'recall', 'roc_auc']
+          if (!data.value_function.type || !validTypes.includes(data.value_function.type)) {
+            messages.push({
+              level: 'error' as const,
+              code: 'EXPERIMENT_VALUE_FUNCTION_INVALID_TYPE',
+              title: 'Invalid Value Function Type',
+              message: `Value function type must be one of: ${validTypes.join(', ')}.`,
+              suggestion: `Set "type" to one of the supported values: ${validTypes.join(', ')}.`,
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/experiments#value-function',
+              context: { field_path: 'value_function.type', valid_types: validTypes, current_value: data.value_function.type }
+            })
+          }
+        }
+        return messages
+      }
+    },
+
+    // Exploration method validation
+    {
+      rule_id: 'EXPERIMENT_EXPLORATION_STRUCTURE',
+      description: 'Exploration configuration must have valid method',
+      severity: 'error',
+      validate: (data: Record<string, any>) => {
+        const messages = []
+        if (data.exploration && typeof data.exploration === 'object') {
+          const validMethods = ['beam_search', 'random_search', 'grid_search', 'genetic']
+          if (!data.exploration.method || !validMethods.includes(data.exploration.method)) {
+            messages.push({
+              level: 'error' as const,
+              code: 'EXPERIMENT_EXPLORATION_INVALID_METHOD',
+              title: 'Invalid Exploration Method',
+              message: `Exploration method must be one of: ${validMethods.join(', ')}.`,
+              suggestion: `Set "method" to one of the supported values: ${validMethods.join(', ')}.`,
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/experiments#exploration',
+              context: { field_path: 'exploration.method', valid_methods: validMethods, current_value: data.exploration.method }
+            })
+          }
+        }
+        return messages
+      }
+    },
+
+    // Dataset validation
+    {
+      rule_id: 'EXPERIMENT_DATASET_STRUCTURE',
+      description: 'Dataset configuration must have valid source',
+      severity: 'error',
+      validate: (data: Record<string, any>) => {
+        const messages = []
+        if (data.dataset && typeof data.dataset === 'object') {
+          const validSources = ['items', 'feedback', 'evaluations']
+          if (!data.dataset.source || !validSources.includes(data.dataset.source)) {
+            messages.push({
+              level: 'error' as const,
+              code: 'EXPERIMENT_DATASET_INVALID_SOURCE',
+              title: 'Invalid Dataset Source',
+              message: `Dataset source must be one of: ${validSources.join(', ')}.`,
+              suggestion: `Set "source" to one of the supported values: ${validSources.join(', ')}.`,
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/experiments#dataset',
+              context: { field_path: 'dataset.source', valid_sources: validSources, current_value: data.dataset.source }
+            })
+          }
+        }
+        return messages
+      }
+    }
+  ]
+}
+
 // Factory functions for creating linters
 export function createScoreLinter(): YamlLinter {
   return new YamlLinter(
@@ -515,13 +764,23 @@ export function createDataSourceLinter(): YamlLinter {
   )
 }
 
+export function createExperimentLinter(): YamlLinter {
+  return new YamlLinter(
+    EXPERIMENT_YAML_SCHEMA,
+    createExperimentValidationRules(),
+    'https://docs.plexus.ai/yaml-dsl/experiments'
+  )
+}
+
 // Utility function to determine linter type from context
-export function createLinterForContext(context: 'score' | 'data-source'): YamlLinter {
+export function createLinterForContext(context: 'score' | 'data-source' | 'experiment'): YamlLinter {
   switch (context) {
     case 'score':
       return createScoreLinter()
     case 'data-source':
       return createDataSourceLinter()
+    case 'experiment':
+      return createExperimentLinter()
     default:
       throw new Error(`Unknown linter context: ${context}`)
   }
