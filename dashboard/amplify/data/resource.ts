@@ -114,6 +114,7 @@ const schema = a.schema({
             dataSources: a.hasMany('DataSource', 'scorecardId'),
             dataSets: a.hasMany('DataSet', 'scorecardId'),
             experiments: a.hasMany('Experiment', 'scorecardId'),
+            chatSessions: a.hasMany('ChatSession', 'scorecardId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -174,7 +175,8 @@ const schema = a.schema({
             externalId: a.string().required(),
             isDisabled: a.boolean(),
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scoreId'),
-            experiments: a.hasMany('Experiment', 'scoreId')
+            experiments: a.hasMany('Experiment', 'scoreId'),
+            chatSessions: a.hasMany('ChatSession', 'scoreId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
