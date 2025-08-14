@@ -91,6 +91,110 @@ class FeedbackItems(DataCache):
         
         logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
 
+    def _perform_update(self, cache_identifier: str, scorecard_id: str, score_id: str, 
+                        scorecard_name: str, score_name: str) -> pd.DataFrame:
+        """
+        Perform an update operation by fetching current values for existing cached records.
+        
+        This method:
+        1. Loads the existing cached dataframe
+        2. Extracts the feedback_item_ids from the cache
+        3. Fetches ONLY those specific feedback items from the API (with current values)
+        4. Updates the values in the cached dataframe
+        5. Preserves all IDs and the exact same set of records
+        
+        Args:
+            cache_identifier: Cache file identifier
+            scorecard_id: ID of the scorecard
+            score_id: ID of the score
+            scorecard_name: Name of the scorecard
+            score_name: Name of the score
+            
+        Returns:
+            Updated DataFrame with refreshed values for existing records only
+        """
+        # Load existing data
+        existing_df = self._load_from_cache(cache_identifier)
+        logger.info(f"Loaded {len(existing_df)} existing rows from cache for update")
+        
+        # Extract feedback_item_ids from existing data
+        if 'feedback_item_id' not in existing_df.columns:
+            logger.error("Cannot perform update: 'feedback_item_id' column not found in cached data")
+            return existing_df
+        
+        feedback_item_ids = existing_df['feedback_item_id'].tolist()
+        logger.info(f"Will fetch updates for {len(feedback_item_ids)} feedback items")
+        
+        # Fetch only the specific feedback items by their IDs
+        logger.info(f"Fetching current values for existing feedback items...")
+        try:
+            # Try to get the current event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're in a running loop, create a task
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        lambda: asyncio.run(self._fetch_specific_feedback_items(feedback_item_ids))
+                    )
+                    feedback_items = future.result()
+            else:
+                # If no running loop, use asyncio.run
+                feedback_items = asyncio.run(self._fetch_specific_feedback_items(feedback_item_ids))
+        except RuntimeError:
+            # Fallback: create new event loop
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                feedback_items = new_loop.run_until_complete(
+                    self._fetch_specific_feedback_items(feedback_item_ids)
+                )
+            finally:
+                new_loop.close()
+        
+        if not feedback_items:
+            logger.warning("Could not fetch feedback items for update, returning existing data")
+            return existing_df
+        
+        logger.info(f"Fetched {len(feedback_items)} feedback items for update")
+        
+        # Create a mapping of feedback_item_id to FeedbackItem for efficient lookup
+        feedback_items_map = {item.id: item for item in feedback_items}
+        
+        # Update the dataframe with new values
+        updated_count = 0
+        for idx, row in existing_df.iterrows():
+            feedback_item_id = row['feedback_item_id']
+            
+            if feedback_item_id in feedback_items_map:
+                feedback_item = feedback_items_map[feedback_item_id]
+                
+                # Update the answer values and comments
+                existing_df.at[idx, score_name] = feedback_item.finalAnswerValue
+                
+                # Update the comment using the same logic as in _determine_score_comment
+                score_comment = self._determine_score_comment(feedback_item)
+                existing_df.at[idx, f"{score_name} comment"] = score_comment
+                
+                # Update edit comment
+                edit_comment = getattr(feedback_item, 'editCommentValue', None) or ""
+                existing_df.at[idx, f"{score_name} edit comment"] = edit_comment
+                
+                # Update metadata with latest values
+                metadata = self._create_metadata_structure(feedback_item)
+                existing_df.at[idx, 'metadata'] = metadata
+                
+                updated_count += 1
+            else:
+                logger.warning(f"Feedback item {feedback_item_id} not found in API response, keeping existing values")
+        
+        logger.info(f"Updated {updated_count} out of {len(existing_df)} records")
+        
+        # Save the updated cache
+        self._save_to_cache(existing_df, cache_identifier)
+        
+        return existing_df
+    
     def _normalize_value(self, value: Optional[str]) -> Optional[str]:
         """
         Normalize a value for case-insensitive comparison.
@@ -237,13 +341,14 @@ class FeedbackItems(DataCache):
         logger.info(f"Loaded {len(df)} rows from cache: {cache_file}")
         return df
 
-    def load_dataframe(self, *, data=None, fresh=False) -> pd.DataFrame:
+    def load_dataframe(self, *, data=None, fresh=False, update=False) -> pd.DataFrame:
         """
         Load a dataframe of feedback items sampled from confusion matrix cells.
         
         Args:
             data: Not used - parameters come from class initialization
-            fresh: If True, bypass cache and fetch fresh data
+            fresh: If True, bypass cache and fetch fresh data (generates new parquet)
+            update: If True, merge new data with existing cache, preserving form IDs
             
         Returns:
             DataFrame with sampled feedback items
@@ -254,10 +359,19 @@ class FeedbackItems(DataCache):
         # Generate cache identifier
         cache_identifier = self._generate_cache_identifier(scorecard_id, score_id)
         
+        # Handle update mode - merge with existing cache
+        if update:
+            if not self._cache_exists(cache_identifier):
+                logger.warning("No existing cache found for update mode. Performing fresh load instead.")
+                # Fall through to fresh load
+            else:
+                logger.info(f"Update mode: Loading existing cache and fetching new data for {scorecard_name} / {score_name}")
+                return self._perform_update(cache_identifier, scorecard_id, score_id, scorecard_name, score_name)
+        
         # For dataset generation, we should always generate fresh data
         # The cache is only used for internal optimization during the same run
-        # TODO: Remove caching entirely for dataset generation commands
-        if not fresh and self._cache_exists(cache_identifier):
+        # TODO: Remove caching entirely for dataset generation commands  
+        if not fresh and not update and self._cache_exists(cache_identifier):
             return self._load_from_cache(cache_identifier)
         
         logger.info(f"Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
@@ -313,6 +427,80 @@ class FeedbackItems(DataCache):
         
         return df
 
+    async def _fetch_specific_feedback_items(self, feedback_item_ids: List[str]) -> List[FeedbackItem]:
+        """
+        Fetch specific feedback items by their IDs.
+        
+        Args:
+            feedback_item_ids: List of feedback item IDs to fetch
+            
+        Returns:
+            List of FeedbackItem objects
+        """
+        if not feedback_item_ids:
+            return []
+        
+        all_items = []
+        errors = 0
+        
+        # Fetch each feedback item individually using getFeedbackItem
+        for idx, feedback_item_id in enumerate(feedback_item_ids, 1):
+            try:
+                # Query for a specific feedback item by ID
+                query = """
+                query GetFeedbackItem($id: ID!) {
+                    getFeedbackItem(id: $id) {
+                        id
+                        accountId
+                        scorecardId
+                        scoreId
+                        itemId
+                        cacheKey
+                        initialAnswerValue
+                        initialCommentValue
+                        finalAnswerValue
+                        finalCommentValue
+                        editCommentValue
+                        isAgreement
+                        editedAt
+                        editorName
+                        createdAt
+                        updatedAt
+                        item {
+                            id
+                            externalId
+                            text
+                            metadata
+                            identifiers
+                            createdAt
+                            updatedAt
+                        }
+                    }
+                }
+                """
+                
+                result = self.client.execute(query, {"id": feedback_item_id})
+                
+                if result and 'getFeedbackItem' in result and result['getFeedbackItem']:
+                    item_data = result['getFeedbackItem']
+                    feedback_item = FeedbackItem.from_dict(item_data, self.client)
+                    all_items.append(feedback_item)
+                    
+                    # Log progress every 10 items
+                    if idx % 10 == 0:
+                        logger.info(f"Fetched {idx}/{len(feedback_item_ids)} feedback items")
+                else:
+                    logger.warning(f"Feedback item {feedback_item_id} not found in API")
+                    errors += 1
+                
+            except Exception as e:
+                logger.error(f"Error fetching feedback item {feedback_item_id}: {e}")
+                errors += 1
+                # Continue with other items even if one fails
+        
+        logger.info(f"Fetched {len(all_items)} out of {len(feedback_item_ids)} feedback items ({errors} errors)")
+        return all_items
+    
     async def _fetch_feedback_items(self, scorecard_id: str, score_id: str, 
                                    scorecard_name: str, score_name: str) -> List[FeedbackItem]:
         """Fetch feedback items using the FeedbackService."""
