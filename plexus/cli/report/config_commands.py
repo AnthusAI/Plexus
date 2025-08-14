@@ -1,3 +1,23 @@
+import click
+
+
+@click.group(name="config")
+def config():
+    """Report configuration commands (stub)."""
+    pass
+
+
+@config.command(name="list")
+def list_configs():
+    """List report configurations (stub)."""
+    click.echo("Report config: list (stub)")
+
+
+@config.command(name="show")
+@click.option("--id", "config_id", required=False, help="Report configuration ID")
+def show_config(config_id: str | None):
+    """Show a report configuration (stub)."""
+    click.echo(f"Report config: show {config_id or ''} (stub)")
 """
 Commands for managing Plexus Report Configurations.
 """
