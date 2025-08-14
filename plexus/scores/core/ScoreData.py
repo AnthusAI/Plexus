@@ -13,7 +13,7 @@ from plexus.CustomLogging import logging, console
 
 class ScoreData:
 
-    def load_data(self, *, data=None, excel=None, fresh=False, update=False):
+    def load_data(self, *, data=None, excel=None, fresh=False, reload=False):
         """
         Load the specified data from the training data lake, with caching, into a combined DataFrame in the class instance.
 
@@ -25,22 +25,22 @@ class ScoreData:
             Path to an Excel file to load data from.
         fresh : bool, optional
             If True, bypass cache and fetch fresh data.
-        update : bool, optional
-            If True, update existing dataset by refreshing values for current records only.
+        reload : bool, optional
+            If True, reload existing dataset by refreshing values for current records only.
         """
         data_cache = self._load_data_cache()
 
-        # Check if the data cache's load_dataframe method supports the update parameter
+        # Check if the data cache's load_dataframe method supports the reload parameter
         import inspect
         load_dataframe_signature = inspect.signature(data_cache.load_dataframe)
         
         # Build kwargs based on what the data cache supports
         kwargs = {'data': data, 'fresh': fresh}
-        if 'update' in load_dataframe_signature.parameters:
-            kwargs['update'] = update
-        elif update:
-            # Log a warning if update was requested but not supported
-            logging.warning(f"The data cache {data_cache.__class__.__name__} does not support the 'update' parameter. Ignoring --update flag.")
+        if 'reload' in load_dataframe_signature.parameters:
+            kwargs['reload'] = reload
+        elif reload:
+            # Log a warning if reload was requested but not supported
+            logging.warning(f"The data cache {data_cache.__class__.__name__} does not support the 'reload' parameter. Ignoring --reload flag.")
         
         self.dataframe = data_cache.load_dataframe(**kwargs)
 

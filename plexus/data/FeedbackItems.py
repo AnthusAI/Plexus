@@ -91,10 +91,10 @@ class FeedbackItems(DataCache):
         
         logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
 
-    def _perform_update(self, cache_identifier: str, scorecard_id: str, score_id: str, 
+    def _perform_reload(self, cache_identifier: str, scorecard_id: str, score_id: str, 
                         scorecard_name: str, score_name: str) -> pd.DataFrame:
         """
-        Perform an update operation by fetching current values for existing cached records.
+        Perform a reload operation by fetching current values for existing cached records.
         
         This method:
         1. Loads the existing cached dataframe
@@ -115,11 +115,11 @@ class FeedbackItems(DataCache):
         """
         # Load existing data
         existing_df = self._load_from_cache(cache_identifier)
-        logger.info(f"Loaded {len(existing_df)} existing rows from cache for update")
+        logger.info(f"Loaded {len(existing_df)} existing rows from cache for reload")
         
         # Extract feedback_item_ids from existing data
         if 'feedback_item_id' not in existing_df.columns:
-            logger.error("Cannot perform update: 'feedback_item_id' column not found in cached data")
+            logger.error("Cannot perform reload: 'feedback_item_id' column not found in cached data")
             return existing_df
         
         feedback_item_ids = existing_df['feedback_item_id'].tolist()
@@ -153,10 +153,10 @@ class FeedbackItems(DataCache):
                 new_loop.close()
         
         if not feedback_items:
-            logger.warning("Could not fetch feedback items for update, returning existing data")
+            logger.warning("Could not fetch feedback items for reload, returning existing data")
             return existing_df
         
-        logger.info(f"Fetched {len(feedback_items)} feedback items for update")
+        logger.info(f"Fetched {len(feedback_items)} feedback items for reload")
         
         # Create a mapping of feedback_item_id to FeedbackItem for efficient lookup
         feedback_items_map = {item.id: item for item in feedback_items}
@@ -341,14 +341,14 @@ class FeedbackItems(DataCache):
         logger.info(f"Loaded {len(df)} rows from cache: {cache_file}")
         return df
 
-    def load_dataframe(self, *, data=None, fresh=False, update=False) -> pd.DataFrame:
+    def load_dataframe(self, *, data=None, fresh=False, reload=False) -> pd.DataFrame:
         """
         Load a dataframe of feedback items sampled from confusion matrix cells.
         
         Args:
             data: Not used - parameters come from class initialization
             fresh: If True, bypass cache and fetch fresh data (generates new parquet)
-            update: If True, merge new data with existing cache, preserving form IDs
+            reload: If True, reload existing cache with current values, preserving form IDs
             
         Returns:
             DataFrame with sampled feedback items
@@ -359,19 +359,19 @@ class FeedbackItems(DataCache):
         # Generate cache identifier
         cache_identifier = self._generate_cache_identifier(scorecard_id, score_id)
         
-        # Handle update mode - merge with existing cache
-        if update:
+        # Handle reload mode - reload existing cache with current values
+        if reload:
             if not self._cache_exists(cache_identifier):
-                logger.warning("No existing cache found for update mode. Performing fresh load instead.")
+                logger.warning("No existing cache found for reload mode. Performing fresh load instead.")
                 # Fall through to fresh load
             else:
-                logger.info(f"Update mode: Loading existing cache and fetching new data for {scorecard_name} / {score_name}")
-                return self._perform_update(cache_identifier, scorecard_id, score_id, scorecard_name, score_name)
+                logger.info(f"Reload mode: Loading existing cache and fetching current data for {scorecard_name} / {score_name}")
+                return self._perform_reload(cache_identifier, scorecard_id, score_id, scorecard_name, score_name)
         
         # For dataset generation, we should always generate fresh data
         # The cache is only used for internal optimization during the same run
         # TODO: Remove caching entirely for dataset generation commands  
-        if not fresh and not update and self._cache_exists(cache_identifier):
+        if not fresh and not reload and self._cache_exists(cache_identifier):
             return self._load_from_cache(cache_identifier)
         
         logger.info(f"Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
