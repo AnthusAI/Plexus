@@ -51,8 +51,6 @@ type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersio
 type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "rootNodeId" | "updatedAt" | "createdAt";
 type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "versionNumber" | "status" | "childrenCount";
 type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "versionNumber" | "seq" | "status";
-type ChatSessionIndexFields = "accountId" | "scorecardId" | "scoreId" | "experimentId" | "status";
-type ChatMessageIndexFields = "sessionId" | "experimentId" | "role";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
