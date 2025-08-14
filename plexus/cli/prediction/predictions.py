@@ -1108,7 +1108,7 @@ async def predict_score_with_individual_loading(scorecard_identifier, score_name
         from plexus.cli.shared.client_utils import create_client
         from plexus.cli.shared.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
         from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
-        from plexus.cli.identify_target_scores import identify_target_scores
+        from plexus.cli.shared.identify_target_scores import identify_target_scores
         from plexus.cli.shared.iterative_config_fetching import iteratively_fetch_configurations
         
         # Resolve scorecard and fetch minimal structure

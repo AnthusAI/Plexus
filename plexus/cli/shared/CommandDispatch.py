@@ -159,8 +159,8 @@ def create_celery_app() -> Celery:
     )
     
     # Register task modules
-    from plexus.cli.CommandTasks import register_tasks as register_command_tasks
-    from plexus.cli.score_chat.commands import register_tasks as register_score_chat_tasks
+    from plexus.cli.shared.CommandTasks import register_tasks as register_command_tasks
+    from plexus.cli.score_chat.chat import register_tasks as register_score_chat_tasks
     
     # Register tasks
     register_command_tasks(app)
