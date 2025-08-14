@@ -24,7 +24,8 @@ def register_evaluation_tools(mcp: FastMCP):
         evaluation_type: str = "",
         include_score_results: bool = False,
         include_examples: bool = False,
-        quadrant: str = "",
+        predicted_value: Optional[str] = None,
+        actual_value: Optional[str] = None,
         limit: int = 10,
         output_format: str = "json"
     ) -> str:
@@ -45,9 +46,10 @@ def register_evaluation_tools(mcp: FastMCP):
         - account_key: Account key to filter by when using use_latest (default: 'call-criteria')
         - evaluation_type: Optional filter by evaluation type when using use_latest (e.g., 'accuracy', 'consistency')
         - include_score_results: Whether to include score results information (default: False)
-        - include_examples: Whether to include quadrant examples (default: False)
-        - quadrant: Specific quadrant to show examples for ("tp", "tn", "fp", "fn", or "" for all)
-        - limit: Maximum number of examples per quadrant (default: 10)
+        - include_examples: Whether to include examples from confusion matrix (default: False)
+        - predicted_value: Filter examples where AI predicted this value (e.g., "medium", "high", "yes", "no")
+        - actual_value: Filter examples where human labeled this value (e.g., "low", "yes", "no")
+        - limit: Maximum number of examples per category (default: 10)
         - output_format: Output format - "json", "yaml", or "text" (default: "json")
         
         Returns:
@@ -112,7 +114,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     client = PlexusDashboardClient()
                     import json as _json
 
-                    def fetch_examples(q: str, k: int) -> List[Dict[str, Any]]:
+                    def fetch_examples(k: int, pred_val: Optional[str] = None, actual_val: Optional[str] = None) -> List[Dict[str, Any]]:
                         query = """
                         query ListByEval($evaluationId: String!, $limit: Int, $nextToken: String) {
                           listScoreResultByEvaluationId(evaluationId: $evaluationId, limit: $limit, nextToken: $nextToken) {
@@ -148,17 +150,12 @@ def register_evaluation_tools(mcp: FastMCP):
                                         inner_md = inner.get('metadata') or {}
                                         human_label = (inner_md.get('human_label') or '').strip().lower()
                                 predicted = (sr.get('value') or '').strip().lower()
-                                quad = None
-                                if human_label in ("yes", "no") and predicted in ("yes", "no"):
-                                    if human_label == "yes" and predicted == "yes":
-                                        quad = "tp"
-                                    elif human_label == "no" and predicted == "no":
-                                        quad = "tn"
-                                    elif human_label == "no" and predicted == "yes":
-                                        quad = "fp"
-                                    elif human_label == "yes" and predicted == "no":
-                                        quad = "fn"
-                                if quad == q:
+                                # Check if this example matches our filter criteria
+                                pred_match = pred_val is None or predicted == pred_val.lower()
+                                actual_match = actual_val is None or human_label == actual_val.lower()
+                                matches = pred_match and actual_match
+                                
+                                if matches:
                                     examples.append({
                                         "score_result_id": sr.get('id'),
                                         "item_id": sr.get('itemId'),
@@ -172,15 +169,16 @@ def register_evaluation_tools(mcp: FastMCP):
                                 break
                         return examples
 
-                    if quadrant:
-                        payload['examples'] = {quadrant.lower(): fetch_examples(quadrant.lower(), limit)}
+                    # Filter examples by predicted/actual values if specified
+                    if predicted_value is not None or actual_value is not None:
+                        # Filter by specific predicted/actual values
+                        examples = fetch_examples(limit, predicted_value, actual_value)
+                        filter_key = f"predicted_{predicted_value or 'any'}_actual_{actual_value or 'any'}"
+                        payload['examples'] = {filter_key: examples}
                     else:
-                        payload['examples'] = {
-                            'fp': fetch_examples('fp', limit),
-                            'fn': fetch_examples('fn', limit),
-                            'tp': fetch_examples('tp', min(5, limit)),
-                            'tn': fetch_examples('tn', min(5, limit)),
-                        }
+                        # No filtering - return all examples
+                        examples = fetch_examples(limit)
+                        payload['examples'] = {"all": examples}
 
                 # Output formatting - support both structured (JSON/YAML) and formatted text
                 if output_format.lower() == 'yaml':
@@ -275,3 +273,35 @@ def register_evaluation_tools(mcp: FastMCP):
             # Restore original stdout
             sys.stdout = old_stdout
 
+    @mcp.tool()
+    async def run_plexus_evaluation(
+        scorecard_name: str = "",
+        score_name: str = "",
+        n_samples: int = 10,
+        remote: bool = False,
+        yaml: bool = True,
+    ) -> str:
+        """Run a local YAML-based accuracy evaluation using the same code path as CLI (DRY)."""
+        if not scorecard_name:
+            return "Error: scorecard_name must be provided"
+
+        try:
+            # Use the shared evaluation function - no code duplication!
+            from plexus.cli.shared.evaluation_runner import run_accuracy_evaluation
+            import json
+
+            # Call the shared function that both CLI and MCP use
+            result = await run_accuracy_evaluation(
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                number_of_samples=n_samples,
+                sampling_method="random",
+                fresh=True,
+                use_yaml=yaml
+            )
+            
+            return json.dumps(result)
+
+        except Exception as e:
+            logger.error(f"Error running Plexus evaluation: {e}", exc_info=True)
+            return f"Error: {e}"

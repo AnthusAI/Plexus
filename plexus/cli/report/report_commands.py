@@ -1,3 +1,40 @@
+import click
+
+
+@click.command(name="run")
+def run():
+    """Run a report (stub)."""
+    click.echo("Report run (stub)")
+
+
+@click.command(name="list")
+def list_reports():
+    """List reports (stub)."""
+    click.echo("Report list (stub)")
+
+
+@click.command(name="show")
+def show_report():
+    """Show report (stub)."""
+    click.echo("Report show (stub)")
+
+
+@click.command(name="last")
+def show_last_report():
+    """Show last report (stub)."""
+    click.echo("Report last (stub)")
+
+
+@click.command(name="delete")
+def delete_report():
+    """Delete report (stub)."""
+    click.echo("Report delete (stub)")
+
+
+@click.command(name="purge")
+def purge_reports():
+    """Purge reports (stub)."""
+    click.echo("Report purge (stub)")
 """
 Commands for generating and inspecting Plexus Reports.
 """

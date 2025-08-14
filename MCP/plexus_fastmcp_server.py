@@ -86,7 +86,7 @@ temp_stdout = StringIO()
 sys.stdout = temp_stdout
 
 # Initialize Global flags and dummy functions first
-PLEXUS_CORE_AVAILABLE = False
+CORE_IMPORTED = False
 def create_dashboard_client(): return None
 def resolve_account_identifier(client, identifier): return None
 def resolve_scorecard_identifier(client, identifier): return None
@@ -209,11 +209,11 @@ try:
         create_dashboard_client = enhanced_create_dashboard_client
         resolve_account_identifier = wrapped_resolve_account_identifier
         resolve_scorecard_identifier = wrapped_resolve_scorecard_identifier
-        PLEXUS_CORE_AVAILABLE = True
+        CORE_IMPORTED = True
         logger.info("Plexus core modules imported successfully.")
     except ImportError as e:
-        logger.warning(f"Could not import core Plexus modules: {e}. Dashboard features will be unavailable.")
-        # Dummies are already defined, PLEXUS_CORE_AVAILABLE is already False
+        logger.error(f"Could not import core Plexus modules: {e}.")
+        raise
     except Exception as import_err:
         # Catch other potential errors during import/setup
         logger.error(f"Error during Plexus core module import/setup: {import_err}", exc_info=True)
@@ -234,6 +234,11 @@ except Exception as e:
     else:
         print(f"Error during initialization: {e}", file=sys.stderr)
     raise
+
+# Require core before continuing
+if not CORE_IMPORTED:
+    logger.error("Plexus core not available")
+    raise RuntimeError("Plexus core not available")
 
 # Create FastMCP instance
 mcp = FastMCP(
@@ -383,11 +388,6 @@ def initialize_default_account():
     
     DEFAULT_ACCOUNT_KEY = account_key
     
-    # Only attempt to resolve if we have the client available
-    if not PLEXUS_CORE_AVAILABLE:
-        logger.warning("Plexus core not available, can't resolve default account ID")
-        return
-    
     # Create dashboard client and resolve account ID
     try:
         client = create_dashboard_client()
@@ -495,13 +495,12 @@ if __name__ == "__main__":
     if args.env_dir:
         load_env_file(args.env_dir)
     
-    # Initialize default account as early as possible after env vars are loaded
-    # but after the Plexus core is available
-    if PLEXUS_CORE_AVAILABLE:
-        logger.info("Initializing default account from environment...")
-        initialize_default_account()
-    else:
-        logger.warning("Plexus core not available, skipping default account initialization")
+    # Require core and initialize default account
+    if not CORE_IMPORTED:
+        logger.error("Plexus core not available")
+        sys.exit(1)
+    logger.info("Initializing default account from environment...")
+    initialize_default_account()
     
     # Run the server with appropriate transport
     try:

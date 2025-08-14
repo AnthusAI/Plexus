@@ -11,7 +11,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from shared.setup import logger, create_dashboard_client, resolve_scorecard_identifier
+from shared.setup import logger, create_dashboard_client, resolve_scorecard_identifier, resolve_account_identifier
 from shared.utils import get_default_account_id
 
 def register_scorecard_tools(mcp: FastMCP):
@@ -379,22 +379,70 @@ def register_scorecard_tools(mcp: FastMCP):
                 else:
                     scorecard_instance, _ = load_scorecard_from_api(scorecard_name)
 
-                # Run evaluation using core Evaluation API directly to avoid duplicating CLI logic
+                # Mirror CLI behavior: create TaskProgressTracker and Evaluation record, then run with tracker
+                from plexus.cli.shared.evaluation_runner import create_tracker_and_evaluation
                 from plexus.Evaluation import AccuracyEvaluation
+
+                # Ensure API client and account are available
+                # Require configured client and account (no contingencies)
+                # Use CLI client factory for config loading from .plexus/config.yaml or .env
+                from plexus.cli.shared.client_utils import create_client as _create_client
+                from plexus.cli.report.utils import resolve_account_id_for_command
+                client = _create_client()
+                # Resolve default account using the wrapped resolver to avoid relying on cached DEFAULT_ACCOUNT_ID
+                # Resolve account exactly like the CLI
+                account_id = resolve_account_id_for_command(client, None)
+                if not client:
+                    return "Error: Could not create Dashboard client."
+                if not account_id:
+                    return "Error: Could not resolve account (PLEXUS_ACCOUNT_KEY)."
+
+                # Create tracker and evaluation using shared helper (DRY with CLI)
+                tracker, evaluation_record = create_tracker_and_evaluation(
+                    client=client,
+                    account_id=account_id,
+                    scorecard_name=scorecard_name,
+                    number_of_samples=n_samples,
+                    sampling_method='random',
+                    score_name=score_name or None,
+                )
+                evaluation_id = evaluation_record.id
+
+                # Initialize AccuracyEvaluation. Dataset will be loaded from score YAML inside evaluator.
                 eval_instance = AccuracyEvaluation(
                     scorecard_name=scorecard_name,
                     scorecard=scorecard_instance,
                     number_of_texts_to_sample=n_samples,
                     subset_of_score_names=[score_name] if score_name else None,
+                    evaluation_id=evaluation_id,
+                    sampling_method='random',
+                    account_id=account_id,
                 )
-                # Execute synchronously (this will block until complete)
+
+                # Execute with tracker (synchronous/blocking)
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # If we're already in an event loop, create a new task and wait
-                    result = await eval_instance.run()
+                    metrics = await eval_instance.run(tracker=tracker)
                 else:
-                    result = loop.run_until_complete(eval_instance.run())
-                return f"Local evaluation completed for '{scorecard_name}'{' / ' + score_name if score_name else ''}."
+                    metrics = loop.run_until_complete(eval_instance.run(tracker=tracker))
+
+                # Prepare a concise JSON summary to return to the client
+                try:
+                    summary = {
+                        "scorecard": scorecard_name,
+                        "score": score_name or "",
+                        "samples": metrics.get("totalItems") or metrics.get("total_items") or n_samples,
+                        "accuracy": metrics.get("accuracy"),
+                        "precision": metrics.get("precision"),
+                        "recall": metrics.get("recall"),
+                        "alignment": metrics.get("alignment"),
+                        "confusionMatrix": metrics.get("confusionMatrix"),
+                        "predictedClassDistribution": metrics.get("predictedClassDistribution"),
+                        "datasetClassDistribution": metrics.get("datasetClassDistribution"),
+                    }
+                    return json.dumps(summary)
+                except Exception:
+                    return f"Local evaluation completed for '{scorecard_name}'{' / ' + score_name if score_name else ''}."
             except Exception as e:
                 logger.error(f"Local evaluation failed: {e}", exc_info=True)
                 return f"Error: Local evaluation failed: {e}"
