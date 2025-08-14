@@ -964,14 +964,14 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"]),
-            idx("accountId").sortKeys(["createdAt"]),
-            idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"]),
-            idx("experimentId").sortKeys(["updatedAt"]),
-            idx("experimentId").sortKeys(["createdAt"]),
-            idx("status").sortKeys(["updatedAt"])
+        .secondaryIndexes((index) => [
+            index("accountId").sortKeys(["updatedAt"]),
+            index("accountId").sortKeys(["createdAt"]),
+            index("scorecardId").sortKeys(["updatedAt"]),
+            index("scoreId").sortKeys(["updatedAt"]),
+            index("experimentId").sortKeys(["updatedAt"]),
+            index("experimentId").sortKeys(["createdAt"]),
+            index("status").sortKeys(["updatedAt"])
         ]),
 
     ChatMessage: a
@@ -988,9 +988,9 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("sessionId"),
-            idx("experimentId").sortKeys(["createdAt"])
+        .secondaryIndexes((index) => [
+            index("sessionId"),
+            index("experimentId").sortKeys(["createdAt"])
         ]),
 });
 
