@@ -914,7 +914,7 @@ const schema = a.schema({
             parentNode: a.belongsTo('ExperimentNode', 'parentNodeId'),
             childNodes: a.hasMany('ExperimentNode', 'parentNodeId'),
             versionNumber: a.integer().required(),
-            status: a.enum(['ACTIVE', 'EXPANDED', 'STOPPED']),
+            status: a.string(),
             isFrontier: a.boolean().required(),
             childrenCount: a.integer().required(),
             versions: a.hasMany('ExperimentNodeVersion', 'nodeId'),
@@ -935,8 +935,10 @@ const schema = a.schema({
             node: a.belongsTo('ExperimentNode', 'nodeId'),
             versionNumber: a.integer().required(),
             seq: a.integer().required(),
-            status: a.enum(['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED']),
-            yaml: a.string().required(),
+            status: a.string(),
+            code: a.string().required(),
+            hypothesis: a.string(),
+            insight: a.string(),
             value: a.json().required(),
         })
         .authorization((allow) => [
@@ -979,9 +981,17 @@ const schema = a.schema({
             session: a.belongsTo('ChatSession', 'sessionId'),
             experimentId: a.string(),
             experiment: a.belongsTo('Experiment', 'experimentId'),
-            role: a.enum(['USER', 'ASSISTANT', 'SYSTEM']),
+            role: a.enum(['USER', 'ASSISTANT', 'SYSTEM', 'TOOL']),
             content: a.string().required(),
             metadata: a.json(),
+            messageType: a.enum(['MESSAGE', 'TOOL_CALL', 'TOOL_RESPONSE']),
+            toolName: a.string(), // Name of the tool being called (for TOOL_CALL and TOOL_RESPONSE)
+            toolParameters: a.json(), // Parameters passed to the tool (for TOOL_CALL)
+            toolResponse: a.json(), // Response from the tool (for TOOL_RESPONSE)
+            parentMessageId: a.string(), // Links tool responses to their calls, or chains related messages
+            parentMessage: a.belongsTo('ChatMessage', 'parentMessageId'),
+            childMessages: a.hasMany('ChatMessage', 'parentMessageId'),
+            sequenceNumber: a.integer(), // Order within the session for proper conversation flow
             createdAt: a.datetime().required(),
         })
         .authorization((allow) => [
@@ -989,8 +999,11 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("sessionId"),
-            idx("experimentId").sortKeys(["createdAt"])
+            idx("sessionId").sortKeys(["sequenceNumber"]),
+            idx("sessionId").sortKeys(["createdAt"]),
+            idx("experimentId").sortKeys(["createdAt"]),
+            idx("parentMessageId"),
+            idx("messageType").sortKeys(["createdAt"])
         ]),
 });
 
