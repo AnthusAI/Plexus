@@ -24,7 +24,7 @@ async function listScorecards(): Promise<{ data: Schema['Scorecard']['type'][], 
   let nextToken: string | null = null
   
   do {
-    const result = await listFromModel<Schema['Scorecard']['type']>(
+    const result: AmplifyListResult<Schema['Scorecard']['type']> = await listFromModel<Schema['Scorecard']['type']>(
       client.models.Scorecard,
       undefined,
       nextToken || undefined,
@@ -43,7 +43,7 @@ async function listSections(scorecardId: string): Promise<{ data: Schema['Scorec
   let nextToken: string | null = null
   
   do {
-    const result = await listFromModel<Schema['ScorecardSection']['type']>(
+    const result: AmplifyListResult<Schema['ScorecardSection']['type']> = await listFromModel<Schema['ScorecardSection']['type']>(
       client.models.ScorecardSection,
       { scorecardId: { eq: scorecardId } },
       nextToken || undefined,
@@ -62,7 +62,7 @@ async function listScores(sectionId: string): Promise<{ data: Schema['Score']['t
   let nextToken: string | null = null
   
   do {
-    const result = await listFromModel<Schema['Score']['type']>(
+    const result: AmplifyListResult<Schema['Score']['type']> = await listFromModel<Schema['Score']['type']>(
       client.models.Score,
       { sectionId: { eq: sectionId } },
       nextToken || undefined,
