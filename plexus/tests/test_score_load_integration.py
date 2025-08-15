@@ -143,7 +143,7 @@ class TestEvaluationCommandsDataDrivenSamples(unittest.TestCase):
         # Act
         result = get_data_driven_samples(
             self.scorecard_instance, self.scorecard_name, self.score_name,
-            self.score_config, fresh=False, content_ids_to_sample_set=self.content_ids_set
+            self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
         )
         
         # Assert
@@ -170,7 +170,7 @@ class TestEvaluationCommandsDataDrivenSamples(unittest.TestCase):
         # Act
         result = get_data_driven_samples(
             self.scorecard_instance, self.scorecard_name, self.score_name,
-            self.score_config, fresh=False, content_ids_to_sample_set=self.content_ids_set
+            self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
         )
         
         # Assert - function catches exception and returns empty list
@@ -345,7 +345,7 @@ class TestBackwardCompatibility(unittest.TestCase):
         # Act - should not raise exception, should return empty list
         result = get_data_driven_samples(
             MagicMock(), "test_scorecard", "test_score", 
-            score_config, False, set()
+            score_config, fresh=False, reload=False, content_ids_to_sample_set=set()
         )
         
         # Assert - should have attempted Score.load() and returned empty list on error
