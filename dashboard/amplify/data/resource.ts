@@ -882,6 +882,7 @@ const schema = a.schema({
     Experiment: a
         .model({
             featured: a.boolean(),
+            code: a.string(),
             rootNodeId: a.id(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
