@@ -960,6 +960,8 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             experimentId: a.string(),
             experiment: a.belongsTo('Experiment', 'experimentId'),
+            nodeId: a.string(),
+            node: a.belongsTo('ExperimentNode', 'nodeId'),
             status: a.enum(['ACTIVE', 'COMPLETED', 'ERROR']),
             metadata: a.json(),
             createdAt: a.datetime().required(),
@@ -973,6 +975,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("experimentId").sortKeys(["createdAt"]),
+            idx("nodeId").sortKeys(["createdAt"]),
             idx("status").sortKeys(["updatedAt"])
         ]),
 
