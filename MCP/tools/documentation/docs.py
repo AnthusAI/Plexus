@@ -51,9 +51,11 @@ def register_documentation_tools(mcp: FastMCP):
             
             try:
                 # Get the path to the plexus docs directory
-                # Navigate from MCP/ to plexus/docs/
+                # Navigate from MCP/tools/documentation to Plexus project root, then to plexus/docs/
                 current_dir = os.path.dirname(os.path.abspath(__file__))
-                plexus_dir = os.path.dirname(os.path.dirname(current_dir))  # Go up from MCP/tools/documentation to project root
+                tools_dir = os.path.dirname(current_dir)  # documentation -> tools
+                mcp_dir = os.path.dirname(tools_dir)  # tools -> MCP
+                plexus_dir = os.path.dirname(mcp_dir)  # MCP -> Plexus project root
                 docs_dir = os.path.join(plexus_dir, "plexus", "docs")
                 file_path = os.path.join(docs_dir, valid_files[filename])
                 
