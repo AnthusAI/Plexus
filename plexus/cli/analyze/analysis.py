@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 
 dotenv.load_dotenv('.env', override=True)
 
+def analyze_topics(*args, **kwargs):
+    """Lazy wrapper for analyze_topics to avoid loading PyTorch unless needed."""
+    from plexus.analysis.topics.analyzer import analyze_topics as _analyze_topics
+    return _analyze_topics(*args, **kwargs)
+
 @click.group()
 def analyze():
     """
@@ -334,8 +339,6 @@ def topics(
             logging.info(f"OMP_NUM_THREADS set to: {os.environ.get('OMP_NUM_THREADS')}")
 
             try:
-                # Lazy import to avoid loading PyTorch unless actually needed
-                from plexus.analysis.topics.analyzer import analyze_topics
                 analyze_topics(
                     text_file_path=text_file_path,
                     output_dir=output_dir_str,
