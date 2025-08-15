@@ -66,7 +66,6 @@ def register_feedback_tools(mcp: FastMCP):
             
             logger.info(f"[MCP] Generating feedback summary for '{score_name}' on '{scorecard_name}' (last {days} days)")
             
-            # Try to import required modules directly (don't rely on global PLEXUS_CORE_AVAILABLE)
             try:
                 from plexus.cli.feedback.feedback_service import FeedbackService
             except ImportError as e:

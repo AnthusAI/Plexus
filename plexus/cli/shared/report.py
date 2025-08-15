@@ -1,6 +1,6 @@
 import click
 from plexus.reports.s3_utils import check_s3_bucket_access
-from plexus.cli.cli import report_group
+from plexus.cli.report.reports import report as report_group
 
 @click.command('check-s3')
 @click.option('--bucket', help='Optional bucket name to check (uses default if not specified)')

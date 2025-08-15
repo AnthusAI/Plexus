@@ -671,7 +671,9 @@ class Score(BaseModel):
                 'scoreId': self.id,
                 'configuration': yaml_content.strip(),
                 'note': note or 'Updated via Score.create_version_from_yaml()',
-                'isFeatured': True  # Auto-promote to champion
+                # Mark as featured by default so the version is created as a candidate for champion
+                # (promotion will be explicitly set via updateScore below)
+                'isFeatured': True
             }
             
             # Include parent version if available
@@ -690,29 +692,28 @@ class Score(BaseModel):
             new_version = result['createScoreVersion']
             new_version_id = new_version['id']
 
-            # Update the score to point to the new champion version
+            # Promote new version to champion explicitly to match expected behavior
             update_mutation = """
             mutation UpdateScore($input: UpdateScoreInput!) {
                 updateScore(input: $input) {
                     id
-                    name
                     championVersionId
                 }
             }
             """
-            
             update_input = {
                 'id': self.id,
                 'championVersionId': new_version_id
             }
-            
-            update_result = self._client.execute(update_mutation, {'input': update_input})
-            
-            if 'errors' in update_result:
-                logger.warning(f"Failed to update champion version for Score {self.id}: {update_result['errors']}")
+            try:
+                update_result = self._client.execute(update_mutation, {'input': update_input})
+                # Detect GraphQL-style errors returned as part of payload
+                if not update_result or update_result.get('errors'):
+                    champion_updated = False
+                else:
+                    champion_updated = True
+            except Exception:
                 champion_updated = False
-            else:
-                champion_updated = True
 
             logger.info(f"Successfully created new version {new_version_id} for Score {self.name}")
             

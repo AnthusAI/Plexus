@@ -12,7 +12,7 @@ import type { LintResult, LintMessage } from '@/lib/yaml-linter'
 
 interface UseYamlLinterOptions {
   /** The type of YAML being edited */
-  context: 'score' | 'data-source'
+  context: 'score' | 'data-source' | 'experiment'
   /** Debounce delay in milliseconds */
   debounceMs?: number
   /** Whether to automatically show Monaco markers */

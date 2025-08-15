@@ -138,7 +138,7 @@ class TestAccountManagement:
     """Test account management utilities"""
     
     @patch.dict(os.environ, {"PLEXUS_ACCOUNT_KEY": "test-account"})
-    @patch('shared.utils.PLEXUS_CORE_AVAILABLE', True)
+    # Core availability is enforced at server startup; no patching required
     @patch('shared.utils.create_dashboard_client')
     @patch('shared.utils.resolve_account_identifier')
     def test_get_default_account_id_success(self, mock_resolve, mock_create_client):
@@ -172,7 +172,7 @@ class TestAccountManagement:
         assert result is None
     
     @patch.dict(os.environ, {"PLEXUS_ACCOUNT_KEY": "test-account"})
-    @patch('shared.utils.PLEXUS_CORE_AVAILABLE', False)
+    # Core availability is enforced at server startup; no patching required
     def test_get_default_account_id_core_unavailable(self):
         """Test when Plexus core is not available"""
         # Reset the global cache for testing
@@ -185,7 +185,7 @@ class TestAccountManagement:
         assert result is None
     
     @patch.dict(os.environ, {"PLEXUS_ACCOUNT_KEY": "test-account"})
-    @patch('shared.utils.PLEXUS_CORE_AVAILABLE', True)
+    # Core availability is enforced at server startup; no patching required
     @patch('shared.utils.create_dashboard_client')
     def test_get_default_account_id_client_creation_fails(self, mock_create_client):
         """Test when client creation fails"""
