@@ -893,6 +893,7 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             nodes: a.hasMany('ExperimentNode', 'experimentId'),
             chatSessions: a.hasMany('ChatSession', 'experimentId'),
+            chatMessages: a.hasMany('ChatMessage', 'experimentId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
