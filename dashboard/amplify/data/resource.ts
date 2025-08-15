@@ -917,6 +917,7 @@ const schema = a.schema({
             name: a.string(),
             status: a.string(),
             versions: a.hasMany('ExperimentNodeVersion', 'nodeId'),
+            chatSessions: a.hasMany('ChatSession', 'nodeId'),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
