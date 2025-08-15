@@ -936,7 +936,7 @@ const schema = a.schema({
             code: a.string().required(),
             hypothesis: a.string(),
             insight: a.string(),
-            value: a.json().required(),
+            value: a.json(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
