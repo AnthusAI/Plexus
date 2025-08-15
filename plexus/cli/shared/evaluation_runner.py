@@ -93,6 +93,7 @@ async def run_accuracy_evaluation(
     client: Optional[PlexusDashboardClient] = None,
     account_id: Optional[str] = None,
     fresh: bool = True,
+    reload: bool = False,
     use_yaml: bool = True
 ) -> dict:
     """Run a complete accuracy evaluation using the same logic as CLI.
@@ -189,6 +190,7 @@ async def run_accuracy_evaluation(
             score_name=primary_score_config.get('name') if primary_score_config else None,
             score_config=primary_score_config,
             fresh=fresh,
+            reload=reload,
             content_ids_to_sample_set=set(),
             progress_callback=tracker.update if tracker else None,
             number_of_samples=number_of_samples,
