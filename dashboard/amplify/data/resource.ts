@@ -49,7 +49,7 @@ type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | 
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
 type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "rootNodeId" | "updatedAt" | "createdAt";
-type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "status" | "createdAt" | "updatedAt";
+type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
 type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "status" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
@@ -914,6 +914,7 @@ const schema = a.schema({
             parentNodeId: a.id(),
             parentNode: a.belongsTo('ExperimentNode', 'parentNodeId'),
             childNodes: a.hasMany('ExperimentNode', 'parentNodeId'),
+            name: a.string(),
             status: a.string(),
             versions: a.hasMany('ExperimentNodeVersion', 'nodeId'),
             createdAt: a.datetime().required(),
