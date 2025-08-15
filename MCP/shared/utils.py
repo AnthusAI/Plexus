@@ -9,7 +9,7 @@ from io import StringIO
 from urllib.parse import urljoin
 from typing import Optional, Dict, Any, List
 from .setup import (
-    PLEXUS_CORE_AVAILABLE, DEFAULT_ACCOUNT_ID, DEFAULT_ACCOUNT_KEY, ACCOUNT_CACHE,
+    DEFAULT_ACCOUNT_ID, DEFAULT_ACCOUNT_KEY, ACCOUNT_CACHE,
     create_dashboard_client, resolve_account_identifier, logger
 )
 
@@ -47,11 +47,6 @@ def initialize_default_account():
         return
     
     DEFAULT_ACCOUNT_KEY = account_key
-    
-    # Only attempt to resolve if we have the client available
-    if not PLEXUS_CORE_AVAILABLE:
-        logger.warning("Plexus core not available, can't resolve default account ID")
-        return
     
     # Create dashboard client and resolve account ID
     try:

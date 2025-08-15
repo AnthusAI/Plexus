@@ -13,7 +13,7 @@ import os
 import re
 from pathlib import Path
 from plexus.analysis.topics.transformer import transform_transcripts, inspect_data, transform_transcripts_llm, transform_transcripts_itemize
-from plexus.analysis.topics.analyzer import analyze_topics
+# Lazy import: from plexus.analysis.topics.analyzer import analyze_topics  # Avoid loading PyTorch at startup
 from plexus.analysis.topics.ollama_test import test_ollama_chat
 from typing import Optional
 import asyncio
@@ -334,6 +334,8 @@ def topics(
             logging.info(f"OMP_NUM_THREADS set to: {os.environ.get('OMP_NUM_THREADS')}")
 
             try:
+                # Lazy import to avoid loading PyTorch unless actually needed
+                from plexus.analysis.topics.analyzer import analyze_topics
                 analyze_topics(
                     text_file_path=text_file_path,
                     output_dir=output_dir_str,

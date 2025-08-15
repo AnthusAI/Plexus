@@ -174,8 +174,8 @@ class LangChainUser:
                 else:
                     pass
                 if not is_gpt5 and params.top_p is not None:
-                    chat_kwargs.setdefault("model_kwargs", {})
-                    chat_kwargs["model_kwargs"]["top_p"] = params.top_p
+                    # chat_kwargs.setdefault("model_kwargs", {})
+                    chat_kwargs["top_p"] = params.top_p
                 if not is_gpt5 and params.temperature is not None:
                     chat_kwargs["temperature"] = params.temperature
                 try:

@@ -60,14 +60,17 @@ DEFAULT_ACCOUNT_KEY = None
 ACCOUNT_CACHE = {}  # Maps account keys/names to resolved IDs
 
 # Initialize Global flags and dummy functions first
-PLEXUS_CORE_AVAILABLE = False
+"""Setup utilities for MCP server to import Plexus core and configure logging.
+
+This module raises on failure to import core modules; there is no partial mode.
+"""
 def create_dashboard_client(): return None
 def resolve_account_identifier(client, identifier): return None
 def resolve_scorecard_identifier(client, identifier): return None
 
 def setup_plexus_imports():
-    """Setup Plexus imports and path configuration"""
-    global PLEXUS_CORE_AVAILABLE, create_dashboard_client, resolve_account_identifier, resolve_scorecard_identifier
+    """Setup Plexus imports and path configuration. Raises on failure."""
+    global create_dashboard_client, resolve_account_identifier, resolve_scorecard_identifier
     
     # Temporarily redirect stdout during initialization to prevent any accidental writing to stdout
     original_stdout = sys.stdout
@@ -113,6 +116,7 @@ def setup_plexus_imports():
             # Attempt to import Plexus modules for core functionality
             from plexus.dashboard.api.client import PlexusDashboardClient
             # Assign imported functions to pre-defined names
+            # Prefer minimal-dependency resolution path to avoid importing heavy CLI groups
             from plexus.cli.shared.client_utils import create_client as _create_dashboard_client
             from plexus.cli.scorecard.scorecards import resolve_account_identifier as _resolve_account_identifier
             from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier as _resolve_scorecard_identifier
@@ -125,16 +129,8 @@ def setup_plexus_imports():
                 sys.stdout = client_stdout
                 
                 try:
-                    api_url = os.environ.get('PLEXUS_API_URL', '')
-                    api_key = os.environ.get('PLEXUS_API_KEY', '')
-                    
-                    logger.debug(f"API URL exists: {bool(api_url)}, API KEY exists: {bool(api_key)}")
-                    
-                    if not api_url or not api_key:
-                        logger.warning("Missing API credentials: API_URL or API_KEY not set in environment")
-                        return None
-                    
-                    # Call the original function
+                    # Always delegate to the CLI's client factory, which itself loads
+                    # .plexus/config.yaml and falls back to .env when present.
                     client = _create_dashboard_client()
                     
                     if client:
@@ -189,11 +185,10 @@ def setup_plexus_imports():
             create_dashboard_client = enhanced_create_dashboard_client
             resolve_account_identifier = wrapped_resolve_account_identifier
             resolve_scorecard_identifier = wrapped_resolve_scorecard_identifier
-            PLEXUS_CORE_AVAILABLE = True
             logger.info("Plexus core modules imported successfully.")
         except ImportError as e:
-            logger.warning(f"Could not import core Plexus modules: {e}. Dashboard features will be unavailable.")
-            # Dummies are already defined, PLEXUS_CORE_AVAILABLE is already False
+            logger.error(f"Could not import core Plexus modules: {e}.")
+            raise
         except Exception as import_err:
             # Catch other potential errors during import/setup
             logger.error(f"Error during Plexus core module import/setup: {import_err}", exc_info=True)
@@ -215,4 +210,4 @@ def setup_plexus_imports():
             print(f"Error during initialization: {e}", file=sys.stderr)
         raise
 
-    return PLEXUS_CORE_AVAILABLE
+    return True
