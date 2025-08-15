@@ -49,8 +49,8 @@ type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | 
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
 type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "rootNodeId" | "updatedAt" | "createdAt";
-type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "versionNumber" | "status" | "childrenCount";
-type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "versionNumber" | "seq" | "status";
+type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "status" | "createdAt" | "updatedAt";
+type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "status" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -913,18 +913,17 @@ const schema = a.schema({
             parentNodeId: a.id(),
             parentNode: a.belongsTo('ExperimentNode', 'parentNodeId'),
             childNodes: a.hasMany('ExperimentNode', 'parentNodeId'),
-            versionNumber: a.integer().required(),
             status: a.string(),
-            isFrontier: a.boolean().required(),
-            childrenCount: a.integer().required(),
             versions: a.hasMany('ExperimentNodeVersion', 'nodeId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: ExperimentNodeIndexFields) => any) => [
-            idx("experimentId").sortKeys(["versionNumber"]).name("nodesByExperimentVersionNumber"),
+            idx("experimentId").sortKeys(["createdAt"]).name("nodesByExperimentCreatedAt"),
             idx("parentNodeId").name("nodesByParent")
         ]),
 
@@ -933,21 +932,21 @@ const schema = a.schema({
             experimentId: a.id().required(),
             nodeId: a.id().required(),
             node: a.belongsTo('ExperimentNode', 'nodeId'),
-            versionNumber: a.integer().required(),
-            seq: a.integer().required(),
             status: a.string(),
             code: a.string().required(),
             hypothesis: a.string(),
             insight: a.string(),
             value: a.json().required(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ExperimentNodeVersionIndexFields) => any) => [
-            idx("nodeId").sortKeys(["seq"]).name("versionsByNode")
-        ]),
+        // .secondaryIndexes((idx: (field: ExperimentNodeVersionIndexFields) => any) => [
+        //     idx("nodeId").sortKeys(["createdAt"]).name("versionsByNodeCreatedAt")
+        // ]),
 
     ChatSession: a
         .model({
