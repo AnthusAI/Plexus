@@ -10,46 +10,50 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowLeft, Save, Trash2, Waypoints } from "lucide-react"
+import { ArrowLeft, Save, Trash2, Waypoints, FileText, ChevronRight, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import Editor from "@monaco-editor/react"
 import { useYamlLinter, useLintMessageHandler } from "@/hooks/use-yaml-linter"
 import YamlLinterPanel from "@/components/ui/yaml-linter-panel"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
 import ExperimentTask from "./ExperimentTask"
+import ExperimentNodesList from "./experiment-nodes-list"
 import { useAccount } from '@/app/contexts/AccountContext'
 import ScorecardContext from '@/components/ScorecardContext'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 
 // Types based on our GraphQL schema
 type Experiment = Schema['Experiment']['type']
 
 const client = generateClient<Schema>()
 
-// Skeleton YAML for new experiments (shows required fields)
-const EXPERIMENT_TEMPLATE = `# Plexus Experiment Configuration
-name: ""
-description: ""
+// Experiment template with realistic examples
+const EXPERIMENT_TEMPLATE = `class: "BeamSearch"
 
-# Classification target (required)
-class: 
-  field: ""
-  values: []
+value: |
+  -- Extract accuracy score from experiment node's structured data
+  local score = experiment_node.value.accuracy or 0
+  -- Apply cost penalty to balance performance vs efficiency  
+  local penalty = (experiment_node.value.cost or 0) * 0.1
+  -- Return single scalar value (higher is better)
+  return score - penalty
 
-# Value function - how we measure success (required)
-value_function:
-  type: ""
-
-# Exploration method (required)
-exploration:
-  method: ""
-
-# Budget constraints (required)
-budget:
-  max_versions: 
-
-# Dataset (required)
-dataset:
-  source: ""
+exploration: |
+  You are helping optimize an AI system through beam search experimentation.
+  
+  You have access to previous experiment results including their configurations, 
+  performance metrics, and computed values. Your job is to suggest new experiment 
+  variations that might improve performance.
+  
+  Based on the results so far, propose specific changes to try next. Focus on 
+  modifications that could address weaknesses or build on promising directions.
+  
+  Generate concrete, actionable suggestions for the next experiment iteration.
 `
 
 
@@ -71,14 +75,14 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
   const [isEditing, setIsEditing] = useState(initialEditMode || !experimentId) // true for new experiments or when initialEditMode is true
   const [formData, setFormData] = useState({
     featured: false,
-    yaml: EXPERIMENT_TEMPLATE,
+    code: EXPERIMENT_TEMPLATE,
     scorecardId: null as string | null,
     scoreId: null as string | null
   })
   const [loadedYaml, setLoadedYaml] = useState<string>('')
   const [originalFormData, setOriginalFormData] = useState({
     featured: false,
-    yaml: EXPERIMENT_TEMPLATE,
+    code: EXPERIMENT_TEMPLATE,
     scorecardId: null as string | null,
     scoreId: null as string | null
   })
@@ -104,32 +108,17 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
 
       try {
         setIsLoading(true)
-        const { data } = await client.models.Experiment.get({ id: experimentId })
+        const { data } = await (client.models.Experiment.get as any)({ id: experimentId })
         if (data) {
           setExperiment(data)
           
-          // Load YAML from the root node's latest version
-          let yamlContent = EXPERIMENT_TEMPLATE
-          if (data.rootNodeId) {
-            try {
-              // Get the latest version for the root node
-              const { data: versions } = await client.models.ExperimentNodeVersion.list({
-                filter: { nodeId: { eq: data.rootNodeId } },
-                limit: 1,
-                sortBy: 'desc' // Get the latest version
-              })
-              if (versions && versions.length > 0) {
-                yamlContent = versions[0].yaml || EXPERIMENT_TEMPLATE
-              }
-            } catch (yamlError) {
-              console.warn('Failed to load YAML from experiment node:', yamlError)
-            }
-          }
+          // Load YAML from the experiment's code field
+          const yamlContent = data.code || EXPERIMENT_TEMPLATE
           
           setLoadedYaml(yamlContent)
           const initialData = {
             featured: data.featured || false,
-            yaml: yamlContent,
+            code: yamlContent,
             scorecardId: data.scorecardId || null,
             scoreId: data.scoreId || null
           }
@@ -155,65 +144,68 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
         return
       }
 
+      // Validate required fields
+      if (!formData.scorecardId) {
+        toast.error('Please select a scorecard')
+        return
+      }
+
+      if (!formData.scoreId) {
+        toast.error('Please select a score')
+        return
+      }
+
       if (isNew) {
-        // Create new experiment
-        const { data: experimentData } = await client.models.Experiment.create({
-          featured: formData.featured,
-          rootNodeId: null,
-          accountId: selectedAccount?.id || 'call-criteria',
+        // Validate account is selected
+        if (!selectedAccount?.id) {
+          toast.error('No account selected')
+          return
+        }
+
+        const createData = {
+          featured: formData.featured || false,
+          code: formData.code,
           scorecardId: formData.scorecardId,
           scoreId: formData.scoreId,
-        })
-        
-        // Create root node and initial version with YAML
-        if (experimentData) {
-          try {
-            // Create root ExperimentNode
-            const { data: nodeData } = await client.models.ExperimentNode.create({
-              experimentId: experimentData.id,
-              parentNodeId: null,
-              versionNumber: 1,
-              status: 'ACTIVE',
-              isFrontier: true,
-              childrenCount: 0,
-            })
-
-            // Create first ExperimentNodeVersion with YAML
-            if (nodeData) {
-              await client.models.ExperimentNodeVersion.create({
-                experimentId: experimentData.id,
-                nodeId: nodeData.id,
-                versionNumber: 1,
-                seq: 1,
-                status: 'QUEUED',
-                yaml: formData.yaml,
-                value: {},
-              })
-              
-              // Update experiment with root node ID
-              await client.models.Experiment.update({
-                id: experimentData.id,
-                rootNodeId: nodeData.id,
-              })
-            }
-          } catch (nodeError) {
-            console.error('Error creating initial node/version:', nodeError)
-            toast.warning('Experiment created but failed to save YAML configuration')
-          }
+          accountId: selectedAccount.id,
         }
+
+        console.log('Creating experiment with data:', createData)
+        console.log('Data types:', {
+          featured: typeof createData.featured,
+          scorecardId: typeof createData.scorecardId,
+          scoreId: typeof createData.scoreId,
+          accountId: typeof createData.accountId,
+        })
+
+        // Create new experiment (matching the format used in duplicate function)
+        const result = await (client.models.Experiment.create as any)(createData)
+
+        if (result.errors) {
+          console.error('Experiment creation errors:', result.errors)
+          toast.error('Failed to create experiment: ' + result.errors.map((e: any) => e.message).join(', '))
+          return
+        }
+
+        if (!result.data) {
+          console.error('No experiment data returned')
+          toast.error('Failed to create experiment: No data returned')
+          return
+        }
+
+        const experimentData = result.data
+
+        console.log('Experiment created successfully:', experimentData)
         
         toast.success('Experiment created successfully')
-        // Call onSave callback if provided, otherwise redirect
-        if (onSave) {
-          onSave()
-        } else if (experimentData) {
-          router.push(`/lab/experiments/${experimentData.id}`)
-        }
+        // Always go back to experiments list and select the new experiment
+        router.push(`/lab/experiments/${experimentData.id}`)
       } else if (experiment) {
         // Update existing experiment
-        const { data } = await client.models.Experiment.update({
+        const { data } = await (client.models.Experiment.update as any)({
           id: experiment.id,
           featured: formData.featured,
+          code: formData.code,
           scorecardId: formData.scorecardId,
           scoreId: formData.scoreId,
         })
@@ -249,7 +241,7 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
     if (!experiment || isNew) return
     
     try {
-      await client.models.Experiment.delete({ id: experiment.id })
+      await (client.models.Experiment.delete as any)({ id: experiment.id })
       toast.success('Experiment deleted successfully')
       router.push('/lab/experiments')
     } catch (error) {
@@ -310,7 +302,8 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
   const showHeader = !onCancel
   
   return (
-    <div className={`bg-card ${showHeader ? "p-6" : "p-3"}`}>
+    <div className="bg-background p-3">
+      <div className="bg-card p-3 rounded-lg">
       {showHeader && (
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -319,7 +312,7 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
             </Button>
             <Waypoints className="h-6 w-6 text-primary" />
             <h1 className="text-2xl font-bold">
-              {isNew ? 'New Experiment' : experiment?.name || 'Experiment'}
+              {isNew ? 'New Experiment' : 'Experiment'}
             </h1>
           </div>
           
@@ -378,33 +371,65 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
               <Label>YAML Configuration</Label>
               
               {(isEditing || isNew) ? (
-                // Edit mode - full Monaco editor
-                <div>
+                  // Edit mode - full Monaco editor
+                  <div>
+                    <div className="overflow-hidden">
+                      <Editor
+                        height="400px"
+                        defaultLanguage="yaml"
+                        value={formData.code}
+                        onChange={(value) => {
+                          const newFormData = { ...formData, code: value || '' }
+                          setFormData(newFormData)
+                          // Check if there are changes
+                          const changed = JSON.stringify(newFormData) !== JSON.stringify(originalFormData)
+                          setHasChanges(changed)
+                        }}
+                        onMount={(editor, monaco) => {
+                          // Configure Monaco editor for YAML
+                          defineCustomMonacoThemes(monaco)
+                          applyMonacoTheme(monaco)
+                          setupMonacoThemeWatcher(monaco)
+                          configureYamlLanguage(monaco)
+                          
+                          // Set up linting integration
+                          setupMonacoIntegration(editor, monaco)
+                        }}
+                        options={{
+                          ...getCommonMonacoOptions(),
+                          minimap: { enabled: false },
+                          scrollBeyondLastLine: false,
+                          wordWrap: 'on',
+                          tabSize: 2,
+                          insertSpaces: true,
+                        }}
+                      />
+                    </div>
+
+                    {/* YAML Linting Panel */}
+                    <YamlLinterPanel
+                      result={lintResult || undefined}
+                      onMessageClick={handleLintMessageClick}
+                      className="mt-2"
+                    />
+                  </div>
+                ) : (
+                  // Read-only mode - read-only Monaco editor
                   <div className="overflow-hidden">
                     <Editor
                       height="400px"
                       defaultLanguage="yaml"
-                      value={formData.yaml}
-                      onChange={(value) => {
-                        const newFormData = { ...formData, yaml: value || '' }
-                        setFormData(newFormData)
-                        // Check if there are changes
-                        const changed = JSON.stringify(newFormData) !== JSON.stringify(originalFormData)
-                        setHasChanges(changed)
-                      }}
+                      value={loadedYaml || EXPERIMENT_TEMPLATE}
                       onMount={(editor, monaco) => {
                         // Configure Monaco editor for YAML
                         defineCustomMonacoThemes(monaco)
                         applyMonacoTheme(monaco)
                         setupMonacoThemeWatcher(monaco)
                         configureYamlLanguage(monaco)
-                        
-                        // Set up linting integration
-                        setupMonacoIntegration(editor, monaco)
                       }}
                       options={{
                         ...getCommonMonacoOptions(),
-                        lineNumbers: 'on',
+                        readOnly: true,
                         minimap: { enabled: false },
                         scrollBeyondLastLine: false,
                         wordWrap: 'on',
@@ -413,41 +438,8 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
                       }}
                     />
                   </div>
-
-                  {/* YAML Linting Panel */}
-                  <YamlLinterPanel
-                    result={lintResult}
-                    onMessageClick={handleLintMessageClick}
-                    className="mt-2"
-                  />
-                </div>
-              ) : (
-                // Read-only mode - read-only Monaco editor
-                <div className="overflow-hidden">
-                  <Editor
-                    height="400px"
-                    defaultLanguage="yaml"
-                    value={loadedYaml || EXPERIMENT_TEMPLATE}
-                    onMount={(editor, monaco) => {
-                      // Configure Monaco editor for YAML
-                      defineCustomMonacoThemes(monaco)
-                      applyMonacoTheme(monaco)
-                      setupMonacoThemeWatcher(monaco)
-                      configureYamlLanguage(monaco)
-                    }}
-                    options={{
-                      ...getCommonMonacoOptions(),
-                      readOnly: true,
-                      lineNumbers: 'on',
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      wordWrap: 'on',
-                      tabSize: 2,
-                      insertSpaces: true,
-                    }}
-                  />
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Featured Toggle and Save/Cancel - only in edit mode */}
@@ -510,7 +502,11 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
         </div>
 
         {experiment && (
-          <ExperimentTask experiment={experiment as any} />
+          <ExperimentTask experiment={experiment as any} variant="detail" />
+        )}
+
+        {experiment && !isNew && (
+          <ExperimentNodesList experimentId={experiment.id} />
         )}
 
         {!experiment && !isNew && (

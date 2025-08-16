@@ -287,6 +287,14 @@ mcp = FastMCP(
     ## Documentation Tools
     - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback analysis and score testing guide)
     
+    ## Experiment Tools
+    - plexus_experiment_create: Create a new experiment
+    - plexus_experiment_list: List experiments for an account
+    - plexus_experiment_info: Get detailed experiment information
+    - plexus_experiment_run: Run an experiment 
+    - plexus_experiment_chat_sessions: Get chat sessions for an experiment (optional - shows conversation activity)
+    - plexus_experiment_chat_messages: Get detailed chat messages for debugging conversation flow and tool calls/responses
+    
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
     """
@@ -308,6 +316,7 @@ try:
     from tools.documentation.docs import register_documentation_tools
     from tools.cost.analysis import register_cost_analysis_tools
     from tools.dataset.datasets import register_dataset_tools
+    from tools.experiment.experiments import register_experiment_tools
     
     register_think_tool(mcp)
     register_scorecard_tools(mcp)
@@ -321,6 +330,7 @@ try:
     register_documentation_tools(mcp)
     register_cost_analysis_tools(mcp)
     register_dataset_tools(mcp)
+    register_experiment_tools(mcp)
     
     logger.info("Successfully registered separated tools")
 except ImportError as e:
@@ -491,7 +501,15 @@ if __name__ == "__main__":
                         help="Transport protocol (stdio for MCP process or sse for HTTP)")
     args = parser.parse_args()
     
-    # Load environment variables from .env file if specified
+    # Load Plexus configuration (including secrets) using DRY configuration loader
+    try:
+        from plexus.config.loader import load_config
+        load_config()  # This loads .plexus/config.yaml and sets environment variables
+        logger.info("Loaded Plexus configuration at MCP server startup")
+    except Exception as e:
+        logger.warning(f"Failed to load Plexus configuration: {e}")
+    
+    # Load environment variables from .env file if specified (for backwards compatibility)
     if args.env_dir:
         load_env_file(args.env_dir)
     

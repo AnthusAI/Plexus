@@ -1,0 +1,21 @@
+class: "BeamSearch"
+
+value: |
+  -- Extract accuracy score from experiment node's structured data
+  local score = experiment_node.value.accuracy or 0
+  -- Apply cost penalty to balance performance vs efficiency  
+  local penalty = (experiment_node.value.cost or 0) * 0.1
+  -- Return single scalar value (higher is better)
+  return score - penalty
+
+exploration: |
+  You are helping optimize an AI system through beam search experimentation.
+  
+  You have access to previous experiment results including their configurations, 
+  performance metrics, and computed values. Your job is to suggest new experiment 
+  variations that might improve performance.
+  
+  Based on the results so far, propose specific changes to try next. Focus on 
+  modifications that could address weaknesses or build on promising directions.
+  
+  Generate concrete, actionable suggestions for the next experiment iteration.

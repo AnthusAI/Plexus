@@ -76,9 +76,17 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
   }, [handleSelectExperiment])
 
   const loadExperiments = useCallback(async () => {
+    if (!selectedAccount?.id) {
+      setExperiments([])
+      setIsLoading(false)
+      return
+    }
+
     try {
       setIsLoading(true)
-      const { data } = await client.models.Experiment.list({
+      const { data } = await client.models.Experiment.listExperimentByAccountIdAndUpdatedAt({
+        accountId: selectedAccount.id,
+        sortDirection: 'DESC',
         // Include scorecard and score relationships
         selectionSet: [
           'id',
@@ -99,7 +107,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [selectedAccount?.id])
 
   useEffect(() => {
     loadExperiments()
@@ -130,7 +138,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
       
       // Since experiments don't have names, we'll need to create a description
       // that indicates it's a duplicate. For now, let's just duplicate it as-is
-      const { data: newExperiment } = await client.models.Experiment.create({
+      const { data: newExperiment } = await (client.models.Experiment.create as any)({
         featured: experiment.featured || false,
         rootNodeId: null, // Will be set after creating nodes
         scorecardId: experiment.scorecardId,
@@ -166,6 +174,20 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
     window.addEventListener('popstate', syncFromUrl)
     return () => window.removeEventListener('popstate', syncFromUrl)
   }, [])
+
+  // Refresh experiments when returning to the dashboard (e.g., from creation page)
+  useEffect(() => {
+    const handleFocus = () => {
+      // Only refresh if we're on the experiments dashboard page
+      if (window.location.pathname === '/lab/experiments' || 
+          window.location.pathname.startsWith('/lab/experiments/')) {
+        loadExperiments()
+      }
+    }
+    
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [loadExperiments])
 
   const handleCreateExperiment = () => {
     router.push('/lab/experiments/new')
@@ -211,6 +233,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
   // Transform experiments to ExperimentTaskData
   const transformExperiment = (experiment: Experiment): ExperimentTaskData => ({
     id: experiment.id,
+    title: `${experiment.scorecard?.name || 'Experiment'} - ${experiment.score?.name || 'Score'}`,
     featured: experiment.featured || false,
     rootNodeId: experiment.rootNodeId || undefined,
     createdAt: experiment.createdAt,
