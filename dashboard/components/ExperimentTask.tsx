@@ -1,8 +1,8 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useState, useEffect } from 'react'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson } from 'lucide-react'
 import { Timestamp } from './ui/timestamp'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +12,43 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import Editor from "@monaco-editor/react"
+import { generateClient } from "aws-amplify/data"
+import type { Schema } from "@/amplify/data/resource"
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
+import ExperimentNodesList from "./experiment-nodes-list"
+
+const client = generateClient<Schema>()
+
+// Experiment template with realistic examples
+const EXPERIMENT_TEMPLATE = `class: "BeamSearch"
+
+value: |
+  -- Extract accuracy score from experiment node's structured data
+  local score = experiment_node.value.accuracy or 0
+  -- Apply cost penalty to balance performance vs efficiency  
+  local penalty = (experiment_node.value.cost or 0) * 0.1
+  -- Return single scalar value (higher is better)
+  return score - penalty
+
+exploration: |
+  You are helping optimize an AI system through beam search experimentation.
+  
+  You have access to previous experiment results including their configurations, 
+  performance metrics, and computed values. Your job is to suggest new experiment 
+  variations that might improve performance.
+  
+  Based on the results so far, propose specific changes to try next. Focus on 
+  modifications that could address weaknesses or build on promising directions.
+  
+  Generate concrete, actionable suggestions for the next experiment iteration.
+`
 
 // Define the experiment data type
 export interface ExperimentTaskData extends BaseTaskData {
@@ -56,6 +93,38 @@ export default function ExperimentTask({
   onEdit,
   onDuplicate
 }: ExperimentTaskProps) {
+  const [loadedYaml, setLoadedYaml] = useState<string>('')
+  const [isLoadingYaml, setIsLoadingYaml] = useState(false)
+
+  // Load YAML for detail view
+  useEffect(() => {
+    if (variant === 'detail' && experiment.rootNodeId) {
+      loadExperimentYaml()
+    }
+  }, [variant, experiment.rootNodeId])
+
+  const loadExperimentYaml = async () => {
+    if (!experiment.rootNodeId) return
+    
+    try {
+      setIsLoadingYaml(true)
+      // Get the latest version for the root node
+      const { data: versions } = await (client.models.ExperimentNodeVersion.list as any)({
+        filter: { nodeId: { eq: experiment.rootNodeId } },
+        limit: 1
+      })
+      if (versions && versions.length > 0) {
+        setLoadedYaml((versions[0] as any).code || EXPERIMENT_TEMPLATE)
+      } else {
+        setLoadedYaml(EXPERIMENT_TEMPLATE)
+      }
+    } catch (error) {
+      console.warn('Failed to load YAML from experiment node:', error)
+      setLoadedYaml(EXPERIMENT_TEMPLATE)
+    } finally {
+      setIsLoadingYaml(false)
+    }
+  }
   
   // Function to handle experiment deletion with confirmation
   const handleDelete = useCallback(async () => {
@@ -194,30 +263,59 @@ export default function ExperimentTask({
   const renderContent = () => (
     <TaskContent variant={variant} task={taskData}>
       {variant === 'grid' ? (
-        <div className="p-3 space-y-3">
-          <div className="flex items-center gap-2">
-            <Waypoints className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Experiment</span>
-          </div>
-          
-          <div className="space-y-1">
-            {experiment.scorecard?.name ? (
-              <div className="font-semibold text-sm truncate">{experiment.scorecard.name}</div>
-            ) : (
-              <div className="text-sm text-muted-foreground truncate">No scorecard selected</div>
-            )}
-            {experiment.score?.name ? (
-              <div className="font-semibold text-sm truncate">{experiment.score.name}</div>
-            ) : experiment.scorecard?.name ? (
-              <div className="text-sm text-muted-foreground truncate">No score selected</div>
-            ) : null}
-            <Timestamp time={experiment.createdAt} variant="relative" />
-          </div>
-          
-        </div>
+        // Empty grid content since all info is now in header
+        null
       ) : (
-        <div className="p-6">
-          {/* Detail view content - simplified */}
+        <div className="p-3">
+          {/* Configuration section */}
+          <Accordion type="multiple" className="w-full">
+            <AccordionItem value="configuration" className="border-b-0">
+              <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
+                <div className="flex items-center gap-2">
+                  <FileJson className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-sm font-medium leading-none text-muted-foreground">Code</span>
+                  <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                  <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pt-0 pb-4">
+                <div className="overflow-hidden">
+                  {isLoadingYaml ? (
+                    <div className="flex items-center justify-center h-32">
+                      <span className="text-sm text-muted-foreground">Loading configuration...</span>
+                    </div>
+                  ) : (
+                    <Editor
+                      height="400px"
+                      defaultLanguage="yaml"
+                      value={loadedYaml || EXPERIMENT_TEMPLATE}
+                      onMount={(editor, monaco) => {
+                        // Configure Monaco editor for YAML
+                        defineCustomMonacoThemes(monaco)
+                        applyMonacoTheme(monaco)
+                        setupMonacoThemeWatcher(monaco)
+                        configureYamlLanguage(monaco)
+                      }}
+                      options={{
+                        ...getCommonMonacoOptions(),
+                        readOnly: true,
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        wordWrap: 'on',
+                        tabSize: 2,
+                        insertSpaces: true,
+                      }}
+                    />
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+          
+          {/* Experiment Nodes section */}
+          <div className="mt-6">
+            <ExperimentNodesList experimentId={experiment.id} />
+          </div>
         </div>
       )}
     </TaskContent>

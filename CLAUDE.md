@@ -50,3 +50,5 @@ Plexus is an orchestration system for AI/ML classification at scale. It provides
 - SemanticClassifier: Embedding-based matching
 - LangGraphScore: LangGraph flow-based scoring
 - SimpleLLMScore: Direct LLM-based scoring
+- You can't test changes you make to MCP tools until we restart either the MCP server or you, so ask me to do that whenever you make changes to the MCP server tools.
+- You should use the Plexus MCP tools rather than CLI tools or custom code tools whenever possible because they're more token-efficient with the output.  You only need other options when an existing MCP tool won't work or when you have changed the MCP tool since you can't access the new version until we restart either the MCP server or you.
