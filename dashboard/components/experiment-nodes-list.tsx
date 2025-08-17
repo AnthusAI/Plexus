@@ -110,9 +110,10 @@ export default function ExperimentNodesList({ experimentId }: Props) {
         
         console.log('ExperimentNodesList: Loading nodes for experiment ID:', experimentId)
         
-        // Query experiment nodes using the list operation with filter
-        const { data: nodesData, errors } = await (client.models.ExperimentNode.list as any)({
-          filter: { experimentId: { eq: experimentId } }
+        // Query experiment nodes using the GSI for better performance and complete results
+        const { data: nodesData, errors } = await client.models.ExperimentNode.listExperimentNodeByExperimentIdAndCreatedAt({
+          experimentId: experimentId,
+          limit: 1000 // Ensure we get all nodes
         })
 
         console.log('ExperimentNodesList: Filtered GraphQL response:', { nodesData, errors })
@@ -138,8 +139,36 @@ export default function ExperimentNodesList({ experimentId }: Props) {
         for (const node of nodesData) {
           try {
             // Get the latest version for this node
-            const { data: versionsData } = await (client.models.ExperimentNodeVersion.list as any)({
-              filter: { nodeId: { eq: node.id } }
+            console.log(`ExperimentNodesList: Loading versions for node ${node.id}`)
+            // Try using the GSI first for better performance
+            let versionsData = null
+            let versionErrors = null
+            
+            try {
+              const gsiResult = await (client.models.ExperimentNodeVersion.listExperimentNodeVersionByNodeIdAndCreatedAt as any)({
+                nodeId: node.id,
+                limit: 10
+              })
+              versionsData = gsiResult.data
+              versionErrors = gsiResult.errors
+              console.log(`ExperimentNodesList: GSI query for node ${node.id} returned ${versionsData ? versionsData.length : 0} versions`)
+            } catch (gsiError) {
+              console.warn(`ExperimentNodesList: GSI query failed for node ${node.id}, falling back to filter:`, gsiError)
+              
+              // Fallback to filter-based query
+              const filterResult = await (client.models.ExperimentNodeVersion.list as any)({
+                filter: { nodeId: { eq: node.id } },
+                limit: 10
+              })
+              versionsData = filterResult.data
+              versionErrors = filterResult.errors
+              console.log(`ExperimentNodesList: Filter query for node ${node.id} returned ${versionsData ? versionsData.length : 0} versions`)
+            }
+            
+            console.log(`ExperimentNodesList: Version query result for node ${node.id}:`, {
+              versionsCount: versionsData ? versionsData.length : 0,
+              errors: versionErrors,
+              firstVersion: versionsData && versionsData.length > 0 ? versionsData[0] : null
             })
 
             let latestVersion = null
@@ -153,6 +182,15 @@ export default function ExperimentNodesList({ experimentId }: Props) {
                 return 0
               })
               latestVersion = sortedVersions[0]
+              
+              // Debug logging to see what's in the version data
+              console.log(`ExperimentNodesList: Latest version for node ${node.id}:`, {
+                id: latestVersion.id,
+                hypothesis: latestVersion.hypothesis,
+                hasHypothesis: !!latestVersion.hypothesis,
+                hypothesisLength: latestVersion.hypothesis ? latestVersion.hypothesis.length : 0,
+                allFields: Object.keys(latestVersion)
+              })
             }
 
             nodesWithVersions.push({

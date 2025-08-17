@@ -53,6 +53,42 @@ interface ChatMessageWithDetails {
 
 const client = generateClient<Schema>()
 
+// Collapsible text component for long messages
+function CollapsibleText({ 
+  content, 
+  maxLines = 10, 
+  className = "whitespace-pre-wrap break-words" 
+}: { 
+  content: string, 
+  maxLines?: number,
+  className?: string 
+}) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const lines = content.split('\n')
+  const shouldTruncate = lines.length > maxLines
+  const displayContent = shouldTruncate && !isExpanded 
+    ? lines.slice(0, maxLines).join('\n') + '...'
+    : content
+
+  if (!shouldTruncate) {
+    return <p className={className}>{content}</p>
+  }
+
+  return (
+    <div>
+      <p className={className}>{displayContent}</p>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="mt-2 p-0 h-auto text-xs text-muted-foreground hover:text-foreground"
+      >
+        {isExpanded ? 'Show less' : `Show more (${lines.length - maxLines} more lines)`}
+      </Button>
+    </div>
+  )
+}
+
 // Message type icons and colors
 const getMessageIcon = (role?: string, messageType?: string) => {
   if (messageType === 'TOOL_CALL') {
@@ -123,16 +159,10 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
         
         console.log('ExperimentChatMessages: Loading sessions for experiment ID:', experimentId)
         
-        // Query chat sessions for this experiment
-        const { data: sessionsData, errors } = await client.models.ChatSession.list({
-          filter: { experimentId: { eq: experimentId } },
-          selectionSet: [
-            'id',
-            'status',
-            'metadata',
-            'createdAt',
-            'updatedAt'
-          ]
+        // Query chat sessions for this experiment using GSI
+        const { data: sessionsData, errors } = await (client.models.ChatSession.listChatSessionByExperimentIdAndCreatedAt as any)({
+          experimentId: experimentId,
+          limit: 100  // Reasonable limit for sessions
         })
 
         console.log('ExperimentChatMessages: Sessions response:', { sessionsData, errors })
@@ -154,11 +184,13 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
         console.log('ExperimentChatMessages: Found', sessionsData.length, 'sessions')
         setSessions(sessionsData as any[])
         
-        // Load messages for the first session by default
+        // Load ALL messages for this experiment using the GSI
+        await loadAllMessagesForExperiment()
+        
+        // Set the first session as selected by default
         if (sessionsData.length > 0) {
           const firstSession = sessionsData[0] as any
           setSelectedSessionId(firstSession.id)
-          await loadMessagesForSession(firstSession.id)
         }
         
       } catch (err) {
@@ -172,27 +204,18 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
     loadChatSessions()
   }, [experimentId])
 
-  const loadMessagesForSession = async (sessionId: string) => {
+  const loadAllMessagesForExperiment = async () => {
     try {
-      console.log('Loading messages for session:', sessionId)
+      console.log('Loading ALL messages for experiment:', experimentId)
       
-      // Query messages for this session, ordered by sequence number
-      const { data: messagesData, errors } = await client.models.ChatMessage.list({
-        filter: { sessionId: { eq: sessionId } },
-        selectionSet: [
-          'id',
-          'role',
-          'content',
-          'messageType',
-          'toolName',
-          'toolParameters',
-          'toolResponse',
-          'parentMessageId',
-          'sequenceNumber',
-          'createdAt',
-          'metadata'
-        ]
+      // Use the experimentId GSI to get all messages for this experiment  
+      const result = await (client.models.ChatMessage.listChatMessageByExperimentIdAndCreatedAt as any)({
+        experimentId: experimentId,
+        limit: 1000  // Set a reasonable limit to get all messages
       })
+      
+      const messagesData = result?.data
+      const errors = result?.errors
 
       if (errors) {
         console.error('GraphQL errors loading messages:', errors)
@@ -201,9 +224,19 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
       }
 
       if (messagesData) {
-        // Sort messages by sequence number
-        const sortedMessages = (messagesData as any[]).sort((a: any, b: any) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0))
-        console.log('Loaded', sortedMessages.length, 'messages for session', sessionId)
+        // Sort all messages by session and then by sequence number
+        const sortedMessages = (messagesData as any[]).sort((a: any, b: any) => {
+          // First sort by sessionId to group messages
+          if (a.sessionId !== b.sessionId) {
+            return a.sessionId.localeCompare(b.sessionId)
+          }
+          // Then sort by sequence number within each session
+          return (a.sequenceNumber || 0) - (b.sequenceNumber || 0)
+        })
+        
+        console.log('Loaded', sortedMessages.length, 'total messages for experiment', experimentId)
+        console.log('Sample message:', sortedMessages[0])
+        console.log('All session IDs:', [...new Set(sortedMessages.map(m => m.sessionId))])
         setMessages(sortedMessages)
       }
       
@@ -215,7 +248,8 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
 
   const handleSessionSelect = async (sessionId: string) => {
     setSelectedSessionId(sessionId)
-    await loadMessagesForSession(sessionId)
+    // No need to reload messages since we already have all messages loaded
+    // The UI will automatically filter based on selectedSessionId
   }
 
   if (isLoading) {
@@ -280,35 +314,48 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
     <div className="space-y-4">
       <h3 className="text-lg font-semibold flex items-center gap-2">
         <MessageSquare className="h-5 w-5" />
-        Chat Messages ({sessions.length} session{sessions.length !== 1 ? 's' : ''})
+        Chat Messages ({messages.length} message{messages.length !== 1 ? 's' : ''}, {sessions.length} session{sessions.length !== 1 ? 's' : ''})
       </h3>
       
       {/* Session selector if multiple sessions */}
       {sessions.length > 1 && (
         <div className="flex gap-2 flex-wrap">
-          {sessions.map((session, index) => (
-            <Button
-              key={session.id}
-              variant={selectedSessionId === session.id ? "default" : "outline"}
-              size="sm"
-              onClick={() => handleSessionSelect(session.id)}
-              className="text-xs"
-            >
-              Session {index + 1}
-              <Badge 
-                variant="secondary" 
-                className={`ml-2 text-xs ${session.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : session.status === 'ERROR' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}
+          {sessions.map((session, index) => {
+            const sessionMessageCount = messages.filter((msg: any) => msg.sessionId === session.id).length
+            return (
+              <Button
+                key={session.id}
+                variant={selectedSessionId === session.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleSessionSelect(session.id)}
+                className="text-xs"
               >
-                {session.status}
-              </Badge>
-            </Button>
-          ))}
+                Session {index + 1} ({sessionMessageCount} msg{sessionMessageCount !== 1 ? 's' : ''})
+                <Badge 
+                  variant="secondary" 
+                  className={`ml-2 text-xs ${session.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : session.status === 'ERROR' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}
+                >
+                  {session.status}
+                </Badge>
+              </Button>
+            )
+          })}
         </div>
       )}
       
       {/* Messages display */}
       <div className="space-y-3">
-        {messages.map((message) => (
+        {(() => {
+          const filteredMessages = messages.filter((message) => !selectedSessionId || message.sessionId === selectedSessionId)
+          console.log('Rendering messages:', {
+            totalMessages: messages.length,
+            selectedSessionId,
+            filteredMessages: filteredMessages.length,
+            sessionIds: [...new Set(messages.map(m => m.sessionId))]
+          })
+          return filteredMessages
+        })()
+          .map((message) => (
           <Card key={message.id} className="bg-background border-none">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
@@ -338,7 +385,7 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
                   </div>
                   
                   <div className="text-sm">
-                    <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                    <CollapsibleText content={message.content} maxLines={10} />
                   </div>
                   
                   {/* Tool parameters and responses */}
@@ -355,17 +402,23 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
                           {message.toolParameters && (
                             <div className="mb-2">
                               <div className="font-semibold mb-1">Parameters:</div>
-                              <pre className="whitespace-pre-wrap">
-                                {JSON.stringify(message.toolParameters, null, 2)}
-                              </pre>
+                              <div className="font-mono text-xs">
+                                <CollapsibleText 
+                                  content={JSON.stringify(message.toolParameters, null, 2)} 
+                                  maxLines={5}
+                                />
+                              </div>
                             </div>
                           )}
                           {message.toolResponse && (
                             <div>
                               <div className="font-semibold mb-1">Response:</div>
-                              <pre className="whitespace-pre-wrap">
-                                {JSON.stringify(message.toolResponse, null, 2)}
-                              </pre>
+                              <div className="font-mono text-xs">
+                                <CollapsibleText 
+                                  content={JSON.stringify(message.toolResponse, null, 2)} 
+                                  maxLines={5}
+                                />
+                              </div>
                             </div>
                           )}
                         </div>

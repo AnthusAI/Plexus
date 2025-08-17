@@ -21,9 +21,9 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
     @server.tool()
     async def create_experiment_node(
         experiment_id: str,
-        yaml_configuration: str,
         hypothesis_description: str,
         node_name: Optional[str] = None,
+        yaml_configuration: Optional[str] = None,
         parent_node_id: Optional[str] = None,
         initial_value: Optional[Dict[str, Any]] = None
     ) -> str:
@@ -37,7 +37,6 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
         
         Args:
             experiment_id: ID of the experiment to add the node to
-            yaml_configuration: Modified score YAML configuration (e.g., LangGraphScore with updated prompts, thresholds, etc.)
             hypothesis_description: Structured description with TWO parts:
                 1) GOAL: What you're trying to improve (e.g., "Reduce false positives for medical queries")
                 2) METHOD: Specific implementation approach (e.g., "Add medical domain keywords to classification prompt")
@@ -45,6 +44,8 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
             node_name: Optional short, distinctive name for this hypothesis. If not provided, will be 
                 auto-generated from the first few words of the hypothesis description.
                 Examples: "Medical Query Filtering", "Threshold Adjustment v2", "Context-Aware Prompting"
+            yaml_configuration: Optional modified score YAML configuration. If not provided, the node will be 
+                created without an initial configuration - this can be added later in a separate step.
             parent_node_id: Optional parent node ID (if None, creates child of root node)
             initial_value: Optional initial computed value (defaults to hypothesis info)
             
@@ -54,12 +55,16 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
         try:
             logger.info(f"Creating experiment node for experiment {experiment_id}")
             
-            # Validate YAML configuration
-            try:
-                parsed_yaml = yaml.safe_load(yaml_configuration)
-                logger.debug(f"YAML configuration validated successfully")
-            except yaml.YAMLError as e:
-                return f"Error: Invalid YAML configuration: {str(e)}"
+            # Validate YAML configuration if provided
+            parsed_yaml = None
+            if yaml_configuration:
+                try:
+                    parsed_yaml = yaml.safe_load(yaml_configuration)
+                    logger.debug(f"YAML configuration validated successfully")
+                except yaml.YAMLError as e:
+                    return f"Error: Invalid YAML configuration: {str(e)}"
+            else:
+                logger.debug(f"No YAML configuration provided - node will be created without initial config")
             
             # Get Plexus client from experiment context if available
             if experiment_context and 'client' in experiment_context:
@@ -141,31 +146,24 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
             
             # Create initial version for the new node
             # Note: yaml_configuration should be a modified score configuration, not experiment configuration
-            new_node.create_version(
-                code=yaml_configuration,  # This should be score YAML (LangGraphScore, etc.)
-                value=initial_value,
-                status='ACTIVE',
-                hypothesis=hypothesis_description
-            )
-            
-            # Create a chat session for this node to record future AI interactions
+            logger.info(f"Creating version for node {new_node.id} with hypothesis: {hypothesis_description[:100]}...")
             try:
-                from plexus.cli.experiment.chat_recorder import ExperimentChatRecorder
-                chat_recorder = ExperimentChatRecorder(client, experiment_id, new_node.id)
-                session_id = await chat_recorder.start_session({
-                    'node_id': new_node.id,
-                    'node_name': node_name,
-                    'hypothesis': hypothesis_description,
-                    'created_by': 'ai_agent'
-                })
-                if session_id:
-                    logger.info(f"Created chat session {session_id} for node {new_node.id}")
-                    await chat_recorder.record_system_message(f"Node created: {node_name}\n\nHypothesis: {hypothesis_description}")
-                    await chat_recorder.end_session('COMPLETED')
-                else:
-                    logger.warning(f"Failed to create chat session for node {new_node.id}")
-            except Exception as e:
-                logger.warning(f"Could not create chat session for node {new_node.id}: {e}")
+                version = new_node.create_version(
+                    code=yaml_configuration or "# No configuration provided - concept-only node",  # GraphQL requires non-null string
+                    value=initial_value,
+                    status='ACTIVE',
+                    hypothesis=hypothesis_description
+                )
+                logger.info(f"Successfully created version {version.id} for node {new_node.id}")
+            except Exception as version_error:
+                logger.error(f"Failed to create version for node {new_node.id}: {version_error}")
+                return f"Error: Node created but failed to create version: {str(version_error)}"
+            
+            # NOTE: Chat recording is handled by the main experiment session
+            # Do not create separate chat sessions for individual nodes as this fragments
+            # the conversation. All tool calls and responses should be recorded in the 
+            # single root-level chat session managed by the ExperimentAIRunner.
+            logger.info(f"Node {new_node.id} created - chat recording handled by main session")
             
             logger.info(f"Successfully created experiment node {new_node.id}")
             
@@ -177,7 +175,7 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
                 "parent_node_id": parent_node_id,
                 "hypothesis": hypothesis_description,
                 "status": "Node created successfully and ready for testing",
-                "yaml_preview": yaml_configuration[:200] + "..." if len(yaml_configuration) > 200 else yaml_configuration
+                "yaml_preview": (yaml_configuration[:200] + "..." if len(yaml_configuration) > 200 else yaml_configuration) if yaml_configuration else "No YAML configuration provided"
             }
             
             return f"Successfully created experiment node: {result}"

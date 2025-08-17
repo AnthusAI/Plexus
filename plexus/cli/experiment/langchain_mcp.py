@@ -11,234 +11,16 @@ from typing import Dict, Any, List, Optional, Callable
 from pydantic import BaseModel, Field
 import yaml
 from .chat_recorder import ExperimentChatRecorder, LangChainChatRecorderHook
+from .conversation_flow import ConversationFlowManager, ConversationStage
+from .mcp_tool import MCPTool
+from .mcp_adapter import LangChainMCPAdapter
+from .openai_compat import O3CompatibleChatOpenAI
+from .tool_calling import extract_all_tool_calls, call_tool
+from .chat_callbacks import ChatRecordingCallback
 
 logger = logging.getLogger(__name__)
 
 
-class MCPTool(BaseModel):
-    """LangChain-compatible tool that wraps an MCP tool."""
-    name: str
-    description: str
-    args_schema: Optional[type] = None
-    func: Callable[[Dict[str, Any]], str]
-    
-    def run(self, **kwargs) -> str:
-        """Run the tool with the given arguments."""
-        return self.func(kwargs)
-    
-    async def arun(self, **kwargs) -> str:
-        """Async version of run."""
-        return self.run(**kwargs)
-
-
-class LangChainMCPAdapter:
-    """
-    Adapter that converts MCP tools into LangChain-compatible tools.
-    
-    This allows AI models using LangChain to seamlessly access all Plexus MCP tools
-    through the in-process MCP transport.
-    """
-    
-    def __init__(self, mcp_client):
-        self.mcp_client = mcp_client
-        self.tools = []
-        self._tools_loaded = False
-        self.chat_recorder = None  # Will be set by the AI runner
-        self.pending_tool_calls = {}  # Maps tool_name to most recent call_id
-    
-    async def load_tools(self) -> List[MCPTool]:
-        """Load and convert all MCP tools to LangChain format."""
-        if self._tools_loaded:
-            return self.tools
-        
-        try:
-            # Get tools from MCP client
-            mcp_tools = await self.mcp_client.list_tools()
-            logger.info(f"Loading {len(mcp_tools)} MCP tools for LangChain")
-            
-            self.tools = []
-            for mcp_tool in mcp_tools:
-                # Create LangChain-compatible tool
-                langchain_tool = self._create_langchain_tool(mcp_tool)
-                self.tools.append(langchain_tool)
-                logger.debug(f"Converted MCP tool '{mcp_tool['name']}' to LangChain tool")
-            
-            self._tools_loaded = True
-            logger.info(f"Successfully loaded {len(self.tools)} tools for LangChain")
-            return self.tools
-            
-        except Exception as e:
-            logger.error(f"Error loading MCP tools for LangChain: {e}")
-            return []
-    
-    def _create_langchain_tool(self, mcp_tool: Dict[str, Any]) -> MCPTool:
-        """Convert an MCP tool to a LangChain-compatible tool."""
-        tool_name = mcp_tool['name']
-        tool_description = mcp_tool['description']
-        
-        # Create the function that will be called by LangChain
-        def tool_func(args) -> str:
-            try:
-                # Handle different argument formats from LangChain
-                if isinstance(args, str):
-                    # LangChain sometimes passes string arguments
-                    try:
-                        import json
-                        args = json.loads(args)
-                    except (json.JSONDecodeError, ValueError):
-                        # If it's not valid JSON, treat as a simple string parameter
-                        # Try to guess the parameter name from the tool schema
-                        input_schema = mcp_tool.get('inputSchema', {})
-                        properties = input_schema.get('properties', {})
-                        if properties:
-                            # Use the first property name as the parameter
-                            first_param = list(properties.keys())[0]
-                            args = {first_param: args}
-                        else:
-                            # Default to common parameter names
-                            args = {'query': args}
-                elif not isinstance(args, dict):
-                    # Convert other types to dict
-                    args = {'input': str(args)}
-                
-                # Ensure args is a dictionary
-                if not isinstance(args, dict):
-                    args = {}
-                
-                # Handle the async call properly - check for existing event loop
-                try:
-                    # Try to get the current event loop
-                    current_loop = asyncio.get_running_loop()
-                    # We're in an async context, so we need to create a task
-                    # But since LangChain expects sync execution, we'll use a workaround
-                    import concurrent.futures
-                    import threading
-                    
-                    # Run the async call in a separate thread with its own event loop
-                    def run_in_thread():
-                        new_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(new_loop)
-                        try:
-                            return new_loop.run_until_complete(
-                                self.mcp_client.call_tool(tool_name, args)
-                            )
-                        finally:
-                            new_loop.close()
-                    
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(run_in_thread)
-                        result = future.result(timeout=30)  # 30 second timeout
-                        
-                except RuntimeError:
-                    # No event loop running, safe to create one
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        result = loop.run_until_complete(
-                            self.mcp_client.call_tool(tool_name, args)
-                        )
-                    finally:
-                        loop.close()
-                
-                # Record tool response FIRST - before any early returns
-                if self.chat_recorder:
-                    try:
-                        # Look up the corresponding tool call ID
-                        tool_call_id = self.pending_tool_calls.get(tool_name)
-                        if tool_call_id:
-                            logger.info(f"MCP WRAPPER: Recording response for {tool_name} (call_id: {tool_call_id})")
-                            
-                            # Record tool response asynchronously 
-                            import threading
-                            def record_response():
-                                try:
-                                    loop = asyncio.new_event_loop()
-                                    asyncio.set_event_loop(loop)
-                                    response_id = loop.run_until_complete(
-                                        self.chat_recorder.record_tool_response(
-                                            tool_name=tool_name,
-                                            response=result if isinstance(result, dict) else {'result': str(result)},
-                                            parent_message_id=tool_call_id,
-                                            description=f"Response from {tool_name}"
-                                        )
-                                    )
-                                    loop.close()
-                                    logger.info(f"MCP WRAPPER: Successfully recorded tool response {response_id}")
-                                    
-                                    # Clean up the pending call
-                                    if tool_name in self.pending_tool_calls:
-                                        del self.pending_tool_calls[tool_name]
-                                        
-                                except Exception as e:
-                                    logger.error(f"MCP WRAPPER: Error recording tool response: {e}")
-                            
-                            threading.Thread(target=record_response, daemon=True).start()
-                        else:
-                            logger.warning(f"MCP WRAPPER: No tool call ID found for {tool_name} response")
-                    except Exception as e:
-                        logger.error(f"MCP WRAPPER: Error in response recording setup: {e}")
-                
-                # Format the result for LangChain - preserve full response for accurate analysis
-                def format_response(result_data):
-                    """Format the result without truncation for accurate AI analysis."""
-                    # The AI context management should be done at the LLM level, not by truncating tool results
-                    # This allows the AI to see the full data and make informed decisions
-                    if isinstance(result_data, dict):
-                        # Return the JSON string representation for consistent parsing
-                        import json
-                        return json.dumps(result_data, indent=2)
-                    else:
-                        return str(result_data)
-                
-                if isinstance(result, dict):
-                    if 'content' in result:
-                        # MCP standard format
-                        content = result['content']
-                        if isinstance(content, list) and len(content) > 0:
-                            raw_text = content[0].get('text', str(result))
-                            return format_response(raw_text)
-                        return format_response(content)
-                    elif 'error' in result:
-                        return f"Error: {result['error']}"
-                    else:
-                        return format_response(result)
-                else:
-                    return format_response(result)
-                    
-            except Exception as e:
-                error_msg = f"Error calling MCP tool {tool_name}: {str(e)}"
-                logger.error(error_msg)
-                return error_msg
-        
-        # Create schema for the tool arguments (simplified)
-        try:
-            input_schema = mcp_tool.get('inputSchema', {})
-            properties = input_schema.get('properties', {})
-            
-            # Create a simple args schema
-            class ToolArgs(BaseModel):
-                pass
-            
-            # Dynamically add fields based on the schema
-            for prop_name, prop_info in properties.items():
-                prop_type = str  # Default to string for simplicity
-                prop_description = prop_info.get('description', f'{prop_name} parameter')
-                
-                # Add field to the model
-                setattr(ToolArgs, prop_name, Field(default="", description=prop_description))
-            
-            args_schema = ToolArgs
-            
-        except Exception as e:
-            logger.warning(f"Could not create args schema for {tool_name}: {e}")
-            args_schema = None
-        
-        return MCPTool(
-            name=tool_name,
-            description=tool_description,
-            args_schema=args_schema,
-            func=tool_func
-        )
 
 
 class ExperimentAIRunner:
@@ -263,6 +45,7 @@ class ExperimentAIRunner:
         self.mcp_adapter = None
         self.experiment_context = experiment_context or {}
         self.chat_recorder = None
+        self.conversation_flow = None
     
     def _get_openai_key(self) -> Optional[str]:
         """Get OpenAI API key using Plexus configuration system."""
@@ -288,6 +71,10 @@ class ExperimentAIRunner:
             self.experiment_config = yaml.safe_load(experiment_yaml)
             logger.info(f"Loaded experiment config for {self.experiment_id}")
             
+            # Initialize conversation flow manager with context
+            self.conversation_flow = ConversationFlowManager(self.experiment_config, self.experiment_context)
+            logger.info("Initialized intelligent conversation flow manager")
+            
             # Set up MCP adapter
             async with self.mcp_server.connect({'name': f'AI Runner for {self.experiment_id}'}) as mcp_client:
                 self.mcp_adapter = LangChainMCPAdapter(mcp_client)
@@ -300,63 +87,130 @@ class ExperimentAIRunner:
             logger.error(f"Error setting up AI runner: {e}")
             return False
     
-    def get_exploration_prompt(self) -> str:
-        """Get the exploration prompt from the experiment config."""
-        if not self.experiment_config:
-            base_prompt = "Explore and analyze the available tools and data."
-        else:
-            base_prompt = self.experiment_config.get('exploration', 
-                "Explore and analyze the available tools and data.")
+    def get_system_prompt(self) -> str:
+        """Get the system prompt with context about the hypothesis engine and documentation."""
+        # Core system context about the hypothesis engine
+        system_prompt = """You are part of a hypothesis engine that is part of an automated experiment running process aimed at optimizing scorecard score configurations for an industrial machine learning system. This system is organized around scorecards and scores, where each score represents a specific task like classification or extraction.
+
+Our system has the ability to run evaluations to measure the performance of a given score configuration versus ground truth labels. The ground truth labels come from feedback edits provided by humans, creating a reinforcement learning feedback loop system.
+
+Your specific role in this process is the hypothesis engine, which is responsible for coming up with valuable hypotheses for how to make changes to score configurations in order to better align with human feedback.
+
+## Score YAML Format Documentation
+
+"""
         
-        # Create context section with known experiment information
-        context_section = ""
-        if self.experiment_context:
-            context_section = f"""
-=== EXPERIMENT CONTEXT ===
-You are working with the following experiment:
+        # Add score YAML format documentation if available
+        score_yaml_docs = self.experiment_context.get('score_yaml_format_docs') if self.experiment_context else None
+        if score_yaml_docs:
+            system_prompt += f"""{score_yaml_docs}
+
+## Feedback Alignment Process Documentation
+
+"""
+        
+        # Add feedback alignment documentation if available
+        feedback_docs = self.experiment_context.get('feedback_alignment_docs') if self.experiment_context else None
+        if feedback_docs:
+            system_prompt += f"""{feedback_docs}
+
+"""
+        
+        # Add the hypothesis engine task description
+        system_prompt += """## Your Task: Hypothesis Generation
+
+Your task is to analyze feedback patterns and generate hypotheses for improving score alignment. You should:
+
+1. **CRITICAL: Use Provided Context**: The user prompt will provide specific scorecard_name and score_name values. You MUST use these exact values when calling feedback tools like plexus_feedback_summary and plexus_feedback_find. Do NOT use empty strings or try to discover these names yourself.
+
+2. **Examine Feedback Details**: Use tools to look closely into feedback edits for different squares in the confusion matrix (e.g., cases where we predicted "yes" but the answer was "no" or vice versa).
+
+3. **Analyze Individual Items**: Look at details of specific calls/items to understand how mistakes were made.
+
+4. **Focus on Mistakes**: Specifically examine the mistakes identified in feedback analysis to understand root causes.
+
+5. **Generate Varied Hypotheses**: Create distinct improvement ideas:
+   - **Iterative**: Low-risk, incremental improvements (most valuable)
+   - **Creative**: Moderate creativity, rethinking aspects of the approach
+   - **Revolutionary**: High-risk, complete problem reframing (Hail Mary attempts)
+
+6. **Prioritize Incremental**: Focus primarily on lower-risk, less creative, incremental improvements like adding policies inferred from human feedback patterns.
+
+Your hypotheses should be:
+- **Distinct**: Each idea should be genuinely different
+- **Specific**: Include concrete configuration changes
+- **Evidence-based**: Grounded in actual feedback patterns
+- **Conceptual**: Focus on the idea, NOT the implementation details
+- **Non-quantified**: Do NOT include percentage targets or specific numeric goals (e.g., "reduce by 30%") - focus on directional improvements
+
+**IMPORTANT: When creating experiment nodes with create_experiment_node:**
+- DO NOT include yaml_configuration parameter
+- Focus on clear hypothesis_description and node_name
+- YAML implementation will be handled in a separate future step
+- Your job is to generate the concepts, not implement them
+
+Use the available tools to examine feedback data and item details before generating hypotheses. Think carefully about what might actually be wrong and how to actually improve it."""
+
+        return system_prompt
+
+    def get_user_prompt(self) -> str:
+        """Get the user prompt with current score configuration and feedback summary."""
+        if not self.experiment_context:
+            return "Please analyze the current score configuration and generate improvement hypotheses."
+        
+        user_prompt = f"""**Current Experiment Context:**
 - Experiment ID: {self.experiment_context.get('experiment_id', 'Unknown')}
 - Scorecard: {self.experiment_context.get('scorecard_name', 'Unknown')}
 - Score: {self.experiment_context.get('score_name', 'Unknown')}
-- Nodes: {self.experiment_context.get('node_count', 0)}
-- Versions: {self.experiment_context.get('version_count', 0)}
-
-You already know this information, so you don't need to look it up. Focus on analyzing and improving this specific experiment.
-==========================
 
 """
         
-        # Enhanced prompt with context and tool guidance
-        enhanced_prompt = f"""{context_section}{base_prompt}
+        # Add current score configuration if available
+        score_config = self.experiment_context.get('current_score_config')
+        if score_config:
+            user_prompt += f"""**Current Score Configuration (Champion Version):**
 
-CRITICAL: You MUST use the Plexus MCP tools to analyze the experiment and CREATE new experiment nodes. DO NOT provide a text-only response.
+```yaml
+{score_config}
+```
 
-REQUIRED ACTIONS (you must complete ALL of these):
-1. **First**: Call `plexus_feedback_summary` with scorecard_name="{self.experiment_context.get('scorecard_name', 'Unknown')}" and score_name="{self.experiment_context.get('score_name', 'Unknown')}" to get performance data
-2. **Second**: Call `plexus_score_info` with the same scorecard and score names to get configuration details
-3. **Third**: Call `get_experiment_tree` with experiment_id="{self.experiment_context.get('experiment_id', 'Unknown')}" to understand current experiment structure
-4. **Fourth**: Based on the analysis, create NEW experiment nodes for different hypotheses using `create_experiment_node` tool
-5. **Fifth**: Each new node should test a specific hypothesis to improve the identified weaknesses
-
-EXPERIMENT NODE CREATION GUIDELINES:
-- Create 2-3 experiment nodes with DISTINCT hypotheses that address different performance issues
-- For each node, provide a clear hypothesis description that explains both the goal and the method
-- Optionally provide a short, distinctive node name (will be auto-generated if not provided)
-
-**Recommended hypothesis format:**
-"GOAL: [What specific performance issue you're trying to fix]
-METHOD: [Exact implementation approach and configuration changes]"
-
-Example:
-"GOAL: Reduce false positives in medical query classification by 15%
-METHOD: Add medical domain-specific keywords to the classification prompt in the first LLM node and increase confidence threshold from 0.7 to 0.85"
-
-- The YAML configuration should implement the specific method described in the hypothesis
-- Focus on different improvement strategies: prompt engineering, threshold tuning, model parameters, architectural changes, etc.
-- Don't worry about perfect formatting - the system will handle auto-generation of names and validation
-
-You cannot complete this task without using these tools. The goal is to generate actionable experiment variations, not just recommendations.
 """
-        return enhanced_prompt
+        
+        # Add feedback summary if available
+        feedback_summary = self.experiment_context.get('feedback_summary')
+        if feedback_summary:
+            user_prompt += f"""**Performance Analysis Summary:**
+
+{feedback_summary}
+
+"""
+        
+        user_prompt += f"""**Your Task:**
+
+Please analyze the current score configuration and feedback patterns to generate 2-3 distinct hypotheses for improving alignment with human feedback.
+
+**CRITICAL: When using feedback tools, you MUST use these exact names:**
+- scorecard_name: "{self.experiment_context.get('scorecard_name', 'Unknown')}"
+- score_name: "{self.experiment_context.get('score_name', 'Unknown')}"
+
+**Required Analysis Steps:**
+1. FIRST: Use plexus_feedback_summary with scorecard_name="{self.experiment_context.get('scorecard_name', 'Unknown')}" and score_name="{self.experiment_context.get('score_name', 'Unknown')}"
+2. Use plexus_feedback_find to examine false positives and false negatives with the same scorecard_name and score_name
+3. Use plexus_item_info to examine specific problematic items
+4. Create experiment nodes with your hypotheses
+
+**Example first tool call:**
+plexus_feedback_summary(scorecard_name="{self.experiment_context.get('scorecard_name', 'Unknown')}", score_name="{self.experiment_context.get('score_name', 'Unknown')}", days=30)
+
+For each hypothesis, use the `create_experiment_node` tool with:
+- experiment_id: {self.experiment_context.get('experiment_id', 'EXPERIMENT_ID')}
+- A clear hypothesis description following this format: "GOAL: [specific target - NO quantification] | METHOD: [exact changes]"
+- A complete YAML configuration implementing your proposed changes
+- A descriptive node name
+
+Focus on evidence-based improvements that address the specific issues identified in the feedback analysis."""
+
+        return user_prompt
     
     async def run_ai_with_tools(self) -> Dict[str, Any]:
         """Run the AI model with access to MCP tools."""
@@ -380,11 +234,13 @@ You cannot complete this task without using these tools. The goal is to generate
                     except Exception as e:
                         logger.warning(f"Could not get experiment for chat session: {e}")
                 
-                # Create chat recorder with node association (or None if no root node)
-                self.chat_recorder = ExperimentChatRecorder(self.client, self.experiment_id, root_node_id)
+                # FIXED: For the main experiment conversation, record at experiment level (node_id = None)
+                # Individual node conversations would use specific node IDs, but this is the main
+                # conversation that should appear at the experiment level in the UI
+                self.chat_recorder = ExperimentChatRecorder(self.client, self.experiment_id, None)
                 
                 # Always try to start a session, even without node association
-                logger.info(f"Starting chat session for experiment {self.experiment_id} with node {root_node_id}")
+                logger.info(f"Starting chat session for experiment {self.experiment_id} at experiment level (no node association)")
                 session_id = await self.chat_recorder.start_session(self.experiment_context)
                 if session_id:
                     logger.info(f"Successfully started chat recording session: {session_id}")
@@ -404,7 +260,10 @@ You cannot complete this task without using these tools. The goal is to generate
             
             # Import LangChain components
             try:
-                from langchain.chat_models import ChatOpenAI
+                try:
+                    from langchain_openai import ChatOpenAI
+                except ImportError:
+                    from langchain.chat_models import ChatOpenAI
                 from langchain.agents import initialize_agent, AgentType
                 from langchain.memory import ConversationBufferMemory
                 from langchain.tools import Tool, StructuredTool
@@ -423,279 +282,28 @@ You cannot complete this task without using these tools. The goal is to generate
                 }
             
             # Create custom callback for chat recording
-            class ChatRecordingCallback(BaseCallbackHandler):
-                """Custom callback to record LLM messages and tool calls."""
-                
-                def __init__(self, recorder, mcp_adapter=None):
-                    super().__init__()
-                    self.recorder = recorder
-                    self.tool_call_messages = {}
-                    self.current_run_messages = {}
-                    self.mcp_adapter = mcp_adapter  # Reference to adapter for storing tool call IDs
-                    logger.info("CALLBACK INIT: ChatRecordingCallback initialized")
-                
-                def on_chain_start(self, serialized, inputs, **kwargs):
-                    """Called when chain starts - test if callback is working."""
-                    logger.info(f"CALLBACK TEST: Chain starting - callback is working!")
-                
-                def on_agent_action(self, action, **kwargs):
-                    """Called when agent takes an action - this should capture tool calls."""
-                    run_id = kwargs.get('run_id')
-                    logger.info(f"CALLBACK TEST: Agent action detected - tool: {action.tool}, run_id: {run_id}")
-                    logger.info(f"CALLBACK TEST: Tool input: {action.tool_input}")
-                    
-                    if self.recorder:
-                        try:
-                            import threading
-                            tool_call_id = None
-                            
-                            def record_action():
-                                nonlocal tool_call_id
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                                tool_call_id = loop.run_until_complete(
-                                    self.recorder.record_tool_call(
-                                        tool_name=action.tool,
-                                        parameters=action.tool_input if isinstance(action.tool_input, dict) else {'input': str(action.tool_input)},
-                                        description=f"Agent calling tool: {action.tool}"
-                                    )
-                                )
-                                loop.close()
-                            
-                            thread = threading.Thread(target=record_action)
-                            thread.start()
-                            thread.join()
-                            
-                            # Store the tool call ID for later use in on_tool_end and MCP wrapper
-                            if tool_call_id and run_id:
-                                self.tool_call_messages[run_id] = (tool_call_id, action.tool)
-                                logger.info(f"CALLBACK TEST: Stored tool call {tool_call_id} for run {run_id}")
-                                
-                                # Also store in MCP adapter for direct tool response recording
-                                if self.mcp_adapter:
-                                    self.mcp_adapter.pending_tool_calls[action.tool] = tool_call_id
-                                    logger.info(f"MCP ADAPTER: Stored tool call {tool_call_id} for {action.tool}")
-                            
-                        except Exception as e:
-                            logger.error(f"CALLBACK ERROR: Failed to record agent action: {e}")
-                
-                def on_chain_end(self, outputs, **kwargs):
-                    """Called when a chain ends - this might capture tool responses."""
-                    run_id = kwargs.get('run_id')
-                    logger.info(f"CALLBACK TEST: Chain end - run_id: {run_id}, outputs: {str(outputs)[:200]}...")
-                    
-                    # Check if this is a tool response by looking for matching tool call
-                    if self.recorder and run_id in self.tool_call_messages:
-                        tool_call_id, tool_name = self.tool_call_messages[run_id]
-                        logger.info(f"CALLBACK TEST: Found tool response for {tool_name} (call_id: {tool_call_id})")
-                        
-                        try:
-                            import threading
-                            response_id = None
-                            
-                            def record_response_sync():
-                                nonlocal response_id
-                                try:
-                                    new_loop = asyncio.new_event_loop()
-                                    asyncio.set_event_loop(new_loop)
-                                    
-                                    response_id = new_loop.run_until_complete(
-                                        self.recorder.record_tool_response(
-                                            tool_name=tool_name,
-                                            response=outputs if isinstance(outputs, dict) else {'result': str(outputs)},
-                                            parent_message_id=tool_call_id,
-                                            description=f"Tool {tool_name} response"
-                                        )
-                                    )
-                                    new_loop.close()
-                                    logger.info(f"CALLBACK TEST: Successfully recorded tool response {response_id}")
-                                    
-                                except Exception as e:
-                                    logger.error(f"CALLBACK ERROR: Failed to record tool response in thread: {e}")
-                            
-                            thread = threading.Thread(target=record_response_sync)
-                            thread.start()
-                            thread.join()
-                            
-                            # Clean up the stored tool call info
-                            del self.tool_call_messages[run_id]
-                            
-                        except Exception as e:
-                            logger.error(f"CALLBACK ERROR: Failed to record tool response: {e}")
-
-                def on_agent_finish(self, finish, **kwargs):
-                    """Called when agent finishes - this should capture tool responses.""" 
-                    logger.info(f"CALLBACK TEST: Agent finished - output: {finish.return_values}")
-                    # For agents, the finish contains the final result but not individual tool responses
-                    # Tool responses are handled in on_chain_end now
-                
-                def on_llm_start(self, serialized, prompts, **kwargs):
-                    """Record when LLM starts - capture the input prompts."""
-                    logger.info(f"CALLBACK TEST: LLM starting with {len(prompts) if prompts else 0} prompts")
-
-                def on_llm_end(self, response, **kwargs):
-                    """Record when LLM ends - might capture tool results."""
-                    run_id = kwargs.get('run_id')
-                    logger.info(f"CALLBACK TEST: LLM end - run_id: {run_id}, response: {str(response)[:200]}...")
-                    
-                    # Check if this LLM response contains tool results we can capture
-                    if hasattr(response, 'generations') and response.generations:
-                        for gen_list in response.generations:
-                            for gen in gen_list:
-                                if hasattr(gen, 'text') and gen.text:
-                                    logger.info(f"CALLBACK TEST: LLM generated text: {gen.text[:100]}...")
-                                    # Look for tool output patterns in the generated text
-                            try:
-                                # Run async code synchronously in callback
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                                result = loop.run_until_complete(
-                                    self.recorder.record_user_message(f"Prompt {i+1}: {prompt}")
-                                )
-                                loop.close()
-                                logger.info(f"CHAT CALLBACK: Successfully recorded prompt as message {result}")
-                            except Exception as e:
-                                logger.error(f"CHAT CALLBACK: Error recording LLM prompt: {e}")
-                    else:
-                        logger.warning(f"CHAT CALLBACK: No recorder or prompts (recorder: {bool(self.recorder)}, prompts: {bool(prompts)})")
-                
-                def on_llm_end(self, response, **kwargs):
-                    """Record when LLM ends - capture the response."""
-                    logger.info(f"CHAT CALLBACK: LLM ended with response type: {type(response)}")
-                    if self.recorder and response:
-                        try:
-                            # Extract the actual text response
-                            if hasattr(response, 'generations') and response.generations:
-                                logger.info(f"CHAT CALLBACK: Found {len(response.generations)} generation groups")
-                                for i, generation_list in enumerate(response.generations):
-                                    logger.info(f"CHAT CALLBACK: Generation group {i} has {len(generation_list)} generations")
-                                    for j, generation in enumerate(generation_list):
-                                        if hasattr(generation, 'text'):
-                                            logger.info(f"CHAT CALLBACK: Recording assistant response: {generation.text[:100]}...")
-                                            # Record as assistant message
-                                            loop = asyncio.new_event_loop()
-                                            asyncio.set_event_loop(loop)
-                                            result = loop.run_until_complete(
-                                                self.recorder.record_assistant_message(generation.text)
-                                            )
-                                            loop.close()
-                                            logger.info(f"CHAT CALLBACK: Successfully recorded assistant message {result}")
-                            else:
-                                logger.warning(f"CHAT CALLBACK: Response has no generations attribute or empty generations")
-                        except Exception as e:
-                            logger.error(f"CHAT CALLBACK: Error recording LLM response: {e}")
-                    else:
-                        logger.warning(f"CHAT CALLBACK: No recorder or response (recorder: {bool(self.recorder)}, response: {bool(response)})")
-                
-                def on_tool_start(self, serialized, input_str, **kwargs):
-                    """Record when a tool starts executing."""
-                    if self.recorder:
-                        tool_name = serialized.get('name', 'unknown_tool')
-                        run_id = kwargs.get('run_id')
-                        logger.info(f"CHAT RECORDER: Tool starting - {tool_name} with run_id {run_id}")
-                        logger.info(f"CHAT RECORDER: Tool input: {input_str}")
-                        
-                        try:
-                            # Use the existing event loop instead of creating a new one
-                            import threading
-                            
-                            def record_sync():
-                                try:
-                                    # Create a new event loop for this thread
-                                    new_loop = asyncio.new_event_loop()
-                                    asyncio.set_event_loop(new_loop)
-                                    
-                                    tool_call_id = new_loop.run_until_complete(
-                                        self.recorder.record_tool_call(
-                                            tool_name=tool_name,
-                                            parameters=input_str if isinstance(input_str, dict) else {'input': str(input_str)},
-                                            description=f"AI is calling tool: {tool_name}"
-                                        )
-                                    )
-                                    new_loop.close()
-                                    
-                                    if run_id and tool_call_id:
-                                        self.current_run_messages[run_id] = (tool_call_id, tool_name)
-                                        logger.info(f"CHAT RECORDER: Recorded tool call {tool_call_id} for run {run_id}")
-                                    
-                                except Exception as e:
-                                    logger.error(f"CHAT RECORDER: Error in record_sync: {e}")
-                            
-                            # Run in a separate thread to avoid event loop conflicts
-                            thread = threading.Thread(target=record_sync)
-                            thread.start()
-                            thread.join()  # Wait for completion
-                            
-                        except Exception as e:
-                            logger.error(f"CHAT RECORDER: Error recording tool call: {e}")
-                
-                def on_tool_end(self, output, **kwargs):
-                    """Record when a tool finishes executing."""
-                    run_id = kwargs.get('run_id')
-                    logger.info(f"CALLBACK TEST: on_tool_end called - run_id: {run_id}")
-                    logger.info(f"CALLBACK TEST: Tool output type: {type(output)}, content: {str(output)[:200]}...")
-                    
-                    if self.recorder:
-                        # Check both possible storage locations for tool call info
-                        tool_info = self.tool_call_messages.get(run_id) or self.current_run_messages.get(run_id)
-                        
-                        if tool_info:
-                            tool_call_id, tool_name = tool_info
-                            logger.info(f"CALLBACK TEST: Found matching tool call {tool_call_id} for tool {tool_name}")
-                            
-                            try:
-                                import threading
-                                response_id = None
-                                
-                                def record_response_sync():
-                                    nonlocal response_id
-                                    try:
-                                        new_loop = asyncio.new_event_loop()
-                                        asyncio.set_event_loop(new_loop)
-                                        
-                                        response_id = new_loop.run_until_complete(
-                                            self.recorder.record_tool_response(
-                                                tool_name=tool_name,
-                                                response=output if isinstance(output, dict) else {'result': str(output)},
-                                                parent_message_id=tool_call_id,
-                                                description=f"Tool {tool_name} response"
-                                            )
-                                        )
-                                        new_loop.close()
-                                        logger.info(f"CALLBACK TEST: Successfully recorded tool response {response_id}")
-                                        
-                                    except Exception as e:
-                                        logger.error(f"CALLBACK ERROR: Failed to record tool response in thread: {e}")
-                                
-                                thread = threading.Thread(target=record_response_sync)
-                                thread.start()
-                                thread.join()
-                                
-                                # Clean up the stored tool call info
-                                if run_id in self.tool_call_messages:
-                                    del self.tool_call_messages[run_id]
-                                if run_id in self.current_run_messages:
-                                    del self.current_run_messages[run_id]
-                                
-                            except Exception as e:
-                                logger.error(f"CALLBACK ERROR: Failed to record tool response: {e}")
-                        else:
-                            logger.warning(f"CALLBACK WARNING: No tool call info found for run_id {run_id}")
-                            logger.warning(f"CALLBACK WARNING: Available tool calls: {list(self.tool_call_messages.keys())}")
-                            logger.warning(f"CALLBACK WARNING: Available current runs: {list(self.current_run_messages.keys())}")
-                    else:
-                        logger.warning("CALLBACK WARNING: No recorder available for tool response")
-            
-            # Create callback if recorder is available
+                        # Create callback if recorder is available
             callback = None
             
-            # Set up the AI model - use gpt-4o which has larger context window
-            llm = ChatOpenAI(
-                model="gpt-4o",  # 128k context window
-                temperature=0.7,
-                openai_api_key=self.openai_api_key,
-                max_tokens=4000  # Limit response length to preserve context
-            )
+            # Set up the AI model - create o3-compatible configuration
+            model_name = "o3"
+            
+            # Create model kwargs that exclude unsupported parameters for o3
+            model_config = {
+                "model": model_name,
+                "temperature": 1,
+                "openai_api_key": self.openai_api_key,
+            }
+            
+            # Only add completion tokens for newer models like o3
+            if model_name in ["o3", "gpt-4.1", "gpt-5"]:
+                model_config["max_completion_tokens"] = 4000
+            else:
+                model_config["max_tokens"] = 4000
+            
+            # Use the extracted O3-compatible model
+            
+            llm = O3CompatibleChatOpenAI(**model_config)
             
             # Convert MCP tools to LangChain tools
             async with self.mcp_server.connect({'name': f'AI Agent for {self.experiment_id}'}) as mcp_client:
@@ -752,6 +360,22 @@ You cannot complete this task without using these tools. The goal is to generate
                             'days': 'Number of days back to analyze',
                             'output_format': 'Output format - json or yaml'
                         },
+                        'plexus_feedback_find': {
+                            'scorecard_name': 'Name of the scorecard containing the score',
+                            'score_name': 'Name of the specific score to search feedback for',
+                            'initial_value': 'Optional filter for the original AI prediction value',
+                            'final_value': 'Optional filter for the corrected human value',
+                            'limit': 'Maximum number of feedback items to return',
+                            'days': 'Number of days back to search',
+                            'output_format': 'Output format - json or yaml',
+                            'prioritize_edit_comments': 'Whether to prioritize feedback items with edit comments'
+                        },
+                        'plexus_item_info': {
+                            'item_id': 'The unique ID of the item OR an external identifier value'
+                        },
+                        'plexus_scorecard_info': {
+                            'scorecard_identifier': 'The identifier for the scorecard (can be ID, name, key, or external ID)'
+                        },
                         'plexus_predict': {
                             'scorecard_name': 'Name of the scorecard containing the score',
                             'score_name': 'Name of the specific score to run predictions with',
@@ -764,12 +388,10 @@ You cannot complete this task without using these tools. The goal is to generate
                             'yaml_only': 'If True, load only from local YAML files'
                         },
                         'create_experiment_node': {
-                            'experiment_id': 'ID of the experiment to add the node to',
-                            'yaml_configuration': 'YAML configuration for the new hypothesis',
-                            'hypothesis_description': 'Structured description: "GOAL: [what to improve]\\nMETHOD: [specific implementation]"',
-                            'node_name': 'Optional: Short, distinctive name (auto-generated if not provided)',
-                            'parent_node_id': 'Optional parent node ID (if None, creates child of root node)',
-                            'initial_value': 'Optional initial computed value (defaults to hypothesis info)'
+                            'experiment_id': 'The unique ID of the experiment',
+                            'hypothesis_description': 'Clear description following format: GOAL: [target - no quantification] | METHOD: [changes]',
+                            'node_name': 'Descriptive name for the hypothesis node (optional)',
+                            'yaml_configuration': 'Optional YAML configuration - can be added later'
                         },
                         'get_experiment_tree': {
                             'experiment_id': 'ID of the experiment to analyze'
@@ -808,9 +430,12 @@ You cannot complete this task without using these tools. The goal is to generate
                                         if i < len(prop_names):
                                             arg_dict[prop_names[i]] = arg
                                     result = func(arg_dict)
-                            else:
-                                # Use kwargs as provided
+                            elif kwargs:
+                                # LangChain passed keyword arguments - pass them to MCP tool
                                 result = func(kwargs)
+                            else:
+                                # No arguments provided
+                                result = func({})
                             
                             logger.info(f"MCP Tool Result: {result}")
                             logger.info("=== END LANGCHAIN STRUCTURED WRAPPER ===")
@@ -855,66 +480,335 @@ You cannot complete this task without using these tools. The goal is to generate
                 
                 logger.info(f"Created {len(langchain_tools)} LangChain tools from MCP")
                 
-                # Set up memory
-                memory = ConversationBufferMemory(
-                    memory_key="chat_history",
-                    return_messages=True
-                )
+                # Get the system and user prompts first
+                system_prompt = self.get_system_prompt()
+                user_prompt = self.get_user_prompt()
+                logger.info(f"Generated prompts: system={len(system_prompt)} chars, user={len(user_prompt)} chars")
                 
-                # Create the agent - use STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION for multi-input tool support
-                agent_kwargs = {
-                    'tools': langchain_tools,
-                    'llm': llm,
-                    'agent': AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,  # Supports structured tools
-                    'memory': memory,
-                    'verbose': True,
-                    'handle_parsing_errors': True,
-                    'max_iterations': 15,  # Allow more iterations for tool usage
-                    'early_stopping_method': "generate",  # Don't stop early
-                    'return_intermediate_steps': True  # Get detailed execution info
-                }
+                # Simple conversation history - just a list of messages
+                from langchain.schema import SystemMessage, HumanMessage, AIMessage
+                conversation_history = [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=user_prompt)
+                ]
                 
-                # Add callback if available
-                if callback:
-                    agent_kwargs['callbacks'] = [callback]
+                # Tool calling logic is now in separate module
                 
-                agent = initialize_agent(**agent_kwargs)
-                
-                # Get the exploration prompt
-                prompt = self.get_exploration_prompt()
                 logger.info(f"Running AI agent with {len(langchain_tools)} tools")
                 
-                # Record the initial system prompt
+                # Record the system prompt and user prompt separately
                 if self.chat_recorder:
-                    await self.chat_recorder.record_system_message(prompt)
+                    await self.chat_recorder.record_system_message(system_prompt)
+                    # Record user message with the current configuration and task
+                    user_message_id = await self.chat_recorder.record_message(
+                        role='USER',
+                        content=user_prompt,
+                        message_type='MESSAGE'
+                    )
                 
                 # Log the conversation history that will be sent to the AI model
                 logger.info("="*60)
                 logger.info("CONVERSATION HISTORY BEING SENT TO AI MODEL:")
                 logger.info("="*60)
-                logger.info(f"PROMPT:\n{prompt}")
+                logger.info(f"SYSTEM: {system_prompt[:300]}{'...' if len(system_prompt) > 300 else ''}")
+                logger.info("-" * 30)
+                logger.info(f"USER: {user_prompt[:300]}{'...' if len(user_prompt) > 300 else ''}")
                 logger.info("-"*60)
                 logger.info(f"AVAILABLE TOOLS: {[tool.name for tool in langchain_tools]}")
                 logger.info("="*60)
                 
-                # Run the agent using invoke method (run is deprecated)
-                result = agent.invoke({"input": prompt})
+                # Track tool usage for safeguards
+                tool_usage_tracker = {"create_experiment_node_count": 0}
                 
-                # Extract the output from the result
-                response = result.get("output", str(result))
+                # Create enhanced callback that tracks create_experiment_node usage
+                if callback:
+                    original_on_agent_action = callback.on_agent_action
+                    def enhanced_on_agent_action(action, **kwargs):
+                        if action.tool == "create_experiment_node":
+                            tool_usage_tracker["create_experiment_node_count"] += 1
+                            logger.info(f"TOOL TRACKER: create_experiment_node called #{tool_usage_tracker['create_experiment_node_count']}")
+                        return original_on_agent_action(action, **kwargs)
+                    callback.on_agent_action = enhanced_on_agent_action
                 
-                # Record the final AI response
+                # SIMPLE CONVERSATION LOOP: Just chat with the AI
+                response = ""
+                nodes_created = 0
+                max_conversation_rounds = 10  # Safety limit
+                
+                # Start with initial prompt
+                next_message = "Begin analyzing the current score configuration and feedback patterns to generate hypotheses. You have access to all the necessary context and tools."
+                
+                for conversation_round in range(max_conversation_rounds):
+                    logger.info(f"CONVERSATION ROUND {conversation_round + 1}/{max_conversation_rounds}")
+                    
+                    # Use the message we have (either initial prompt or guidance from previous round)
+                    if conversation_round == 0:
+                        logger.info(f"FIRST ROUND: Prompting AI to start")
+                    else:
+                        logger.info(f"ROUND {conversation_round + 1}: Sending message ({len(next_message)} chars)")
+                    
+                    # Add the message to conversation (guidance messages are SystemMessages)
+                    if conversation_round == 0:
+                        # First message is the user prompt
+                        conversation_history.append(HumanMessage(content=next_message))
+                    else:
+                        # Subsequent messages are system guidance
+                        conversation_history.append(SystemMessage(content=next_message))
+                    
+                    # Note: guidance messages are recorded when they're generated (line 666), not when they're sent
+                    
+                    # Log conversation state
+                    logger.info(f"CONVERSATION HISTORY: {len(conversation_history)} messages")
+                    for i, msg in enumerate(conversation_history):
+                        logger.info(f"  Message {i}: {type(msg).__name__} ({len(msg.content)} chars)")
+                    
+                    # Call the LLM directly with conversation history
+                    logger.info(f"CALLING LLM directly with {len(conversation_history)} messages")
+                    
+                    try:
+                        ai_response = llm.invoke(conversation_history)
+                        logger.info(f"RAW AI RESPONSE CONTENT: {ai_response.content if hasattr(ai_response, 'content') else 'NO CONTENT ATTR'}")
+                        
+                        response = ai_response.content if hasattr(ai_response, 'content') else str(ai_response)
+                        
+                        if not response:
+                            logger.error("AI RESPONSE IS EMPTY!")
+                            logger.error(f"Full AI response object: {ai_response}")
+                            response = "No response from AI"
+                        
+                        logger.info(f"PROCESSED AI RESPONSE ({len(response)} chars): {response}")
+                        logger.info(f"FULL AI RESPONSE: {response}")
+                        
+                    except Exception as e:
+                        logger.error(f"ERROR calling LLM: {e}")
+                        logger.error(f"Exception type: {type(e)}")
+                        response = f"Error calling LLM: {e}"
+                    
+                    # Add AI response to conversation
+                    conversation_history.append(AIMessage(content=response))
+                    
+                    # Record AI response
+                    if self.chat_recorder:
+                        await self.chat_recorder.record_message(
+                            role='ASSISTANT',
+                            content=response,
+                            message_type='MESSAGE'
+                        )
+                    
+                    # Check if AI wants to call tools
+                    logger.info(f"CHECKING FOR TOOL CALLS in response: {response[:500]}...")
+                    tool_calls = extract_all_tool_calls(response, mcp_tools)
+                    
+                    if tool_calls:
+                        logger.info(f"FOUND {len(tool_calls)} TOOL CALL(S)")
+                        
+                        # Process each tool call with error feedback
+                        all_tool_results = []
+                        for tool_name, tool_kwargs in tool_calls:
+                            logger.info(f"PROCESSING TOOL CALL: {tool_name} with {tool_kwargs}")
+                            
+                            try:
+                                tool_result = call_tool(tool_name, tool_kwargs, mcp_tools)
+                                logger.info(f"TOOL RESULT: {tool_result[:500]}...")
+                                
+                                # Check if the result indicates an error and provide helpful feedback
+                                if tool_result and isinstance(tool_result, str):
+                                    if tool_result.startswith("Error calling") or (tool_result.startswith("Tool") and "not found" in tool_result):
+                                        # Format error with helpful guidance
+                                        error_feedback = f"⚠️ **Tool Error**: {tool_result}\n\n**Suggestion**: Please check your parameters and try again. Common issues:\n- Missing required parameters\n- Incorrect parameter names or values\n- Invalid tool name\n\nYou can retry this tool call in your next response."
+                                        all_tool_results.append(f"Tool {tool_name} error: {error_feedback}")
+                                        logger.warning(f"TOOL CALL FAILED: {tool_result}")
+                                    else:
+                                        # Success!
+                                        all_tool_results.append(f"Tool {tool_name} result: {tool_result}")
+                                else:
+                                    # Non-string result, assume success
+                                    all_tool_results.append(f"Tool {tool_name} result: {tool_result}")
+                                    
+                            except Exception as e:
+                                # Handle exceptions with clear feedback
+                                error_message = str(e)
+                                logger.error(f"TOOL CALL EXCEPTION: {error_message}")
+                                
+                                error_feedback = f"⚠️ **Tool Exception**: {error_message}\n\n**Suggestion**: There was an unexpected error executing this tool. Please:\n- Verify all required parameters are provided\n- Check parameter types and formats\n- Try the tool call again with corrected parameters\n\nYou can retry this tool call in your next response."
+                                all_tool_results.append(f"Tool {tool_name} error: {error_feedback}")
+                                tool_result = error_feedback
+                            
+                            # Record tool call and response
+                            if self.chat_recorder:
+                                await self.chat_recorder.record_message(
+                                    role='TOOL',
+                                    content=f"{tool_name}({tool_kwargs})",
+                                    message_type='TOOL_CALL'
+                                )
+                                await self.chat_recorder.record_message(
+                                    role='TOOL',
+                                    content=str(tool_result),
+                                    message_type='TOOL_RESPONSE'
+                                )
+                            
+                            # Track successful node creation only (exclude errors)
+                            if tool_name == "create_experiment_node" and tool_result and not str(tool_result).startswith(("Error", "⚠️", "❌")):
+                                tool_usage_tracker["create_experiment_node_count"] += 1
+                                nodes_created = tool_usage_tracker["create_experiment_node_count"]
+                                logger.info(f"TOOL TRACKER: create_experiment_node successfully called #{nodes_created}")
+                            elif tool_name == "create_experiment_node":
+                                logger.info(f"TOOL TRACKER: create_experiment_node failed, not counting towards nodes_created")
+                        
+                        # Add all tool results to conversation
+                        combined_results = "\n\n".join(all_tool_results)
+                        conversation_history.append(HumanMessage(content=combined_results))
+                        
+                    else:
+                        logger.info("NO TOOL CALLS DETECTED in AI response")
+                    
+                    # Update conversation flow state
+                    if self.conversation_flow:
+                        # Use both local tool calls and MCP adapter tools for comprehensive tracking
+                        tools_used = [tool_name for tool_name, _ in tool_calls] if tool_calls else []
+                        if hasattr(self.mcp_adapter, 'tools_called'):
+                            tools_used.extend(list(self.mcp_adapter.tools_called))
+                        
+                        self.conversation_flow.update_state(
+                            tools_used=tools_used,
+                            response_content=response,
+                            nodes_created=nodes_created
+                        )
+                        
+                        logger.info(f"CONVERSATION FLOW: Round {conversation_round + 1} complete, {nodes_created} nodes created")
+                        
+                        # Check if we should continue the conversation
+                        if self.conversation_flow.should_continue():
+                            guidance = self.conversation_flow.get_next_guidance()
+                            
+                            if guidance:
+                                logger.info(f"CONVERSATION FLOW: Providing guidance for stage {self.conversation_flow.state.stage.value}")
+                                
+                                # Record the guidance prompt
+                                if self.chat_recorder:
+                                    await self.chat_recorder.record_system_message(guidance)
+                                
+                                # Set up next round with guidance
+                                next_message = guidance
+                                continue  # Continue the conversation loop
+                            else:
+                                logger.info("CONVERSATION FLOW: No guidance available, continuing conversation")
+                                break
+                        else:
+                            logger.info(f"CONVERSATION FLOW: should_continue=False after round {conversation_round + 1}")
+                            break
+                    else:
+                        # No conversation flow, just run once
+                        break
+                
+                # CONVERSATION COMPLETE: Handle completion summary and emergency fallback
+                if self.conversation_flow:
+                    logger.info(f"CONVERSATION ENDING: nodes_created={nodes_created}")
+                    
+                    # EMERGENCY FALLBACK: Force node creation if none exist
+                    if nodes_created == 0:
+                        logger.warning("EMERGENCY FALLBACK: Forcing node creation since none were created")
+                        emergency_prompt = f"""
+🚨 **EMERGENCY: CREATE NODES NOW** 🚨
+
+The conversation is about to end but you have not created any experiment nodes yet.
+
+**CRITICAL CONTEXT:**
+- scorecard_name: "{self.experiment_context.get('scorecard_name', 'Unknown')}"
+- score_name: "{self.experiment_context.get('score_name', 'Unknown')}"
+- experiment_id: {self.experiment_context.get('experiment_id', 'EXPERIMENT_ID')}
+
+You MUST create at least 2 experiment nodes before this conversation can end.
+
+**IMMEDIATE ACTION REQUIRED:**
+Use create_experiment_node tool with these parameters:
+1. A conservative hypothesis targeting the specific feedback patterns you found
+2. An aggressive hypothesis with more significant changes
+
+**Example call:**
+create_experiment_node(
+    experiment_id="{self.experiment_context.get('experiment_id', 'EXPERIMENT_ID')}",
+    hypothesis_description="GOAL: Reduce false positives for medication verification | METHOD: Add stricter verification requirements",
+    node_name="Stricter Verification Requirements"
+)
+
+This is MANDATORY - the conversation cannot complete without nodes.
+"""
+                        # Force one final attempt at node creation
+                        if self.chat_recorder:
+                            self.chat_recorder.record_message_sync(
+                                role='SYSTEM', 
+                                content=emergency_prompt,
+                                message_type='MESSAGE'
+                            )
+                        
+                        # Add emergency prompt to conversation and get response
+                        conversation_history.append(HumanMessage(content=emergency_prompt))
+                        emergency_ai_response = llm.invoke(conversation_history)
+                        emergency_result = {"output": emergency_ai_response.content}
+                        emergency_response = emergency_result.get("output", str(emergency_result))
+                        emergency_nodes = tool_usage_tracker["create_experiment_node_count"]
+                        
+                        if emergency_nodes > nodes_created:
+                            response = emergency_response
+                            nodes_created = emergency_nodes
+                            logger.info(f"EMERGENCY SUCCESS: Created {emergency_nodes} nodes in fallback")
+                        else:
+                            logger.error("EMERGENCY FAILURE: Still no nodes created even in fallback")
+                    
+                    # Generate completion summary (always run, regardless of emergency fallback)
+                    completion_summary = self.conversation_flow.get_completion_summary()
+                    
+                    # Add a programmatic explanation of why the conversation ended
+                    termination_reason = f"""
+
+## Experiment Session Complete
+
+**Termination Reason:** {'No experiment nodes created despite multiple attempts' if nodes_created == 0 else f'{nodes_created} experiment nodes created successfully'}
+
+**Session Summary:**
+- Stage reached: {self.conversation_flow.state.stage.value}
+- Total rounds: {self.conversation_flow.state.total_rounds}
+- Tools used: {len(self.conversation_flow.state.tools_used)}
+- Nodes created: {nodes_created}
+
+**Next Steps:** {'Manual intervention required - AI failed to generate hypotheses' if nodes_created == 0 else 'Review generated hypotheses in the experiment dashboard'}
+"""
+                    
+                    # Record the termination explanation
+                    if self.chat_recorder:
+                        self.chat_recorder.record_message_sync(
+                            role='SYSTEM', 
+                            content=termination_reason,
+                            message_type='MESSAGE'
+                        )
+                    
+                    completion_summary_with_reason = completion_summary + termination_reason
+                    response += f"\n\n{completion_summary_with_reason}"
+                    logger.info(f"CONVERSATION FLOW: Conversation complete - {completion_summary}")
+                    logger.info(f"TERMINATION REASON: {termination_reason.strip()}")
+                
+                else:
+                    logger.warning("CONVERSATION FLOW: No conversation flow manager available, using basic check")
+                    if nodes_created == 0:
+                        logger.warning("BASIC CHECK: No experiment nodes created")
+                    else:
+                        logger.info(f"BASIC CHECK: {nodes_created} experiment nodes created")
+                
+                # End the chat session (all messages are recorded automatically via callbacks)
                 if self.chat_recorder:
-                    await self.chat_recorder.record_assistant_message(response)
                     await self.chat_recorder.end_session('COMPLETED')
                 
                 return {
                     "success": True,
                     "experiment_id": self.experiment_id,
-                    "prompt": prompt,
+                    "system_prompt": system_prompt,
+                    "user_prompt": user_prompt,
                     "response": response,
                     "tools_available": len(langchain_tools),
-                    "tool_names": [tool.name for tool in langchain_tools]
+                    "tool_names": [tool.name for tool in langchain_tools],
+                    "nodes_created": tool_usage_tracker["create_experiment_node_count"],
+                    "safeguard_triggered": nodes_created == 0
                 }
             
         except Exception as e:
