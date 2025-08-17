@@ -48,9 +48,9 @@ type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "r
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "rootNodeId" | "updatedAt" | "createdAt";
+type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
 type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
-type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "status" | "createdAt" | "updatedAt";
+type ExperimentTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -82,6 +82,7 @@ const schema = a.schema({
             dataSources: a.hasMany('DataSource', 'accountId'),
             dataSets: a.hasMany('DataSet', 'accountId'),
             experiments: a.hasMany('Experiment', 'accountId'),
+            experimentTemplates: a.hasMany('ExperimentTemplate', 'accountId'),
             chatSessions: a.hasMany('ChatSession', 'accountId'),
         })
         .authorization((allow) => [
@@ -882,7 +883,8 @@ const schema = a.schema({
     Experiment: a
         .model({
             featured: a.boolean(),
-            code: a.string(),
+            templateId: a.string(),
+            template: a.belongsTo('ExperimentTemplate', 'templateId'),
             rootNodeId: a.id(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -904,6 +906,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
+            idx("templateId").sortKeys(["updatedAt"]),
             idx("rootNodeId")
         ]),
 
@@ -916,7 +919,11 @@ const schema = a.schema({
             childNodes: a.hasMany('ExperimentNode', 'parentNodeId'),
             name: a.string(),
             status: a.string(),
-            versions: a.hasMany('ExperimentNodeVersion', 'nodeId'),
+            // Moved from ExperimentNodeVersion - simplified to single version per node
+            code: a.string().required(),
+            hypothesis: a.string(),
+            insight: a.string(),
+            value: a.json(),
             chatSessions: a.hasMany('ChatSession', 'nodeId'),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -930,16 +937,17 @@ const schema = a.schema({
             idx("parentNodeId").name("nodesByParent")
         ]),
 
-    ExperimentNodeVersion: a
+    ExperimentTemplate: a
         .model({
-            experimentId: a.id().required(),
-            nodeId: a.id().required(),
-            node: a.belongsTo('ExperimentNode', 'nodeId'),
-            status: a.string(),
-            code: a.string().required(),
-            hypothesis: a.string(),
-            insight: a.string(),
-            value: a.json(),
+            name: a.string().required(),
+            description: a.string(),
+            template: a.string().required(), // The YAML template content
+            version: a.string().required(), // Template version (e.g., "1.0", "2.1")
+            isDefault: a.boolean(), // Whether this is the default template
+            category: a.string(), // e.g., "hypothesis_generation", "beam_search"
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            experiments: a.hasMany('Experiment', 'templateId'),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
@@ -947,8 +955,9 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ExperimentNodeVersionIndexFields) => any) => [
-            idx("nodeId").sortKeys(["createdAt"]).name("versionsByNodeCreatedAt")
+        .secondaryIndexes((idx) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("category").sortKeys(["updatedAt"])
         ]),
 
     ChatSession: a
