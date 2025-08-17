@@ -885,6 +885,7 @@ const schema = a.schema({
             featured: a.boolean(),
             templateId: a.string(),
             template: a.belongsTo('ExperimentTemplate', 'templateId'),
+            code: a.string(), // YAML template code copied from template
             rootNodeId: a.id(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
