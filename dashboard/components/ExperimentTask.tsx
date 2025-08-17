@@ -23,6 +23,7 @@ import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
 import ExperimentNodesList from "./experiment-nodes-list"
+import ExperimentConversationViewer from "./experiment-conversation-viewer"
 
 const client = generateClient<Schema>()
 
@@ -311,6 +312,11 @@ export default function ExperimentTask({
               </AccordionContent>
             </AccordionItem>
           </Accordion>
+          
+          {/* Experiment Conversation section */}
+          <div className="mt-6">
+            <ExperimentConversationViewer experimentId={experiment.id} />
+          </div>
           
           {/* Experiment Nodes section */}
           <div className="mt-6">

@@ -14,6 +14,15 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 logger = logging.getLogger(__name__)
 
 
+def truncate_for_log(content: str, max_length: int = 200) -> str:
+    """Truncate content for logging purposes."""
+    if not content:
+        return content
+    if len(content) <= max_length:
+        return content
+    return content[:max_length] + f"... [truncated, total: {len(content)} chars]"
+
+
 class ExperimentChatRecorder:
     """Records chat messages during experiment runs."""
     
@@ -23,6 +32,7 @@ class ExperimentChatRecorder:
         self.node_id = node_id
         self.session_id = None
         self.sequence_number = 0
+        self._sequence_lock = None  # Will be initialized when needed
         
     async def start_session(self, context: Optional[Dict[str, Any]] = None) -> str:
         """Start a new chat session for the experiment run."""
@@ -32,16 +42,27 @@ class ExperimentChatRecorder:
             import os
             default_account = os.environ.get('PLEXUS_ACCOUNT_KEY', 'call-criteria')
             
+            # Get the actual IDs that are being passed
+            scorecard_id = context.get('scorecard_id') if context else None
+            score_id = context.get('score_id') if context else None
+            account_id = context.get('account_id', default_account) if context else default_account
+            
             session_data = {
-                'accountId': context.get('account_id') if context and context.get('account_id') else default_account,
-                'scorecardId': context.get('scorecard_id') if context else None,
-                'scoreId': context.get('score_id') if context else None,
+                'accountId': account_id,
                 'experimentId': self.experiment_id,
-                'nodeId': self.node_id,
                 'status': 'ACTIVE'
-                # Note: Omitting metadata field due to GraphQL validation issues
-                # Metadata can be added later if needed via update mutation
             }
+            
+            # Only include nodeId if it's not None (for experiment-level conversations)
+            if self.node_id is not None:
+                session_data['nodeId'] = self.node_id
+
+            # Add scorecard/score IDs if they are present
+            if scorecard_id and str(scorecard_id).strip():
+                session_data['scorecardId'] = scorecard_id
+                
+            if score_id and str(score_id).strip():
+                session_data['scoreId'] = score_id
             
             # Execute GraphQL mutation to create session
             mutation = """
@@ -54,12 +75,11 @@ class ExperimentChatRecorder:
             }
             """
             
-            logger.info(f"Creating chat session with data: {session_data}")
             result = self.client.execute(mutation, {'input': session_data})
             
             # Check for GraphQL errors first
             if 'errors' in result:
-                logger.error(f"GraphQL errors creating chat session: {result['errors']}")
+                logger.error(f"GraphQL error creating session: {result['errors']}")
                 return None
                 
             # Handle both wrapped and unwrapped GraphQL responses
@@ -71,14 +91,16 @@ class ExperimentChatRecorder:
             
             if chat_session_result and 'id' in chat_session_result:
                 self.session_id = chat_session_result['id']
-                logger.info(f"Started chat session {self.session_id} for experiment {self.experiment_id}")
+                logger.info(f"Chat session created: {self.session_id}")
                 return self.session_id
             else:
-                logger.error(f"Failed to create chat session - unexpected result structure: {result}")
+                logger.error(f"Failed to create session - unexpected result: {result}")
                 return None
                 
         except Exception as e:
-            logger.error(f"Error starting chat session: {e}")
+            logger.error(f"Error starting session: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
     
     async def record_message(
@@ -93,7 +115,7 @@ class ExperimentChatRecorder:
     ) -> str:
         """Record a chat message."""
         if not self.session_id:
-            logger.warning("No active chat session for recording message")
+            logger.warning("No active session - cannot record message")
             return None
             
         try:
@@ -116,6 +138,13 @@ class ExperimentChatRecorder:
             # These can be stored in the content field as formatted text instead
             if parent_message_id:
                 message_data['parentMessageId'] = parent_message_id
+            
+            # Log message recording with content preview (truncated for readability)
+            tool_info = f" | Tool: {tool_name}" if tool_name else ""
+            content_preview = truncate_for_log(content, 100)
+            logger.info(f"📝 Recording message [{self.sequence_number}] {role}/{message_type}{tool_info}: {content_preview}")
+            
+            # NOTE: We record the FULL content in the database, only the log is truncated
                 
             # Execute GraphQL mutation to create message
             mutation = """
@@ -132,7 +161,7 @@ class ExperimentChatRecorder:
             
             # Check for GraphQL errors first
             if 'errors' in result:
-                logger.error(f"GraphQL errors creating chat message: {result['errors']}")
+                logger.error(f"GraphQL error creating message: {result['errors']}")
                 return None
                 
             # Handle both wrapped and unwrapped GraphQL responses
@@ -144,14 +173,156 @@ class ExperimentChatRecorder:
             
             if chat_message_result and 'id' in chat_message_result:
                 message_id = chat_message_result['id']
-                logger.debug(f"Recorded message {message_id} in session {self.session_id}")
+                logger.info(f"✅ Created message {message_id} (seq {self.sequence_number})")
                 return message_id
             else:
-                logger.error(f"Failed to create chat message - unexpected result structure: {result}")
+                logger.error(f"Failed to create message - unexpected result: {result}")
                 return None
                 
         except Exception as e:
-            logger.error(f"Error recording chat message: {e}")
+            logger.error(f"Error recording message: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return None
+    
+    def _get_next_sequence_number(self) -> int:
+        """Thread-safe sequence number generation."""
+        import threading
+        
+        # Initialize lock if not already done
+        if self._sequence_lock is None:
+            self._sequence_lock = threading.Lock()
+        
+        with self._sequence_lock:
+            self.sequence_number += 1
+            return self.sequence_number
+    
+    def record_message_sync(
+        self, 
+        role: str, 
+        content: str, 
+        message_type: str = 'MESSAGE',
+        tool_name: Optional[str] = None,
+        parent_message_id: Optional[str] = None
+    ) -> str:
+        """Synchronous wrapper for recording messages from callbacks."""
+        import asyncio
+        import threading
+        
+        message_id = None
+        error = None
+        
+        def run_async():
+            nonlocal message_id, error
+            try:
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Override sequence number generation in async call for thread safety
+                original_seq = self.sequence_number
+                self.sequence_number = original_seq  # Don't increment here
+                
+                message_id = loop.run_until_complete(
+                    self.record_message_with_sequence(
+                        role, content, message_type, tool_name, None, None, parent_message_id,
+                        sequence_number=self._get_next_sequence_number()
+                    )
+                )
+                loop.close()
+            except Exception as e:
+                error = e
+        
+        thread = threading.Thread(target=run_async)
+        thread.start()
+        thread.join(timeout=30)  # 30 second timeout
+        
+        if error:
+            logger.error(f"Error in sync message recording: {error}")
+            return None
+            
+        return message_id
+    
+    async def record_message_with_sequence(
+        self, 
+        role: str, 
+        content: str, 
+        message_type: str = 'MESSAGE',
+        tool_name: Optional[str] = None,
+        tool_parameters: Optional[Dict[str, Any]] = None,
+        tool_response: Optional[Dict[str, Any]] = None,
+        parent_message_id: Optional[str] = None,
+        sequence_number: Optional[int] = None
+    ) -> str:
+        """Record a chat message with explicit sequence number."""
+        if not self.session_id:
+            logger.warning("No active session - cannot record message")
+            return None
+            
+        try:
+            # Use provided sequence number or generate new one
+            if sequence_number is None:
+                sequence_number = self._get_next_sequence_number()
+            
+            message_data = {
+                'sessionId': self.session_id,
+                'experimentId': self.experiment_id,
+                'role': role,
+                'content': content,
+                'messageType': message_type,
+                'sequenceNumber': sequence_number
+                # Note: Omitting metadata field due to GraphQL validation issues
+            }
+            
+            # Add tool-specific fields if provided
+            if tool_name:
+                message_data['toolName'] = tool_name
+            # Note: Omitting tool parameters and response for now due to GraphQL validation
+            # These can be stored in the content field as formatted text instead
+            if parent_message_id:
+                message_data['parentMessageId'] = parent_message_id
+            
+            # Log message recording (keep minimal for production)
+            tool_info = f" | Tool: {tool_name}" if tool_name else ""
+            logger.info(f"📝 Recording message [{sequence_number}] {role}/{message_type}{tool_info}")
+                
+            # Execute GraphQL mutation to create message
+            mutation = """
+            mutation CreateChatMessage($input: CreateChatMessageInput!) {
+                createChatMessage(input: $input) {
+                    id
+                    sequenceNumber
+                    createdAt
+                }
+            }
+            """
+            
+            result = self.client.execute(mutation, {'input': message_data})
+            
+            # Check for GraphQL errors first
+            if 'errors' in result:
+                logger.error(f"GraphQL error creating message: {result['errors']}")
+                return None
+                
+            # Handle both wrapped and unwrapped GraphQL responses
+            chat_message_result = None
+            if result and 'data' in result and 'createChatMessage' in result['data']:
+                chat_message_result = result['data']['createChatMessage']
+            elif result and 'createChatMessage' in result:
+                chat_message_result = result['createChatMessage']
+            
+            if chat_message_result and 'id' in chat_message_result:
+                message_id = chat_message_result['id']
+                logger.info(f"✅ Created message {message_id} (seq {sequence_number})")
+                return message_id
+            else:
+                logger.error(f"Failed to create message - unexpected result: {result}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error recording message: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
     
     async def record_system_message(self, content: str) -> str:
@@ -205,9 +376,12 @@ class ExperimentChatRecorder:
     async def end_session(self, status: str = 'COMPLETED') -> bool:
         """End the chat session."""
         if not self.session_id:
+            logger.debug("No active session to end")
             return True
             
         try:
+            logger.info(f"Ending session {self.session_id} with status {status}")
+            
             # Update session status
             mutation = """
             mutation UpdateChatSession($input: UpdateChatSessionInput!) {
@@ -227,14 +401,16 @@ class ExperimentChatRecorder:
             
             result = self.client.execute(mutation, {'input': update_data})
             if result and 'updateChatSession' in result:
-                logger.info(f"Ended chat session {self.session_id} with status {status}")
+                logger.info(f"Session ended: {self.session_id}")
                 return True
             else:
-                logger.error(f"Failed to update chat session: {result}")
+                logger.error(f"Failed to end session: {result}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error ending chat session: {e}")
+            logger.error(f"Error ending session: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return False
 
 

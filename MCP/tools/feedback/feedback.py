@@ -168,8 +168,7 @@ def register_feedback_tools(mcp: FastMCP):
             # Add command context
             result_dict["command_info"] = {
                 "description": "Comprehensive feedback analysis with confusion matrix and agreement metrics",
-                "tool": f"plexus_feedback_summary(scorecard_name='{scorecard_name}', score_name='{score_name}', days={days}, output_format='{output_format}')",
-                "next_steps": result_dict["recommendation"]
+                "tool": f"plexus_feedback_summary(scorecard_name='{scorecard_name}', score_name='{score_name}', days={days}, output_format='{output_format}')"
             }
             
             # Output in requested format

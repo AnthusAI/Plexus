@@ -50,6 +50,62 @@ exploration: |
   modifications that could address weaknesses or build on promising directions.
   
   Generate concrete, actionable suggestions for the next experiment iteration.
+
+# Conversation flow parameters for hypothesis generation
+conversation_flow:
+  # Analysis requirements that must be completed before hypothesis generation
+  required_analyses:
+    - feedback_summary: "Must examine overall feedback patterns and confusion matrix"
+    - false_positives: "Must investigate specific false positive cases (Yes→No)"
+    - false_negatives: "Must investigate specific false negative cases (No→Yes)"  
+    - item_details: "Must examine details of at least 2-3 specific problematic items"
+  
+  # Guided conversation stages with specific prompts and tools
+              conversation_stages:
+              exploration:
+                max_rounds: 6  # Increased for more thorough analysis including individual item examination
+                required_tool_calls: ["plexus_feedback_summary", "plexus_feedback_find", "plexus_item_info"]
+      guidance_prompts:
+        - "Start by getting an overview: use plexus_feedback_summary to understand the confusion matrix and accuracy patterns."
+        - "Dive into false positives: use plexus_feedback_find with initial_value='Yes' and final_value='No' to see specific correction cases."
+        - "Examine false negatives: use plexus_feedback_find with initial_value='No' and final_value='Yes' to understand missed cases."
+        - "Get item details: use plexus_item_info to examine specific problematic items you found in the feedback."
+        - "Analyze patterns: Look for common themes in the misclassified items - text patterns, content types, or scoring edge cases."
+        - "Document specific examples: Note the item IDs of representative cases that illustrate key problems."
+    
+                  synthesis:
+                max_rounds: 0  # Skip synthesis entirely - go straight to hypothesis generation
+      required_insights: ["root_cause_analysis", "pattern_identification"] 
+      guidance_prompts:
+        - "Now synthesize your findings: What are the main patterns causing misclassification? What root causes can you identify?"
+        - "Focus on actionable insights: What specific changes to the score configuration could address these patterns?"
+    
+                    hypothesis_generation:
+                  max_rounds: 3  # Allow more time to create thoughtful hypotheses with proper item references
+      required_outputs: ["create_experiment_node"]
+      guidance_prompts:
+        - "Time to create hypotheses: Use create_experiment_node to test your top 2-3 ideas for improving alignment. Include specific item IDs from your analysis as examples."
+        - "Create diverse approaches: Generate hypotheses with different risk levels (incremental, creative, revolutionary). Reference specific problematic items you examined."
+        - "Finalize experiments: Ensure each hypothesis has clear GOAL/METHOD. Include item IDs in your descriptions so future agents can reference the original examples that motivated each hypothesis."
+  
+                # Escalation strategy (PATIENT SETTINGS FOR THOROUGH ANALYSIS)
+              escalation:
+                gentle_nudge_after: 3  # allow 3 rounds of thinking before gentle nudges 
+                firm_pressure_after: 6  # firm pressure after 6 rounds  
+                max_total_rounds: 10   # increased limit for more thorough analysis and item examination
+    
+  # Stage transition criteria
+  transition_triggers:
+    exploration_to_synthesis:
+      - "used_feedback_summary: true"
+      - "examined_false_positives: true" 
+      - "examined_false_negatives: true"
+      - "min_tool_calls: 3"
+    
+    synthesis_to_hypothesis:
+      - "identified_patterns: true"
+      - "proposed_solutions: true"
+      - "min_insights: 2"
 """
 
 @dataclass
@@ -543,7 +599,26 @@ class ExperimentService:
             try:
                 from .mcp_transport import create_experiment_mcp_server
                 
-                # Create experiment context for MCP tools
+                # Pre-load all context to minimize AI tool calls
+                logger.info("Pre-loading context: documentation, score config, and feedback summary...")
+                
+                # 1. Get feedback alignment documentation
+                feedback_docs = await self._get_feedback_alignment_docs()
+                
+                # 2. Get score YAML format documentation
+                score_yaml_docs = await self._get_score_yaml_format_docs()
+                
+                # 3. Get current score configuration
+                current_score_config = await self._get_champion_score_config(experiment_info.experiment.scoreId)
+                
+                # 4. Get feedback summary for the last 7 days
+                feedback_summary = await self._get_feedback_summary(
+                    experiment_info.scorecard_name, 
+                    experiment_info.score_name,
+                    experiment_info.experiment.accountId  # Pass the account ID directly
+                )
+                
+                # Create experiment context for MCP tools with pre-loaded data
                 experiment_context = {
                     'experiment_id': experiment_id,
                     'account_id': experiment_info.experiment.accountId,
@@ -553,8 +628,15 @@ class ExperimentService:
                     'score_name': experiment_info.score_name,
                     'node_count': experiment_info.node_count,
                     'version_count': experiment_info.version_count,
-                    'options': options
+                    'options': options,
+                    # Pre-loaded context to minimize tool calls
+                    'feedback_alignment_docs': feedback_docs,
+                    'score_yaml_format_docs': score_yaml_docs,
+                    'current_score_config': current_score_config,
+                    'feedback_summary': feedback_summary
                 }
+                
+                logger.info("Successfully pre-loaded all context for AI agent")
                 
                 # Always create MCP server with all available tools
                 mcp_server = await create_experiment_mcp_server(
@@ -834,45 +916,178 @@ class ExperimentService:
     async def _get_champion_score_config(self, score_id: str) -> Optional[str]:
         """Get the champion (current) YAML configuration for a score."""
         try:
-            # Use the MCP tool to get score configuration since we don't have direct access
-            # This ensures we get the same configuration that MCP tools would use
-            from MCP.tools.score.scores import get_score_configuration
+            from plexus.dashboard.api.models.score import Score
             
-            # The MCP tool expects scorecard and score identifiers, but we only have score_id
-            # Let's get the score first to get its name and scorecard
             score = Score.get_by_id(score_id, self.client)
             if not score:
                 logger.error(f"Score {score_id} not found")
                 return None
             
-            # Get scorecard to find the score name
-            scorecard = Scorecard.get_by_id(score.scorecardId, self.client)
-            if not scorecard:
-                logger.error(f"Scorecard {score.scorecardId} not found")
+            champion_config = score.get_champion_configuration_yaml()
+            if champion_config:
+                logger.info(f"Retrieved champion configuration for score {score_id}")
+                return champion_config
+            else:
+                logger.warning(f"No champion configuration found for score {score_id}")
                 return None
-            
-            # Use MCP tool to get configuration
-            config_result = get_score_configuration(
-                scorecard_identifier=scorecard.name,
-                score_identifier=score.name,
-                client=self.client
-            )
-            
-            if config_result and isinstance(config_result, str) and "yaml_config" in config_result:
-                # Extract YAML from MCP result
-                import json
-                try:
-                    result_data = json.loads(config_result)
-                    champion_config = result_data.get('yaml_config')
-                    if champion_config:
-                        logger.info(f"Retrieved champion configuration for score {score_id}")
-                        return champion_config
-                except json.JSONDecodeError:
-                    pass
-            
-            logger.warning(f"No champion configuration found for score {score_id}")
-            return None
-            
+                
         except Exception as e:
             logger.error(f"Error getting champion score config for {score_id}: {e}")
             return None
+    
+    async def _get_feedback_alignment_docs(self) -> Optional[str]:
+        """Get the feedback alignment documentation."""
+        try:
+            # Read the documentation file directly since MCP tools are async and require server context
+            import os
+            
+            # Navigate to the plexus docs directory
+            current_dir = os.path.dirname(os.path.abspath(__file__))  # experiment/
+            cli_dir = os.path.dirname(current_dir)  # cli/
+            plexus_dir = os.path.dirname(cli_dir)  # plexus/
+            docs_dir = os.path.join(plexus_dir, "docs")
+            file_path = os.path.join(docs_dir, "feedback-alignment.md")
+            
+            logger.info(f"Reading documentation file: {file_path}")
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            logger.info(f"Successfully read feedback alignment documentation ({len(content)} characters)")
+            return content
+            
+        except FileNotFoundError:
+            logger.warning(f"Feedback alignment documentation not found at {file_path}")
+            return "# Feedback Alignment Documentation\nDocumentation not available - proceed with general analysis principles."
+        except Exception as e:
+            logger.error(f"Error getting feedback alignment docs: {e}")
+            return "# Feedback Alignment Documentation\nDocumentation not available - proceed with general analysis principles."
+    
+    async def _get_score_yaml_format_docs(self) -> Optional[str]:
+        """Get the score YAML format documentation."""
+        try:
+            # Read the documentation file directly since MCP tools are async and require server context
+            import os
+            
+            # Navigate to the plexus docs directory
+            current_dir = os.path.dirname(os.path.abspath(__file__))  # experiment/
+            cli_dir = os.path.dirname(current_dir)  # cli/
+            plexus_dir = os.path.dirname(cli_dir)  # plexus/
+            docs_dir = os.path.join(plexus_dir, "docs")
+            file_path = os.path.join(docs_dir, "score-yaml-format.md")
+            
+            logger.info(f"Reading documentation file: {file_path}")
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            logger.info(f"Successfully read score YAML format documentation ({len(content)} characters)")
+            return content
+            
+        except FileNotFoundError:
+            logger.warning(f"Score YAML format documentation not found at {file_path}")
+            return "# Score YAML Format Documentation\nDocumentation not available - proceed with general score configuration principles."
+        except Exception as e:
+            logger.error(f"Error getting score YAML format docs: {e}")
+            return "# Score YAML Format Documentation\nDocumentation not available - proceed with general score configuration principles."
+    
+    async def _get_feedback_summary(self, scorecard_name: str, score_name: str, account_id: str, days: int = 7) -> Optional[str]:
+        """Get feedback summary for the last N days."""
+        try:
+            # Use the feedback service directly to get the same data as the MCP tool
+            from plexus.cli.feedback.feedback_service import FeedbackService
+            from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
+            
+            # Resolve scorecard and get scorecard/score IDs
+            scorecard_id = resolve_scorecard_identifier(self.client, scorecard_name)
+            if not scorecard_id:
+                logger.warning(f"Could not resolve scorecard: {scorecard_name}")
+                return f"# Feedback Summary\nError: Scorecard '{scorecard_name}' not found."
+            
+            # Account ID is passed in from the experiment context
+            if not account_id:
+                logger.warning("No account ID provided to feedback summary")
+                return f"# Feedback Summary\nError: No account ID provided."
+            
+            # Find the score ID within the scorecard (same logic as MCP tool)
+            scorecard_query = f"""
+            query GetScorecardWithScores {{
+                getScorecard(id: "{scorecard_id}") {{
+                    id
+                    name
+                    sections {{
+                        items {{
+                            scores {{
+                                items {{
+                                    id
+                                    name
+                                    key
+                                    externalId
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+            """
+            
+            response = self.client.execute(scorecard_query)
+            scorecard_data = response.get('getScorecard')
+            if not scorecard_data:
+                return f"# Feedback Summary\nError: Could not retrieve scorecard data."
+            
+            # Find score using same matching logic as MCP tool
+            score_match = None
+            for section in scorecard_data.get('sections', {}).get('items', []):
+                for score in section.get('scores', {}).get('items', []):
+                    if (score.get('id') == score_name or 
+                        score.get('name', '').lower() == score_name.lower() or 
+                        score.get('key') == score_name or 
+                        score.get('externalId') == score_name or
+                        score_name.lower() in score.get('name', '').lower()):
+                        score_match = score
+                        break
+                if score_match:
+                    break
+            
+            if not score_match:
+                return f"# Feedback Summary\nError: Score '{score_name}' not found in scorecard '{scorecard_data['name']}'."
+            
+            # Generate summary using the shared service (same as MCP tool)
+            summary_result = await FeedbackService.summarize_feedback(
+                client=self.client,
+                scorecard_name=scorecard_data['name'],
+                score_name=score_match['name'],
+                scorecard_id=scorecard_data['id'],
+                score_id=score_match['id'],
+                account_id=account_id,
+                days=days
+            )
+            
+            # Format as dictionary and convert to YAML (same as MCP tool)
+            result_dict = FeedbackService.format_summary_result_as_dict(summary_result)
+            
+            # Add command context
+            result_dict["command_info"] = {
+                "description": "Comprehensive feedback analysis with confusion matrix and agreement metrics",
+                "period": f"Last {days} days"
+            }
+            
+            # Convert to YAML for better readability in prompts
+            import yaml
+            from datetime import datetime
+            yaml_comment = f"""# Feedback Summary Analysis
+# Scorecard: {scorecard_data['name']}
+# Score: {score_match['name']}
+# Period: Last {days} days
+# Generated: {datetime.now().isoformat()}
+
+"""
+            yaml_output = yaml.dump(result_dict, default_flow_style=False, sort_keys=False)
+            
+            logger.info(f"Retrieved feedback summary for {scorecard_name}/{score_name} (last {days} days)")
+            return yaml_comment + yaml_output
+            
+        except Exception as e:
+            logger.error(f"Error getting feedback summary: {e}")
+            return f"# Feedback Summary\nError retrieving feedback data: {str(e)}"

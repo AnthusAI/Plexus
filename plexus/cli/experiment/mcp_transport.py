@@ -219,8 +219,17 @@ class EmbeddedMCPServer:
     
     def _get_experiment_context(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Handler for get_experiment_context tool."""
+        # Create a JSON-serializable copy of experiment context
+        safe_context = {}
+        if self.experiment_context:
+            for key, value in self.experiment_context.items():
+                # Skip non-serializable objects like PlexusDashboardClient
+                if not isinstance(value, (str, int, float, bool, list, dict, type(None))):
+                    continue
+                safe_context[key] = value
+        
         return {
-            "experiment_context": self.experiment_context,
+            "experiment_context": safe_context,
             "available_tools": list(self.transport.tools.keys()),
             "available_resources": list(self.transport.resources.keys())
         }
