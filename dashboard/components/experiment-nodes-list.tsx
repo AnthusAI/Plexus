@@ -50,7 +50,6 @@ import {
 
 // Types based on our GraphQL schema
 type ExperimentNode = Schema['ExperimentNode']['type']
-type ExperimentNodeVersion = Schema['ExperimentNodeVersion']['type']
 
 // Use direct ExperimentNode type - hypothesis is stored directly on node, not in versions
 
@@ -109,18 +108,16 @@ export default function ExperimentNodesList({ experimentId }: Props) {
         console.log('ExperimentNodesList: Loading nodes for experiment ID:', experimentId)
         
         // Query experiment nodes using the GSI for better performance and complete results
-        const { data: nodesData, errors } = await client.models.ExperimentNode.listExperimentNodeByExperimentIdAndCreatedAt({
+        const { data: nodesData, errors } = await (client.models.ExperimentNode.listExperimentNodeByExperimentIdAndCreatedAt as any)({
           experimentId: experimentId,
           limit: 1000 // Ensure we get all nodes
-        }, {
-          selectionSet: ['id', 'experimentId', 'parentNodeId', 'name', 'status', 'code', 'hypothesis', 'insight', 'value', 'createdAt', 'updatedAt']
         })
 
         console.log('ExperimentNodesList: Filtered GraphQL response:', { nodesData, errors })
 
         if (errors) {
           console.error('GraphQL errors loading experiment nodes:', errors)
-          setError('Failed to load experiment nodes: ' + errors.map((e: any) => e.message).join(', '))
+          setError('Failed to load experiment nodes: ' + errors.map((e: { message: string }) => e.message).join(', '))
           return
         }
 
@@ -136,20 +133,21 @@ export default function ExperimentNodesList({ experimentId }: Props) {
         // Debug logging for hypothesis data
         console.log(`ExperimentNodesList: Found ${nodesData.length} nodes`)
         if (nodesData.length > 0) {
+          const firstNode = nodesData[0] as ExperimentNode
           console.log('ExperimentNodesList: Sample node data:', {
             firstNode: {
-              id: nodesData[0].id,
-              name: nodesData[0].name,
-              hypothesis: nodesData[0].hypothesis,
-              hasHypothesis: !!nodesData[0].hypothesis,
-              hypothesisLength: nodesData[0].hypothesis ? nodesData[0].hypothesis.length : 0,
-              allFields: Object.keys(nodesData[0])
+              id: firstNode.id,
+              name: firstNode.name,
+              hypothesis: firstNode.hypothesis,
+              hasHypothesis: !!firstNode.hypothesis,
+              hypothesisLength: firstNode.hypothesis ? firstNode.hypothesis.length : 0,
+              allFields: Object.keys(firstNode)
             }
           })
         }
 
         // Sort nodes in chronological order by createdAt (oldest first, so root appears at top)
-        const sortedNodes = nodesData.sort((a, b) => {
+        const sortedNodes = (nodesData as ExperimentNode[]).sort((a, b) => {
           if (a.createdAt && b.createdAt) {
             return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           }
