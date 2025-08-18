@@ -16,6 +16,7 @@ from tools.util.think import register_think_tool
 from tools.scorecard.scorecards import register_scorecard_tools
 from tools.evaluation.evaluations import register_evaluation_tools
 from tools.score.management import register_score_tools
+from tools.experiment.experiments import register_experiment_tools
 
 # Setup Plexus imports and core functionality
 setup_plexus_imports()
@@ -91,6 +92,10 @@ def register_all_tools():
     # Register evaluation tools
     register_evaluation_tools(mcp)
     logger.info("Registered evaluation tools")
+    
+    # Register experiment tools
+    register_experiment_tools(mcp)
+    logger.info("Registered experiment tools")
     
     # TODO: Register additional tool modules here as they are created
     # register_report_tools(mcp)

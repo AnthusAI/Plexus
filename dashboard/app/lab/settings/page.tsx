@@ -1,6 +1,5 @@
 'use client'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from 'next/link'
 
 export default function LabSettings() {
@@ -13,20 +12,20 @@ export default function LabSettings() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Account Settings</CardTitle>
-          <CardDescription>Customize your account and preferences.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="bg-card p-6 space-y-6 rounded-lg">
+        <div>
+          <h2 className="text-xl font-semibold">Account Settings</h2>
+          <p className="text-muted-foreground">Customize your account and preferences.</p>
+        </div>
+        <div>
           <p>Update your profile, change notification preferences, and manage security settings.</p>
           <div className="mt-4">
             <Link href="/lab/settings/account" className="text-primary hover:underline">
               Manage Menu Visibility
             </Link>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 } 

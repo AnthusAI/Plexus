@@ -498,6 +498,69 @@ export function createDataSourceValidationRules(): ValidationRule[] {
   ]
 }
 
+// Experiment Configuration Schema - Simplified
+export const EXPERIMENT_YAML_SCHEMA = {
+  type: 'object',
+  required: ['class', 'value', 'exploration'],
+  properties: {
+    class: {
+      type: 'string',
+      minLength: 1,
+      description: 'Python class name for the experiment implementation'
+    },
+    value: {
+      type: 'string',
+      description: 'Lua code to compute scalar value from experiment node'
+    },
+    exploration: {
+      type: 'string',
+      description: 'LLM prompt for generating new experiment variations'
+    }
+  },
+  additionalProperties: true
+}
+
+// Experiment validation rules - Simplified
+export function createExperimentValidationRules(): ValidationRule[] {
+  return [
+    // Required fields
+    new RequiredFieldRule('class'),
+    new RequiredFieldRule('value'),
+    new RequiredFieldRule('exploration'),
+
+    // Type validation
+    new TypeValidationRule('class', 'string'),
+    new TypeValidationRule('value', 'string'),
+    new TypeValidationRule('exploration', 'string'),
+
+    // Class name validation
+    {
+      rule_id: 'EXPERIMENT_CLASS_NAME',
+      description: 'Class must be a valid Python class name',
+      severity: 'error',
+      validate: (data: Record<string, any>) => {
+        const messages = []
+        if (data.class && typeof data.class === 'string') {
+          // Basic Python class name validation
+          const classNamePattern = /^[A-Z][a-zA-Z0-9_]*$/
+          if (!classNamePattern.test(data.class)) {
+            messages.push({
+              level: 'error' as const,
+              code: 'EXPERIMENT_INVALID_CLASS_NAME',
+              title: 'Invalid Class Name',
+              message: 'Class name must be a valid Python class name (PascalCase, starting with uppercase letter).',
+              suggestion: 'Use PascalCase for class names (e.g., "BeamSearch", "RandomSearch", "GeneticAlgorithm").',
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/experiments#class',
+              context: { field_path: 'class', current_value: data.class }
+            })
+          }
+        }
+        return messages
+      }
+    }
+  ]
+}
+
 // Factory functions for creating linters
 export function createScoreLinter(): YamlLinter {
   return new YamlLinter(
@@ -515,13 +578,23 @@ export function createDataSourceLinter(): YamlLinter {
   )
 }
 
+export function createExperimentLinter(): YamlLinter {
+  return new YamlLinter(
+    EXPERIMENT_YAML_SCHEMA,
+    createExperimentValidationRules(),
+    'https://docs.plexus.ai/yaml-dsl/experiments'
+  )
+}
+
 // Utility function to determine linter type from context
-export function createLinterForContext(context: 'score' | 'data-source'): YamlLinter {
+export function createLinterForContext(context: 'score' | 'data-source' | 'experiment'): YamlLinter {
   switch (context) {
     case 'score':
       return createScoreLinter()
     case 'data-source':
       return createDataSourceLinter()
+    case 'experiment':
+      return createExperimentLinter()
     default:
       throw new Error(`Unknown linter context: ${context}`)
   }

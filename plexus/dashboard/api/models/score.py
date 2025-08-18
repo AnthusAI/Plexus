@@ -341,6 +341,56 @@ class Score(BaseModel):
         logger.info(f"Found {len(valid_classes)} valid classes in configuration for Score {self.id}: {valid_classes}")
         return len(valid_classes)
 
+    def get_champion_configuration_yaml(self) -> Optional[str]:
+        """
+        Get the raw YAML configuration string from the champion version.
+        
+        Returns:
+            Optional[str]: The raw YAML configuration string, or None if not found
+        """
+        if not self._client:
+            raise ValueError("No API client available")
+
+        # First get the champion version ID
+        query = """
+        query GetScore($id: ID!) {
+            getScore(id: $id) {
+                championVersionId
+            }
+        }
+        """
+        
+        result = self._client.execute(query, {'id': self.id})
+        if not result or 'getScore' not in result:
+            logger.error(f"Failed to get champion version ID for Score {self.id}")
+            return None
+            
+        champion_version_id = result['getScore'].get('championVersionId')
+        if not champion_version_id:
+            logger.error(f"No champion version found for Score {self.id}")
+            return None
+
+        # Then get the version content
+        version_query = """
+        query GetScoreVersion($id: ID!) {
+            getScoreVersion(id: $id) {
+                configuration
+            }
+        }
+        """
+        
+        version_result = self._client.execute(version_query, {'id': champion_version_id})
+        if not version_result or 'getScoreVersion' not in version_result:
+            logger.error(f"Failed to get version content for version {champion_version_id}")
+            return None
+            
+        config_yaml = version_result['getScoreVersion'].get('configuration')
+        if not config_yaml:
+            logger.error(f"No configuration found in version {champion_version_id}")
+            return None
+
+        return config_yaml
+
     def get_local_configuration_path(self, scorecard_name: Optional[str] = None) -> Path:
         """
         Get the local YAML file path for this score's configuration.

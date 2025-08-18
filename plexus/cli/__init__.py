@@ -33,7 +33,10 @@ def __getattr__(name):
     elif name == 'memoized_resolvers':
         from plexus.cli.shared import memoized_resolvers
         return memoized_resolvers
+    elif name == 'experiment':
+        from plexus.cli.experiment.experiments import experiment
+        return experiment
     else:
         raise AttributeError(f"module 'plexus.cli' has no attribute '{name}'")
 
-__all__ = ['scorecards', 'scores', 'score', 'results', 'feedback', 'tasks', 'task', 'items', 'item', 'iterative_config_fetching', 'memoized_resolvers']
+__all__ = ['scorecards', 'scores', 'score', 'results', 'feedback', 'tasks', 'task', 'items', 'item', 'iterative_config_fetching', 'memoized_resolvers', 'experiment']

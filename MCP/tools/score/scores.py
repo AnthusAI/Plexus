@@ -293,8 +293,8 @@ def register_score_tools(mcp: FastMCP):
                         logger.error(f"Error fetching version details: {str(e)}", exc_info=True)
                         response["versionsError"] = f"Error fetching version details: {str(e)}"
                 else:
-                    # Get configuration preview if champion version exists (original behavior)
-                    config_preview = "No configuration available"
+                    # Get full configuration if champion version exists (no truncation)
+                    configuration = None
                     champion_version_id = score.get('championVersionId')
                     if champion_version_id:
                         try:
@@ -308,16 +308,11 @@ def register_score_tools(mcp: FastMCP):
                             version_result = client.execute(version_query)
                             version_data = version_result.get('getScoreVersion')
                             if version_data and version_data.get('configuration'):
-                                config = version_data['configuration']
-                                # Show first few lines as preview
-                                config_lines = config.split('\n')[:5]
-                                config_preview = '\n'.join(config_lines)
-                                if len(config.split('\n')) > 5:
-                                    config_preview += '\n... (truncated)'
+                                configuration = version_data['configuration']
                         except Exception as e:
-                            config_preview = f"Error loading configuration: {str(e)}"
+                            configuration = f"Error loading configuration: {str(e)}"
                     
-                    response["configurationPreview"] = config_preview
+                    response["configuration"] = configuration
                 
                 return response
             else:

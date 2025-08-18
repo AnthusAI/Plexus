@@ -18,22 +18,61 @@ export interface ScorecardContextProps {
   skeletonMode?: boolean;
 }
 
-async function listScorecards(): ModelListResult<Schema['Scorecard']['type']> {
-  return listFromModel<Schema['Scorecard']['type']>(client.models.Scorecard)
+async function listScorecards(): Promise<{ data: Schema['Scorecard']['type'][], nextToken: string | null }> {
+  // Handle pagination to get ALL scorecards
+  let allScorecards: Schema['Scorecard']['type'][] = []
+  let nextToken: string | null = null
+  
+  do {
+    const result: AmplifyListResult<Schema['Scorecard']['type']> = await listFromModel<Schema['Scorecard']['type']>(
+      client.models.Scorecard,
+      undefined,
+      nextToken || undefined,
+      1000 // Large limit to reduce pagination rounds
+    )
+    allScorecards = allScorecards.concat(result.data)
+    nextToken = result.nextToken
+  } while (nextToken)
+  
+  return { data: allScorecards, nextToken: null }
 }
 
-async function listSections(scorecardId: string): ModelListResult<Schema['ScorecardSection']['type']> {
-  return listFromModel<Schema['ScorecardSection']['type']>(
-    client.models.ScorecardSection,
-    { scorecardId: { eq: scorecardId } }
-  )
+async function listSections(scorecardId: string): Promise<{ data: Schema['ScorecardSection']['type'][], nextToken: string | null }> {
+  // Handle pagination to get ALL sections
+  let allSections: Schema['ScorecardSection']['type'][] = []
+  let nextToken: string | null = null
+  
+  do {
+    const result: AmplifyListResult<Schema['ScorecardSection']['type']> = await listFromModel<Schema['ScorecardSection']['type']>(
+      client.models.ScorecardSection,
+      { scorecardId: { eq: scorecardId } },
+      nextToken || undefined,
+      1000 // Large limit to reduce pagination rounds
+    )
+    allSections = allSections.concat(result.data)
+    nextToken = result.nextToken
+  } while (nextToken)
+  
+  return { data: allSections, nextToken: null }
 }
 
-async function listScores(sectionId: string): ModelListResult<Schema['Score']['type']> {
-  return listFromModel<Schema['Score']['type']>(
-    client.models.Score,
-    { sectionId: { eq: sectionId } }
-  )
+async function listScores(sectionId: string): Promise<{ data: Schema['Score']['type'][], nextToken: string | null }> {
+  // Handle pagination to get ALL scores
+  let allScores: Schema['Score']['type'][] = []
+  let nextToken: string | null = null
+  
+  do {
+    const result: AmplifyListResult<Schema['Score']['type']> = await listFromModel<Schema['Score']['type']>(
+      client.models.Score,
+      { sectionId: { eq: sectionId } },
+      nextToken || undefined,
+      1000 // Large limit to reduce pagination rounds
+    )
+    allScores = allScores.concat(result.data)
+    nextToken = result.nextToken
+  } while (nextToken)
+  
+  return { data: allScores, nextToken: null }
 }
 
 const ScorecardContext: React.FC<ScorecardContextProps> = ({ 
@@ -87,7 +126,7 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
     if (selectedScore) {
       setSelectedScore(null);
     }
-  }, [selectedScorecard, setSelectedScore]);
+  }, [selectedScorecard]); // Removed setSelectedScore from dependencies to prevent infinite loop
 
   useEffect(() => {
     if (useMockData || !selectedScorecard) return
@@ -126,11 +165,12 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
   }, [selectedScorecard, useMockData])
 
   const handleScoreChange = (value: string) => {
+    const newValue = value === "all" ? null : value;
     console.debug('Score selection changed:', { 
-      newValue: value, 
+      newValue, 
       previousValue: selectedScore 
     });
-    setSelectedScore(value === "all" ? null : value);
+    setSelectedScore(newValue);
   };
 
   const handleScorecardChange = (value: string) => {

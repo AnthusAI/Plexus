@@ -1,0 +1,2 @@
+# This file has been consolidated - see plexus/cli/experiment/service.py for the authoritative DEFAULT_EXPERIMENT_YAML template
+# Please use the service.py template which includes the new state machine conversation flow

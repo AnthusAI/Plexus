@@ -48,9 +48,9 @@ type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "r
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "status" | "rootNodeId" | "updatedAt" | "createdAt";
-type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "versionNumber" | "status" | "childrenCount";
-type ExperimentNodeVersionIndexFields = "experimentId" | "nodeId" | "versionNumber" | "seq" | "status";
+type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
+type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
+type ExperimentTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -82,6 +82,8 @@ const schema = a.schema({
             dataSources: a.hasMany('DataSource', 'accountId'),
             dataSets: a.hasMany('DataSet', 'accountId'),
             experiments: a.hasMany('Experiment', 'accountId'),
+            experimentTemplates: a.hasMany('ExperimentTemplate', 'accountId'),
+            chatSessions: a.hasMany('ChatSession', 'accountId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -113,6 +115,7 @@ const schema = a.schema({
             dataSources: a.hasMany('DataSource', 'scorecardId'),
             dataSets: a.hasMany('DataSet', 'scorecardId'),
             experiments: a.hasMany('Experiment', 'scorecardId'),
+            chatSessions: a.hasMany('ChatSession', 'scorecardId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -173,7 +176,8 @@ const schema = a.schema({
             externalId: a.string().required(),
             isDisabled: a.boolean(),
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scoreId'),
-            experiments: a.hasMany('Experiment', 'scoreId')
+            experiments: a.hasMany('Experiment', 'scoreId'),
+            chatSessions: a.hasMany('ChatSession', 'scoreId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -879,7 +883,9 @@ const schema = a.schema({
     Experiment: a
         .model({
             featured: a.boolean(),
-            status: a.enum(['RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']),
+            templateId: a.string(),
+            template: a.belongsTo('ExperimentTemplate', 'templateId'),
+            code: a.string(), // YAML template code copied from template
             rootNodeId: a.id(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -890,6 +896,8 @@ const schema = a.schema({
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
             nodes: a.hasMany('ExperimentNode', 'experimentId'),
+            chatSessions: a.hasMany('ChatSession', 'experimentId'),
+            chatMessages: a.hasMany('ChatMessage', 'experimentId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -899,7 +907,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
-            idx("status"),
+            idx("templateId").sortKeys(["updatedAt"]),
             idx("rootNodeId")
         ]),
 
@@ -910,38 +918,107 @@ const schema = a.schema({
             parentNodeId: a.id(),
             parentNode: a.belongsTo('ExperimentNode', 'parentNodeId'),
             childNodes: a.hasMany('ExperimentNode', 'parentNodeId'),
-            versionNumber: a.integer().required(),
-            status: a.enum(['ACTIVE', 'EXPANDED', 'STOPPED']),
-            isFrontier: a.boolean().required(),
-            childrenCount: a.integer().required(),
-            versions: a.hasMany('ExperimentNodeVersion', 'nodeId'),
+            name: a.string(),
+            status: a.string(),
+            // Moved from ExperimentNodeVersion - simplified to single version per node
+            code: a.string().required(),
+            hypothesis: a.string(),
+            insight: a.string(),
+            value: a.json(),
+            chatSessions: a.hasMany('ChatSession', 'nodeId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: ExperimentNodeIndexFields) => any) => [
-            idx("experimentId").sortKeys(["versionNumber"]).name("nodesByExperimentVersionNumber"),
+            idx("experimentId").sortKeys(["createdAt"]).name("nodesByExperimentCreatedAt"),
             idx("parentNodeId").name("nodesByParent")
         ]),
 
-    ExperimentNodeVersion: a
+    ExperimentTemplate: a
         .model({
-            experimentId: a.id().required(),
-            nodeId: a.id().required(),
-            node: a.belongsTo('ExperimentNode', 'nodeId'),
-            versionNumber: a.integer().required(),
-            seq: a.integer().required(),
-            status: a.enum(['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED']),
-            yaml: a.string().required(),
-            value: a.json().required(),
+            name: a.string().required(),
+            description: a.string(),
+            template: a.string().required(), // The YAML template content
+            version: a.string().required(), // Template version (e.g., "1.0", "2.1")
+            isDefault: a.boolean(), // Whether this is the default template
+            category: a.string(), // e.g., "hypothesis_generation", "beam_search"
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            experiments: a.hasMany('Experiment', 'templateId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ExperimentNodeVersionIndexFields) => any) => [
-            idx("nodeId").sortKeys(["seq"]).name("versionsByNode")
+        .secondaryIndexes((idx) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("category").sortKeys(["updatedAt"])
+        ]),
+
+    ChatSession: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            experimentId: a.string(),
+            experiment: a.belongsTo('Experiment', 'experimentId'),
+            nodeId: a.string(),
+            node: a.belongsTo('ExperimentNode', 'nodeId'),
+            status: a.enum(['ACTIVE', 'COMPLETED', 'ERROR']),
+            metadata: a.json(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            messages: a.hasMany('ChatMessage', 'sessionId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("experimentId").sortKeys(["createdAt"]),
+            idx("nodeId").sortKeys(["createdAt"]),
+            idx("status").sortKeys(["updatedAt"])
+        ]),
+
+    ChatMessage: a
+        .model({
+            sessionId: a.string().required(),
+            session: a.belongsTo('ChatSession', 'sessionId'),
+            experimentId: a.string(),
+            experiment: a.belongsTo('Experiment', 'experimentId'),
+            role: a.enum(['USER', 'ASSISTANT', 'SYSTEM', 'TOOL']),
+            content: a.string().required(),
+            metadata: a.json(),
+            messageType: a.enum(['MESSAGE', 'TOOL_CALL', 'TOOL_RESPONSE']),
+            toolName: a.string(), // Name of the tool being called (for TOOL_CALL and TOOL_RESPONSE)
+            toolParameters: a.json(), // Parameters passed to the tool (for TOOL_CALL)
+            toolResponse: a.json(), // Response from the tool (for TOOL_RESPONSE)
+            parentMessageId: a.string(), // Links tool responses to their calls, or chains related messages
+            parentMessage: a.belongsTo('ChatMessage', 'parentMessageId'),
+            childMessages: a.hasMany('ChatMessage', 'parentMessageId'),
+            sequenceNumber: a.integer(), // Order within the session for proper conversation flow
+            createdAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("sessionId").sortKeys(["sequenceNumber"]),
+            idx("sessionId").sortKeys(["createdAt"]),
+            idx("experimentId").sortKeys(["createdAt"]),
+            idx("parentMessageId"),
+            idx("messageType").sortKeys(["createdAt"])
         ]),
 });
 
