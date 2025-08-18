@@ -209,7 +209,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
       
       console.log('Create input:', createInput)
       
-      const result = await client.models.Experiment.create(createInput as any)
+      const result = await (client.models.Experiment.create as any)(createInput as any)
       const { data: newExperiment, errors } = result
 
       if (errors && errors.length > 0) {
@@ -258,7 +258,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
 
   const handleDelete = async (experimentId: string) => {
     try {
-      await client.models.Experiment.delete({ id: experimentId })
+      await (client.models.Experiment.delete as any)({ id: experimentId })
       setExperiments(prev => prev.filter(exp => exp.id !== experimentId))
       if (selectedExperimentId === experimentId) {
         setSelectedExperimentId(null)
