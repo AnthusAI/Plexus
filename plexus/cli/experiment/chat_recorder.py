@@ -33,6 +33,7 @@ class ExperimentChatRecorder:
         self.session_id = None
         self.sequence_number = 0
         self._sequence_lock = None  # Will be initialized when needed
+        self._state_data: Optional[Dict[str, Any]] = None  # Conversation state machine data
         
     async def start_session(self, context: Optional[Dict[str, Any]] = None) -> str:
         """Start a new chat session for the experiment run."""
@@ -120,6 +121,25 @@ class ExperimentChatRecorder:
             
         try:
             self.sequence_number += 1
+            
+            # Truncate content if it exceeds DynamoDB limits (400KB total item size)
+            # Allow approximately 300KB for content to leave room for other fields
+            MAX_CONTENT_SIZE = 300 * 1024  # 300KB in bytes
+            original_content = content
+            
+            if len(content.encode('utf-8')) > MAX_CONTENT_SIZE:
+                # Truncate content while preserving UTF-8 encoding
+                truncated_bytes = content.encode('utf-8')[:MAX_CONTENT_SIZE]
+                # Decode and handle potential broken UTF-8 at the end
+                try:
+                    content = truncated_bytes.decode('utf-8')
+                except UnicodeDecodeError:
+                    # Try truncating a bit more to avoid broken UTF-8
+                    content = truncated_bytes[:-10].decode('utf-8', errors='ignore')
+                
+                # Add truncation indicator
+                content += "\n\n... [Content truncated due to size limits]"
+                logger.warning(f"Truncated message content from {len(original_content)} to {len(content)} characters")
             
             message_data = {
                 'sessionId': self.session_id,

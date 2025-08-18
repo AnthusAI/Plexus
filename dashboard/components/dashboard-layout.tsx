@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, HardDriveDownload, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge, Waypoints } from "lucide-react"
+import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, HardDriveDownload, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge, Waypoints, FileCode2 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -102,6 +102,7 @@ export const menuItems = [
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Experiments", icon: Waypoints, path: "/lab/experiments" },
+  { name: "Templates", icon: FileCode2, path: "/lab/templates" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
   { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
@@ -250,6 +251,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 (item.name === "Items" && pathname.startsWith(item.path)) ||
                 (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
                 (item.name === "Experiments" && pathname.startsWith(item.path)) ||
+                (item.name === "Templates" && pathname.startsWith(item.path)) ||
                 (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                 (item.name === "Reports" && pathname.startsWith(item.path)) ||
                 (item.name === "Sources" && pathname.startsWith(item.path)) ||

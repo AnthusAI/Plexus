@@ -175,12 +175,13 @@ class ConversationFlowManager:
                 logger.info("ConversationFlow: Transitioning from EXPLORATION to SYNTHESIS")
                 
         elif current_stage == ConversationStage.SYNTHESIS:
-            # VERY AGGRESSIVE TRANSITION: Force hypothesis generation after just 1 synthesis round
+            # Allow MUCH more synthesis time: at least 10+ rounds before forcing hypothesis generation
             triggers = self.transition_triggers.get('synthesis_to_hypothesis', [])
-            if self._check_triggers(triggers) or self.state.round_in_stage >= 1:
+            # Only transition if triggers are met AND we've had SUBSTANTIAL time to synthesize
+            if self._check_triggers(triggers) and self.state.round_in_stage >= 10:
                 self.state.stage = ConversationStage.HYPOTHESIS_GENERATION  
                 self.state.round_in_stage = 0
-                logger.info("ConversationFlow: Transitioning from SYNTHESIS to HYPOTHESIS_GENERATION (forced after 1 round)")
+                logger.info("ConversationFlow: Transitioning from SYNTHESIS to HYPOTHESIS_GENERATION after thorough analysis")
     
     def _check_triggers(self, triggers: List[str]) -> bool:
         """Check if transition triggers are met."""
@@ -214,20 +215,31 @@ class ConversationFlowManager:
     
     def _get_escalation_level(self) -> str:
         """Determine the escalation level based on progress."""
-        max_rounds = self.conversation_stages.get(self.state.stage.value, {}).get('max_rounds', 3)
-        gentle_nudge = self.escalation.get('gentle_nudge_after', 1)  # More aggressive: escalate after 1 round
-        firm_pressure = self.escalation.get('firm_pressure_after', 2)  # More aggressive: firm after 2 rounds
+        max_rounds = self.conversation_stages.get(self.state.stage.value, {}).get('max_rounds', 5)
+        gentle_nudge = self.escalation.get('gentle_nudge_after', 2)  # Give more time: escalate after 2 rounds
+        firm_pressure = self.escalation.get('firm_pressure_after', 4)  # Give more time: firm after 4 rounds
         
-        # Special case: In synthesis and hypothesis stages, be extra aggressive about node creation
-        if self.state.stage in [ConversationStage.SYNTHESIS, ConversationStage.HYPOTHESIS_GENERATION]:
+        # Special case: In synthesis stage, focus on analysis not node creation pressure
+        if self.state.stage == ConversationStage.SYNTHESIS:
+            # Don't pressure for nodes during synthesis - let AI analyze and synthesize properly
+            if self.state.round_in_stage <= 8:
+                return 'normal'  # Normal synthesis guidance - lots of time
+            elif self.state.round_in_stage <= 10:
+                return 'gentle'  # Gentle encouragement to continue
+            else:
+                return 'firm'   # Only after 10+ rounds, suggest wrapping up
+                
+        # In hypothesis generation stage, be more direct about node creation
+        elif self.state.stage == ConversationStage.HYPOTHESIS_GENERATION:
             if self.state.nodes_created == 0:
-                if self.state.round_in_stage == 0:
-                    return 'normal'
-                elif self.state.round_in_stage == 1:
-                    return 'gentle'  # Start pushing for nodes immediately
+                if self.state.round_in_stage <= 1:
+                    return 'normal'  # Give time to plan hypotheses
+                elif self.state.round_in_stage <= 2:
+                    return 'gentle'  # Start encouraging node creation
                 else:
-                    return 'firm'   # Demand nodes after 2 rounds
+                    return 'firm'   # Demand nodes after 3 rounds
         
+        # Standard escalation for other stages
         if self.state.round_in_stage <= gentle_nudge:
             return 'normal'
         elif self.state.round_in_stage <= firm_pressure:
@@ -317,10 +329,14 @@ Now it's time to synthesize your findings and identify the key patterns causing 
         score_name = self.experiment_context.get('score_name', 'Unknown')
         
         if escalation_level == 'normal':
-            return f"""
-💡 **SYNTHESIS TIME** 💡
+            # For the first many rounds in synthesis, just say "Okay?" to let AI continue naturally
+            if self.state.round_in_stage <= 6:
+                return "Okay?"
+            else:
+                return f"""
+💡 **CONTINUE YOUR ANALYSIS** 💡
 
-{prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Synthesize your findings and identify root causes.'}
+{prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Keep analyzing and synthesizing your findings.'}
 {context_reminder}
 
 **Your exploration progress:**
@@ -328,46 +344,38 @@ Now it's time to synthesize your findings and identify the key patterns causing 
 
 {tools_used_summary}
 
-**Now synthesize:** Based on the feedback data you examined, what are the main error patterns? What root causes can you identify for the misclassifications?
+**Continue deeper analysis:** What patterns are you seeing in the feedback data? What root causes are emerging?
 
-**After analysis, you MUST create experiment nodes to test your hypotheses using:**
-create_experiment_node(experiment_id="{experiment_id}", ...)
+Take all the time you need to thoroughly understand the issues before considering solutions.
 """
         elif escalation_level == 'gentle':
             return f"""
-🎯 **TIME TO CREATE HYPOTHESES** 🎯
+🔍 **CONTINUE SYNTHESIS** 🔍
 
-{prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'You have enough analysis - now create actionable hypotheses.'}
+{prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Continue analyzing patterns and developing your understanding.'}
 {context_reminder}
 
-**REQUIRED NEXT STEP**: Use `create_experiment_node` to test specific configuration changes.
+**Deepen your analysis:**
+- Are there common themes across the errors you examined?
+- What specific configuration changes would target these error patterns?
+- How would you prioritize different potential improvements?
 
-**Required format:**
-create_experiment_node(
-    experiment_id="{experiment_id}",
-    hypothesis_description="GOAL: [target] | METHOD: [changes]",
-    yaml_configuration="[complete YAML]",
-    node_name="[hypothesis name]"
-)
+**Next:** Once you have clear insights about root causes and potential solutions, you'll move to creating concrete hypotheses.
 
-What specific changes would address the issues you've found?
+What are the most important patterns you've identified so far?
 """
         else:  # firm
             return f"""
-🚨 **CREATE EXPERIMENT NODES NOW** 🚨
+🎯 **READY FOR HYPOTHESIS GENERATION** 🎯
 
-You have completed sufficient analysis. You MUST now create experiment nodes.
+You have completed thorough analysis and synthesis. It's time to move to the hypothesis generation stage.
 {context_reminder}
 
-**MANDATORY CALL:**
-create_experiment_node(
-    experiment_id="{experiment_id}",
-    hypothesis_description="GOAL: [improvement] | METHOD: [specific changes]",
-    yaml_configuration="[complete YAML configuration with your changes]",
-    node_name="[descriptive hypothesis name]"
-)
+**Summary of your analysis:** Based on the patterns you've identified, you're ready to design specific configuration changes.
 
-No more analysis - create nodes with specific YAML configuration changes now.
+**Next stage:** You'll transition to hypothesis generation where you can create experiment nodes to test your theories.
+
+**Wrap up:** Summarize your key findings and the main approaches you want to test, then we'll move to creating concrete hypotheses.
 """
     
     def _get_hypothesis_guidance(self, escalation_level: str) -> str:
@@ -457,17 +465,17 @@ Create diverse approaches: incremental, creative, and revolutionary hypotheses.
     
     def should_continue(self) -> bool:
         """Check if the conversation should continue."""
-        max_total = self.escalation.get('max_total_rounds', 12)
+        max_total = self.escalation.get('max_total_rounds', 25)  # Increased for longer analysis time
         
-        # AGGRESSIVE FORCE: If we've reached hypothesis generation stage, demand nodes immediately
+        # Allow proper time for hypothesis generation before forcing termination
         if (self.state.stage == ConversationStage.HYPOTHESIS_GENERATION and 
             self.state.nodes_created == 0):
-            # Allow 2 rounds in hypothesis generation, then force termination for emergency
-            if self.state.round_in_stage >= 2:
-                logger.warning(f"FORCING NODE CREATION: AI has failed to create nodes in hypothesis stage (round {self.state.round_in_stage})")
+            # Allow 4 rounds in hypothesis generation, then force termination for emergency
+            if self.state.round_in_stage >= 4:
+                logger.warning(f"FORCING NODE CREATION: AI has failed to create nodes in hypothesis stage after {self.state.round_in_stage} rounds")
                 return False  # Force termination, which will trigger emergency node creation
             else:
-                logger.info(f"HYPOTHESIS STAGE: Giving AI {2 - self.state.round_in_stage} more chances to create nodes (currently round {self.state.round_in_stage})")
+                logger.info(f"HYPOTHESIS STAGE: Giving AI {4 - self.state.round_in_stage} more chances to create nodes (currently round {self.state.round_in_stage})")
         
         result = (self.state.total_rounds < max_total and 
                   self.state.stage != ConversationStage.COMPLETE and

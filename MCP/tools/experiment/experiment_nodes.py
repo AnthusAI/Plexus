@@ -135,29 +135,24 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
             except Exception as e:
                 return f"Error: Cannot verify parent node {parent_node_id}: {str(e)}"
 
-            # Create the new node (guaranteed to have a parent)
+            # Create the new node with code field (required by GraphQL schema)
+            # In simplified schema, code is stored directly on the node, not in separate versions
+            node_code = yaml_configuration or "# No configuration provided - concept-only node"
+            
             new_node = ExperimentNode.create(
                 client=client,
                 experimentId=experiment_id,
                 parentNodeId=parent_node_id,
                 name=node_name,
-                status='ACTIVE'
+                status='ACTIVE',
+                code=node_code,  # Required field in GraphQL schema
+                hypothesis=hypothesis_description,  # Store hypothesis directly on node
+                value=initial_value  # Store additional metadata in value field
             )
             
-            # Create initial version for the new node
-            # Note: yaml_configuration should be a modified score configuration, not experiment configuration
-            logger.info(f"Creating version for node {new_node.id} with hypothesis: {hypothesis_description[:100]}...")
-            try:
-                version = new_node.create_version(
-                    code=yaml_configuration or "# No configuration provided - concept-only node",  # GraphQL requires non-null string
-                    value=initial_value,
-                    status='ACTIVE',
-                    hypothesis=hypothesis_description
-                )
-                logger.info(f"Successfully created version {version.id} for node {new_node.id}")
-            except Exception as version_error:
-                logger.error(f"Failed to create version for node {new_node.id}: {version_error}")
-                return f"Error: Node created but failed to create version: {str(version_error)}"
+            # Note: hypothesis is now stored directly on the ExperimentNode, and initial_value in the value field
+            # This ensures the UI can display the hypothesis information properly
+            logger.info(f"Successfully created node {new_node.id} with hypothesis: {hypothesis_description[:100]}...")
             
             # NOTE: Chat recording is handled by the main experiment session
             # Do not create separate chat sessions for individual nodes as this fragments
@@ -216,18 +211,17 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
             # Build tree structure
             nodes_info = []
             for node in all_nodes:
-                # Get latest version for each node
-                latest_version = node.get_latest_version()
-                
+                # In simplified schema, data is stored directly on node (no separate versions)
                 node_info = {
                     "node_id": node.id,
+                    "name": node.name,
                     "status": node.status,
                     "parent_node_id": node.parentNodeId,
-                    "latest_version": {
-                        "status": latest_version.status if latest_version else None,
-                        "hypothesis": latest_version.value.get("hypothesis", "No hypothesis") if latest_version and latest_version.value else None,
-                        "yaml_preview": latest_version.code[:100] + "..." if latest_version and len(latest_version.code) > 100 else (latest_version.code if latest_version else None)
-                    } if latest_version else None
+                    "content": {
+                        "code": node.code[:100] + "..." if node.code and len(node.code) > 100 else (node.code if node.code else "No configuration"),
+                        "created_at": node.createdAt,
+                        "updated_at": node.updatedAt
+                    }
                 }
                 nodes_info.append(node_info)
             
@@ -249,17 +243,17 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
             return error_msg
     
     @server.tool()
-    async def update_node_version(
+    async def update_node_content(
         node_id: str,
         yaml_configuration: str,
         update_description: str,
         computed_value: Optional[Dict[str, Any]] = None
     ) -> str:
         """
-        Create a new version for an existing experiment node with updated configuration.
+        Update the content of an existing experiment node with new configuration.
         
-        This allows the AI agent to iteratively improve hypotheses by creating new versions
-        of existing nodes.
+        This allows the AI agent to iteratively improve hypotheses by updating node content
+        directly (simplified schema stores data directly on nodes).
         
         Args:
             node_id: ID of the node to update
@@ -271,7 +265,7 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
             JSON string with update result
         """
         try:
-            logger.info(f"Updating node {node_id} with new version")
+            logger.info(f"Updating node {node_id} with new content")
             
             # Validate YAML configuration
             try:
@@ -280,15 +274,19 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
             except yaml.YAMLError as e:
                 return f"Error: Invalid YAML configuration: {str(e)}"
             
-            # Get Plexus client
-            client = PlexusDashboardClient()
+            # Get Plexus client from experiment context if available
+            if experiment_context and 'client' in experiment_context:
+                client = experiment_context['client']
+            else:
+                # Fallback to creating new client (may fail if no credentials)
+                client = PlexusDashboardClient()
             
             # Get the node
             node = ExperimentNode.get_by_id(node_id, client)
             if not node:
                 return f"Error: Node {node_id} not found"
             
-            # Set up computed value
+            # Set up computed value for tracking
             if computed_value is None:
                 computed_value = {
                     "update_description": update_description,
@@ -298,28 +296,28 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
                 computed_value["update_description"] = update_description
                 computed_value["updated_by"] = "ai_agent"
             
-            # Create new version
-            new_version = node.create_version(
+            # Update node content directly (simplified schema)
+            updated_node = node.update_content(
                 code=yaml_configuration,
-                value=computed_value,
                 status='QUEUED',
-                insight=update_description
+                hypothesis=update_description,
+                value=computed_value
             )
             
-            logger.info(f"Successfully created version {new_version.id} for node {node_id}")
+            logger.info(f"Successfully updated content for node {node_id}")
             
             result = {
                 "success": True,
                 "node_id": node_id,
-                "version_id": new_version.id,
                 "update_description": update_description,
-                "status": "Version created successfully and ready for testing"
+                "status": "Node content updated successfully and ready for testing",
+                "yaml_preview": yaml_configuration[:200] + "..." if len(yaml_configuration) > 200 else yaml_configuration
             }
             
-            return f"Successfully updated node version: {result}"
+            return f"Successfully updated node content: {result}"
             
         except Exception as e:
-            error_msg = f"Error updating node version: {str(e)}"
+            error_msg = f"Error updating node content: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return error_msg
     
@@ -348,18 +346,12 @@ def register_experiment_node_tools(server, experiment_context: Optional[Dict[str
             if not node:
                 return f"Error: Experiment node {node_id} not found"
             
-            # Delete all versions first
-            versions = node.get_versions()
-            for version in versions:
-                version.delete()
-                logger.info(f"Deleted version {version.id} for node {node_id}")
-            
-            # Delete the node itself
+            # In simplified schema, just delete the node directly (no separate versions)
             success = node.delete()
             
             if success:
                 logger.info(f"Successfully deleted experiment node {node_id}")
-                return f"Successfully deleted experiment node {node_id} and {len(versions)} versions"
+                return f"Successfully deleted experiment node {node_id}"
             else:
                 return f"Failed to delete experiment node {node_id}"
                 

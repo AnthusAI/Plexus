@@ -32,29 +32,9 @@ type Experiment = Schema['Experiment']['type']
 
 const client = generateClient<Schema>()
 
-// Experiment template with realistic examples
-const EXPERIMENT_TEMPLATE = `class: "BeamSearch"
-
-value: |
-  -- Extract accuracy score from experiment node's structured data
-  local score = experiment_node.value.accuracy or 0
-  -- Apply cost penalty to balance performance vs efficiency  
-  local penalty = (experiment_node.value.cost or 0) * 0.1
-  -- Return single scalar value (higher is better)
-  return score - penalty
-
-exploration: |
-  You are helping optimize an AI system through beam search experimentation.
-  
-  You have access to previous experiment results including their configurations, 
-  performance metrics, and computed values. Your job is to suggest new experiment 
-  variations that might improve performance.
-  
-  Based on the results so far, propose specific changes to try next. Focus on 
-  modifications that could address weaknesses or build on promising directions.
-  
-  Generate concrete, actionable suggestions for the next experiment iteration.
-`
+// Minimal fallback for YAML editor - actual templates come from backend service
+const MINIMAL_YAML_FALLBACK = `class: "BeamSearch"
+# Default experiment template will be loaded from backend...`
 
 
 
@@ -75,14 +55,14 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
   const [isEditing, setIsEditing] = useState(initialEditMode || !experimentId) // true for new experiments or when initialEditMode is true
   const [formData, setFormData] = useState({
     featured: false,
-    code: EXPERIMENT_TEMPLATE,
+    code: MINIMAL_YAML_FALLBACK,
     scorecardId: null as string | null,
     scoreId: null as string | null
   })
   const [loadedYaml, setLoadedYaml] = useState<string>('')
   const [originalFormData, setOriginalFormData] = useState({
     featured: false,
-    code: EXPERIMENT_TEMPLATE,
+    code: MINIMAL_YAML_FALLBACK,
     scorecardId: null as string | null,
     scoreId: null as string | null
   })
@@ -108,12 +88,16 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
 
       try {
         setIsLoading(true)
-        const { data } = await (client.models.Experiment.get as any)({ id: experimentId })
+        const { data } = await (client.models.Experiment.get as any)({ 
+          id: experimentId 
+        }, {
+          selectionSet: ['id', 'featured', 'templateId', 'code', 'rootNodeId', 'createdAt', 'updatedAt', 'scorecardId', 'scoreId', 'template.template', 'scorecard.name', 'score.name']
+        })
         if (data) {
           setExperiment(data)
           
-          // Load YAML from the experiment's code field
-          const yamlContent = data.code || EXPERIMENT_TEMPLATE
+          // Load YAML from experiment's code field, fallback to template, then to default
+          const yamlContent = data.code || data.template?.template || MINIMAL_YAML_FALLBACK
           
           setLoadedYaml(yamlContent)
           const initialData = {
@@ -168,6 +152,8 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
           scorecardId: formData.scorecardId,
           scoreId: formData.scoreId,
           accountId: selectedAccount.id,
+          templateId: null, // Not creating from template in this flow
+          rootNodeId: null, // Will be set when nodes are created
         }
 
         console.log('Creating experiment with data:', createData)
@@ -419,8 +405,8 @@ export default function ExperimentDetail({ experimentId, onSave, onCancel, initi
                     <Editor
                       height="400px"
                       defaultLanguage="yaml"
-                      value={loadedYaml || EXPERIMENT_TEMPLATE}
-                      onMount={(editor, monaco) => {
+                      value={loadedYaml || MINIMAL_YAML_FALLBACK}
+                      onMount={(_, monaco) => {
                         // Configure Monaco editor for YAML
                         defineCustomMonacoThemes(monaco)
                         applyMonacoTheme(monaco)

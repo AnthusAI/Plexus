@@ -25,6 +25,10 @@ class ExperimentNode(BaseModel):
     parentNodeId: Optional[str]
     name: Optional[str]
     status: Optional[str]
+    code: Optional[str]
+    hypothesis: Optional[str]
+    insight: Optional[str]
+    value: Optional[Dict[str, Any]]
     createdAt: str
     updatedAt: str
 
@@ -37,6 +41,10 @@ class ExperimentNode(BaseModel):
         parentNodeId: Optional[str] = None,
         name: Optional[str] = None,
         status: Optional[str] = None,
+        code: Optional[str] = None,
+        hypothesis: Optional[str] = None,
+        insight: Optional[str] = None,
+        value: Optional[Dict[str, Any]] = None,
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
@@ -44,6 +52,10 @@ class ExperimentNode(BaseModel):
         self.parentNodeId = parentNodeId
         self.name = name
         self.status = status
+        self.code = code
+        self.hypothesis = hypothesis
+        self.insight = insight
+        self.value = value
         self.createdAt = createdAt
         self.updatedAt = updatedAt
 
@@ -55,18 +67,36 @@ class ExperimentNode(BaseModel):
             parentNodeId
             name
             status
+            code
+            hypothesis
+            insight
+            value
             createdAt
             updatedAt
         """
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'ExperimentNode':
+        # Handle value field - parse JSON string back to dict if possible
+        value = data.get('value')
+        if value and isinstance(value, str):
+            try:
+                import json
+                value = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                # If it's not valid JSON, keep it as string
+                pass
+        
         return cls(
             id=data['id'],
             experimentId=data['experimentId'],
             parentNodeId=data.get('parentNodeId'),
             name=data.get('name'),
             status=data.get('status'),
+            code=data.get('code'),
+            hypothesis=data.get('hypothesis'),
+            insight=data.get('insight'),
+            value=value,
             createdAt=data['createdAt'],
             updatedAt=data['updatedAt'],
             client=client
@@ -79,7 +109,11 @@ class ExperimentNode(BaseModel):
         experimentId: str,
         parentNodeId: Optional[str] = None,
         name: Optional[str] = None,
-        status: Optional[str] = None
+        status: Optional[str] = None,
+        code: Optional[str] = None,
+        hypothesis: Optional[str] = None,
+        insight: Optional[str] = None,
+        value: Optional[Dict[str, Any]] = None
     ) -> 'ExperimentNode':
         """Create a new experiment node.
         
@@ -89,6 +123,10 @@ class ExperimentNode(BaseModel):
             parentNodeId: ID of the parent node (None for root nodes)
             name: Name of the node (optional)
             status: Node status (optional)
+            code: Code configuration (required by GraphQL schema)
+            hypothesis: Hypothesis description (optional)
+            insight: Insight text (optional)
+            value: Computed value as JSON (optional)
             
         Returns:
             The created ExperimentNode instance
@@ -105,6 +143,16 @@ class ExperimentNode(BaseModel):
             input_data['name'] = name
         if status is not None:
             input_data['status'] = status
+        if code is not None:
+            input_data['code'] = code
+        if hypothesis is not None:
+            input_data['hypothesis'] = hypothesis
+        if insight is not None:
+            input_data['insight'] = insight
+        if value is not None:
+            # Convert dict to JSON string for GraphQL schema compatibility
+            import json
+            input_data['value'] = json.dumps(value) if isinstance(value, dict) else str(value)
             
         mutation = """
         mutation CreateExperimentNode($input: CreateExperimentNodeInput!) {
@@ -250,65 +298,72 @@ class ExperimentNode(BaseModel):
         result = self._client.execute(mutation, {'input': {'id': self.id}})
         return result.get('deleteExperimentNode', {}).get('id') == self.id
 
-    def get_versions(self, limit: int = 100) -> List['ExperimentNodeVersion']:
-        """Get all versions for this node, ordered by sequence number.
-        
-        Args:
-            limit: Maximum number of versions to return
-            
-        Returns:
-            List of ExperimentNodeVersion instances ordered by seq
-        """
-        if not self._client:
-            return []
-            
-        from .experiment_node_version import ExperimentNodeVersion
-        return ExperimentNodeVersion.list_by_node(self.id, self._client, limit)
+    # Note: Version methods removed - schema was simplified to store version data directly on ExperimentNode
+    # The code, hypothesis, insight, and value fields are now directly on this model
 
-    def get_latest_version(self) -> Optional['ExperimentNodeVersion']:
-        """Get the latest version for this node (highest seq number).
-        
-        Returns:
-            The latest ExperimentNodeVersion or None if no versions exist
-        """
-        versions = self.get_versions(limit=1)
-        return versions[0] if versions else None
-
-    def create_version(
+    def update_content(
         self, 
-        code: str, 
+        code: Optional[str] = None,
         status: Optional[str] = None,
         hypothesis: Optional[str] = None,
         insight: Optional[str] = None,
         value: Optional[Dict[str, Any]] = None
-    ) -> 'ExperimentNodeVersion':
-        """Create a new version for this node.
+    ) -> 'ExperimentNode':
+        """Update the content of this node (replaces create_version since versions are now stored directly on node).
         
         Args:
-            code: Code configuration (YAML/JSON)
-            value: Computed value (JSON object, optional)
-            status: Version status (optional)
-            hypothesis: Hypothesis for this version (optional)
-            insight: Insight for this version (optional)
+            code: New code configuration (YAML/JSON, optional)
+            status: New status (optional)
+            hypothesis: New hypothesis (optional)
+            insight: New insight (optional)
+            value: New computed value (JSON object, optional)
             
         Returns:
-            The created ExperimentNodeVersion
+            The updated ExperimentNode
         """
         if not self._client:
-            raise ValueError("Cannot create version without client")
-            
-        from .experiment_node_version import ExperimentNodeVersion
+            raise ValueError("Cannot update node without client")
         
-        return ExperimentNodeVersion.create(
-            client=self._client,
-            experimentId=self.experimentId,
-            nodeId=self.id,
-            status=status,
-            code=code,
-            hypothesis=hypothesis,
-            insight=insight,
-            value=value
-        )
+        # Build update input - only include fields that are being updated
+        input_data = {'id': self.id}
+        
+        if code is not None:
+            input_data['code'] = code
+        if status is not None:
+            input_data['status'] = status
+        if hypothesis is not None:
+            input_data['hypothesis'] = hypothesis
+        if insight is not None:
+            input_data['insight'] = insight
+        if value is not None:
+            # Convert dict to JSON string for GraphQL schema compatibility
+            import json
+            input_data['value'] = json.dumps(value) if isinstance(value, dict) else str(value)
+            
+        mutation = """
+        mutation UpdateExperimentNode($input: UpdateExperimentNodeInput!) {
+            updateExperimentNode(input: $input) {
+                %s
+            }
+        }
+        """ % self.fields()
+        
+        result = self._client.execute(mutation, {'input': input_data})
+        updated_node = self.from_dict(result['updateExperimentNode'], self._client)
+        
+        # Update current instance with new values
+        if code is not None:
+            self.code = updated_node.code
+        if status is not None:
+            self.status = updated_node.status
+        if hypothesis is not None:
+            self.hypothesis = updated_node.hypothesis
+        if insight is not None:
+            self.insight = updated_node.insight
+        if value is not None:
+            self.value = updated_node.value
+        
+        return self
 
     def get_parent(self) -> Optional['ExperimentNode']:
         """Get the parent node for this node.
@@ -369,13 +424,13 @@ class ExperimentNode(BaseModel):
             status=status
         )
         
-        # Create initial version for the child
-        child_node.create_version(
+        # Update child node with initial content (simplified schema stores data directly on node)
+        child_node.update_content(
             code=code,
-            value=initial_value,
             status=status,
             hypothesis=hypothesis,
-            insight=insight
+            insight=insight,
+            value=initial_value
         )
         
         logger.debug(f"Created child node {child_node.id} for parent {self.id}")

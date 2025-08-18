@@ -63,3 +63,4 @@ class O3CompatibleChatOpenAI(ChatOpenAI):
     @property
     def _llm_type(self) -> str:
         return "o3-compatible-openai"
+
