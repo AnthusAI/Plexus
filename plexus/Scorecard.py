@@ -160,6 +160,11 @@ class Scorecard:
                                     if not score_config.get('version'):
                                         score_config['version'] = score_item.get('championVersionId')
                                         logging.info(f"Setting version {score_item.get('championVersionId')} for score {score_config.get('name')}")
+                                    
+                                    # Always copy isDisabled status from API data to config
+                                    if 'isDisabled' in score_item:
+                                        score_config['isDisabled'] = score_item.get('isDisabled')
+                                        logging.info(f"Setting isDisabled={score_item.get('isDisabled')} for score {score_config.get('name')}")
                                     break
                     parsed_configs.append(score_config)
                 except Exception as e:
@@ -182,6 +187,11 @@ class Scorecard:
                                 if not score_config.get('version'):
                                     score_config['version'] = score_item.get('championVersionId')
                                     logging.info(f"Setting version {score_item.get('championVersionId')} for score {score_config.get('name')}")
+                                
+                                # Always copy isDisabled status from API data to config
+                                if 'isDisabled' in score_item:
+                                    score_config['isDisabled'] = score_item.get('isDisabled')
+                                    logging.info(f"Setting isDisabled={score_item.get('isDisabled')} for score {score_config.get('name')}")
                                 break
                 parsed_configs.append(score_config)
             else:
@@ -1059,6 +1069,11 @@ class Scorecard:
                                     config[key] = value
                                 
                                 logging.info(f"Setting version {api_score.get('championVersionId')} for config {config.get('name')}")
+                            
+                            # Always copy isDisabled status from API data to config (regardless of version)
+                            if 'isDisabled' in api_score:
+                                config['isDisabled'] = api_score.get('isDisabled')
+                                logging.info(f"Setting isDisabled={api_score.get('isDisabled')} for score {config.get('name')}")
                             break
         else:
             logging.warning("API data does not contain expected structure (sections.items)")
