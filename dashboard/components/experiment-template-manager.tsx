@@ -258,7 +258,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
       // Debug: Check what methods are available
       console.log('Available ExperimentTemplate methods:', Object.keys(client.models.ExperimentTemplate))
       
-      const result = await client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt({
+      const result = await (client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt as any)({
         accountId: accountId,
 
       })
@@ -292,7 +292,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
         accountId: accountId
       }
 
-      const result = await client.models.ExperimentTemplate.create(input as any)
+      const result = await (client.models.ExperimentTemplate.create as any)(input as any)
       
       if (result.data) {
         setTemplates(prev => [result.data!, ...prev])
@@ -315,7 +315,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
 
     setIsLoading(true)
     try {
-      await client.models.ExperimentTemplate.delete({ id: template.id })
+      await (client.models.ExperimentTemplate.delete as any)({ id: template.id })
       setTemplates(prev => prev.filter(t => t.id !== template.id))
       if (selectedTemplate?.id === template.id) {
         setSelectedTemplate(null)
