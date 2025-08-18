@@ -52,16 +52,14 @@ import {
 type ExperimentNode = Schema['ExperimentNode']['type']
 type ExperimentNodeVersion = Schema['ExperimentNodeVersion']['type']
 
-interface ExperimentNodeWithLatestVersion extends ExperimentNode {
-  latestVersion?: ExperimentNodeVersion
-}
+// Use direct ExperimentNode type - hypothesis is stored directly on node, not in versions
 
 const client = generateClient<Schema>()
 
 // Status icons and colors - different icons for root nodes vs hypothesis nodes
-const getNodeIcon = (node: ExperimentNodeWithLatestVersion) => {
+const getNodeIcon = (node: ExperimentNode) => {
   // Check if this node has a hypothesis (indicating it's a hypothesis node)
-  const hasHypothesis = node.latestVersion?.hypothesis && node.latestVersion.hypothesis.trim() !== ''
+  const hasHypothesis = node.hypothesis && node.hypothesis.trim() !== ''
   
   if (hasHypothesis) {
     return <GitMerge className="h-4 w-4 text-foreground" />
@@ -91,7 +89,7 @@ interface Props {
 }
 
 export default function ExperimentNodesList({ experimentId }: Props) {
-  const [nodes, setNodes] = useState<ExperimentNodeWithLatestVersion[]>([])
+  const [nodes, setNodes] = useState<ExperimentNode[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deletingNodeId, setDeletingNodeId] = useState<string | null>(null)
@@ -114,6 +112,8 @@ export default function ExperimentNodesList({ experimentId }: Props) {
         const { data: nodesData, errors } = await client.models.ExperimentNode.listExperimentNodeByExperimentIdAndCreatedAt({
           experimentId: experimentId,
           limit: 1000 // Ensure we get all nodes
+        }, {
+          selectionSet: ['id', 'experimentId', 'parentNodeId', 'name', 'status', 'code', 'hypothesis', 'insight', 'value', 'createdAt', 'updatedAt']
         })
 
         console.log('ExperimentNodesList: Filtered GraphQL response:', { nodesData, errors })
@@ -133,88 +133,30 @@ export default function ExperimentNodesList({ experimentId }: Props) {
 
         console.log('ExperimentNodesList: Found', nodesData.length, 'nodes')
 
-        // For each node, get its latest version
-        const nodesWithVersions: ExperimentNodeWithLatestVersion[] = []
-        
-        for (const node of nodesData) {
-          try {
-            // Get the latest version for this node
-            console.log(`ExperimentNodesList: Loading versions for node ${node.id}`)
-            // Try using the GSI first for better performance
-            let versionsData = null
-            let versionErrors = null
-            
-            try {
-              const gsiResult = await (client.models.ExperimentNodeVersion.listExperimentNodeVersionByNodeIdAndCreatedAt as any)({
-                nodeId: node.id,
-                limit: 10
-              })
-              versionsData = gsiResult.data
-              versionErrors = gsiResult.errors
-              console.log(`ExperimentNodesList: GSI query for node ${node.id} returned ${versionsData ? versionsData.length : 0} versions`)
-            } catch (gsiError) {
-              console.warn(`ExperimentNodesList: GSI query failed for node ${node.id}, falling back to filter:`, gsiError)
-              
-              // Fallback to filter-based query
-              const filterResult = await (client.models.ExperimentNodeVersion.list as any)({
-                filter: { nodeId: { eq: node.id } },
-                limit: 10
-              })
-              versionsData = filterResult.data
-              versionErrors = filterResult.errors
-              console.log(`ExperimentNodesList: Filter query for node ${node.id} returned ${versionsData ? versionsData.length : 0} versions`)
+        // Debug logging for hypothesis data
+        console.log(`ExperimentNodesList: Found ${nodesData.length} nodes`)
+        if (nodesData.length > 0) {
+          console.log('ExperimentNodesList: Sample node data:', {
+            firstNode: {
+              id: nodesData[0].id,
+              name: nodesData[0].name,
+              hypothesis: nodesData[0].hypothesis,
+              hasHypothesis: !!nodesData[0].hypothesis,
+              hypothesisLength: nodesData[0].hypothesis ? nodesData[0].hypothesis.length : 0,
+              allFields: Object.keys(nodesData[0])
             }
-            
-            console.log(`ExperimentNodesList: Version query result for node ${node.id}:`, {
-              versionsCount: versionsData ? versionsData.length : 0,
-              errors: versionErrors,
-              firstVersion: versionsData && versionsData.length > 0 ? versionsData[0] : null
-            })
-
-            let latestVersion = null
-
-            if (versionsData && versionsData.length > 0) {
-              // Sort versions by createdAt to get the latest
-              const sortedVersions = versionsData.sort((a: any, b: any) => {
-                if (a.createdAt && b.createdAt) {
-                  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                }
-                return 0
-              })
-              latestVersion = sortedVersions[0]
-              
-              // Debug logging to see what's in the version data
-              console.log(`ExperimentNodesList: Latest version for node ${node.id}:`, {
-                id: latestVersion.id,
-                hypothesis: latestVersion.hypothesis,
-                hasHypothesis: !!latestVersion.hypothesis,
-                hypothesisLength: latestVersion.hypothesis ? latestVersion.hypothesis.length : 0,
-                allFields: Object.keys(latestVersion)
-              })
-            }
-
-            nodesWithVersions.push({
-              ...node,
-              latestVersion: latestVersion || undefined
-            })
-          } catch (versionError) {
-            console.warn(`Failed to load versions for node ${node.id}:`, versionError)
-            // Add node without version info
-            nodesWithVersions.push({
-              ...node
-            })
-          }
+          })
         }
 
         // Sort nodes in chronological order by createdAt (oldest first, so root appears at top)
-        nodesWithVersions.sort((a, b) => {
+        const sortedNodes = nodesData.sort((a, b) => {
           if (a.createdAt && b.createdAt) {
             return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           }
           return 0
         })
         
-        setNodes(nodesWithVersions)
+        setNodes(sortedNodes)
         
       } catch (err) {
         console.error('Error loading experiment nodes:', err)
@@ -332,7 +274,7 @@ export default function ExperimentNodesList({ experimentId }: Props) {
       
       <div className="space-y-3">
         {nodes.map((node) => {
-          const latestStatus = node.latestVersion?.status || 'UNKNOWN'
+          const latestStatus = node.status || 'UNKNOWN'
           
           return (
             <Card 
@@ -411,90 +353,88 @@ export default function ExperimentNodesList({ experimentId }: Props) {
                 </div>
 
                 {/* Collapsible sections for hypothesis, code, and insight */}
-                {node.latestVersion && (
-                  <Accordion type="multiple" className="w-full">
-                    {/* Hypothesis Section */}
-                    {node.latestVersion.hypothesis && (
-                      <AccordionItem value="hypothesis" className="border-b-0">
-                        <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
-                          <div className="flex items-center gap-2">
-                            <Lightbulb className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-sm font-medium leading-none text-muted-foreground">Hypothesis</span>
-                            <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
-                            <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-0 pb-4">
-                          <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {node.latestVersion.hypothesis}
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    )}
+                <Accordion type="multiple" className="w-full">
+                  {/* Hypothesis Section */}
+                  {node.hypothesis && (
+                    <AccordionItem value="hypothesis" className="border-b-0">
+                      <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
+                        <div className="flex items-center gap-2">
+                          <Lightbulb className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-sm font-medium leading-none text-muted-foreground">Hypothesis</span>
+                          <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                          <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pt-0 pb-4">
+                        <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {node.hypothesis}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  )}
 
-                    {/* Code Configuration Section */}
-                    {node.latestVersion.code && (
-                      <AccordionItem value="code" className="border-b-0">
-                        <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
-                          <div className="flex items-center gap-2">
-                            <FileJson className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-sm font-medium leading-none text-muted-foreground">Code</span>
-                            <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
-                            <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-0 pb-4">
-                          <div className="overflow-hidden">
-                            <Editor
-                              height="300px"
-                              defaultLanguage="yaml"
-                              value={node.latestVersion.code}
-                              onMount={(editor, monaco) => {
-                                defineCustomMonacoThemes(monaco)
-                                applyMonacoTheme(monaco)
-                                setupMonacoThemeWatcher(monaco)
-                                configureYamlLanguage(monaco)
-                              }}
-                              options={{
-                                ...getCommonMonacoOptions(),
-                                readOnly: true,
-                                minimap: { enabled: false },
-                                scrollBeyondLastLine: false,
-                                wordWrap: 'on',
-                                fontSize: 13,
-                                lineHeight: 20,
-                                tabSize: 2,
-                                insertSpaces: true
-                              }}
-                            />
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    )}
+                  {/* Code Configuration Section */}
+                  {node.code && (
+                    <AccordionItem value="code" className="border-b-0">
+                      <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
+                        <div className="flex items-center gap-2">
+                          <FileJson className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-sm font-medium leading-none text-muted-foreground">Code</span>
+                          <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                          <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pt-0 pb-4">
+                        <div className="overflow-hidden">
+                          <Editor
+                            height="300px"
+                            defaultLanguage="yaml"
+                            value={node.code}
+                            onMount={(editor, monaco) => {
+                              defineCustomMonacoThemes(monaco)
+                              applyMonacoTheme(monaco)
+                              setupMonacoThemeWatcher(monaco)
+                              configureYamlLanguage(monaco)
+                            }}
+                            options={{
+                              ...getCommonMonacoOptions(),
+                              readOnly: true,
+                              minimap: { enabled: false },
+                              scrollBeyondLastLine: false,
+                              wordWrap: 'on',
+                              fontSize: 13,
+                              lineHeight: 20,
+                              tabSize: 2,
+                              insertSpaces: true
+                            }}
+                          />
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  )}
 
-                    {/* Insight Section */}
-                    {node.latestVersion.insight && (
-                      <AccordionItem value="insight" className="border-b-0">
-                        <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-3 w-3 text-muted-foreground" />  
-                            <span className="text-sm font-medium leading-none text-muted-foreground">Insight</span>
-                            <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
-                            <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-0 pb-4">
-                          <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {node.latestVersion.insight}
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    )}
-                    
-                    {/* Chat Messages Section */}
-                    <NodeChatMessages nodeId={node.id} />
-                  </Accordion>
-                )}
+                  {/* Insight Section */}
+                  {node.insight && (
+                    <AccordionItem value="insight" className="border-b-0">
+                      <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-3 w-3 text-muted-foreground" />  
+                          <span className="text-sm font-medium leading-none text-muted-foreground">Insight</span>
+                          <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                          <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pt-0 pb-4">
+                        <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {node.insight}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  )}
+                  
+                  {/* Chat Messages Section */}
+                  <NodeChatMessages nodeId={node.id} />
+                </Accordion>
               </CardContent>
             </Card>
           )

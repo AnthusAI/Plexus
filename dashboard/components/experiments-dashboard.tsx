@@ -9,6 +9,7 @@ import { toast } from "sonner"
 import ExperimentTask, { ExperimentTaskData } from "@/components/ExperimentTask"
 import ExperimentDetail from "@/components/experiment-detail"
 import ScorecardContext from "@/components/ScorecardContext"
+import TemplateSelector from "@/components/template-selector"
 import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
@@ -40,6 +41,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
 
   // All hooks must be at the top before any conditional returns
@@ -86,20 +88,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
       setIsLoading(true)
       const { data } = await client.models.Experiment.listExperimentByAccountIdAndUpdatedAt({
         accountId: selectedAccount.id,
-        sortDirection: 'DESC',
-        // Include scorecard and score relationships
-        selectionSet: [
-          'id',
-          'featured',
-          'rootNodeId',
-          'createdAt',
-          'updatedAt',
-          'accountId',
-          'scorecardId',
-          'scoreId',
-          'scorecard.name',
-          'score.name'
-        ]
+        sortDirection: 'DESC'
       })
       setExperiments(data)
     } catch (err) {
@@ -140,6 +129,8 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
       // that indicates it's a duplicate. For now, let's just duplicate it as-is
       const { data: newExperiment } = await (client.models.Experiment.create as any)({
         featured: experiment.featured || false,
+        templateId: experiment.templateId || null,
+        code: experiment.code || null, // Copy the code if it exists
         rootNodeId: null, // Will be set after creating nodes
         scorecardId: experiment.scorecardId,
         scoreId: experiment.scoreId,
@@ -190,7 +181,60 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
   }, [loadExperiments])
 
   const handleCreateExperiment = () => {
-    router.push('/lab/experiments/new')
+    setShowTemplateSelector(true)
+  }
+
+  const handleCreateExperimentFromTemplate = async (template: Schema['ExperimentTemplate']['type']) => {
+    if (!selectedAccount?.id) {
+      toast.error('No account selected')
+      return
+    }
+
+    try {
+      console.log('Creating experiment from template:', { 
+        templateId: template.id, 
+        templateName: template.name,
+        templateCode: template.template?.substring(0, 100) + '...'
+      })
+      
+      // Create experiment with template reference and copy template code
+      const createInput = {
+        featured: false,
+        templateId: template.id,
+        code: template.template, // Copy template YAML code to experiment
+        rootNodeId: null, // Will be set when nodes are created
+        scorecardId: selectedScorecard || null,
+        scoreId: selectedScore || null,
+        accountId: selectedAccount.id,
+      }
+      
+      console.log('Create input:', createInput)
+      
+      const result = await client.models.Experiment.create(createInput)
+      const { data: newExperiment, errors } = result
+
+      if (errors && errors.length > 0) {
+        console.error('GraphQL errors creating experiment:', errors)
+        toast.error('Failed to create experiment: ' + errors.map((e: any) => e.message).join(', '))
+        return
+      }
+
+      if (newExperiment) {
+        console.log('Experiment created successfully:', newExperiment)
+        // Refresh experiments list and select the new experiment
+        await loadExperiments()
+        handleSelectExperiment(newExperiment.id)
+        // Close template selector
+        setShowTemplateSelector(false)
+        toast.success(`Experiment created from template "${template.name}"`)
+      } else {
+        console.error('No experiment data returned')
+        toast.error('Failed to create experiment: No data returned')
+      }
+    } catch (error) {
+      console.error('Error creating experiment from template:', error)
+      toast.error('Failed to create experiment from template')
+    }
   }
 
   const handleDragStart = (e: React.MouseEvent) => {
@@ -242,9 +286,6 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
     score: experiment.score ? { name: experiment.score.name } : null,
   })
   
-  const selectedExperiment = selectedExperimentId 
-    ? experiments.find(exp => exp.id === selectedExperimentId)
-    : null
 
   // Loading and error states
   if (isLoading || error) {
@@ -339,11 +380,12 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
         <div className="flex-shrink-0">
           <Button onClick={handleCreateExperiment}>
             <Plus className="h-4 w-4 mr-2" />
-            New Experiment
+            Create
           </Button>
         </div>
       </div>
-      
+
+      {/* Experiments Content */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         <AnimatePresence mode="popLayout">
           <motion.div 
@@ -474,6 +516,16 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
           </div>
         )}
       </div>
+
+      {/* Template Selector Modal */}
+      {selectedAccount && (
+        <TemplateSelector
+          accountId={selectedAccount.id}
+          open={showTemplateSelector}
+          onOpenChange={setShowTemplateSelector}
+          onTemplateSelect={handleCreateExperimentFromTemplate}
+        />
+      )}
     </div>
   )
 }

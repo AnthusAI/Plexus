@@ -27,29 +27,9 @@ import ExperimentConversationViewer from "./experiment-conversation-viewer"
 
 const client = generateClient<Schema>()
 
-// Experiment template with realistic examples
-const EXPERIMENT_TEMPLATE = `class: "BeamSearch"
-
-value: |
-  -- Extract accuracy score from experiment node's structured data
-  local score = experiment_node.value.accuracy or 0
-  -- Apply cost penalty to balance performance vs efficiency  
-  local penalty = (experiment_node.value.cost or 0) * 0.1
-  -- Return single scalar value (higher is better)
-  return score - penalty
-
-exploration: |
-  You are helping optimize an AI system through beam search experimentation.
-  
-  You have access to previous experiment results including their configurations, 
-  performance metrics, and computed values. Your job is to suggest new experiment 
-  variations that might improve performance.
-  
-  Based on the results so far, propose specific changes to try next. Focus on 
-  modifications that could address weaknesses or build on promising directions.
-  
-  Generate concrete, actionable suggestions for the next experiment iteration.
-`
+// Minimal fallback for YAML editor - actual templates come from experiment data
+const MINIMAL_YAML_FALLBACK = `class: "BeamSearch"
+# Loading experiment configuration...`
 
 // Define the experiment data type
 export interface ExperimentTaskData extends BaseTaskData {
@@ -99,29 +79,31 @@ export default function ExperimentTask({
 
   // Load YAML for detail view
   useEffect(() => {
-    if (variant === 'detail' && experiment.rootNodeId) {
+    if (variant === 'detail') {
       loadExperimentYaml()
     }
-  }, [variant, experiment.rootNodeId])
+  }, [variant, experiment.id])
 
   const loadExperimentYaml = async () => {
-    if (!experiment.rootNodeId) return
-    
     try {
       setIsLoadingYaml(true)
-      // Get the latest version for the root node
-      const { data: versions } = await (client.models.ExperimentNodeVersion.list as any)({
-        filter: { nodeId: { eq: experiment.rootNodeId } },
-        limit: 1
+      // Load the full experiment data to get the code field
+      const { data: fullExperiment } = await (client.models.Experiment.get as any)({ 
+        id: experiment.id 
+      }, {
+        selectionSet: ['code', 'template.template']
       })
-      if (versions && versions.length > 0) {
-        setLoadedYaml((versions[0] as any).code || EXPERIMENT_TEMPLATE)
+      
+      if (fullExperiment) {
+        // Use experiment's code field first, fallback to template, then to default
+        const yamlContent = fullExperiment.code || fullExperiment.template?.template || MINIMAL_YAML_FALLBACK
+        setLoadedYaml(yamlContent)
       } else {
-        setLoadedYaml(EXPERIMENT_TEMPLATE)
+        setLoadedYaml(MINIMAL_YAML_FALLBACK)
       }
     } catch (error) {
-      console.warn('Failed to load YAML from experiment node:', error)
-      setLoadedYaml(EXPERIMENT_TEMPLATE)
+      console.warn('Failed to load YAML from experiment:', error)
+      setLoadedYaml(MINIMAL_YAML_FALLBACK)
     } finally {
       setIsLoadingYaml(false)
     }
@@ -289,8 +271,8 @@ export default function ExperimentTask({
                     <Editor
                       height="400px"
                       defaultLanguage="yaml"
-                      value={loadedYaml || EXPERIMENT_TEMPLATE}
-                      onMount={(editor, monaco) => {
+                      value={loadedYaml || MINIMAL_YAML_FALLBACK}
+                      onMount={(_, monaco) => {
                         // Configure Monaco editor for YAML
                         defineCustomMonacoThemes(monaco)
                         applyMonacoTheme(monaco)

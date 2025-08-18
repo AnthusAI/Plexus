@@ -16,7 +16,6 @@ from .mcp_tool import MCPTool
 from .mcp_adapter import LangChainMCPAdapter
 from .openai_compat import O3CompatibleChatOpenAI
 from .tool_calling import extract_all_tool_calls, call_tool
-from .chat_callbacks import ChatRecordingCallback
 
 logger = logging.getLogger(__name__)
 
@@ -38,31 +37,20 @@ class ExperimentAIRunner:
         self.experiment_id = experiment_id
         self.mcp_server = mcp_server
         self.client = client
-        # Use passed openai_api_key parameter first, then fallback to loading from config
-        self.openai_api_key = openai_api_key if openai_api_key else self._get_openai_key()
+        # Use passed openai_api_key parameter first, then get from environment after config load
+        self.openai_api_key = openai_api_key
+        if not self.openai_api_key:
+            # Use Plexus configuration system to properly load environment variables
+            from plexus.config.loader import load_config
+            load_config()  # This loads .plexus/config.yaml and sets environment variables
+            import os
+            self.openai_api_key = os.getenv('OPENAI_API_KEY')
         logger.info(f"AI Runner initialized with OpenAI key: {'Yes' if self.openai_api_key else 'No'}")
         self.experiment_config = None
         self.mcp_adapter = None
         self.experiment_context = experiment_context or {}
         self.chat_recorder = None
         self.conversation_flow = None
-    
-    def _get_openai_key(self) -> Optional[str]:
-        """Get OpenAI API key using Plexus configuration system."""
-        try:
-            from plexus.config.loader import load_config
-            load_config()  # This loads config and sets environment variables
-            
-            import os
-            key = os.getenv('OPENAI_API_KEY')
-            logger.info(f"OpenAI key check: {'Found' if key else 'Not found'}")
-            return key
-        except Exception as e:
-            logger.warning(f"Failed to load configuration: {e}")
-            import os
-            key = os.getenv('OPENAI_API_KEY')
-            logger.info(f"OpenAI key fallback: {'Found' if key else 'Not found'}")
-            return key
     
     async def setup(self, experiment_yaml: str):
         """Set up the AI runner with experiment configuration."""
@@ -108,8 +96,8 @@ Your specific role in this process is the hypothesis engine, which is responsibl
 ## Feedback Alignment Process Documentation
 
 """
-        
-        # Add feedback alignment documentation if available
+            
+            # Add feedback alignment documentation if available
         feedback_docs = self.experiment_context.get('feedback_alignment_docs') if self.experiment_context else None
         if feedback_docs:
             system_prompt += f"""{feedback_docs}
@@ -203,7 +191,7 @@ Please analyze the current score configuration and feedback patterns to generate
 plexus_feedback_summary(scorecard_name="{self.experiment_context.get('scorecard_name', 'Unknown')}", score_name="{self.experiment_context.get('score_name', 'Unknown')}", days=30)
 
 For each hypothesis, use the `create_experiment_node` tool with:
-- experiment_id: {self.experiment_context.get('experiment_id', 'EXPERIMENT_ID')}
+  - experiment_id: {self.experiment_context.get('experiment_id', 'EXPERIMENT_ID')}
 - A clear hypothesis description following this format: "GOAL: [specific target - NO quantification] | METHOD: [exact changes]"
 - A complete YAML configuration implementing your proposed changes
 - A descriptive node name
@@ -313,9 +301,6 @@ Focus on evidence-based improvements that address the specific issues identified
                 # Set up chat recording in the adapter
                 adapter.chat_recorder = self.chat_recorder
                 
-                # Create callback with adapter reference
-                callback = ChatRecordingCallback(self.chat_recorder, adapter) if self.chat_recorder else None
-                
                 # Convert to LangChain Tool format
                 langchain_tools = []
                 for mcp_tool in mcp_tools:
@@ -396,7 +381,7 @@ Focus on evidence-based improvements that address the specific issues identified
                         'get_experiment_tree': {
                             'experiment_id': 'ID of the experiment to analyze'
                         },
-                        'update_node_version': {
+                        'update_node_content': {
                             'node_id': 'ID of the node to update',
                             'yaml_configuration': 'Updated YAML configuration',
                             'update_description': 'Description of what changed in this update',
@@ -519,16 +504,6 @@ Focus on evidence-based improvements that address the specific issues identified
                 
                 # Track tool usage for safeguards
                 tool_usage_tracker = {"create_experiment_node_count": 0}
-                
-                # Create enhanced callback that tracks create_experiment_node usage
-                if callback:
-                    original_on_agent_action = callback.on_agent_action
-                    def enhanced_on_agent_action(action, **kwargs):
-                        if action.tool == "create_experiment_node":
-                            tool_usage_tracker["create_experiment_node_count"] += 1
-                            logger.info(f"TOOL TRACKER: create_experiment_node called #{tool_usage_tracker['create_experiment_node_count']}")
-                        return original_on_agent_action(action, **kwargs)
-                    callback.on_agent_action = enhanced_on_agent_action
                 
                 # SIMPLE CONVERSATION LOOP: Just chat with the AI
                 response = ""
@@ -661,6 +636,47 @@ Focus on evidence-based improvements that address the specific issues identified
                         
                     else:
                         logger.info("NO TOOL CALLS DETECTED in AI response")
+                        
+                        # CRITICAL FIX: Provide feedback to AI when tool calls aren't detected
+                        # Check if response contains potential tool call attempts that failed parsing
+                        response_lower = response.lower()
+                        contains_tool_keywords = any(tool_name in response_lower for tool_name in [tool.name for tool in mcp_tools])
+                        contains_json_structure = "{" in response and "tool" in response_lower and "arguments" in response_lower
+                        contains_function_calls = any(f"{tool_name}(" in response for tool_name in [tool.name for tool in mcp_tools])
+                        
+                        if contains_tool_keywords or contains_json_structure or contains_function_calls:
+                            # AI tried to call tools but they weren't detected - provide helpful feedback
+                            tool_call_failure_feedback = f"""⚠️ **TOOL CALL DETECTION FAILED** ⚠️
+
+I can see you attempted to call tools in your response, but they were not recognized by the tool detection system.
+
+**What I detected in your response:**
+- Contains tool keywords: {contains_tool_keywords}
+- Contains JSON structure: {contains_json_structure}  
+- Contains function calls: {contains_function_calls}
+
+**Available tools:** {', '.join([tool.name for tool in mcp_tools])}
+
+**Please try again using one of these formats:**
+
+**Format 1 - JSON (recommended for o3 model):**
+{{"tool": "create_experiment_node", "arguments": {{"experiment_id": "your-id", "hypothesis_description": "GOAL: ... | METHOD: ...", "node_name": "Your Node Name"}}}}
+
+**Format 2 - Function call:**
+create_experiment_node(experiment_id="your-id", hypothesis_description="GOAL: ... | METHOD: ...", node_name="Your Node Name")
+
+**Critical:** You MUST use the exact tool names from the available tools list above.
+
+Please retry your tool calls using the correct format."""
+                            
+                            # Add this feedback to conversation so AI can see it and retry
+                            conversation_history.append(HumanMessage(content=tool_call_failure_feedback))
+                            
+                            # Also record this feedback in chat recording
+                            if self.chat_recorder:
+                                await self.chat_recorder.record_system_message(
+                                    f"Tool call detection failed - provided format guidance to AI"
+                                )
                     
                     # Update conversation flow state
                     if self.conversation_flow:
@@ -710,7 +726,7 @@ Focus on evidence-based improvements that address the specific issues identified
                         logger.warning("EMERGENCY FALLBACK: Forcing node creation since none were created")
                         emergency_prompt = f"""
 🚨 **EMERGENCY: CREATE NODES NOW** 🚨
-
+                    
 The conversation is about to end but you have not created any experiment nodes yet.
 
 **CRITICAL CONTEXT:**
@@ -727,7 +743,7 @@ Use create_experiment_node tool with these parameters:
 
 **Example call:**
 create_experiment_node(
-    experiment_id="{self.experiment_context.get('experiment_id', 'EXPERIMENT_ID')}",
+   experiment_id="{self.experiment_context.get('experiment_id', 'EXPERIMENT_ID')}",
     hypothesis_description="GOAL: Reduce false positives for medication verification | METHOD: Add stricter verification requirements",
     node_name="Stricter Verification Requirements"
 )
@@ -787,7 +803,7 @@ This is MANDATORY - the conversation cannot complete without nodes.
                     response += f"\n\n{completion_summary_with_reason}"
                     logger.info(f"CONVERSATION FLOW: Conversation complete - {completion_summary}")
                     logger.info(f"TERMINATION REASON: {termination_reason.strip()}")
-                
+                    
                 else:
                     logger.warning("CONVERSATION FLOW: No conversation flow manager available, using basic check")
                     if nodes_created == 0:

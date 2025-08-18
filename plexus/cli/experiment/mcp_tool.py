@@ -22,3 +22,4 @@ class MCPTool(BaseModel):
     async def arun(self, **kwargs) -> str:
         """Async version of run."""
         return self.run(**kwargs)
+
