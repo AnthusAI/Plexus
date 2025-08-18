@@ -260,7 +260,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
       
       const result = await client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt({
         accountId: accountId,
-        limit: 100
+
       })
       
       if (result.data) {
@@ -282,7 +282,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
 
     setIsLoading(true)
     try {
-      const input: CreateExperimentTemplateInput = {
+      const input = {
         name: formData.name,
         description: formData.description || undefined,
         template: formData.template,
@@ -292,7 +292,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
         accountId: accountId
       }
 
-      const result = await client.models.ExperimentTemplate.create(input)
+      const result = await client.models.ExperimentTemplate.create(input as any)
       
       if (result.data) {
         setTemplates(prev => [result.data!, ...prev])
@@ -471,7 +471,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
                           size="sm"
                           variant="destructive"
                           onClick={() => handleDeleteTemplate(template)}
-                          disabled={template.isDefault}
+                          disabled={template.isDefault || false}
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>

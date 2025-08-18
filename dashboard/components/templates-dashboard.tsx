@@ -103,7 +103,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
       setIsLoading(true)
       const { data } = await client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt({
         accountId: selectedAccount.id,
-        sortDirection: 'DESC'
+
       })
       setTemplates(data)
     } catch (err) {
@@ -139,7 +139,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         return
       }
       
-      const input: CreateExperimentTemplateInput = {
+      const input = {
         name: `${template.name} (Copy)`,
         description: template.description,
         template: template.template,
@@ -149,7 +149,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await client.models.ExperimentTemplate.create(input)
+      const { data: newTemplate } = await client.models.ExperimentTemplate.create(input as any)
 
       if (newTemplate) {
         loadTemplates()
@@ -169,7 +169,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
     }
 
     try {
-      const input: CreateExperimentTemplateInput = {
+      const input = {
         name: 'New Template',
         description: 'A new experiment template',
         template: DEFAULT_TEMPLATE_CONTENT,
@@ -179,7 +179,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await client.models.ExperimentTemplate.create(input)
+      const { data: newTemplate } = await client.models.ExperimentTemplate.create(input as any)
 
       if (newTemplate) {
         await loadTemplates()

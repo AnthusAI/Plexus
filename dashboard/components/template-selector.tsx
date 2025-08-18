@@ -37,9 +37,8 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
   const loadTemplates = async () => {
     setIsLoading(true)
     try {
-      const result = await client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt({
-        accountId: accountId,
-        limit: 100
+      const result = await (client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt as any)({
+        accountId: accountId
       })
       
       if (result.data) {
