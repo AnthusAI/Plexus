@@ -88,7 +88,13 @@ export function ScoreVersionHistory({
   const otherVersions = filteredVersions.filter(v => v.id !== championVersionId)
 
   const renderVersion = (version: ScoreVersion, isChampion = false) => {
-    const config = parseYaml(version.configuration)
+    let config
+    try {
+      config = parseYaml(version.configuration)
+    } catch (error) {
+      console.warn('Failed to parse YAML configuration:', error)
+      config = null
+    }
     const isSelected = version.id === selectedVersionId
     
     return (

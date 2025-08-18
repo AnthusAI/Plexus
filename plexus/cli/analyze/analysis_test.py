@@ -57,7 +57,7 @@ def mock_transform_functions():
          patch('plexus.cli.analyze.analysis.transform_transcripts_llm') as mock_transform_llm, \
          patch('plexus.cli.analyze.analysis.transform_transcripts_itemize') as mock_transform_itemize, \
          patch('plexus.cli.analyze.analysis.inspect_data') as mock_inspect, \
-         patch('plexus.cli.analyze.analysis.analyze_topics') as mock_analyze:
+         patch('plexus.analysis.topics.analyzer.analyze_topics') as mock_analyze:
         yield {
             'transform_transcripts': mock_transform,
             'transform_transcripts_llm': mock_transform_llm,

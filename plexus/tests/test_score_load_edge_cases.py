@@ -165,7 +165,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         # Act
         result = get_data_driven_samples(
             self.scorecard_instance, self.scorecard_name, self.score_name,
-            self.score_config, fresh=False, content_ids_to_sample_set=self.content_ids_set
+            self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
         )
         
         # Assert - should return empty list and log error
@@ -188,7 +188,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         # Act
         result = get_data_driven_samples(
             self.scorecard_instance, self.scorecard_name, self.score_name,
-            self.score_config, fresh=False, content_ids_to_sample_set=self.content_ids_set
+            self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
         )
         
         # Assert - should return empty list and log error
@@ -212,7 +212,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         # Act
         result = get_data_driven_samples(
             self.scorecard_instance, self.scorecard_name, self.score_name,
-            self.score_config, fresh=False, content_ids_to_sample_set=self.content_ids_set
+            self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
         )
         
         # Assert - should return empty list and log error with helpful message
@@ -237,7 +237,7 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
         # Act
         result = get_data_driven_samples(
             self.scorecard_instance, self.scorecard_name, self.score_name,
-            self.score_config, fresh=False, content_ids_to_sample_set=self.content_ids_set
+            self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
         )
         
         # Assert - should return empty list

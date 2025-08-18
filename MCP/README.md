@@ -68,6 +68,45 @@ python server.py --transport stdio
 python server.py --host 0.0.0.0 --port 8003
 ```
 
+### Setting Up MCP Server with Claude Code
+
+To use the Plexus MCP server with Claude Code, you need to configure it properly to handle complex arguments.
+
+#### Simple Setup (without complex arguments)
+```bash
+bclaude mcp add plexus /opt/anaconda3/envs/py311/bin/python /Users/ryan.porter/Projects/Plexus/MCP/plexus_fastmcp_wrapper.py
+```
+
+#### Advanced Setup (with arguments like --target-cwd)
+The `bclaude mcp add` command has limitations with complex arguments. For advanced configurations, manually edit your `~/.claude.json` file:
+
+```json
+{
+  "mcpServers": {
+    "plexus": {
+      "command": "/opt/anaconda3/envs/py311/bin/python",
+      "args": [
+        "/Users/ryan.porter/Projects/Plexus/MCP/plexus_fastmcp_wrapper.py",
+        "--target-cwd",
+        "/Users/ryan.porter/Projects/Plexus/"
+      ]
+    }
+  }
+}
+```
+
+**Why this is necessary:** The `bclaude mcp add` command cannot properly parse complex argument strings with flags. When you try to pass a quoted string like `"command --flag value"`, it treats the entire string as the command name rather than parsing the arguments separately.
+
+#### Verifying the Connection
+```bash
+bclaude mcp list
+```
+
+You should see:
+```
+plexus: /opt/anaconda3/envs/py311/bin/python /Users/ryan.porter/Projects/Plexus/MCP/plexus_fastmcp_wrapper.py - ✓ Connected
+```
+
 ### Adding New Tools
 1. Create a new tool file in the appropriate category directory
 2. Implement the tool functions with `@mcp.tool()` decorators

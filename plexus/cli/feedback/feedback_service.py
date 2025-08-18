@@ -371,58 +371,6 @@ class FeedbackService:
             "warning": warning
         }
 
-    @staticmethod
-    def _generate_recommendation(analysis: Dict[str, Any]) -> str:
-        """
-        Generate a recommendation based on the analysis results.
-        
-        Args:
-            analysis: Dictionary containing analysis results
-            
-        Returns:
-            String recommendation for next steps
-        """
-        if analysis["total_items"] == 0:
-            return "No feedback data available. No further analysis possible."
-        
-        accuracy = analysis.get("accuracy", 0)
-        ac1 = analysis.get("ac1")
-        warning = analysis.get("warning") or ""
-        
-        recommendations = []
-        
-        # Accuracy-based recommendations
-        if accuracy < 70:
-            recommendations.append("Low accuracy detected")
-            if "Single class" in warning:
-                recommendations.append("Use `find` to examine why predictions are all wrong")
-            elif "Imbalanced" in warning:
-                recommendations.append("Use `find` with specific value filters to examine false positives and negatives")
-            else:
-                recommendations.append("Use `find` to examine disagreement patterns")
-        elif accuracy < 85:
-            recommendations.append("Moderate accuracy - room for improvement")
-            recommendations.append("Use `find` to examine specific error patterns")
-        
-        # AC1-based recommendations
-        if ac1 is not None:
-            if ac1 < 0:
-                recommendations.append("Systematic disagreement requires immediate attention")
-            elif ac1 < 0.4:
-                recommendations.append("Poor agreement between AI and human reviewers")
-            elif ac1 < 0.6:
-                recommendations.append("Fair agreement - investigate borderline cases")
-        
-        # Warning-based recommendations
-        if "Single class" in warning:
-            recommendations.append("Examine why AI predictions lack diversity")
-        elif "Imbalanced" in warning:
-            recommendations.append("Focus on minority class prediction accuracy")
-        
-        if not recommendations:
-            recommendations.append("Good performance - use `find` to examine edge cases for further improvement")
-        
-        return ". ".join(recommendations) + "."
     
     @staticmethod
     async def summarize_feedback(
@@ -466,9 +414,6 @@ class FeedbackService:
         # Analyze the feedback items
         analysis = FeedbackService._analyze_feedback_items(feedback_items)
         
-        # Generate actionable recommendation
-        recommendation = FeedbackService._generate_recommendation(analysis)
-        
         # Build context
         context = FeedbackSearchContext(
             scorecard_name=scorecard_name,
@@ -483,7 +428,7 @@ class FeedbackService:
         return FeedbackSummaryResult(
             context=context,
             analysis=analysis,
-            recommendation=recommendation
+            recommendation=None  # No recommendations - let AI analyze the data
         )
 
     @staticmethod
@@ -497,7 +442,7 @@ class FeedbackService:
         Returns:
             Dictionary representation suitable for JSON/YAML output
         """
-        return {
+        output_dict = {
             "context": {
                 "scorecard_name": result.context.scorecard_name,
                 "score_name": result.context.score_name,
@@ -507,9 +452,14 @@ class FeedbackService:
                 "filters": result.context.filters,
                 "total_found": result.context.total_found
             },
-            "analysis": result.analysis,
-            "recommendation": result.recommendation
+            "analysis": result.analysis
         }
+        
+        # Only include recommendation if it exists and is meaningful
+        if result.recommendation:
+            output_dict["recommendation"] = result.recommendation
+            
+        return output_dict
     
     @staticmethod
     def prioritize_feedback_with_edit_comments(
