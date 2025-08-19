@@ -3,6 +3,7 @@ import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
+import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/use-toast'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
@@ -1081,12 +1082,14 @@ evaluation:
       <div className="flex items-center space-x-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <CardButton
-              icon={MoreHorizontal}
-              onClick={() => {
-                console.log('MoreHorizontal button clicked - dropdown should open');
-              }}
-            />
+             <Button 
+               variant="ghost" 
+               size="icon" 
+               className="h-8 w-8 rounded-md bg-border"
+               aria-label="More options"
+             >
+               <MoreHorizontal className="h-4 w-4" />
+             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => {
@@ -1278,8 +1281,47 @@ evaluation:
             <div className="flex flex-col items-end flex-shrink-0">
               {variant === 'grid' ? (
                 <div className="flex flex-col items-center gap-1">
-                  <div className="text-muted-foreground">
-                    <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                  <div className="flex items-center gap-2">
+                    <div className="text-muted-foreground">
+                      <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                    </div>
+                    {(onShare || onDelete) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <CardButton
+                            icon={MoreHorizontal}
+                            onClick={() => {}}
+                          />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => {
+                            console.log('Get Code menu item selected');
+                            handleGetCode();
+                          }}>
+                            <MessageSquareCode className="mr-2 h-4 w-4" />
+                            Get Code
+                          </DropdownMenuItem>
+                          {onShare && (
+                            <DropdownMenuItem onSelect={() => {
+                              console.log('Share menu item selected');
+                              onShare();
+                            }}>
+                              <Share className="mr-2 h-4 w-4" />
+                              Share
+                            </DropdownMenuItem>
+                          )}
+                          {onDelete && (
+                            <DropdownMenuItem onSelect={() => {
+                              console.log('Delete menu item selected');
+                              onDelete(data.id);
+                            }}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground text-center">
                     {(() => {

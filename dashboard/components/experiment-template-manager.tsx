@@ -258,9 +258,9 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
       // Debug: Check what methods are available
       console.log('Available ExperimentTemplate methods:', Object.keys(client.models.ExperimentTemplate))
       
-      const result = await client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt({
+      const result = await (client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt as any)({
         accountId: accountId,
-        limit: 100
+
       })
       
       if (result.data) {
@@ -282,7 +282,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
 
     setIsLoading(true)
     try {
-      const input: CreateExperimentTemplateInput = {
+      const input = {
         name: formData.name,
         description: formData.description || undefined,
         template: formData.template,
@@ -292,7 +292,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
         accountId: accountId
       }
 
-      const result = await client.models.ExperimentTemplate.create(input)
+      const result = await (client.models.ExperimentTemplate.create as any)(input as any)
       
       if (result.data) {
         setTemplates(prev => [result.data!, ...prev])
@@ -315,7 +315,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
 
     setIsLoading(true)
     try {
-      await client.models.ExperimentTemplate.delete({ id: template.id })
+      await (client.models.ExperimentTemplate.delete as any)({ id: template.id })
       setTemplates(prev => prev.filter(t => t.id !== template.id))
       if (selectedTemplate?.id === template.id) {
         setSelectedTemplate(null)
@@ -471,7 +471,7 @@ export default function ExperimentTemplateManager({ accountId, onTemplateSelect 
                           size="sm"
                           variant="destructive"
                           onClick={() => handleDeleteTemplate(template)}
-                          disabled={template.isDefault}
+                          disabled={template.isDefault || false}
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>

@@ -48,15 +48,22 @@ class TestExperimentService(unittest.TestCase):
     @patch('plexus.cli.experiment.service.resolve_account_identifier')
     @patch('plexus.cli.experiment.service.resolve_scorecard_identifier')
     @patch('plexus.cli.experiment.service.Experiment')
-    def test_create_experiment_success(self, mock_experiment_class, mock_resolve_scorecard, mock_resolve_account):
+    @patch('plexus.cli.experiment.service.ExperimentTemplate')
+    def test_create_experiment_success(self, mock_template_class, mock_experiment_class, mock_resolve_scorecard, mock_resolve_account):
         """Test successful experiment creation."""
         # Setup mocks
         mock_resolve_account.return_value = 'account-123'
         mock_resolve_scorecard.return_value = 'scorecard-456'
         
+        # Mock template
+        mock_template = Mock()
+        mock_template.id = 'template-123'
+        mock_template.get_template_content.return_value = 'class: BeamSearch'
+        mock_template_class.get_default_for_account.return_value = None  # Force creation
+        mock_template_class.create.return_value = mock_template
+        
         mock_experiment_class.create.return_value = self.mock_experiment
         self.mock_experiment.create_root_node.return_value = self.mock_root_node
-        self.mock_root_node.get_latest_version.return_value = self.mock_initial_version
         
         # Mock score resolution
         with patch.object(self.service, '_resolve_score_identifier', return_value='score-789'):
@@ -72,7 +79,6 @@ class TestExperimentService(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(result.experiment, self.mock_experiment)
         self.assertEqual(result.root_node, self.mock_root_node)
-        self.assertEqual(result.initial_version, self.mock_initial_version)
         
         # Verify calls
         mock_resolve_account.assert_called_once_with(self.mock_client, 'test-account')
@@ -82,6 +88,7 @@ class TestExperimentService(unittest.TestCase):
             accountId='account-123',
             scorecardId='scorecard-456',
             scoreId='score-789',
+            templateId='template-123',
             featured=True
         )
         self.mock_experiment.create_root_node.assert_called_once_with('class: BeamSearch', None)
@@ -138,10 +145,17 @@ class TestExperimentService(unittest.TestCase):
     
     @patch('plexus.cli.experiment.service.resolve_account_identifier')
     @patch('plexus.cli.experiment.service.resolve_scorecard_identifier')
-    def test_create_experiment_invalid_yaml(self, mock_resolve_scorecard, mock_resolve_account):
+    @patch('plexus.cli.experiment.service.ExperimentTemplate')
+    def test_create_experiment_invalid_yaml(self, mock_template_class, mock_resolve_scorecard, mock_resolve_account):
         """Test experiment creation with invalid YAML."""
         mock_resolve_account.return_value = 'account-123'
         mock_resolve_scorecard.return_value = 'scorecard-456'
+        
+        # Mock template (not used for invalid YAML test but needed for service)
+        mock_template = Mock()
+        mock_template.id = 'template-123'
+        mock_template_class.get_default_for_account.return_value = None
+        mock_template_class.create.return_value = mock_template
         
         with patch.object(self.service, '_resolve_score_identifier', return_value='score-789'):
             result = self.service.create_experiment(
@@ -157,15 +171,22 @@ class TestExperimentService(unittest.TestCase):
     
     @patch('plexus.cli.experiment.service.resolve_account_identifier')
     @patch('plexus.cli.experiment.service.resolve_scorecard_identifier')
-    def test_create_experiment_uses_default_yaml(self, mock_resolve_scorecard, mock_resolve_account):
+    @patch('plexus.cli.experiment.service.ExperimentTemplate')
+    def test_create_experiment_uses_default_yaml(self, mock_template_class, mock_resolve_scorecard, mock_resolve_account):
         """Test experiment creation uses default YAML when none provided."""
         mock_resolve_account.return_value = 'account-123'
         mock_resolve_scorecard.return_value = 'scorecard-456'
         
+        # Mock template
+        mock_template = Mock()
+        mock_template.id = 'template-123'
+        mock_template.get_template_content.return_value = DEFAULT_EXPERIMENT_YAML
+        mock_template_class.get_default_for_account.return_value = None  # Force creation
+        mock_template_class.create.return_value = mock_template
+        
         mock_experiment_class = Mock()
         mock_experiment_class.create.return_value = self.mock_experiment
         self.mock_experiment.create_root_node.return_value = self.mock_root_node
-        self.mock_root_node.get_latest_version.return_value = self.mock_initial_version
         
         with patch.object(self.service, '_resolve_score_identifier', return_value='score-789'), \
              patch('plexus.cli.experiment.service.Experiment', mock_experiment_class):
@@ -203,9 +224,9 @@ class TestExperimentService(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.experiment, self.mock_experiment)
         self.assertEqual(result.root_node, self.mock_root_node)
-        self.assertEqual(result.latest_version, self.mock_initial_version)
+        # Note: latest_version no longer exists in simplified schema
         self.assertEqual(result.node_count, 3)
-        self.assertEqual(result.version_count, 6)  # 3 nodes * 2 versions each
+        self.assertEqual(result.version_count, 3)  # In simplified schema, version_count equals node_count
         
         # Verify calls
         mock_experiment_class.get_by_id.assert_called_once_with('exp-123', self.mock_client)
@@ -269,12 +290,9 @@ class TestExperimentService(unittest.TestCase):
         mock_nodes = [Mock(), Mock()]
         mock_node_class.list_by_experiment.return_value = mock_nodes
         
-        # Each node has versions
+        # Each node no longer has separate versions in simplified schema
         for node in mock_nodes:
-            node.get_versions.return_value = [Mock(), Mock()]
             node.delete.return_value = True
-            for version in node.get_versions():
-                version.delete.return_value = True
         
         self.mock_experiment.delete.return_value = True
         
@@ -284,10 +302,8 @@ class TestExperimentService(unittest.TestCase):
         self.assertTrue(success)
         self.assertIn('Deleted experiment', message)
         
-        # Verify all versions and nodes were deleted
+        # Verify all nodes were deleted (no separate versions in simplified schema)
         for node in mock_nodes:
-            for version in node.get_versions():
-                version.delete.assert_called_once()
             node.delete.assert_called_once()
         
         self.mock_experiment.delete.assert_called_once()
@@ -308,17 +324,7 @@ class TestExperimentService(unittest.TestCase):
         mock_experiment_class.get_by_id.return_value = self.mock_experiment
         self.mock_experiment.get_root_node.return_value = self.mock_root_node
         
-        # Mock existing versions
-        mock_versions = [Mock(), Mock()]
-        mock_versions[0].seq = 1
-        mock_versions[1].seq = 2
-        self.mock_root_node.get_versions.return_value = mock_versions
-        
-        # Mock new version creation
-        mock_new_version = Mock()
-        mock_new_version.id = 'version-new'
-        self.mock_root_node.create_version.return_value = mock_new_version
-        
+        # Mock root node update (no separate versions in simplified schema)
         yaml_config = "class: ImprovedBeamSearch"
         note = "Updated configuration"
         
@@ -328,12 +334,12 @@ class TestExperimentService(unittest.TestCase):
         self.assertTrue(success)
         self.assertIn('Updated experiment configuration', message)
         
-        # Verify new version was created with correct seq
-        self.mock_root_node.create_version.assert_called_once_with(
-            seq=3,  # Should be max(1,2) + 1
-            yaml_config=yaml_config,
-            value={"note": note},
-            status='QUEUED'
+        # Verify root node content was updated directly
+        self.mock_root_node.update_content.assert_called_once_with(
+            code=yaml_config,
+            status='QUEUED',
+            hypothesis=note,
+            value={"note": note}
         )
     
     @patch('plexus.cli.experiment.service.Experiment')
@@ -358,12 +364,16 @@ class TestExperimentService(unittest.TestCase):
         self.assertEqual(message, 'Experiment has no root node')
     
     @patch('plexus.cli.experiment.service.Experiment')
-    def test_get_experiment_yaml_success(self, mock_experiment_class):
+    @patch('plexus.cli.experiment.service.ExperimentTemplate')
+    def test_get_experiment_yaml_success(self, mock_template_class, mock_experiment_class):
         """Test getting experiment YAML successfully."""
         mock_experiment_class.get_by_id.return_value = self.mock_experiment
-        self.mock_experiment.get_root_node.return_value = self.mock_root_node
-        self.mock_root_node.get_latest_version.return_value = self.mock_initial_version
-        self.mock_initial_version.get_yaml_config.return_value = 'class: BeamSearch'
+        self.mock_experiment.templateId = 'template-123'
+        
+        # Mock template
+        mock_template = Mock()
+        mock_template.get_template_content.return_value = 'class: BeamSearch'
+        mock_template_class.get_by_id.return_value = mock_template
         
         result = self.service.get_experiment_yaml('exp-123')
         
