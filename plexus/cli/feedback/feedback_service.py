@@ -371,6 +371,61 @@ class FeedbackService:
             "warning": warning
         }
 
+    @staticmethod
+    def _generate_recommendation(analysis: Dict[str, Any]) -> str:
+        """
+        Generate actionable recommendations based on feedback analysis.
+        
+        Args:
+            analysis: Dictionary containing analysis results
+            
+        Returns:
+            String with actionable recommendations
+        """
+        total_items = analysis.get("total_items", 0)
+        accuracy = analysis.get("accuracy")
+        ac1 = analysis.get("ac1")
+        warning = analysis.get("warning")
+        
+        if total_items == 0:
+            return "No feedback data available for analysis. Consider:\n" \
+                   "- Ensuring the scorecard and score identifiers are correct\n" \
+                   "- Expanding the time window (increase days parameter)\n" \
+                   "- Checking if feedback has been collected for this score"
+        
+        recommendations = []
+        
+        # Accuracy-based recommendations
+        if accuracy is not None:
+            if accuracy < 70:
+                recommendations.append("Low accuracy detected ({}%). Consider using the 'find' command to examine specific false positives and negatives for pattern analysis.".format(accuracy))
+            elif accuracy < 85:
+                recommendations.append("Moderate accuracy ({}%). Look for specific edge cases that could be addressed in score configuration.".format(accuracy))
+            else:
+                recommendations.append("Good performance ({}%). Focus on edge cases and rare scenarios for further improvement.".format(accuracy))
+        
+        # AC1 agreement recommendations
+        if ac1 is not None:
+            if ac1 < 0.4:
+                recommendations.append("Low agreement (AC1: {:.2f}). Systematic review of score logic may be needed.".format(ac1))
+            elif ac1 < 0.7:
+                recommendations.append("Moderate agreement (AC1: {:.2f}). Fine-tuning of criteria could improve consistency.".format(ac1))
+        
+        # Warning-specific recommendations
+        if warning and "Imbalanced classes" in warning:
+            recommendations.append("Imbalanced class distribution detected. When using 'find' command, examine both false positives and negatives to understand different error patterns.")
+        
+        if warning and "Single class" in warning:
+            recommendations.append("Only one class found in feedback. This may indicate the score is working well, or feedback collection needs expansion.")
+        
+        # General recommendations
+        if accuracy is not None and accuracy < 80:
+            recommendations.append("Use 'plexus feedback find' with initial_value and final_value filters to examine specific correction patterns.")
+        
+        recommendations.append("Review individual item details with 'plexus item info' to understand content characteristics that lead to misclassification.")
+        
+        return "\n".join(f"• {rec}" for rec in recommendations)
+
     
     @staticmethod
     async def summarize_feedback(
@@ -425,10 +480,13 @@ class FeedbackService:
             total_found=analysis["total_items"]
         )
         
+        # Generate recommendations
+        recommendation = FeedbackService._generate_recommendation(analysis)
+        
         return FeedbackSummaryResult(
             context=context,
             analysis=analysis,
-            recommendation=None  # No recommendations - let AI analyze the data
+            recommendation=recommendation
         )
 
     @staticmethod

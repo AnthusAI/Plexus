@@ -169,7 +169,7 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
 
         if (errors) {
           console.error('GraphQL errors loading chat sessions:', errors)
-          setError('Failed to load chat sessions: ' + errors.map(e => e.message).join(', '))
+          setError('Failed to load chat sessions: ' + errors.map((e: { message: string }) => e.message).join(', '))
           return
         }
 
@@ -219,7 +219,7 @@ export default function ExperimentChatMessages({ experimentId }: Props) {
 
       if (errors) {
         console.error('GraphQL errors loading messages:', errors)
-        setError('Failed to load messages: ' + errors.map(e => e.message).join(', '))
+        setError('Failed to load messages: ' + errors.map((e: { message: string }) => e.message).join(', '))
         return
       }
 

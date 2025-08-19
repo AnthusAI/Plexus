@@ -101,9 +101,9 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
 
     try {
       setIsLoading(true)
-      const { data } = await client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt({
+      const { data } = await (client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt as any)({
         accountId: selectedAccount.id,
-        sortDirection: 'DESC'
+
       })
       setTemplates(data)
     } catch (err) {
@@ -139,7 +139,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         return
       }
       
-      const input: CreateExperimentTemplateInput = {
+      const input = {
         name: `${template.name} (Copy)`,
         description: template.description,
         template: template.template,
@@ -149,7 +149,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await client.models.ExperimentTemplate.create(input)
+      const { data: newTemplate } = await (client.models.ExperimentTemplate.create as any)(input as any)
 
       if (newTemplate) {
         loadTemplates()
@@ -169,7 +169,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
     }
 
     try {
-      const input: CreateExperimentTemplateInput = {
+      const input = {
         name: 'New Template',
         description: 'A new experiment template',
         template: DEFAULT_TEMPLATE_CONTENT,
@@ -179,7 +179,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await client.models.ExperimentTemplate.create(input)
+      const { data: newTemplate } = await (client.models.ExperimentTemplate.create as any)(input as any)
 
       if (newTemplate) {
         await loadTemplates()
@@ -215,7 +215,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
 
   const handleDeleteTemplate = async (templateId: string) => {
     try {
-      await client.models.ExperimentTemplate.delete({ id: templateId })
+      await (client.models.ExperimentTemplate.delete as any)({ id: templateId })
       setTemplates(prev => prev.filter(t => t.id !== templateId))
       if (selectedTemplateId === templateId) {
         setSelectedTemplateId(null)
@@ -236,7 +236,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         ...updates
       }
 
-      await client.models.ExperimentTemplate.update(updateData)
+      await (client.models.ExperimentTemplate.update as any)(updateData)
       
       // Update local state
       setTemplates(prev => prev.map(t => 

@@ -344,9 +344,9 @@ export default function TemplateTask({
               </Accordion>
 
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Created: <Timestamp date={template.createdAt} /></span>
+                <span>Created: <Timestamp time={template.createdAt} variant="relative" /></span>
                 <span>•</span>
-                <span>Modified: <Timestamp date={template.updatedAt} /></span>
+                <span>Modified: <Timestamp time={template.updatedAt} variant="relative" /></span>
               </div>
             </div>
           )}
