@@ -973,6 +973,8 @@ const schema = a.schema({
             experiment: a.belongsTo('Experiment', 'experimentId'),
             nodeId: a.string(),
             node: a.belongsTo('ExperimentNode', 'nodeId'),
+            name: a.string(),
+            category: a.string(),
             status: a.enum(['ACTIVE', 'COMPLETED', 'ERROR']),
             metadata: a.json(),
             createdAt: a.datetime().required(),
