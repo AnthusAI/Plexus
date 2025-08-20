@@ -2,6 +2,7 @@
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarProvider } from "@/app/contexts/SidebarContext";
+import { AccountProvider } from "@/app/contexts/AccountContext";
 import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import { Amplify } from "aws-amplify";
@@ -156,7 +157,9 @@ export default function ClientLayout({
     return (
       <Authenticator.Provider>
         <SidebarProvider>
-          <div style={{ visibility: 'hidden' }}>{children}</div>
+          <AccountProvider>
+            <div style={{ visibility: 'hidden' }}>{children}</div>
+          </AccountProvider>
         </SidebarProvider>
       </Authenticator.Provider>
     );
@@ -165,46 +168,48 @@ export default function ClientLayout({
   return (
     <Authenticator.Provider>
       <SidebarProvider>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <Toaster 
-            position="bottom-right"
-            theme="system"
-            closeButton
-            expand={true}
-            visibleToasts={6}
-            className="toaster group"
-            style={{
-              '--toast-background': 'var(--card)',
-              '--toast-color': 'var(--foreground)',
-              '--toast-border': 'var(--border)',
-              '--toast-success': 'var(--true)',
-              '--toast-error': 'var(--false)',
-              '--toast-info': 'var(--primary)'
-            } as React.CSSProperties}
-            toastOptions={{
-              style: {
-                background: 'var(--card)',
-                color: 'var(--foreground)',
-                border: '1px solid var(--border)',
-                borderRadius: '0.5rem'
-              },
-              classNames: {
-                toast: "group bg-card text-foreground hover:bg-accent",
-                title: "text-foreground font-medium",
-                description: "text-muted-foreground font-mono text-sm",
-                actionButton: "bg-primary text-primary-foreground",
-                cancelButton: "bg-muted text-muted-foreground"
-              },
-              duration: 8000
-            }}
-          />
-          <AuthWrapper>{children}</AuthWrapper>
-        </ThemeProvider>
+        <AccountProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <Toaster 
+              position="bottom-right"
+              theme="system"
+              closeButton
+              expand={true}
+              visibleToasts={6}
+              className="toaster group"
+              style={{
+                '--toast-background': 'var(--card)',
+                '--toast-color': 'var(--foreground)',
+                '--toast-border': 'var(--border)',
+                '--toast-success': 'var(--true)',
+                '--toast-error': 'var(--false)',
+                '--toast-info': 'var(--primary)'
+              } as React.CSSProperties}
+              toastOptions={{
+                style: {
+                  background: 'var(--card)',
+                  color: 'var(--foreground)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '0.5rem'
+                },
+                classNames: {
+                  toast: "group bg-card text-foreground hover:bg-accent",
+                  title: "text-foreground font-medium",
+                  description: "text-muted-foreground font-mono text-sm",
+                  actionButton: "bg-primary text-primary-foreground",
+                  cancelButton: "bg-muted text-muted-foreground"
+                },
+                duration: 8000
+              }}
+            />
+            <AuthWrapper>{children}</AuthWrapper>
+          </ThemeProvider>
+        </AccountProvider>
       </SidebarProvider>
     </Authenticator.Provider>
   );
