@@ -31,7 +31,7 @@ class Classifier(BaseNode):
         parse_from_start: Optional[bool] = False
 
     class GraphState(BaseNode.GraphState):
-        pass
+        reasoning: Optional[str] = None  # Store reasoning content from gpt-oss models
 
     def __init__(self, **parameters):
         # Extract batch parameter before passing to super
@@ -278,6 +278,10 @@ class Classifier(BaseNode):
                 "classification": result['classification'],
                 "explanation": result['explanation']
             }
+            
+            # Include reasoning for gpt-oss models
+            if hasattr(state, 'reasoning') and state.reasoning:
+                output_state["reasoning"] = state.reasoning
             
             # Log the state and get a new state object with updated node_results
             final_state = self.log_state(new_state, None, output_state)
@@ -535,15 +539,26 @@ class Classifier(BaseNode):
                     
                     # Normalize completion text (handles Responses API content blocks)
                     completion_text = self.normalize_text_output(response)
+                    
+                    # Extract reasoning content for gpt-oss models
+                    reasoning_content = ""
+                    if self.is_gpt_oss_model():
+                        reasoning_content = self.extract_reasoning_content(response)
+                    
                     # Create the initial result state
                     result_state = self.GraphState(
-                        **{k: v for k, v in state.model_dump().items() if k not in ['completion']},
-                        completion=completion_text
+                        **{k: v for k, v in state.model_dump().items() if k not in ['completion', 'reasoning']},
+                        completion=completion_text,
+                        reasoning=reasoning_content if reasoning_content else None
                     )
                     
                     output_state = {
                         "explanation": completion_text
                     }
+                    
+                    # Add reasoning to output_state for gpt-oss models
+                    if reasoning_content:
+                        output_state["reasoning"] = reasoning_content
                     
                     # Log the state and get a new state object with updated node_results
                     updated_state = self.log_state(result_state, None, output_state)
