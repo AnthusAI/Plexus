@@ -470,7 +470,7 @@ class TestPredictionTool:
     def test_skipped_result_handling_patterns(self):
         """Test handling of SKIPPED results due to unmet dependencies"""
         def handle_skipped_result(results, resolved_score_name, score_name, target_id):
-            if results and any(v == "SKIPPED" for v in results.values()):
+            if results and any(isinstance(v, Score.Result) and v.value == "SKIPPED" for v in results.values()):
                 return {
                     "item_id": target_id,
                     "scores": [
@@ -485,7 +485,11 @@ class TestPredictionTool:
             return None
         
         # Test with SKIPPED results
-        mock_results = {"other_score": "SKIPPED", "another_score": "Yes"}
+        from plexus.scores.Score import Score
+        mock_results = {
+            "other_score": Score.Result(value="SKIPPED", parameters=Score.Parameters(name="other_score")), 
+            "another_score": Score.Result(value="Yes", parameters=Score.Parameters(name="another_score"))
+        }
         result = handle_skipped_result(mock_results, "test-score", "test-score", "item-123")
         assert result is not None
         assert result["item_id"] == "item-123"
