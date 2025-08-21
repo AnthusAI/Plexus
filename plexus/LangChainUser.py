@@ -66,7 +66,21 @@ class LangChainUser:
                     if response.llm_output:
                         usage = response.llm_output.get("token_usage", response.llm_output.get("usage", {}))
                     
-                    # Method 2: Check message.response_metadata (gpt-4.1-mini-2025-04-14)
+                    # Method 2: Check usage_metadata (gpt-oss models)
+                    if not usage and hasattr(response, 'generations') and response.generations:
+                        for gen_list in response.generations:
+                            if gen_list:
+                                for gen in gen_list:
+                                    # Check if usage_metadata is in the message object (gpt-oss models)
+                                    if hasattr(gen, 'message') and gen.message and hasattr(gen.message, '__dict__'):
+                                        if 'usage_metadata' in gen.message.__dict__:
+                                            usage = gen.message.__dict__['usage_metadata']
+                                            if usage:
+                                                break
+                                if usage:
+                                    break
+                    
+                    # Method 3: Check message.response_metadata (gpt-4.1-mini-2025-04-14)
                     if not usage and hasattr(response, 'generations') and response.generations:
                         for gen_list in response.generations:
                             if gen_list:
@@ -83,9 +97,14 @@ class LangChainUser:
                     if "token_usage" in usage:
                         usage = usage["token_usage"]
 
-                    self.prompt_tokens += usage.get("prompt_tokens", 0)
-                    self.completion_tokens += usage.get("completion_tokens", 0)
-                    self.total_tokens += usage.get("total_tokens", 0)
+                    # Handle different token field names (gpt-oss vs standard)
+                    prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens", 0)
+                    completion_tokens = usage.get("completion_tokens") or usage.get("output_tokens", 0)
+                    total_tokens = usage.get("total_tokens", 0)
+                    
+                    self.prompt_tokens += prompt_tokens
+                    self.completion_tokens += completion_tokens
+                    self.total_tokens += total_tokens
                     
                     # Track cached tokens if available
                     prompt_tokens_details = usage.get("prompt_tokens_details", {})
