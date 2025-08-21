@@ -373,15 +373,27 @@ class Generator(BaseNode):
 
                     response = await model.ainvoke(messages)
                     
+                    # Normalize response content for gpt-oss and other complex response formats
+                    normalized_content = self.normalize_response_text(response)
+                    
+                    # Extract reasoning content for gpt-oss models
+                    reasoning_content = ""
+                    if self.is_gpt_oss_model():
+                        reasoning_content = self.extract_reasoning_content(response)
+                    
                     # Create the initial result state
                     result_state = self.GraphState(
                         **{k: v for k, v in state.model_dump().items() if k not in ['completion']},
-                        completion=response.content
+                        completion=normalized_content
                     )
                     
                     output_state = {
-                        "explanation": response.content
+                        "explanation": normalized_content
                     }
+                    
+                    # Add reasoning to output_state for gpt-oss models
+                    if reasoning_content:
+                        output_state["reasoning"] = reasoning_content
                     
                     # Log the state and get a new state object with updated node_results
                     updated_state = self.log_state(result_state, None, output_state)
