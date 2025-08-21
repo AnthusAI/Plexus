@@ -127,7 +127,7 @@ class LangGraphScore(Score, LangChainUser):
     class Parameters(Score.Parameters):
         ...
         model_config = ConfigDict(protected_namespaces=())
-        model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
+        model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI", "ChatOllama"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
         model_region: Optional[str] = None
         reasoning_effort: Optional[str] = "low"
