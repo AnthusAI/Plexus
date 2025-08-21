@@ -643,6 +643,7 @@ class FeedbackService:
                             externalId
                             description
                             text
+                            metadata
                         }
                     }
                     nextToken

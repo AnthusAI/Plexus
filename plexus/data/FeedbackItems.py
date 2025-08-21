@@ -361,10 +361,13 @@ class FeedbackItems(DataCache):
         
         # Handle reload mode - reload existing cache with current values
         if reload:
+            logger.error(f"🔍 RELOAD DEBUG: reload=True, checking cache existence")
             if not self._cache_exists(cache_identifier):
+                logger.error(f"🔍 RELOAD DEBUG: No existing cache found, falling through to fresh load")
                 logger.warning("No existing cache found for reload mode. Performing fresh load instead.")
                 # Fall through to fresh load
             else:
+                logger.error(f"🔍 RELOAD DEBUG: Cache exists, calling _perform_reload")
                 logger.info(f"Reload mode: Loading existing cache and fetching current data for {scorecard_name} / {score_name}")
                 return self._perform_reload(cache_identifier, scorecard_id, score_id, scorecard_name, score_name)
         
@@ -374,6 +377,7 @@ class FeedbackItems(DataCache):
         if not fresh and not reload and self._cache_exists(cache_identifier):
             return self._load_from_cache(cache_identifier)
         
+        logger.error(f"🔍 FRESH LOAD DEBUG: Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
         logger.info(f"Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
         
         # Fetch feedback items
@@ -481,6 +485,22 @@ class FeedbackItems(DataCache):
                 
                 result = self.client.execute(query, {"id": feedback_item_id})
                 
+                # DEBUG: Log the raw GraphQL response - using ERROR level to ensure visibility
+                logger.error(f"🔍 GRAPHQL DEBUG: Processing feedback_item_id={feedback_item_id}")
+                logger.error(f"🔍 GRAPHQL DEBUG: Raw result keys: {list(result.keys()) if result else 'None'}")
+                if result and 'getFeedbackItem' in result and result['getFeedbackItem']:
+                    feedback_data = result['getFeedbackItem']
+                    logger.error(f"🔍 GRAPHQL DEBUG: FeedbackItem keys: {list(feedback_data.keys())}")
+                    if 'item' in feedback_data and feedback_data['item']:
+                        item_raw_data = feedback_data['item']
+                        logger.error(f"🔍 GRAPHQL DEBUG: Item raw data keys: {list(item_raw_data.keys())}")
+                        logger.error(f"🔍 GRAPHQL DEBUG: Item metadata from GraphQL: {item_raw_data.get('metadata')}")
+                        logger.error(f"🔍 GRAPHQL DEBUG: Item metadata type: {type(item_raw_data.get('metadata'))}")
+                    else:
+                        logger.error(f"🔍 GRAPHQL DEBUG: No item data in feedback response")
+                else:
+                    logger.error(f"🔍 GRAPHQL DEBUG: No feedback item data in GraphQL response")
+                
                 if result and 'getFeedbackItem' in result and result['getFeedbackItem']:
                     item_data = result['getFeedbackItem']
                     feedback_item = FeedbackItem.from_dict(item_data, self.client)
@@ -505,6 +525,7 @@ class FeedbackItems(DataCache):
                                    scorecard_name: str, score_name: str) -> List[FeedbackItem]:
         """Fetch feedback items using the FeedbackService."""
         # First, get all items without value filtering (since FeedbackService is case-sensitive)
+        logger.error(f"🔍 FEEDBACK SERVICE DEBUG: About to call FeedbackService.find_feedback_items")
         all_items = await FeedbackService.find_feedback_items(
             client=self.client,
             scorecard_id=scorecard_id,
@@ -516,6 +537,18 @@ class FeedbackItems(DataCache):
             limit=None,  # We'll apply limits after sampling
             prioritize_edit_comments=False
         )
+        logger.error(f"🔍 FEEDBACK SERVICE DEBUG: Received {len(all_items)} items from FeedbackService")
+        
+        # Debug the first item to see what metadata structure we get
+        if all_items:
+            first_item = all_items[0]
+            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item ID: {first_item.id}")
+            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has .item: {hasattr(first_item, 'item')}")
+            if hasattr(first_item, 'item') and first_item.item:
+                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.id: {first_item.item.id}")
+                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.metadata: {getattr(first_item.item, 'metadata', 'NOT_FOUND')}")
+            else:
+                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has no .item or .item is None")
         
         # Apply case-insensitive filtering locally if needed
         if self.parameters.initial_value or self.parameters.final_value:
@@ -770,6 +803,7 @@ class FeedbackItems(DataCache):
         Returns:
             JSON string containing relevant metadata
         """
+        import json  # Move import to top of function
         metadata = {
             'feedback_item_id': feedback_item.id,
             'scorecard_id': feedback_item.scorecardId,
@@ -785,8 +819,9 @@ class FeedbackItems(DataCache):
             'initial_comment_value': feedback_item.initialCommentValue
         }
         
-        # Add item metadata if available
+        # Add item metadata if available - use the cached metadata directly from API
         if feedback_item.item:
+            logger.info(f"Adding item metadata for feedback_item_id={feedback_item.id}, item_id={feedback_item.item.id}")
             item_metadata = {
                 'item_id': feedback_item.item.id,
                 'external_id': getattr(feedback_item.item, 'externalId', None),
@@ -795,7 +830,35 @@ class FeedbackItems(DataCache):
                 'item_metadata': getattr(feedback_item.item, 'metadata', None)
             }
             metadata['item'] = item_metadata
-        
+            logger.info(f"Item metadata added: {item_metadata}")
+            
+            # Use the Item's cached metadata directly (it should already have the API structure)
+            original_item_metadata = getattr(feedback_item.item, 'metadata', None)
+            logger.info(f"DEBUG: Checking item metadata for item_id={feedback_item.item.id}")
+            logger.info(f"DEBUG: feedback_item.item type: {type(feedback_item.item)}")
+            logger.info(f"DEBUG: feedback_item.item attributes: {dir(feedback_item.item)}")
+            logger.info(f"DEBUG: original_item_metadata: {original_item_metadata}")
+            logger.info(f"DEBUG: original_item_metadata type: {type(original_item_metadata)}")
+            if original_item_metadata:
+                logger.info(f"Found original item metadata for item_id={feedback_item.item.id}: type={type(original_item_metadata)}")
+                try:
+                    # Parse the original item metadata if it's a JSON string
+                    if isinstance(original_item_metadata, str):
+                        parsed_metadata = json.loads(original_item_metadata)
+                        logger.info(f"Parsed item metadata from JSON string for item_id={feedback_item.item.id}")
+                    else:
+                        parsed_metadata = original_item_metadata
+                        logger.info(f"Using item metadata as object for item_id={feedback_item.item.id}")
+                    
+                    # Merge the API-cached metadata directly (should already have other_data, etc.)
+                    if isinstance(parsed_metadata, dict):
+                        metadata.update(parsed_metadata)
+                        logger.info(f"Merged {len(parsed_metadata)} fields from cached item metadata for item_id={feedback_item.item.id}")
+                    else:
+                        logger.info(f"Parsed item metadata is not a dict for item_id={feedback_item.item.id}, type={type(parsed_metadata)}")
+                except Exception as e:
+                    logger.warning(f"Could not parse cached item metadata for item_id={feedback_item.item.id}: {e}")
+                    # Continue without the cached metadata
         return json.dumps(metadata, default=str)
     
     def _create_ids_hash(self, feedback_item: FeedbackItem) -> str:
