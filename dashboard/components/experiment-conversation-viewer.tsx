@@ -69,7 +69,7 @@ export default function ExperimentConversationViewer({ experimentId }: Experimen
             experimentId
           })
 
-          const response = await (client.models.ChatMessage.listChatMessageByExperimentIdAndCreatedAt as any)({
+          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByExperimentIdAndCreatedAt as any)({
             experimentId,
             limit: 1000,
             nextToken,
@@ -79,7 +79,7 @@ export default function ExperimentConversationViewer({ experimentId }: Experimen
             allMessages = [...allMessages, ...response.data]
           }
           
-          nextToken = response.nextToken
+          nextToken = response.nextToken || null
         } while (nextToken)
 
         console.log(`Loaded ${allMessages.length} total messages across ${pageCount} pages`)
