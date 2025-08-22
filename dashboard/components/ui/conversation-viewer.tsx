@@ -37,6 +37,7 @@ export interface ChatMessage {
   toolResponse?: any
   createdAt: string
   sequenceNumber?: number
+  sessionId?: string
 }
 
 export interface ChatSession {
