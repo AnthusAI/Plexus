@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any, List, Union, Optional
 from io import StringIO
 from fastmcp import FastMCP
+from plexus.scores.Score import Score
 
 logger = logging.getLogger(__name__)
 
@@ -318,7 +319,7 @@ def register_prediction_tools(mcp: FastMCP):
 
                             # Handle SKIPPED due to unmet dependency conditions
                             if score_result_obj is None:
-                                if results and any(v == "SKIPPED" for v in results.values()):
+                                if results and any(isinstance(v, Score.Result) and v.value == "SKIPPED" for v in results.values()):
                                     logger.info(f"Score '{resolved_score_name}' not applicable due to unmet dependency conditions")
                                     prediction_result = {
                                         "item_id": target_id,

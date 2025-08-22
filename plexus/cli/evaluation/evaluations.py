@@ -719,11 +719,17 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
         if not yaml_files:
             raise ValueError(f"No YAML files found in scorecard directory: {scorecard_dir}")
         
+        logging.info(f"Found {len(yaml_files)} YAML files in {scorecard_dir}: {[f.name for f in yaml_files]}")
+        if score_names:
+            logging.info(f"Looking for scores matching identifiers: {score_names}")
         
-        # Parse YAML files to get score configurations
+        
+        # First pass: Parse all YAML files to build a complete inventory
         yaml_parser = YAML(typ='safe')
-        parsed_configs = []
+        all_configs = {}  # Map score name -> config
+        all_configs_by_id = {}  # Map score id -> config
         
+        logging.info("First pass: Loading all YAML files to build score inventory...")
         for yaml_file in yaml_files:
             try:
                 with open(yaml_file, 'r') as f:
@@ -738,17 +744,94 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
                     logging.warning(f"Skipping configuration without name in {yaml_file}")
                     continue
                 
-                # Filter by score_names if provided
-                if score_names and score_name not in score_names:
-                    logging.info(f"Skipping score '{score_name}' (not in requested scores)")
-                    continue
+                # Log the score identifiers for debugging
+                score_id = config.get('id')
+                external_id = config.get('externalId')
+                logging.info(f"Found YAML file {yaml_file.name}: name='{score_name}', id='{score_id}', externalId='{external_id}'")
                 
-                parsed_configs.append(config)
-                logging.info(f"Loaded configuration for score: {score_name}")
+                # Store in both mappings
+                all_configs[score_name] = config
+                if score_id:
+                    all_configs_by_id[str(score_id)] = config
                 
             except Exception as e:
                 logging.error(f"Error parsing {yaml_file}: {str(e)}")
                 continue
+        
+        logging.info(f"Loaded {len(all_configs)} total score configurations from YAML files")
+        
+        # Second pass: Identify target scores and discover dependencies
+        target_configs = []
+        processed_names = set()
+        
+        def find_config_by_identifier(identifier):
+            """Find a config by any identifier (name, id, etc.)"""
+            # First try direct name lookup
+            if identifier in all_configs:
+                return all_configs[identifier]
+            
+            # Then try ID lookup
+            if identifier in all_configs_by_id:
+                return all_configs_by_id[identifier]
+            
+            # Finally try searching by all identifier fields
+            for config in all_configs.values():
+                if (config.get('name') == identifier or
+                    config.get('key') == identifier or 
+                    str(config.get('id', '')) == identifier or
+                    config.get('externalId') == identifier or
+                    config.get('originalExternalId') == identifier):
+                    return config
+            return None
+        
+        def collect_dependencies(config, depth=0):
+            """Recursively collect all dependencies for a score"""
+            if depth > 10:  # Prevent infinite recursion
+                logging.warning(f"Max dependency depth reached for score: {config.get('name')}")
+                return []
+            
+            score_name = config.get('name')
+            if score_name in processed_names:
+                return []  # Already processed
+            
+            processed_names.add(score_name)
+            target_configs.append(config)
+            
+            depends_on = config.get('depends_on', [])
+            dependency_names = []
+            
+            # Extract dependency names from different formats
+            if isinstance(depends_on, list):
+                dependency_names = depends_on
+            elif isinstance(depends_on, dict):
+                dependency_names = list(depends_on.keys())
+            
+            # Recursively collect dependencies
+            for dep_name in dependency_names:
+                dep_config = find_config_by_identifier(dep_name)
+                if dep_config:
+                    logging.info(f"Found dependency '{dep_name}' for score '{score_name}'")
+                    collect_dependencies(dep_config, depth + 1)
+                else:
+                    logging.warning(f"Could not find dependency '{dep_name}' for score '{score_name}'")
+        
+        # Start dependency collection from specified scores or all scores
+        if score_names:
+            logging.info(f"Looking for scores matching identifiers: {score_names}")
+            for identifier in score_names:
+                config = find_config_by_identifier(identifier)
+                if config:
+                    logging.info(f"Found target score '{config.get('name')}' matching identifier '{identifier}'")
+                    collect_dependencies(config)
+                else:
+                    logging.warning(f"Could not find score matching identifier '{identifier}'")
+        else:
+            # If no specific scores requested, load all
+            for config in all_configs.values():
+                collect_dependencies(config)
+        
+        parsed_configs = target_configs
+        logging.info(f"Final selection: {len(parsed_configs)} scores (including dependencies)")
         
         if not parsed_configs:
             if score_names:
