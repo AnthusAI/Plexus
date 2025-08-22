@@ -24,6 +24,7 @@ import importlib
 import logging
 import re
 import uuid
+import traceback
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -259,6 +260,7 @@ class Evaluation:
         self.mismatches = []
         self.total_correct = 0
         self.total_questions = 0
+        self.total_skipped = 0  # Track scores skipped due to unmet conditions
 
 
     def __enter__(self):
@@ -537,8 +539,8 @@ class Evaluation:
                     self.logging.warning(f"Score result has no 'value' attribute: {score_identifier}")
                     continue
 
-                # Skip if the score result is an error
-                if isinstance(score_result.value, str) and score_result.value.upper() == "ERROR":
+                # Skip if the score result is an error or was skipped due to unmet conditions
+                if isinstance(score_result.value, str) and score_result.value.upper() in ["ERROR", "SKIPPED"]:
                     continue
 
                 # Ensure parameters attribute exists before accessing name
@@ -1085,6 +1087,13 @@ class Evaluation:
             logging.info(f"Form ID: {result['form_id']}")
             for question in self.score_names():
                 score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
+                
+                # Skip counting if score was skipped due to unmet conditions
+                if score_result and isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                    logging.info(f"Question: {question}, skipped due to unmet dependency conditions")
+                    self.total_skipped += 1
+                    continue
+                
                 score_value = str(score_result.value).lower() if score_result else None
                 human_label = str(score_result.metadata['human_label']).lower() if score_result and hasattr(score_result, 'metadata') and 'human_label' in score_result.metadata else None
                 logging.info(f"Question: {question}, score Label: {score_value}, Human Label: {human_label}")
@@ -1195,6 +1204,8 @@ class Evaluation:
 
         logging.info(f"Expenses: {expenses}")
         logging.info(f"{overall_accuracy:.1f}% accuracy / {len(selected_sample_rows)} samples")
+        if self.total_skipped > 0:
+            logging.info(f"Skipped {self.total_skipped} score results due to unmet dependency conditions")
         logging.info(f"cost: ${expenses['cost_per_text']:.6f} per call / ${expenses['total_cost']:.6f} total")
 
         report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
@@ -1254,7 +1265,24 @@ class Evaluation:
                         
                         return result
                 except Exception as e:
+                    # Enhanced error logging with more context
+                    error_context = {
+                        'score_name': score_name,
+                        'text_index': idx,
+                        'content_id': row.get('content_id', 'unknown'),
+                        'text_preview': str(row.get('text', ''))[:100] + '...' if row.get('text') else 'No text',
+                        'error_type': type(e).__name__,
+                        'error_message': str(e),
+                        'traceback': traceback.format_exc()
+                    }
                     logging.error(f"Error processing text at index {idx} for {score_name}: {e}")
+                    logging.error(f"Error context: {json.dumps(error_context, indent=2)}")
+                    
+                    # For NoneType iteration errors, provide specific guidance
+                    if 'NoneType' in str(e) and 'iterable' in str(e):
+                        logging.error("DEBUGGING TIP: This error usually occurs when None is used with 'in' operator or iteration")
+                        logging.error("Check for None values in metadata, score parameters, or workflow state")
+                    
                     raise
 
         # Create tasks for all rows but process them with controlled concurrency
@@ -1718,6 +1746,7 @@ class Evaluation:
             "overall_accuracy": accuracy_format.format(overall_accuracy) if overall_accuracy is not None else 0,
             "number_correct": self.total_correct,
             "total_questions": self.total_questions,
+            "total_skipped": self.total_skipped,
             "number_of_samples": sample_size,
             "cost_per_call": f"{expenses['cost_per_text']:.7f}".rstrip('0').rstrip('.'),
             "total_cost": f"{expenses['total_cost']:.7f}".rstrip('0').rstrip('.')
@@ -1764,6 +1793,7 @@ Transcript:
 
 Overall Accuracy: {overall_accuracy:.1f}% ({self.total_correct} / {self.total_questions})
 Sample Size:      {sample_size}
+Skipped Results:  {self.total_skipped} (due to unmet dependency conditions)
 Cost per call:    ${expenses['cost_per_text']:.6f}
 Total cost:       ${expenses['total_cost']:.6f}
 """            
@@ -1885,6 +1915,12 @@ Total cost:       ${expenses['total_cost']:.6f}
                         # Skip if this is a dependency score and not our primary score
                         if primary_score_name and score_name != primary_score_name:
                             continue
+                        
+                        # Handle skipped scores - don't try to process them for evaluation
+                        if isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                            logging.info(f"Score '{score_name}' was skipped due to unmet dependency conditions for content_id {content_id}")
+                            self.total_skipped += 1
+                            continue
 
                         # First check for override
                         human_label = None
@@ -1946,7 +1982,26 @@ Total cost:       ${expenses['total_cost']:.6f}
                                 # Don't re-raise - continue with evaluation but log the failure
 
                     except Exception as e:
-                        logging.exception(f"Error processing {score_identifier}: {e}")
+                        # Enhanced error logging for score processing
+                        error_info = {
+                            'score_identifier': score_identifier,
+                            'content_id': content_id,
+                            'error_type': type(e).__name__,
+                            'error_message': str(e),
+                            'text_preview': text[:200] + '...' if len(text) > 200 else text
+                        }
+                        
+                        logging.error(f"Error processing {score_identifier}: {e}")
+                        logging.error(f"Detailed error info: {json.dumps(error_info, indent=2)}")
+                        
+                        # Specific handling for NoneType iteration errors
+                        if 'NoneType' in str(e) and 'iterable' in str(e):
+                            logging.error(f"NoneType iteration error in score '{score_identifier}'")
+                            logging.error("This usually indicates None values in score configuration or workflow state")
+                            logging.error("Common causes: missing parameters, None metadata values, or None results")
+                        
+                        logging.exception(f"Full traceback for {score_identifier}:")
+                        
                         # Ensure parameters uses the correct scorecard name string
                         score_result = Score.Result(
                             value="ERROR", 
@@ -2718,12 +2773,19 @@ class AccuracyEvaluation(Evaluation):
             # Reset counters and mismatches
             self.total_correct = 0
             self.total_questions = 0
+            self.total_skipped = 0
             self.mismatches = []
             
             # Count the number correct out of all questions and collect mismatches
             for result in self.all_results:
                 for question in self.score_names():
                     score_result = next((r for r in result['results'].values() if r.parameters.name == question), None)
+                    
+                    # Skip counting if score was skipped due to unmet conditions
+                    if score_result and isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                        self.total_skipped += 1
+                        continue
+                    
                     score_value = str(score_result.value).lower() if score_result else None
                     human_label = str(score_result.metadata['human_label']).lower() if score_result and hasattr(score_result, 'metadata') and 'human_label' in score_result.metadata else None
                     
@@ -2844,7 +2906,7 @@ class AccuracyEvaluation(Evaluation):
             return metrics
         except Exception as e:
             self.logging.error(f"Error in _run_evaluation: {e}", exc_info=True)
-            raise e
+            'raise e'
         finally:
             pass
 

@@ -52,6 +52,7 @@ dependencies = [
     "langgraph==0.2.60",
     "langchain-aws>=0.1.9",
     "langchain-openai>=0.1.14",
+    "langchain-ollama>=0.3.6",
     "langchain-google-vertexai>=1.0.6",
     "langchain-anthropic>=0.3.10",
     "langgraph-checkpoint-postgres==2.0.9",
