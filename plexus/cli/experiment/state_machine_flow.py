@@ -321,7 +321,7 @@ class StateMachineFlowManager:
         if current_state == 'investigation':
             # Recommend specific tools that haven't been used yet
             missing_tools = []
-            if not tracker.has_used_successfully('plexus_feedback_summary'):
+            if not tracker.has_used_successfully('plexus_feedback_analysis'):
                 missing_tools.append("Get the overall feedback summary first")
             if tracker.get_count('plexus_feedback_find') < 2:
                 missing_tools.append("Find specific correction cases (both false positives and false negatives)")

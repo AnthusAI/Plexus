@@ -47,6 +47,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 // Types based on our GraphQL schema
 type ExperimentNode = Schema['ExperimentNode']['type']
@@ -111,6 +114,8 @@ export default function ExperimentNodesList({ experimentId }: Props) {
         const { data: nodesData, errors } = await (client.models.ExperimentNode.listExperimentNodeByExperimentIdAndCreatedAt as any)({
           experimentId: experimentId,
           limit: 1000 // Ensure we get all nodes
+        }, {
+          selectionSet: ['id', 'name', 'parentNodeId', 'status', 'hypothesis', 'insight', 'code', 'value', 'createdAt', 'updatedAt']
         })
 
         console.log('ExperimentNodesList: Filtered GraphQL response:', { nodesData, errors })
@@ -141,6 +146,10 @@ export default function ExperimentNodesList({ experimentId }: Props) {
               hypothesis: firstNode.hypothesis,
               hasHypothesis: !!firstNode.hypothesis,
               hypothesisLength: firstNode.hypothesis ? firstNode.hypothesis.length : 0,
+              hypothesisPreview: firstNode.hypothesis ? firstNode.hypothesis.substring(0, 200) + '...' : null,
+              hypothesisFull: firstNode.hypothesis,
+              insight: firstNode.insight,
+              insightLength: firstNode.insight ? firstNode.insight.length : 0,
               allFields: Object.keys(firstNode)
             }
           })
@@ -363,9 +372,26 @@ export default function ExperimentNodesList({ experimentId }: Props) {
                           <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
                         </div>
                       </AccordionTrigger>
-                      <AccordionContent className="pt-0 pb-4">
-                        <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {node.hypothesis}
+                      <AccordionContent className="pt-0 pb-4 overflow-visible">
+                        <div className="prose prose-sm dark:prose-invert max-w-none overflow-visible min-h-0" style={{ maxHeight: 'none', height: 'auto' }}>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkBreaks]}
+                            components={{
+                              p: ({ children }) => <p className="mb-3 last:mb-0 text-sm text-muted-foreground">{children}</p>,
+                              ul: ({ children }) => <ul className="mb-3 ml-4 list-disc text-sm text-muted-foreground">{children}</ul>,
+                              ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal text-sm text-muted-foreground">{children}</ol>,
+                              li: ({ children }) => <li className="mb-1">{children}</li>,
+                              strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                              em: ({ children }) => <em className="italic">{children}</em>,
+                              code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                              blockquote: ({ children }) => <blockquote className="border-l-2 border-border pl-4 italic text-muted-foreground">{children}</blockquote>,
+                              h1: ({ children }) => <h1 className="text-lg font-semibold mb-2 text-foreground">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-sm font-semibold mb-2 text-foreground">{children}</h3>,
+                            }}
+                          >
+                            {node.hypothesis}
+                          </ReactMarkdown>
                         </div>
                       </AccordionContent>
                     </AccordionItem>
@@ -422,9 +448,26 @@ export default function ExperimentNodesList({ experimentId }: Props) {
                           <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
                         </div>
                       </AccordionTrigger>
-                      <AccordionContent className="pt-0 pb-4">
-                        <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {node.insight}
+                      <AccordionContent className="pt-0 pb-4 overflow-visible">
+                        <div className="prose prose-sm dark:prose-invert max-w-none overflow-visible min-h-0" style={{ maxHeight: 'none', height: 'auto' }}>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkBreaks]}
+                            components={{
+                              p: ({ children }) => <p className="mb-3 last:mb-0 text-sm text-muted-foreground">{children}</p>,
+                              ul: ({ children }) => <ul className="mb-3 ml-4 list-disc text-sm text-muted-foreground">{children}</ul>,
+                              ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal text-sm text-muted-foreground">{children}</ol>,
+                              li: ({ children }) => <li className="mb-1">{children}</li>,
+                              strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                              em: ({ children }) => <em className="italic">{children}</em>,
+                              code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                              blockquote: ({ children }) => <blockquote className="border-l-2 border-border pl-4 italic text-muted-foreground">{children}</blockquote>,
+                              h1: ({ children }) => <h1 className="text-lg font-semibold mb-2 text-foreground">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-sm font-semibold mb-2 text-foreground">{children}</h3>,
+                            }}
+                          >
+                            {node.insight}
+                          </ReactMarkdown>
                         </div>
                       </AccordionContent>
                     </AccordionItem>

@@ -3,6 +3,12 @@ import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { 
   MessageSquare,
   User,
@@ -14,7 +20,9 @@ import {
   ChevronRight,
   ChevronLeft,
   PanelLeftOpen,
-  PanelLeftClose
+  PanelLeftClose,
+  MoreHorizontal,
+  Trash2
 } from "lucide-react"
 import { Timestamp } from "@/components/ui/timestamp"
 
@@ -34,8 +42,10 @@ export interface ChatMessage {
 export interface ChatSession {
   id: string
   name?: string
+  category?: string
   status?: 'ACTIVE' | 'COMPLETED' | 'ERROR'
   createdAt: string
+  updatedAt?: string
   messageCount?: number
 }
 
@@ -44,6 +54,7 @@ export interface ConversationViewerProps {
   messages: ChatMessage[]
   selectedSessionId?: string
   onSessionSelect?: (sessionId: string) => void
+  onSessionDelete?: (sessionId: string) => void
   className?: string
 }
 
@@ -129,9 +140,17 @@ export function ConversationViewer({
   messages, 
   selectedSessionId,
   onSessionSelect,
+  onSessionDelete,
   className = ""
 }: ConversationViewerProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
+  
+  // Sort sessions by last update date in reverse chronological order (most recent first)
+  const sortedSessions = [...sessions].sort((a, b) => {
+    const aTime = new Date(a.updatedAt || a.createdAt).getTime()
+    const bTime = new Date(b.updatedAt || b.createdAt).getTime()
+    return bTime - aTime
+  })
   
   // Filter messages for selected session
   const filteredMessages = selectedSessionId 
@@ -145,6 +164,9 @@ export function ConversationViewer({
     }
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   })
+  
+  // Get the current selected session
+  const selectedSession = selectedSessionId ? sessions.find(s => s.id === selectedSessionId) : null
 
   return (
     <div className={`flex h-full bg-background ${className}`}>
@@ -153,7 +175,7 @@ export function ConversationViewer({
         {/* Sidebar Header */}
         <div className="p-3 border-b border-border flex items-center justify-between">
           {!isSidebarCollapsed && (
-            <h3 className="text-sm font-medium">Chat Sessions ({sessions.length})</h3>
+            <h3 className="text-sm font-medium">Chat Sessions ({sortedSessions.length})</h3>
           )}
           <Button
             variant="ghost"
@@ -172,7 +194,7 @@ export function ConversationViewer({
         {/* Session List */}
         {!isSidebarCollapsed && (
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {sessions.map((session) => (
+            {sortedSessions.map((session) => (
               <Button
                 key={session.id}
                 variant={selectedSessionId === session.id ? "secondary" : "ghost"}
@@ -184,7 +206,7 @@ export function ConversationViewer({
                   <MessageSquare className="h-4 w-4 flex-shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-medium truncate">
-                      {session.name || `Session ${session.id.slice(0, 8)}`}
+                      {session.name || session.category || `Session ${session.id.slice(0, 8)}`}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {session.messageCount ? `${session.messageCount} messages` : 'No messages'}
@@ -213,14 +235,14 @@ export function ConversationViewer({
         {/* Collapsed Sidebar Content */}
         {isSidebarCollapsed && (
           <div className="flex-1 p-2 space-y-2">
-            {sessions.slice(0, 5).map((session) => (
+            {sortedSessions.slice(0, 5).map((session) => (
               <Button
                 key={session.id}
                 variant={selectedSessionId === session.id ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => onSessionSelect?.(session.id)}
                 className="w-full h-8 p-0"
-                title={session.name || `Session ${session.id.slice(0, 8)}`}
+                title={session.name || session.category || `Session ${session.id.slice(0, 8)}`}
               >
                 <MessageSquare className="h-4 w-4" />
               </Button>
@@ -231,6 +253,69 @@ export function ConversationViewer({
 
       {/* Main Content - Messages */}
       <div className="flex-1 flex flex-col">
+        {/* Session Header */}
+        {selectedSession && (
+          <div className="border-b border-border p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <h3 className="font-medium text-sm">
+                    {selectedSession.name || selectedSession.category || `Session ${selectedSession.id.slice(0, 8)}`}
+                  </h3>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                    {selectedSession.status && (
+                      <Badge 
+                        variant="outline"
+                        className={`text-xs ${
+                          selectedSession.status === 'COMPLETED' 
+                            ? 'bg-green-100 text-green-800' 
+                            : selectedSession.status === 'ERROR' 
+                            ? 'bg-red-100 text-red-800' 
+                            : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
+                        {selectedSession.status}
+                      </Badge>
+                    )}
+                    <span>
+                      {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
+                    </span>
+                    <span>•</span>
+                    <Timestamp time={selectedSession.createdAt} variant="relative" showIcon={false} />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Action Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                    aria-label="More options"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem 
+                    onSelect={() => {
+                      if (onSessionDelete) {
+                        onSessionDelete(selectedSession.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        )}
+        
         {/* Messages List */}
         <div className="flex-1 overflow-y-auto p-4">
           {!selectedSessionId ? (
@@ -261,7 +346,13 @@ export function ConversationViewer({
                         variant="secondary" 
                         className={`text-xs ${getMessageTypeColor(message.role, message.messageType)}`}
                       >
-                        {message.messageType || message.role}
+                        {message.messageType === 'TOOL_CALL' ? 'Tool Call' :
+                         message.messageType === 'TOOL_RESPONSE' ? 'Tool Response' :
+                         message.role === 'SYSTEM' ? 'System' :
+                         message.role === 'ASSISTANT' ? 'Assistant' :
+                         message.role === 'USER' ? 'User' :
+                         message.role === 'TOOL' ? 'Tool' :
+                         message.messageType || message.role || 'Message'}
                       </Badge>
                       
                       {message.toolName && (

@@ -60,7 +60,19 @@ class ConversationFlowManager:
         self.state = ConversationState()
         self.conversation_stages = self.config.get('conversation_stages', {})
         self.escalation = self.config.get('escalation', {})
-        self.transition_triggers = self.config.get('transition_triggers', {})
+        
+        # Set up transition triggers with sensible defaults to prevent immediate transitions
+        default_triggers = {
+            'exploration_to_synthesis': [
+                'used_feedback_summary',  # Must use feedback summary tool first
+                'min_tool_calls: 2',      # Must make at least 2 tool calls
+            ],
+            'synthesis_to_hypothesis': [
+                'min_insights: 2',        # Must capture at least 2 insights
+                'identified_patterns',    # Must identify patterns
+            ]
+        }
+        self.transition_triggers = {**default_triggers, **self.config.get('transition_triggers', {})}
     
     def _get_context_reminder(self) -> str:
         """Get a context reminder with scorecard and score names."""
@@ -77,7 +89,7 @@ class ConversationFlowManager:
     def update_state(self, 
                     tools_used: List[str] = None,
                     response_content: str = "",
-                    nodes_created: int = 0) -> None:
+                    nodes_created: int = 0) -> Dict[str, Any]:
         """Update conversation state based on recent activity."""
         
         # Track tools used
@@ -93,9 +105,17 @@ class ConversationFlowManager:
         # Update analysis completion status
         self._update_analysis_completion()
         
-
-        
         logger.info(f"ConversationFlow: Stage={self.state.stage.value}, Round={self.state.round_in_stage}, Tools={len(self.state.tools_used)}, Nodes={self.state.nodes_created}")
+        
+        # Return current state data for orchestration
+        return {
+            'current_state': self.state.stage.value,
+            'round_in_stage': self.state.round_in_stage,
+            'total_rounds': self.state.total_rounds,
+            'tools_used': list(self.state.tools_used),
+            'nodes_created': self.state.nodes_created,
+            'analysis_completed': self.state.analysis_completed.copy()
+        }
     
     def get_next_guidance(self) -> Optional[str]:
         """Get the next guidance prompt based on current state."""
@@ -128,39 +148,47 @@ class ConversationFlowManager:
         """Analyze response content to identify captured insights."""
         content_lower = content.lower()
         
-        # Look for key analysis patterns
-        if any(term in content_lower for term in ['false positive', 'precision', 'specificity']):
-            self.state.insights_captured.add('false_positive_analysis')
+        # Look for key analysis patterns - generalized for any classification system
+        if any(term in content_lower for term in ['scoring mistake', 'misclassified', 'incorrectly scored', 'wrong prediction', 'error pattern']):
+            self.state.insights_captured.add('scoring_error_analysis')
             
-        if any(term in content_lower for term in ['false negative', 'recall', 'sensitivity']):
-            self.state.insights_captured.add('false_negative_analysis')
+        if any(term in content_lower for term in ['correction', 'edited', 'changed from', 'initial_value', 'final_value']):
+            self.state.insights_captured.add('correction_analysis')
             
-        if any(term in content_lower for term in ['pattern', 'trend', 'common']):
+        if any(term in content_lower for term in ['pattern', 'trend', 'common', 'frequent', 'systematic']):
             self.state.insights_captured.add('pattern_identification')
             
-        if any(term in content_lower for term in ['root cause', 'reason', 'because']):
+        if any(term in content_lower for term in ['root cause', 'reason', 'because', 'why', 'underlying']):
             self.state.insights_captured.add('root_cause_analysis')
             
-        if any(term in content_lower for term in ['suggest', 'recommend', 'improve', 'solution']):
+        if any(term in content_lower for term in ['suggest', 'recommend', 'improve', 'solution', 'fix', 'change']):
             self.state.insights_captured.add('proposed_solutions')
+            
+        # Track specific analysis completions for any classification system
+        if any(term in content_lower for term in ['examined', 'analyzed', 'reviewed', 'looked at']):
+            self.state.insights_captured.add('item_examination')
     
     def _update_analysis_completion(self) -> None:
         """Update which required analyses have been completed."""
-        # Feedback summary completed
-        if 'plexus_feedback_summary' in self.state.tools_used:
+        # Feedback summary completed - universal first step
+        if 'plexus_feedback_analysis' in self.state.tools_used:
             self.state.analysis_completed['feedback_summary'] = True
             
-        # False positive analysis 
-        if 'plexus_feedback_find' in self.state.tools_used and 'false_positive_analysis' in self.state.insights_captured:
-            self.state.analysis_completed['false_positives'] = True
+        # Scoring error analysis - any classification system
+        if 'plexus_feedback_find' in self.state.tools_used and 'scoring_error_analysis' in self.state.insights_captured:
+            self.state.analysis_completed['scoring_errors'] = True
             
-        # False negative analysis
-        if 'plexus_feedback_find' in self.state.tools_used and 'false_negative_analysis' in self.state.insights_captured:
-            self.state.analysis_completed['false_negatives'] = True
+        # Correction pattern analysis - examining how scores were changed
+        if 'plexus_feedback_find' in self.state.tools_used and 'correction_analysis' in self.state.insights_captured:
+            self.state.analysis_completed['correction_patterns'] = True
             
-        # Item details examined
-        if 'plexus_item_info' in self.state.tools_used:
+        # Individual item examination - detailed case analysis
+        if ('plexus_item_info' in self.state.tools_used or 'item_examination' in self.state.insights_captured):
             self.state.analysis_completed['item_details'] = True
+            
+        # Pattern identification across multiple examples
+        if 'pattern_identification' in self.state.insights_captured:
+            self.state.analysis_completed['pattern_analysis'] = True
     
     def _check_stage_transition(self) -> None:
         """Check if we should transition to the next stage."""
@@ -189,14 +217,14 @@ class ConversationFlowManager:
             if trigger.startswith('used_feedback_summary'):
                 if not self.state.analysis_completed.get('feedback_summary', False):
                     return False
-            elif trigger.startswith('examined_false_positives'):
-                if not self.state.analysis_completed.get('false_positives', False):
+            elif trigger.startswith('examined_scoring_errors'):
+                if not self.state.analysis_completed.get('scoring_errors', False):
                     return False
-            elif trigger.startswith('examined_false_negatives'):
-                if not self.state.analysis_completed.get('false_negatives', False):
+            elif trigger.startswith('examined_corrections'):
+                if not self.state.analysis_completed.get('correction_patterns', False):
                     return False
             elif trigger.startswith('min_tool_calls'):
-                min_calls = int(trigger.split(':')[1].strip()) if ':' in trigger else 3
+                min_calls = int(trigger.split(':')[1].strip()) if ':' in trigger else 2
                 # Only count successful analysis completions, not just tool attempts
                 completed_analyses = sum(1 for completed in self.state.analysis_completed.values() if completed)
                 if completed_analyses < min_calls:
@@ -252,16 +280,18 @@ class ConversationFlowManager:
         stage_config = self.conversation_stages.get('exploration', {})
         prompts = stage_config.get('guidance_prompts', [])
         
-        # Determine what's missing and provide targeted guidance
+        # Determine what's missing and provide targeted guidance - generalized for any classification system
         missing_analyses = []
         if not self.state.analysis_completed.get('feedback_summary', False):
             missing_analyses.append("feedback summary overview")
-        if not self.state.analysis_completed.get('false_positives', False):
-            missing_analyses.append("false positive analysis")
-        if not self.state.analysis_completed.get('false_negatives', False):
-            missing_analyses.append("false negative analysis")
+        if not self.state.analysis_completed.get('scoring_errors', False):
+            missing_analyses.append("scoring error examination")
+        if not self.state.analysis_completed.get('correction_patterns', False):
+            missing_analyses.append("correction pattern analysis")
         if not self.state.analysis_completed.get('item_details', False):
             missing_analyses.append("detailed item examination")
+        if not self.state.analysis_completed.get('pattern_analysis', False):
+            missing_analyses.append("cross-case pattern identification")
             
         context_reminder = self._get_context_reminder()
         
@@ -273,6 +303,8 @@ class ConversationFlowManager:
 Great progress! Next, focus on: {', '.join(missing_analyses[:2])}
 {context_reminder}
 
+**Aim for 5-6 examples** of each type of scoring mistake you find, but be flexible - if there are only 2 examples available, that's sufficient to move forward.
+
 {prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Continue your analysis using the available feedback tools.'}
 """
             elif escalation_level == 'gentle':
@@ -283,6 +315,8 @@ You still need to examine: {', '.join(missing_analyses)}
 
 {prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Please use the feedback analysis tools to complete your investigation.'}
 
+**Target**: Examine multiple examples of each scoring mistake type you identify. If limited examples are available, analyze what you can find thoroughly.
+
 This analysis is essential for generating effective hypotheses.
 """
             else:  # firm
@@ -292,6 +326,8 @@ This analysis is essential for generating effective hypotheses.
 Missing required analyses: {', '.join(missing_analyses)}
 
 You must complete these investigations before proceeding to hypothesis generation. Use the tools available to gather this essential data.
+
+**Note**: If limited examples are available for some mistake types, focus on the patterns you can identify and move forward.
 """
         else:
             # All exploration complete, encourage transition
@@ -300,7 +336,7 @@ You must complete these investigations before proceeding to hypothesis generatio
 
 Excellent investigation! You've gathered comprehensive feedback data. 
 
-Now it's time to synthesize your findings and identify the key patterns causing misalignment.
+Now it's time to synthesize your findings and identify the key patterns causing scoring misalignment.
 """
     
     def _get_synthesis_guidance(self, escalation_level: str) -> str:
@@ -308,14 +344,14 @@ Now it's time to synthesize your findings and identify the key patterns causing 
         stage_config = self.conversation_stages.get('synthesis', {})
         prompts = stage_config.get('guidance_prompts', [])
         
-        # Summarize what analysis was completed
+        # Summarize what analysis was completed - generalized for any classification system
         completed_analysis = []
         if self.state.analysis_completed.get('feedback_summary', False):
             completed_analysis.append("✅ Reviewed feedback summary and confusion matrix")
-        if self.state.analysis_completed.get('false_positives', False):
-            completed_analysis.append("✅ Examined false positive cases (Yes→No corrections)")
-        if self.state.analysis_completed.get('false_negatives', False):
-            completed_analysis.append("✅ Examined false negative cases (No→Yes corrections)")
+        if self.state.analysis_completed.get('scoring_errors', False):
+            completed_analysis.append("✅ Examined scoring mistake patterns and error cases")
+        if self.state.analysis_completed.get('correction_patterns', False):
+            completed_analysis.append("✅ Analyzed correction patterns and human feedback")
         if self.state.analysis_completed.get('item_details', False):
             completed_analysis.append("✅ Reviewed specific problematic item details")
         
@@ -329,9 +365,9 @@ Now it's time to synthesize your findings and identify the key patterns causing 
         score_name = self.experiment_context.get('score_name', 'Unknown')
         
         if escalation_level == 'normal':
-            # For the first many rounds in synthesis, just say "Okay?" to let AI continue naturally
-            if self.state.round_in_stage <= 6:
-                return "Okay?"
+            # For the first few rounds in synthesis, provide minimal guidance to let AI work naturally
+            if self.state.round_in_stage <= 3:
+                return "Continue your analysis."  # Minimal guidance - let AI continue naturally  
             else:
                 return f"""
 💡 **CONTINUE YOUR ANALYSIS** 💡
@@ -346,7 +382,14 @@ Now it's time to synthesize your findings and identify the key patterns causing 
 
 **Continue deeper analysis:** What patterns are you seeing in the feedback data? What root causes are emerging?
 
-Take all the time you need to thoroughly understand the issues before considering solutions.
+**For rich hypothesis development, explore:**
+- Specific quantified patterns (e.g., "67% of false positives occur when...")
+- Concrete examples from the data you examined
+- Root cause theories with supporting evidence  
+- Multiple potential solution approaches with trade-offs
+- Expected impact on scoring metrics
+
+Take all the time you need to thoroughly understand the issues before considering solutions. The more detailed your analysis, the richer your eventual hypotheses will be.
 """
         elif escalation_level == 'gentle':
             return f"""
@@ -355,14 +398,21 @@ Take all the time you need to thoroughly understand the issues before considerin
 {prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Continue analyzing patterns and developing your understanding.'}
 {context_reminder}
 
-**Deepen your analysis:**
-- Are there common themes across the errors you examined?
-- What specific configuration changes would target these error patterns?
-- How would you prioritize different potential improvements?
+**Deepen your analysis with quantified insights:**
+- Are there common themes across the errors you examined? (What percentage?)
+- What specific configuration changes would target these error patterns? (Be precise)
+- How would you prioritize different potential improvements? (What's the expected impact?)
+- Can you identify specific examples that illustrate key problem patterns?
+- What success metrics would validate your proposed solutions?
 
 **Next:** Once you have clear insights about root causes and potential solutions, you'll move to creating concrete hypotheses.
 
-What are the most important patterns you've identified so far?
+**For comprehensive hypotheses, document:**
+- Specific error rates and patterns you discovered
+- Concrete examples that illustrate the problems
+- Multiple solution approaches with expected trade-offs
+
+What are the most important quantified patterns you've identified so far?
 """
         else:  # firm
             return f"""
@@ -379,7 +429,7 @@ You have completed thorough analysis and synthesis. It's time to move to the hyp
 """
     
     def _get_hypothesis_guidance(self, escalation_level: str) -> str:
-        """Get hypothesis generation stage guidance."""
+        """Get detailed hypothesis generation stage guidance focused on comprehensive descriptions."""
         stage_config = self.conversation_stages.get('hypothesis_generation', {})
         prompts = stage_config.get('guidance_prompts', [])
         
@@ -392,97 +442,136 @@ You have completed thorough analysis and synthesis. It's time to move to the hyp
         
         if escalation_level == 'normal':
             return f"""
-🚀 **MANDATORY HYPOTHESIS CREATION** 🚀
+🧠 **COMPREHENSIVE HYPOTHESIS DEVELOPMENT** 🧠
 
-Analysis is complete. You MUST now create experiment nodes.
+Now it's time to create detailed, well-reasoned hypotheses based on your thorough analysis.
 {context_reminder}
 
-{prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Create experiment nodes to test your hypotheses.'}
+**FOCUS ON RICH, DETAILED HYPOTHESES:**
 
-**REQUIRED ACTION**: Use the `create_experiment_node` tool with these exact parameters:
+Your hypothesis_description should include:
+• **BACKGROUND**: What specific problems did you identify in the feedback data?
+• **ROOT CAUSE**: What underlying issues are causing the scoring mistakes?
+• **SOLUTION APPROACH**: What high-level strategy will address these issues?
+• **EXPECTED IMPACT**: How will this change improve scoring accuracy?
+• **IMPLEMENTATION DETAILS**: What specific configuration changes are needed?
 
-**Example call:**
+**EXAMPLE of a comprehensive hypothesis format:**
+
 create_experiment_node(
     experiment_id="{experiment_id}",
-    hypothesis_description="GOAL: Reduce false positives for {score_name} | METHOD: Add stricter verification requirements",
-    yaml_configuration="[your complete YAML with specific changes]",
-    node_name="Stricter Verification Requirements"
+    hypothesis_description="BACKGROUND: Analysis revealed that 67% of false positives occur with medical terminology not in training data. ROOT CAUSE: Classification rules too broad, lack medical domain context. SOLUTION: Add medical terminology whitelist and stricter prescriber verification. EXPECTED IMPACT: Reduce false positive rate from 12% to 8% while maintaining 94% true positive detection. IMPLEMENTATION: Enhanced validation rules with medical context awareness.",
+    yaml_configuration="name: medical_context\\nprompt: Enhanced classification with medical domain knowledge\\nvalidation_rules: strict_medical_terms",
+    node_name="Medical Context Enhancement for Reduced False Positives"
 )
 
-This is not optional - you must create nodes to proceed.
+**Take your time to craft detailed, thoughtful hypotheses that explain the reasoning behind each approach.**
+
+What specific patterns did you identify that will inform your first hypothesis?
 """
         elif escalation_level == 'gentle':
             return f"""
-⏰ **NODE CREATION REQUIRED** ⏰
+📝 **DETAILED HYPOTHESIS CREATION** 📝
 
-{prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Please create experiment nodes based on your analysis.'}
+{prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Please create detailed experiment nodes based on your analysis.'}
 {context_reminder}
 
-The analysis phase is over. You must now create testable hypotheses using create_experiment_node.
+**REMEMBER: Focus on comprehensive hypothesis descriptions, not just tool mechanics.**
 
-**Required call format:**
+Each hypothesis should tell a complete story:
+
+1. **What problem did you find?** (specific examples from your analysis)
+2. **Why is this problem occurring?** (root cause analysis)
+3. **How will your solution address it?** (logical connection)
+4. **What changes are needed?** (specific configuration details)
+
 create_experiment_node(
     experiment_id="{experiment_id}",
-    hypothesis_description="GOAL: [specific improvement] | METHOD: [exact changes]",
-    yaml_configuration="[complete YAML configuration with your changes]",
-    node_name="[descriptive name for this hypothesis]"
+    hypothesis_description="BACKGROUND: [What problems were found] ROOT CAUSE: [Why problems occur] SOLUTION: [High-level approach] IMPACT: [Expected improvements] IMPLEMENTATION: [Key configuration changes]",
+    yaml_configuration="name: your_config_name\\nprompt: your enhanced prompt\\nrules: specific_validation_changes",
+    node_name="Descriptive Name for This Hypothesis"
 )
 
-Create 2-3 different hypotheses based on the feedback patterns you found.
+**Your hypothesis descriptions should be 3-4 paragraphs, not single sentences.**
+
+Create 2-3 different hypotheses that test different aspects of the problems you identified.
 """
         else:  # firm
             return f"""
-🚨 **FINAL WARNING: CREATE NODES NOW** 🚨
+⚡ **URGENT: CREATE COMPREHENSIVE HYPOTHESES** ⚡
 
-You MUST use the `create_experiment_node` tool immediately to create 2-3 hypothesis variations.
+You must create detailed experiment nodes now, but focus on QUALITY over speed.
 {context_reminder}
 
-**THIS IS YOUR LAST CHANCE** - Failure to create nodes will terminate the conversation.
+**CRITICAL: Your hypotheses must include detailed background context, not just brief summaries.**
 
-**MANDATORY PARAMETERS:**
-- experiment_id: "{experiment_id}"
-- scorecard_name: "{scorecard_name}" 
-- score_name: "{score_name}"
-
-**Example calls you MUST make:**
+**Required comprehensive format:**
 create_experiment_node(
     experiment_id="{experiment_id}",
-    hypothesis_description="GOAL: Reduce false positives | METHOD: Stricter verification requirements",
-    yaml_configuration="[complete YAML with stricter rules]",
-    node_name="Conservative: Stricter Verification"
+    hypothesis_description="PROBLEM IDENTIFIED: [What specific issues found in feedback data with examples] ROOT CAUSE ANALYSIS: [Why problems occurring, what patterns emerged] PROPOSED SOLUTION: [High-level approach to address root causes] EXPECTED OUTCOMES: [How scoring accuracy will improve, metric changes] CONFIGURATION STRATEGY: [Specific changes needed for implementation]",
+    yaml_configuration="name: hypothesis_config\\nprompt: enhanced_classification_logic\\nvalidation: improved_rules",
+    node_name="Clear Descriptive Name for This Hypothesis"
 )
 
-create_experiment_node(
-    experiment_id="{experiment_id}",
-    hypothesis_description="GOAL: Improve accuracy | METHOD: Enhanced pattern matching",
-    yaml_configuration="[complete YAML with enhanced patterns]",
-    node_name="Aggressive: Enhanced Patterns"
-)
+**NO TERSE SUMMARIES** - Each hypothesis description should be 200-400 words explaining:
+- The specific problems you identified
+- Why these problems are occurring  
+- How your solution addresses the root causes
+- What configuration changes will implement your approach
 
-Create diverse approaches: incremental, creative, and revolutionary hypotheses.
-**NO MORE ANALYSIS - CREATE NODES NOW!**
+Create detailed, comprehensive hypotheses that future developers can understand and implement.
 """
     
     def should_continue(self) -> bool:
         """Check if the conversation should continue."""
-        max_total = self.escalation.get('max_total_rounds', 25)  # Increased for longer analysis time
+        max_total = self.escalation.get('max_total_rounds', 50)  # Further increased to allow more patient handling of tool errors
         
-        # Allow proper time for hypothesis generation before forcing termination
+        # ENHANCED: Much more patient termination logic that prioritizes feedback over termination
         if (self.state.stage == ConversationStage.HYPOTHESIS_GENERATION and 
             self.state.nodes_created == 0):
-            # Allow 4 rounds in hypothesis generation, then force termination for emergency
-            if self.state.round_in_stage >= 4:
-                logger.warning(f"FORCING NODE CREATION: AI has failed to create nodes in hypothesis stage after {self.state.round_in_stage} rounds")
+            
+            # Check if AI is actively trying to create nodes (even with parameter errors)
+            attempting_node_creation = any(tool_name == 'create_experiment_node' for tool_name in self.state.tools_used)
+            
+            # CRITICAL IMPROVEMENT: Be much more patient when AI is learning from errors
+            # The goal is to provide feedback and education, not quick termination
+            if attempting_node_creation:
+                # Give AI up to 12 rounds to learn from parameter errors and succeed
+                # This accounts for multiple feedback iterations needed for complex tool parameters
+                patience_limit = 12
+                logger.info(f"HYPOTHESIS STAGE: AI is attempting node creation - extended patient mode (up to {patience_limit} rounds)")
+            else:
+                # Even if AI isn't trying, give them more time to understand what's needed
+                patience_limit = 6
+                logger.info(f"HYPOTHESIS STAGE: AI not attempting node creation - encouraging patience (up to {patience_limit} rounds)")
+            
+            if self.state.round_in_stage >= patience_limit:
+                logger.warning(f"PATIENCE EXHAUSTED: AI has {'attempted but failed to succeed' if attempting_node_creation else 'failed to attempt'} node creation after {self.state.round_in_stage} rounds")
+                # BEFORE terminating, log what went wrong to help with future improvements
+                if attempting_node_creation:
+                    logger.info("TERMINATION ANALYSIS: AI was actively trying to create nodes but couldn't get parameters right despite feedback")
+                else:
+                    logger.info("TERMINATION ANALYSIS: AI never attempted to use create_experiment_node tool")
                 return False  # Force termination, which will trigger emergency node creation
             else:
-                logger.info(f"HYPOTHESIS STAGE: Giving AI {4 - self.state.round_in_stage} more chances to create nodes (currently round {self.state.round_in_stage})")
+                remaining_rounds = patience_limit - self.state.round_in_stage
+                logger.info(f"HYPOTHESIS STAGE: Continuing with patience - {remaining_rounds} more rounds available (currently round {self.state.round_in_stage}/{patience_limit})")
         
+        # GENERAL CONTINUATION LOGIC: Stop when we reach our target
         result = (self.state.total_rounds < max_total and 
                   self.state.stage != ConversationStage.COMPLETE and
-                  self.state.nodes_created < 2)
+                  self.state.nodes_created < 2)  # Stop at 2 nodes as per completion logic
         
-        logger.info(f"should_continue: stage={self.state.stage.value}, round_in_stage={self.state.round_in_stage}, total_rounds={self.state.total_rounds}, nodes={self.state.nodes_created}, result={result}")
+        # Enhanced logging for better debugging of conversation termination
+        logger.info(f"FLOW_MANAGER.should_continue: stage={self.state.stage.value}, round_in_stage={self.state.round_in_stage}/{self._get_stage_patience_limit()}, total_rounds={self.state.total_rounds}/{max_total}, nodes_created={self.state.nodes_created}/2, attempting_node_creation={'create_experiment_node' in self.state.tools_used}, result={result}")
         return result
+    
+    def _get_stage_patience_limit(self) -> int:
+        """Get the patience limit for the current stage."""
+        if self.state.stage == ConversationStage.HYPOTHESIS_GENERATION:
+            attempting_node_creation = any(tool_name == 'create_experiment_node' for tool_name in self.state.tools_used)
+            return 12 if attempting_node_creation else 6
+        return 10  # Default for other stages
     
     def get_completion_summary(self) -> str:
         """Get a summary when the conversation is complete."""

@@ -379,6 +379,73 @@ nested:
         # Regular comments should remain
         self.assertIn('# This comment should remain', pushed_content)
 
+    def test_get_champion_configuration_yaml_success(self):
+        """Test get_champion_configuration_yaml with successful retrieval."""
+        self.mock_client.execute_responses['get_champion'] = {
+            'getScore': {'championVersionId': 'version-123'}
+        }
+        self.mock_client.execute_responses['get_version'] = {
+            'getScoreVersion': {'configuration': 'graph:\n  - node_id: test\n    class: SimpleClassifier'}
+        }
+        
+        yaml_config = self.score.get_champion_configuration_yaml()
+        
+        self.assertEqual(yaml_config, 'graph:\n  - node_id: test\n    class: SimpleClassifier')
+        
+        # Verify the correct queries were made
+        self.assertEqual(len(self.mock_client.call_history), 2)
+        
+        # Check first call (getScore)
+        first_call = self.mock_client.call_history[0]
+        self.assertIn('GetScore', first_call['query'])
+        self.assertEqual(first_call['variables'], {'id': 'score-123'})
+        
+        # Check second call (getScoreVersion)
+        second_call = self.mock_client.call_history[1]
+        self.assertIn('GetScoreVersion', second_call['query'])
+        self.assertEqual(second_call['variables'], {'id': 'version-123'})
+    
+    def test_get_champion_configuration_yaml_no_champion(self):
+        """Test get_champion_configuration_yaml when no champion version exists."""
+        self.mock_client.execute_responses['get_champion'] = {
+            'getScore': {'championVersionId': None}
+        }
+        
+        yaml_config = self.score.get_champion_configuration_yaml()
+        
+        self.assertIsNone(yaml_config)
+    
+    def test_get_champion_configuration_yaml_no_configuration(self):
+        """Test get_champion_configuration_yaml when version has no configuration."""
+        self.mock_client.execute_responses['get_champion'] = {
+            'getScore': {'championVersionId': 'version-123'}
+        }
+        self.mock_client.execute_responses['get_version'] = {
+            'getScoreVersion': {'configuration': None}
+        }
+        
+        yaml_config = self.score.get_champion_configuration_yaml()
+        
+        self.assertIsNone(yaml_config)
+
+    def test_get_champion_configuration_yaml_no_client(self):
+        """Test get_champion_configuration_yaml fails without API client."""
+        score_no_client = Score(
+            id='score-123',
+            name='Test Score',
+            key='test_score',
+            externalId='external-123',
+            type='classification',
+            order=1,
+            sectionId='section-123',
+            accuracy=0.95
+        )
+        
+        with self.assertRaises(ValueError) as context:
+            score_no_client.get_champion_configuration_yaml()
+        
+        self.assertEqual(str(context.exception), "No API client available")
+
 
 class TestScoreVersionCreation(unittest.TestCase):
     """Test cases for Score.create_version_from_yaml() - the foundational string-based method."""

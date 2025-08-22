@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter, usePathname, useParams } from "next/navigation"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
@@ -22,7 +22,7 @@ interface ExperimentsDashboardProps {
   initialSelectedExperimentId?: string | null
 }
 
-export default function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashboardProps = {}) {
+function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashboardProps = {}) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams()
@@ -43,6 +43,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
   const [isEditMode, setIsEditMode] = useState(false)
   const [showTemplateSelector, setShowTemplateSelector] = useState(false)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
+  const lastLoadTimeRef = useRef(0)
 
   // All hooks must be at the top before any conditional returns
   const handleSelectExperiment = useCallback((id: string | null) => {
@@ -77,7 +78,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
     }
   }, [handleSelectExperiment])
 
-  const loadExperiments = useCallback(async () => {
+  const loadExperiments = useCallback(async (force = false) => {
     if (!selectedAccount?.id) {
       setExperiments([])
       setIsLoading(false)
@@ -86,10 +87,59 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
 
     try {
       setIsLoading(true)
-      const { data } = await (client.models.Experiment.listExperimentByAccountIdAndUpdatedAt as any)({
-        accountId: selectedAccount.id
+      lastLoadTimeRef.current = Date.now()
+      console.log('Loading experiments for account:', selectedAccount.id)
+      const result = await (client.models.Experiment.listExperimentByAccountIdAndUpdatedAt as any)({
+        accountId: selectedAccount.id,
+        limit: 1000 // Increase limit to get more experiments
       })
-      setExperiments(data)
+      console.log('Raw experiment query result:', result)
+      const { data } = result
+      console.log('Experiments data from query:', data)
+      
+      // Check if we're looking for a specific experiment (for debugging)
+      if (force) {
+        console.log('Forced reload - checking if we can find recently created experiments...')
+        const recentExperiments = data?.slice(0, 5)?.map((exp: Experiment) => ({
+          id: exp.id,
+          createdAt: exp.createdAt
+        }))
+        console.log('Most recent 5 experiments by API order:', recentExperiments)
+      }
+      
+      // Sort experiments in reverse chronological order (newest first)
+      const sortedData = data?.sort((a: Experiment, b: Experiment) => {
+        const dateA = new Date(a.updatedAt || a.createdAt)
+        const dateB = new Date(b.updatedAt || b.createdAt)
+        return dateB.getTime() - dateA.getTime()
+      }) || []
+      console.log('Sorted experiments data:', sortedData)
+      
+      // Only update state if data has actually changed
+      setExperiments(prevExperiments => {
+        console.log('Previous experiments:', prevExperiments.length, 'items')
+        console.log('New experiments:', sortedData.length, 'items')
+        
+        // Quick comparison: check length first
+        if (prevExperiments.length !== sortedData.length) {
+          console.log('Length changed, updating experiments list')
+          return sortedData
+        }
+        
+        // If same length, check if all IDs match in same order
+        const hasChanges = prevExperiments.some((prev, index) => {
+          const current = sortedData[index]
+          return !current || prev.id !== current.id || prev.updatedAt !== current.updatedAt
+        })
+        
+        if (hasChanges) {
+          console.log('Experiments data changed, updating list')
+          return sortedData
+        } else {
+          console.log('No changes detected, keeping previous data')
+          return prevExperiments
+        }
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load experiments')
     } finally {
@@ -140,7 +190,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
       if (newExperiment) {
         // TODO: Copy the experiment nodes and versions from the original
         // For now, just refresh the experiments list
-        loadExperiments()
+        await loadExperiments(true) // Force reload to ensure duplicate appears
         // Select the newly created duplicate experiment
         handleSelectExperiment(newExperiment.id)
         toast.success('Experiment duplicated successfully')
@@ -166,12 +216,17 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
   }, [])
 
   // Refresh experiments when returning to the dashboard (e.g., from creation page)
+  // Only refresh if data is stale (older than 30 seconds) to prevent excessive re-renders
   useEffect(() => {
     const handleFocus = () => {
-      // Only refresh if we're on the experiments dashboard page
-      if (window.location.pathname === '/lab/experiments' || 
-          window.location.pathname.startsWith('/lab/experiments/')) {
-        loadExperiments()
+      const now = Date.now()
+      const isStale = now - lastLoadTimeRef.current > 30000 // 30 seconds
+      
+      // Only refresh if we're on the experiments dashboard page AND data is stale
+      if (isStale && 
+          (window.location.pathname === '/lab/experiments' || 
+           window.location.pathname.startsWith('/lab/experiments/'))) {
+        loadExperiments(true) // Force reload on focus if stale
       }
     }
     
@@ -221,7 +276,9 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
       if (newExperiment) {
         console.log('Experiment created successfully:', newExperiment)
         // Refresh experiments list and select the new experiment
-        await loadExperiments()
+        console.log('About to reload experiments for newly created experiment:', newExperiment.id)
+        await loadExperiments(true) // Force reload to ensure new experiment appears
+        console.log('Finished reloading experiments')
         handleSelectExperiment(newExperiment.id)
         // Close template selector
         setShowTemplateSelector(false)
@@ -273,8 +330,8 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
     }
   }
 
-  // Transform experiments to ExperimentTaskData
-  const transformExperiment = (experiment: Experiment): ExperimentTaskData => ({
+  // Transform experiments to ExperimentTaskData - memoized to prevent unnecessary re-renders
+  const transformExperiment = useCallback((experiment: Experiment): ExperimentTaskData => ({
     id: experiment.id,
     title: `${experiment.scorecard?.name || 'Experiment'} - ${experiment.score?.name || 'Score'}`,
     featured: experiment.featured || false,
@@ -283,7 +340,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
     updatedAt: experiment.updatedAt,
     scorecard: experiment.scorecard ? { name: experiment.scorecard.name } : null,
     score: experiment.score ? { name: experiment.score.name } : null,
-  })
+  }), [])
   
 
   // Loading and error states
@@ -340,7 +397,7 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
             // Exit edit mode and refresh experiments list after save
             setIsEditMode(false)
             // Reload experiments to get updated data
-            loadExperiments()
+            loadExperiments(true)
           }}
           onCancel={() => {
             // Exit edit mode without saving
@@ -528,3 +585,6 @@ export default function ExperimentsDashboard({ initialSelectedExperimentId }: Ex
     </div>
   )
 }
+
+// Memoize the component to prevent unnecessary re-renders from parent
+export default React.memo(ExperimentsDashboard)

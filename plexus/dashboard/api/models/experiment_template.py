@@ -240,3 +240,6 @@ class ExperimentTemplate(BaseModel):
         result = self._client.execute(mutation, {'input': input_data})
         return self.from_dict(result['updateExperimentTemplate'], self._client)
 
+
+
+

@@ -75,8 +75,8 @@ conversation_flow:
         **Next Steps:** {next_action_guidance}
         
         **Available Tools:**
-        - \`plexus_feedback_summary(scorecard_name="{scorecard_name}", score_name="{score_name}")\` - Get confusion matrix and patterns
-        - \`plexus_feedback_find(scorecard_name="{scorecard_name}", score_name="{score_name}", ...)\` - Find specific correction cases  
+        - \`plexus_feedback_analysis(scorecard_name="{scorecard_name}", score_name="{score_name}")\` - Get confusion matrix and patterns
+        - \`plexus_feedback_find(scorecard_name="{scorecard_name}", score_name="{score_name}", initial_value="No", final_value="Yes")\` - Find specific correction cases  
         - \`plexus_item_info(item_id="...")\` - Examine individual item details
         
         Focus on discovering actionable patterns that could inform configuration changes.
@@ -146,7 +146,7 @@ conversation_flow:
       to_state: "pattern_analysis"
       conditions:
         - type: "tool_usage_count"
-          tool: "plexus_feedback_summary"
+          tool: "plexus_feedback_analysis"
           min_count: 1
         - type: "tool_usage_count" 
           tool: "plexus_feedback_find"
@@ -163,7 +163,7 @@ conversation_flow:
       to_state: "pattern_analysis"
       conditions:
         - type: "tool_usage_count"
-          tool: "plexus_feedback_summary"
+          tool: "plexus_feedback_analysis"
           min_count: 1
         - type: "round_in_state"
           min_rounds: 6
@@ -213,7 +213,7 @@ conversation_flow:
   # Guidance for specific situations
   guidance:
     missing_tools:
-      plexus_feedback_summary: "Start with the feedback summary to understand overall error patterns and confusion matrix"
+      plexus_feedback_analysis: "Start with the feedback analysis to understand overall error patterns and confusion matrix"
       plexus_feedback_find: "Search for specific feedback corrections to understand individual misalignment cases"
       plexus_item_info: "Examine item details to understand what content characteristics lead to errors"
       create_experiment_node: "Create testable hypotheses based on the patterns you've discovered"

@@ -123,7 +123,8 @@ class TestCLIImports:
             'plexus.cli.data.operations',
             'plexus.cli.feedback.commands',
             'plexus.cli.dataset.datasets',
-            'plexus.cli.record_count.counting'
+            'plexus.cli.record_count.counting',
+            'plexus.cli.experiment.experiments'
         ]
         
         for module_name in command_modules:

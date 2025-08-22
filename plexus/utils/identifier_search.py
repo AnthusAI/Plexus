@@ -36,17 +36,17 @@ Usage Examples:
 """
 
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
-from plexus.dashboard.api.models import Identifier, Item
 
 if TYPE_CHECKING:
     from plexus.dashboard.api.client import PlexusDashboardClient
+    from plexus.dashboard.api.models import Identifier, Item
 
 
 def find_item_by_identifier(
     identifier_value: str, 
     account_id: str, 
     client: 'PlexusDashboardClient'
-) -> Optional[Item]:
+) -> Optional['Item']:
     """
     Find an item by exact identifier value within an account.
     
@@ -66,6 +66,7 @@ def find_item_by_identifier(
         if item:
             print(f"Found item {item.id} with data: {item.data}")
     """
+    from plexus.dashboard.api.models import Identifier, Item
     identifier = Identifier.find_by_value(identifier_value, account_id, client)
     if not identifier:
         return None
@@ -83,7 +84,7 @@ def find_items_by_identifier_type(
     account_id: str, 
     client: 'PlexusDashboardClient',
     limit: Optional[int] = None
-) -> List[Item]:
+) -> List['Item']:
     """
     Find all items that have identifiers of a specific type.
     
@@ -102,6 +103,8 @@ def find_items_by_identifier_type(
         for item in items:
             print(f"Item {item.id} has customer identifier")
     """
+    from plexus.dashboard.api.models import Identifier, Item
+    
     # Query for all identifiers of this type in the account
     query = """
     query FindIdentifiersByType($accountId: String!, $name: String!, $limit: Int) {
@@ -150,7 +153,7 @@ def batch_find_items_by_identifiers(
     identifier_values: List[str],
     account_id: str,
     client: 'PlexusDashboardClient'
-) -> Dict[str, Item]:
+) -> Dict[str, 'Item']:
     """
     Efficiently find multiple items by their identifier values.
     
@@ -179,6 +182,8 @@ def batch_find_items_by_identifiers(
         if "CUST-123456" in items_dict:
             customer_item = items_dict["CUST-123456"]
     """
+    from plexus.dashboard.api.models import Identifier, Item
+    
     if not identifier_values:
         return {}
     
@@ -217,7 +222,7 @@ def find_item_by_typed_identifier(
     identifier_value: str,
     account_id: str,
     client: 'PlexusDashboardClient'
-) -> Optional[Item]:
+) -> Optional['Item']:
     """
     Find an item by identifier name and exact value.
     
@@ -240,6 +245,8 @@ def find_item_by_typed_identifier(
             "Customer ID", "123456", "account123", client
         )
     """
+    from plexus.dashboard.api.models import Identifier, Item
+    
     identifier = Identifier.find_by_name_and_value(
         identifier_name, identifier_value, account_id, client
     )
@@ -275,6 +282,8 @@ def get_item_identifiers(item_id: str, client: 'PlexusDashboardClient') -> List[
         #     {"name": "Order ID", "id": "ORD-789012"}
         # ]
     """
+    from plexus.dashboard.api.models import Identifier
+    
     identifier_records = Identifier.list_by_item_id(item_id, client)
     
     # Convert to UI-compatible format
@@ -296,7 +305,7 @@ def create_identifiers_for_item(
     account_id: str,
     identifiers_data: List[Dict[str, Any]],
     client: 'PlexusDashboardClient'
-) -> List[Identifier]:
+) -> List['Identifier']:
     """
     Create identifier records for an item from JSON-style data.
     
@@ -324,6 +333,8 @@ def create_identifiers_for_item(
             "item123", "account123", json_identifiers, client
         )
     """
+    from plexus.dashboard.api.models import Identifier
+    
     if not identifiers_data:
         return []
     
