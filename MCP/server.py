@@ -59,7 +59,7 @@ mcp = FastMCP(
     - plexus_task_info: Get detailed information about a specific task by its ID, including task stages
     
     ## Feedback Analysis & Score Testing Tools
-    - plexus_feedback_summary: Generate comprehensive feedback summary with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
+    - plexus_feedback_analysis: Generate comprehensive feedback analysis with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
     - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
     - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
     

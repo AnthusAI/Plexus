@@ -38,8 +38,9 @@ class O3CompatibleChatOpenAI(ChatOpenAI):
         super().__init__(**kwargs)
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        """Override to remove stop parameter entirely for o3 models."""
+        """Override to remove stop parameter entirely for o3 models and ensure no streaming."""
         kwargs.pop('stop', None)  # Remove stop parameter entirely for o3 models
+        kwargs['stream'] = False  # Force streaming to be disabled for o3 models
         return super()._generate(messages, stop=None, run_manager=run_manager, **kwargs)
 
     @property
@@ -57,6 +58,9 @@ class O3CompatibleChatOpenAI(ChatOpenAI):
         unsupported_params = ["stop", "presence_penalty", "frequency_penalty"]
         for param in unsupported_params:
             params.pop(param, None)
+        
+        # Force streaming to be disabled
+        params['stream'] = False
             
         return params
 

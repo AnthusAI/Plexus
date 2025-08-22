@@ -12,7 +12,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestFeedbackSummaryTool:
-    """Test plexus_feedback_summary tool patterns"""
+    """Test plexus_feedback_analysis tool patterns"""
     
     def test_feedback_summary_validation_patterns(self):
         """Test feedback summary parameter validation patterns"""
@@ -218,7 +218,7 @@ class TestFeedbackSummaryTool:
         result_dict = {
             "command_info": {
                 "description": "Comprehensive feedback analysis with confusion matrix and agreement metrics",
-                "tool": "plexus_feedback_summary(scorecard_name='test', score_name='test', days=14, output_format='json')",
+                "tool": "plexus_feedback_analysis(scorecard_name='test', score_name='test', days=14, output_format='json')",
                 "next_steps": result["recommendation"]
             },
             **result

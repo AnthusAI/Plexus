@@ -106,10 +106,10 @@ The \`class\` field determines the scoring algorithm, and \`parameters\` contain
   },
   {
     id: 'msg-4',
-    content: 'plexus_feedback_summary(scorecard_name="SelectQuote HCS Medium-Risk", score_name="Medication Review", days=30, output_format="json")',
+    content: 'plexus_feedback_analysis(scorecard_name="SelectQuote HCS Medium-Risk", score_name="Medication Review", days=30, output_format="json")',
     role: 'ASSISTANT',
     messageType: 'TOOL_CALL',
-    toolName: 'plexus_feedback_summary',
+    toolName: 'plexus_feedback_analysis',
     toolParameters: {
       scorecard_name: "SelectQuote HCS Medium-Risk",
       score_name: "Medication Review",
@@ -154,7 +154,7 @@ The \`class\` field determines the scoring algorithm, and \`parameters\` contain
 }`,
     role: 'TOOL',
     messageType: 'TOOL_RESPONSE',
-    toolName: 'plexus_feedback_summary',
+    toolName: 'plexus_feedback_analysis',
     toolResponse: {
       context: {
         scorecard_name: "SelectQuote HCS Medium-Risk",

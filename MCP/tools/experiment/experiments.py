@@ -12,6 +12,7 @@ Available tools:
 - plexus_experiment_delete: Delete an experiment
 - plexus_experiment_run: Run an experiment
 - plexus_experiment_yaml: Get experiment YAML configuration
+- stop_conversation: Stop the current conversation with a reason
 """
 
 import logging
@@ -668,5 +669,9 @@ def register_experiment_tools(mcp):
                 "success": False,
                 "error": f"Failed to get chat messages: {str(e)}"
             }
+    
+    # Register the stop tool
+    from .stop import register_stop_tool
+    register_stop_tool(mcp)
     
     logger.info("Registered experiment management tools")

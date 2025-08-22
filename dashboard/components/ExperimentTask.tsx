@@ -295,14 +295,14 @@ export default function ExperimentTask({
             </AccordionItem>
           </Accordion>
           
-          {/* Experiment Conversation section */}
-          <div className="mt-6">
-            <ExperimentConversationViewer experimentId={experiment.id} />
-          </div>
-          
           {/* Experiment Nodes section */}
           <div className="mt-6">
             <ExperimentNodesList experimentId={experiment.id} />
+          </div>
+          
+          {/* Experiment Conversation section */}
+          <div className="mt-6">
+            <ExperimentConversationViewer experimentId={experiment.id} />
           </div>
         </div>
       )}

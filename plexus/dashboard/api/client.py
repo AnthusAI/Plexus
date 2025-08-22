@@ -866,6 +866,8 @@ class PlexusDashboardClient(_BaseAPIClient):
                 scorecardId
                 scoreId
                 experimentId
+                name
+                category
                 status
                 metadata
                 createdAt

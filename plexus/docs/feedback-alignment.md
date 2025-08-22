@@ -15,7 +15,7 @@ Systematic process for improving score configurations using human feedback data 
 Use MCP tools for token-efficient structured output:
 - `get_plexus_documentation`: Always open this doc before starting alignment
 - `think`: Required planning step; enforces baseline-first workflow
-- `plexus_feedback_summary`: Performance metrics and error patterns
+- `plexus_feedback_analysis`: Performance metrics and error patterns
 - `plexus_feedback_find`: Specific feedback items with human corrections
 - `plexus_predict`: Test predictions against known ground-truth (LOCAL YAML mode)
 - `run_plexus_evaluation`: Run evaluations (LOCAL mode) for baseline and post-change comparisons
@@ -25,7 +25,7 @@ Use MCP tools for token-efficient structured output:
 Get comprehensive performance summary:
 
 ```
-plexus_feedback_summary(
+plexus_feedback_analysis(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
     days=14,
@@ -65,32 +65,44 @@ Note: Do not push or promote versions during this phase; iterate strictly on loc
 Examine primary error pattern from Phase 1:
 
 ```
-# For false negatives (AI missed violations)
+# For false negatives (AI missed violations) - paginated results
 plexus_feedback_find(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
     initial_value="No",
     final_value="Yes",
-    limit=10,
-    days=14,
-    output_format="yaml"
+    limit=5,
+    days=14
 )
 ```
 
-Analyze `edit_comment` fields for configuration gaps. Look for patterns in missed behaviors.
+Results include full item details nested within each feedback edit, eliminating need for separate item_info calls. 
+Analyze `edit_comment` fields and `item_details.text` for configuration gaps. Look for patterns in missed behaviors.
+
+Use pagination for larger datasets:
+```
+# Get next page using next_page_start_id from previous response
+plexus_feedback_find(
+    scorecard_name="Quality Assurance v1.0",
+    score_name="Compliance Check",
+    initial_value="No", 
+    final_value="Yes",
+    limit=5,
+    next_page_start_id="feedback_item_123"
+)
+```
 
 Examine secondary error pattern:
 
 ```
-# For false positives (AI over-detected)
+# For false positives (AI over-detected) 
 plexus_feedback_find(
     scorecard_name="Quality Assurance v1.0", 
     score_name="Compliance Check",
     initial_value="Yes",
     final_value="No",
     limit=5,
-    days=14,
-    output_format="yaml"
+    days=14
 )
 ```
 
@@ -182,7 +194,7 @@ plexus_dataset_load(
 
 ### 1. Baseline Summary
 ```
-plexus_feedback_summary(
+plexus_feedback_analysis(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check", 
     days=30,
@@ -197,9 +209,8 @@ plexus_feedback_find(
     score_name="Compliance Check",
     initial_value="No",
     final_value="Yes",
-    limit=15,
-    days=30,
-    output_format="yaml"
+    limit=5,
+    days=30
 )
 ```
 
@@ -242,7 +253,7 @@ plexus_predict(
 
 ### 7. Impact Measurement
 ```
-plexus_feedback_summary(
+plexus_feedback_analysis(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
     days=7,
@@ -257,18 +268,30 @@ plexus_feedback_summary(
 plexus_feedback_find(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check", 
-    limit=50,
+    limit=5,
     days=30,
-    output_format="yaml",
     prioritize_edit_comments=true
 )
 ```
 
 **A/B Testing**: Compare baseline vs modified configurations on same test items
 
+**Pagination for Large Datasets**: Use pagination to analyze large volumes of feedback
+```
+# Get multiple pages of feedback items
+first_page = plexus_feedback_find(..., limit=5)
+second_page = plexus_feedback_find(..., limit=5, next_page_start_id=first_page.pagination.next_page_start_id)
+```
+
+**Nested Item Details**: Each feedback result includes full item information
+- `item_details.text`: Original call transcript or document text
+- `item_details.external_id`: External system identifier  
+- `item_details.identifiers`: Additional identifying information
+- Eliminates need for separate `plexus_item_info` calls
+
 **Continuous Monitoring**: Weekly performance tracking
 ```
-plexus_feedback_summary(
+plexus_feedback_analysis(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
     days=7, 

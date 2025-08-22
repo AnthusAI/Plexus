@@ -51,6 +51,7 @@ class ExperimentChatRecorder:
             session_data = {
                 'accountId': account_id,
                 'experimentId': self.experiment_id,
+                'category': 'Hypothesize',
                 'status': 'ACTIVE'
             }
             
@@ -393,21 +394,58 @@ class ExperimentChatRecorder:
             parent_message_id=parent_message_id
         )
     
-    async def end_session(self, status: str = 'COMPLETED') -> bool:
-        """End the chat session."""
+    async def update_session_name(self, name: str) -> bool:
+        """Update the name of the current chat session."""
+        if not self.session_id:
+            logger.warning("No active session to update")
+            return False
+            
+        try:
+            mutation = """
+            mutation UpdateChatSession($input: UpdateChatSessionInput!) {
+                updateChatSession(input: $input) {
+                    id
+                    name
+                    updatedAt
+                }
+            }
+            """
+            
+            session_data = {
+                'id': self.session_id,
+                'name': name
+            }
+            
+            result = self.client.execute(mutation, {'input': session_data})
+            
+            if 'errors' in result:
+                logger.error(f"GraphQL error updating session name: {result['errors']}")
+                return False
+                
+            logger.info(f"📝 Session {self.session_id} name updated to: {name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating session name: {e}")
+            return False
+
+    async def end_session(self, status: str = 'COMPLETED', name: Optional[str] = None) -> bool:
+        """End the chat session with optional name update."""
         if not self.session_id:
             logger.debug("No active session to end")
             return True
             
         try:
-            logger.info(f"Ending session {self.session_id} with status {status}")
+            name_info = f" with name '{name}'" if name else ""
+            logger.info(f"Ending session {self.session_id} with status {status}{name_info}")
             
-            # Update session status
+            # Update session status and optionally name
             mutation = """
             mutation UpdateChatSession($input: UpdateChatSessionInput!) {
                 updateChatSession(input: $input) {
                     id
                     status
+                    name
                     updatedAt
                 }
             }
@@ -418,6 +456,9 @@ class ExperimentChatRecorder:
                 'status': status
                 # Note: Omitting metadata field due to GraphQL validation issues
             }
+            
+            if name:
+                update_data['name'] = name
             
             result = self.client.execute(mutation, {'input': update_data})
             if result and 'updateChatSession' in result:

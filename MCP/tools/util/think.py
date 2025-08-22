@@ -16,7 +16,7 @@ def register_think_tool(mcp: FastMCP):
     """Register the think tool with the MCP server."""
 
     @mcp.tool()
-    async def think(thought: str) -> str:
+    async def think(thought: str = "", **kwargs) -> str:
         """
         Use this tool as a scratchpad when working with Plexus tools to:
         - Plan your approach for Plexus operations
@@ -37,7 +37,7 @@ def register_think_tool(mcp: FastMCP):
 
         REQUIRED BASELINE STEPS (no edits yet):
         1) Pull champion YAML locally (score pull). Confirm the local path.
-        2) Collect recent metrics: plexus_feedback_summary (e.g., 30 days) and plexus_feedback_find for FP (Yes→No) and FN (No→Yes).
+        2) Collect recent metrics: plexus_feedback_analysis (e.g., 30 days) and plexus_feedback_find for FP (Yes→No) and FN (No→Yes).
         3) Run a LOCAL baseline evaluation using ONLY local YAML:
            - Evaluations must set remote=false and yaml=true.
            - Path overrides are handled automatically; you do not need to pass any folder parameters.
@@ -73,8 +73,16 @@ def register_think_tool(mcp: FastMCP):
         sys.stdout = temp_stdout
 
         try:
-            logger.info(f"Think tool used: {thought[:100]}...")
-            return "Thought processed"
+            # Combine all provided content for flexibility
+            all_content = []
+            if thought:
+                all_content.append(f"thought: {thought}")
+            for key, value in kwargs.items():
+                all_content.append(f"{key}: {value}")
+            
+            combined_content = " | ".join(all_content) if all_content else "empty"
+            logger.info(f"Think tool used: {combined_content[:200]}...")
+            return "Thought processed successfully"
         except Exception as e:
             logger.error(f"Error in think tool: {str(e)}", exc_info=True)
             return f"Error processing thought: {str(e)}"

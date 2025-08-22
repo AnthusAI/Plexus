@@ -249,10 +249,10 @@ export const AssistantMessage: Story = {
 
 export const ToolCall: Story = {
   args: {
-    content: 'plexus_feedback_summary(scorecard_name="SelectQuote HCS Medium-Risk", score_name="Medication Review", days=30, output_format="json")',
+    content: 'plexus_feedback_analysis(scorecard_name="SelectQuote HCS Medium-Risk", score_name="Medication Review", days=30, output_format="json")',
     role: 'ASSISTANT',
     messageType: 'TOOL_CALL',
-    toolName: 'plexus_feedback_summary',
+    toolName: 'plexus_feedback_analysis',
     toolParameters: {
       scorecard_name: "SelectQuote HCS Medium-Risk",
       score_name: "Medication Review", 
@@ -288,7 +288,7 @@ export const ToolResponse: Story = {
 }`,
     role: 'TOOL',
     messageType: 'TOOL_RESPONSE',
-    toolName: 'plexus_feedback_summary',
+    toolName: 'plexus_feedback_analysis',
     toolResponse: {
       context: {
         scorecard_name: "SelectQuote HCS Medium-Risk",
