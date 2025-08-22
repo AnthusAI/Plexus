@@ -10,10 +10,16 @@ from langchain_aws import ChatBedrock, ChatBedrockConverse
 from langchain_openai import AzureChatOpenAI
 from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import OpenAICallbackHandler
-from langchain_ollama import ChatOllama
+
+# Optional import for ChatOllama
+try:
+    from langchain_ollama import ChatOllama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    ChatOllama = None
+    OLLAMA_AVAILABLE = False
 
 from plexus.CustomLogging import logging
-from plexus.scores.Score import Score
 
 from langchain_community.chat_models import ChatVertexAI
 
@@ -251,6 +257,12 @@ class LangChainUser:
             )
             callbacks = [self.token_counter]
         elif params.model_provider == "ChatOllama":
+            if not OLLAMA_AVAILABLE:
+                raise ImportError(
+                    "ChatOllama provider requires the 'langchain_ollama' package. "
+                    "Install it with: pip install langchain-ollama"
+                )
+            
             model_name = params.model_name or "gpt-oss:20b"
             
             # For gpt-oss models with ChatOllama, add reasoning support
