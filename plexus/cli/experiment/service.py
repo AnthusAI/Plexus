@@ -1100,20 +1100,15 @@ class ExperimentService:
                 # Fallback placeholder config per tests
                 score_config = "# Champion score configuration not available (placeholder)\nname: placeholder"
 
-            if hasattr(root_node, 'create_version') and callable(getattr(root_node, 'create_version')):
-                value = {
-                    'type': 'programmatic_root_node_update',
-                    'created_by': 'system:programmatic'
-                }
-                root_node.create_version(
-                    code=score_config,
-                    status='ACTIVE',
-                    value=value
-                )
-            else:
-                # Fallback: set attribute if direct update is the only option
-                setattr(root_node, 'code', score_config)
-                logger.info(f"Root node {root_node.id} code set via direct attribute update")
+            # Update root node with champion configuration using simplified schema
+            value = {
+                'type': 'programmatic_root_node_update',
+                'created_by': 'system:programmatic'
+            }
+            root_node.update_content(
+                code=score_config,
+                value=value
+            )
             
         except Exception as e:
             logger.error(f"Error updating root node: {e}")
