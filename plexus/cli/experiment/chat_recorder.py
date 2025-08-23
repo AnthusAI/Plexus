@@ -160,10 +160,9 @@ class ExperimentChatRecorder:
             if parent_message_id:
                 message_data['parentMessageId'] = parent_message_id
             
-            # Log message recording with content preview (truncated for readability)
+            # Log message recording (reduced noise - just sequence and type)
             tool_info = f" | Tool: {tool_name}" if tool_name else ""
-            content_preview = truncate_for_log(content, 100)
-            logger.info(f"📝 Recording message [{self.sequence_number}] {role}/{message_type}{tool_info}: {content_preview}")
+            logger.debug(f"📝 Recording message [{self.sequence_number}] {role}/{message_type}{tool_info}")
             
             # NOTE: We record the FULL content in the database, only the log is truncated
                 
@@ -303,9 +302,9 @@ class ExperimentChatRecorder:
             if parent_message_id:
                 message_data['parentMessageId'] = parent_message_id
             
-            # Log message recording (keep minimal for production)
+            # Log message recording (reduced noise)
             tool_info = f" | Tool: {tool_name}" if tool_name else ""
-            logger.info(f"📝 Recording message [{sequence_number}] {role}/{message_type}{tool_info}")
+            logger.debug(f"📝 Recording message [{sequence_number}] {role}/{message_type}{tool_info}")
                 
             # Execute GraphQL mutation to create message
             mutation = """

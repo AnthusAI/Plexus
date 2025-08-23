@@ -103,19 +103,23 @@ class InProcessMCPTransport:
         tool = self.tools[name]
         
         try:
-            logger.info(f"=== MCP TOOL CALL DEBUG ===")
-            logger.info(f"Tool Name: '{name}'")
-            logger.info(f"Arguments Received: {arguments}")
-            logger.info(f"Arguments Type: {type(arguments)}")
-            logger.info(f"Tool Handler: {tool.handler}")
-            logger.info("=== CALLING TOOL HANDLER ===")
+            # Call tool handler
+            logger.debug(f"🔧 MCP TRANSPORT: Calling handler for tool '{name}' with args: {arguments}")
+            logger.debug(f"🔧 MCP TRANSPORT: Tool handler type: {type(tool.handler)}")
             result = tool.handler(arguments)
-            logger.info(f"Tool Result: {result}")
-            logger.info("=== END MCP TOOL CALL ===")
+            logger.debug(f"🔧 MCP TRANSPORT: Handler returned: {type(result)} - {str(result)[:200]}...")
             
             # Handle async results (Tasks and coroutines)
             if hasattr(result, '__await__'):
-                result = await result
+                logger.debug(f"🔧 MCP TRANSPORT: Awaiting coroutine for tool '{name}'")
+                try:
+                    result = await result
+                    logger.debug(f"🔧 MCP TRANSPORT: Coroutine completed, result: {type(result)} - {str(result)[:200]}...")
+                except Exception as e:
+                    logger.error(f"🔧 MCP TRANSPORT: Coroutine failed with error: {e}")
+                    import traceback
+                    logger.error(f"🔧 MCP TRANSPORT: Traceback: {traceback.format_exc()}")
+                    raise
             
             # Ensure result follows MCP tool call response format
             if not isinstance(result, dict):
@@ -299,15 +303,22 @@ class EmbeddedMCPServer:
                                 import asyncio
                                 import inspect
                                 
+                                logger.debug(f"🔧 WRAPPER: async_handler called for {tool_name} with args: {args}")
+                                logger.debug(f"🔧 WRAPPER: func is coroutine function: {inspect.iscoroutinefunction(func)}")
+                                
                                 # Handle different argument patterns and function types
                                 if args:
                                     if inspect.iscoroutinefunction(func):
                                         # Async function - need to run it
                                         try:
                                             loop = asyncio.get_running_loop()
+                                            logger.debug(f"🔧 WRAPPER: Calling await func(**args) for {tool_name}")
                                             # We're in an event loop, create a task and await it
-                                            return await func(**args)
+                                            result = await func(**args)
+                                            logger.debug(f"🔧 WRAPPER: func returned: {type(result)} - {str(result)[:200]}...")
+                                            return result
                                         except RuntimeError:
+                                            logger.debug(f"🔧 WRAPPER: No running loop, using asyncio.run for {tool_name}")
                                             # No running loop, use asyncio.run
                                             return asyncio.run(func(**args))
                                     else:
@@ -324,7 +335,9 @@ class EmbeddedMCPServer:
                                         return func()
                                 
                             except Exception as e:
-                                logger.error(f"Error in MCP tool {tool_name}: {e}")
+                                logger.error(f"🔧 WRAPPER: Exception in MCP tool {tool_name}: {e}")
+                                import traceback
+                                logger.error(f"🔧 WRAPPER: Traceback: {traceback.format_exc()}")
                                 return {"error": str(e)}
                         
                         tool_info = MCPToolInfo(
@@ -334,8 +347,10 @@ class EmbeddedMCPServer:
                             handler=async_handler
                         )
                         
+                        logger.info(f"🔧 REGISTRATION: Registering tool '{tool_name}' with handler {async_handler}")
                         self.server.transport.register_tool(tool_info)
                         self.registered_tools.append(tool_name)
+                        logger.info(f"🔧 REGISTRATION: Successfully registered tool '{tool_name}'")
                         
                         return func
                     return decorator

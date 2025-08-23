@@ -15,7 +15,7 @@ import logging
 from unittest.mock import Mock, AsyncMock, patch
 from plexus.cli.experiment.service import ExperimentService
 from plexus.cli.experiment.mcp_transport import create_experiment_mcp_server
-from plexus.cli.experiment.langchain_mcp import run_experiment_with_ai, ExperimentAIRunner
+from plexus.cli.experiment.experiment_sop_agent import run_sop_guided_experiment, ExperimentSOPAgent
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ class TestAIMCPIntegration:
     @pytest.mark.asyncio
     async def test_langchain_adapter_loads_tools(self, experiment_context):
         """Test that LangChain adapter can load MCP tools."""
-        from plexus.cli.experiment.langchain_mcp import LangChainMCPAdapter
+        from plexus.cli.experiment.experiment_sop_agent import LangChainMCPAdapter
         
         mcp_server = await create_experiment_mcp_server(
             experiment_context=experiment_context,
@@ -178,15 +178,15 @@ class TestAIMCPIntegration:
     
     @pytest.mark.asyncio
     async def test_experiment_ai_runner_setup(self, experiment_context):
-        """Test that ExperimentAIRunner can be set up properly."""
-        from plexus.cli.experiment.langchain_mcp import ExperimentAIRunner
+        """Test that ExperimentSOPAgent can be set up properly."""
+        from plexus.cli.experiment.experiment_sop_agent import ExperimentSOPAgent
         
         mcp_server = await create_experiment_mcp_server(
             experiment_context=experiment_context,
             plexus_tools=['scorecard', 'score', 'feedback']
         )
         
-        runner = ExperimentAIRunner(
+        runner = ExperimentSOPAgent(
             experiment_id='test-exp-123',
             mcp_server=mcp_server,
             openai_api_key=TEST_OPENAI_KEY
@@ -205,7 +205,7 @@ class TestAIMCPIntegration:
         assert len(prompt) > 0
         assert 'plexus_scorecards_list' in prompt  # Enhanced prompt should mention tools
         
-        logger.info("ExperimentAIRunner setup completed successfully")
+        logger.info("ExperimentSOPAgent setup completed successfully")
         logger.info(f"Generated prompt length: {len(prompt)} characters")
     
     @pytest.mark.asyncio
@@ -234,7 +234,7 @@ class TestAIMCPIntegration:
             )
             
             # Run the AI experiment
-            result = await run_experiment_with_ai(
+            result = await run_sop_guided_experiment(
                 experiment_id='test-exp-123',
                 experiment_yaml=TEST_EXPERIMENT_YAML,
                 mcp_server=mcp_server,
@@ -269,7 +269,7 @@ class TestAIMCPIntegration:
         
         with patch.object(service, 'get_experiment_info') as mock_get_info, \
              patch.object(service, 'get_experiment_yaml') as mock_get_yaml, \
-             patch('plexus.cli.experiment.langchain_mcp.run_experiment_with_ai') as mock_run_ai:
+             patch('plexus.cli.experiment.experiment_sop_agent.run_sop_guided_experiment') as mock_run_ai:
             
             # Set up mocks
             mock_get_info.return_value = mock_experiment_info
@@ -321,7 +321,7 @@ class TestAIMCPIntegration:
             mock_getenv.side_effect = mock_getenv_func
             
             # Test without API key (explicitly set to None)
-            result = await run_experiment_with_ai(
+            result = await run_sop_guided_experiment(
                 experiment_id='test-exp-123',
                 experiment_yaml=TEST_EXPERIMENT_YAML,
                 mcp_server=mcp_server,
@@ -469,7 +469,7 @@ async def run_integration_test():
         
         # Test LangChain adapter
         logger.info("Testing LangChain adapter...")
-        from plexus.cli.experiment.langchain_mcp import LangChainMCPAdapter
+        from plexus.cli.experiment.experiment_sop_agent import LangChainMCPAdapter
         
         async with mcp_server.connect({'name': 'LangChain Integration Test'}) as client:
             adapter = LangChainMCPAdapter(client)
@@ -482,10 +482,10 @@ async def run_integration_test():
                 logger.info(f"✓ Sample tool: {test_tool.name} - {test_tool.description[:100]}...")
         
         # Test experiment runner setup
-        logger.info("Testing ExperimentAIRunner setup...")
-        from plexus.cli.experiment.langchain_mcp import ExperimentAIRunner
+        logger.info("Testing ExperimentSOPAgent setup...")
+        from plexus.cli.experiment.experiment_sop_agent import ExperimentSOPAgent
         
-        runner = ExperimentAIRunner(
+        runner = ExperimentSOPAgent(
             experiment_id='integration-test-001',
             mcp_server=mcp_server,
             openai_api_key=TEST_OPENAI_KEY

@@ -26,7 +26,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from plexus.cli.experiment.mcp_transport import create_experiment_mcp_server
-from plexus.cli.experiment.langchain_mcp import LangChainMCPAdapter, ExperimentAIRunner
+from plexus.cli.experiment.sop_agent import LangChainMCPAdapter, ExperimentSOPAgent
 from plexus.cli.experiment.service import ExperimentService
 from unittest.mock import Mock
 
@@ -154,7 +154,7 @@ async def demo_ai_runner_setup(mcp_server):
     logger.info("\n🤖 Testing AI Runner setup...")
     
     # Create AI runner
-    runner = ExperimentAIRunner(
+    runner = ExperimentSOPAgent(
         experiment_id='demo-001',
         mcp_server=mcp_server,
         openai_api_key='demo-key'  # Won't be used in setup phase
