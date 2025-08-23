@@ -132,8 +132,8 @@ class LangChainMCPAdapter:
                     finally:
                         loop.close()
                 
-                # TOOL RESPONSE RECORDING: Since on_tool_end callback isn't being called,
-                # we need to record tool responses here in the MCP wrapper
+                # TOOL RESPONSE RECORDING: Only record if SOP agent hasn't already handled it
+                # The SOP agent now records tool calls/responses properly, so this is a fallback
                 if self.chat_recorder and tool_name in self.pending_tool_calls:
                     tool_call_id = self.pending_tool_calls[tool_name]
                     logger.info(f"MCP WRAPPER: Recording tool response for {tool_name}, call_id: {tool_call_id}")

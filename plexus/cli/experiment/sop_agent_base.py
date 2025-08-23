@@ -658,6 +658,22 @@ Your response will become the next user message to guide the coding assistant.
                             # LangChain tool calls are objects, not dicts
                             tool_name = tool_call.get('name') if isinstance(tool_call, dict) else getattr(tool_call, 'name', None)
                             tool_args = tool_call.get('args') if isinstance(tool_call, dict) else getattr(tool_call, 'args', {})
+                            tool_call_id = tool_call.get('id') if isinstance(tool_call, dict) else getattr(tool_call, 'id', None)
+                            
+                            # Record tool call BEFORE execution
+                            tool_call_message_id = None
+                            if self.chat_recorder:
+                                tool_call_message_id = await self.chat_recorder.record_message(
+                                    role='ASSISTANT',
+                                    content=f"Calling tool: {tool_name}",
+                                    message_type='TOOL_CALL',
+                                    tool_name=tool_name,
+                                    tool_parameters=tool_args
+                                )
+                                
+                                # Store in MCP adapter's pending_tool_calls for response linking
+                                if hasattr(self.mcp_adapter, 'pending_tool_calls'):
+                                    self.mcp_adapter.pending_tool_calls[tool_name] = tool_call_message_id
                             
                             # Execute tool
                             import time
@@ -768,10 +784,16 @@ Your response will become the next user message to guide the coding assistant.
                             if "plexus_feedback_find" in tool_name:
                                 logger.info(f"   🎯 Search parameters: scorecard='{tool_args.get('scorecard_name', 'N/A')}', score='{tool_args.get('score_name', 'N/A')}', initial='{tool_args.get('initial_value', 'N/A')}', final='{tool_args.get('final_value', 'N/A')}'")
                             
-                            # Record tool execution
-                            if self.chat_recorder:
-                                await self.chat_recorder.record_message('TOOL', f"{tool_name}({tool_args})", 'TOOL_CALL')
-                                await self.chat_recorder.record_message('TOOL', str(tool_result), 'TOOL_RESPONSE')
+                            # Record tool response (tool call was already recorded before execution)
+                            if self.chat_recorder and tool_call_message_id:
+                                await self.chat_recorder.record_message(
+                                    role='TOOL',
+                                    content=str(tool_result),
+                                    message_type='TOOL_RESPONSE',
+                                    tool_name=tool_name,
+                                    tool_response=tool_result if isinstance(tool_result, dict) else {"result": tool_result},
+                                    parent_message_id=tool_call_message_id
+                                )
                             
                             # Add result to conversation
                             try:
