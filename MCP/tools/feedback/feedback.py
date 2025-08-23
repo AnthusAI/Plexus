@@ -122,27 +122,39 @@ async def _get_paginated_feedback_with_items(
     
     # Legacy token-based pagination has been removed - only offset method supported
     
+    # Debug logging for GraphQL query
+    logger.info(f"[MCP DEBUG] GraphQL variables: {variables}")
+    
     # Execute the query
     response = await asyncio.to_thread(client.execute, query, variables)
     
+    logger.info(f"[MCP DEBUG] GraphQL response keys: {list(response.keys()) if response else 'None'}")
     if response and 'errors' in response:
+        logger.error(f"[MCP DEBUG] GraphQL errors: {response.get('errors')}")
         raise Exception(f"GraphQL errors: {response.get('errors')}")
     
     if not response or 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt' not in response:
+        logger.error(f"[MCP DEBUG] Unexpected response format: {response}")
         raise Exception("Unexpected response format from feedback query")
     
     result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt']
     raw_items = result.get('items', [])
     next_token = result.get('nextToken')
     
+    logger.info(f"[MCP DEBUG] Retrieved {len(raw_items)} raw items from GraphQL")
+    
     # Filter by initial_value and final_value if specified
     filtered_items = []
     for item_data in raw_items:
         if initial_value and item_data.get('initialAnswerValue') != initial_value:
+            logger.info(f"[MCP DEBUG] Filtering out item: initial_value={item_data.get('initialAnswerValue')} != {initial_value}")
             continue
         if final_value and item_data.get('finalAnswerValue') != final_value:
+            logger.info(f"[MCP DEBUG] Filtering out item: final_value={item_data.get('finalAnswerValue')} != {final_value}")
             continue
         filtered_items.append(item_data)
+    
+    logger.info(f"[MCP DEBUG] After value filtering: {len(filtered_items)} items (from {len(raw_items)} raw items)")
     
     # Sort and prioritize items with edit comments if requested
     if prioritize_edit_comments:
@@ -442,6 +454,42 @@ def register_feedback_tools(mcp: FastMCP):
         prioritize_edit_comments: bool = True,
         offset: Optional[Union[int, float, str]] = None
     ) -> Union[str, Dict[str, Any]]:
+        logger.error(f"🔥🔥🔥 FUNCTION START: plexus_feedback_find called with scorecard='{scorecard_name}', score='{score_name}'")
+        
+        # TEMPORARY FIX: Call the CLI directly since it works
+        try:
+            import subprocess
+            import json
+            
+            cmd = [
+                'python', '-m', 'plexus.cli', 'feedback', 'find',
+                '--scorecard', scorecard_name,
+                '--score', score_name,
+                '--limit', str(limit or 1),
+                '--days', str(days or 30),
+                '--format', 'yaml'
+            ]
+            
+            if initial_value:
+                cmd.extend(['--initial-value', initial_value])
+            if final_value:
+                cmd.extend(['--final-value', final_value])
+                
+            logger.error(f"🔥 CALLING CLI: {' '.join(cmd)}")
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd='.')
+            
+            if result.returncode == 0:
+                logger.error(f"🔥 CLI SUCCESS: {result.stdout[:200]}...")
+                return result.stdout
+            else:
+                logger.error(f"🔥 CLI FAILED: {result.stderr}")
+                return f"CLI Error: {result.stderr}"
+                
+        except Exception as cli_error:
+            logger.error(f"🔥 CLI EXCEPTION: {cli_error}")
+            # Fall through to original logic
+            pass
         """
         Find feedback items where human reviewers have corrected predictions. 
         This helps identify cases where score configurations need improvement.
@@ -559,14 +607,16 @@ def register_feedback_tools(mcp: FastMCP):
             if not scorecard_data:
                 return f"Error: Could not retrieve scorecard data for '{scorecard_name}'."
 
-            # Find the specific score
+            # Find the specific score using the same robust matching as plexus_feedback_analysis
             found_score_id = None
             for section in scorecard_data.get('sections', {}).get('items', []):
                 for score in section.get('scores', {}).get('items', []):
-                    if (score.get('name') == score_name or 
+                    # Use same matching criteria as plexus_feedback_analysis
+                    if (score.get('id') == score_name or 
+                        score.get('name', '').lower() == score_name.lower() or 
                         score.get('key') == score_name or 
-                        score.get('id') == score_name or 
-                        score.get('externalId') == score_name):
+                        score.get('externalId') == score_name or
+                        score_name.lower() in score.get('name', '').lower()):
                         found_score_id = score['id']
                         break
                 if found_score_id:
@@ -574,6 +624,10 @@ def register_feedback_tools(mcp: FastMCP):
 
             if not found_score_id:
                 return f"Error: Score '{score_name}' not found within scorecard '{scorecard_name}'."
+            
+            logger.error(f"🔥 MCP TOOL DEBUG: Resolved scorecard_id: {scorecard_id}")
+            logger.error(f"🔥 MCP TOOL DEBUG: Resolved score_id: {found_score_id}")
+            logger.error(f"🔥 MCP TOOL DEBUG: Search parameters: initial_value={initial_value}, final_value={final_value}, days={days}, limit={limit}")
 
             # Get account ID using the same method as feedback_summary
             try:
@@ -581,6 +635,7 @@ def register_feedback_tools(mcp: FastMCP):
                 account_id = resolve_account_id_for_command(client, None)
                 if not account_id:
                     return "Error: Could not determine account ID for feedback query."
+                logger.error(f"🔥 MCP TOOL DEBUG: Resolved account_id: {account_id}")
             except Exception as e:
                 logger.error(f"Error getting account ID: {e}")
                 return f"Error getting account ID: {e}"
@@ -613,6 +668,11 @@ def register_feedback_tools(mcp: FastMCP):
                         return f"Error: Invalid offset parameter '{offset}'. Must be a number."
                 
                 # Get feedback items with pagination and item details
+                logger.info(f"[MCP DEBUG] Calling _get_paginated_feedback_with_items with:")
+                logger.info(f"  scorecard_id={scorecard_id}, score_id={found_score_id}, account_id={account_id}")
+                logger.info(f"  days={days_int}, initial_value={initial_value}, final_value={final_value}")
+                logger.info(f"  limit={limit_int or 5}, offset={offset_int}")
+                
                 paginated_result = await _get_paginated_feedback_with_items(
                     client=client,
                     scorecard_name=scorecard_name,

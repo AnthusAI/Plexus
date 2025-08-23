@@ -105,7 +105,7 @@ class ConversationFlowManager:
         # Update analysis completion status
         self._update_analysis_completion()
         
-        logger.info(f"ConversationFlow: Stage={self.state.stage.value}, Round={self.state.round_in_stage}, Tools={len(self.state.tools_used)}, Nodes={self.state.nodes_created}")
+        logger.debug(f"ConversationFlow: Stage={self.state.stage.value}, Round={self.state.round_in_stage}, Tools={len(self.state.tools_used)}, Nodes={self.state.nodes_created}")
         
         # Return current state data for orchestration
         return {
@@ -563,7 +563,7 @@ Create detailed, comprehensive hypotheses that future developers can understand 
                   self.state.nodes_created < 2)  # Stop at 2 nodes as per completion logic
         
         # Enhanced logging for better debugging of conversation termination
-        logger.info(f"FLOW_MANAGER.should_continue: stage={self.state.stage.value}, round_in_stage={self.state.round_in_stage}/{self._get_stage_patience_limit()}, total_rounds={self.state.total_rounds}/{max_total}, nodes_created={self.state.nodes_created}/2, attempting_node_creation={'create_experiment_node' in self.state.tools_used}, result={result}")
+        logger.debug(f"FLOW_MANAGER.should_continue: stage={self.state.stage.value}, round_in_stage={self.state.round_in_stage}/{self._get_stage_patience_limit()}, total_rounds={self.state.total_rounds}/{max_total}, nodes_created={self.state.nodes_created}/2, attempting_node_creation={'create_experiment_node' in self.state.tools_used}, result={result}")
         return result
     
     def _get_stage_patience_limit(self) -> int:

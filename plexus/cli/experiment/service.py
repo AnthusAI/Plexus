@@ -795,7 +795,7 @@ class ExperimentService:
                 # 3. Get current score configuration
                 current_score_config = await self._get_champion_score_config(experiment_info.experiment.scoreId)
                 
-                # 4. Get feedback summary for the last 7 days
+                # 4. Get feedback summary for the last 30 days
                 feedback_summary = await self._get_feedback_summary(
                     experiment_info.scorecard_name, 
                     experiment_info.score_name,
@@ -889,7 +889,7 @@ class ExperimentService:
                         experiment_yaml = DEFAULT_EXPERIMENT_YAML
                     
                     # Import and run AI experiment
-                    from .langchain_mcp import run_experiment_with_ai
+                    from .experiment_sop_agent import run_sop_guided_experiment
                     
                     logger.info("Starting AI-powered experiment execution with MCP tools...")
                     
@@ -902,7 +902,7 @@ class ExperimentService:
                     else:
                         logger.info("Service will let AI runner handle OpenAI key loading from config")
                     
-                    ai_result = await run_experiment_with_ai(
+                    ai_result = await run_sop_guided_experiment(
                         experiment_id=experiment_id,
                         experiment_yaml=experiment_yaml,
                         mcp_server=mcp_server,
@@ -1192,7 +1192,7 @@ class ExperimentService:
             logger.error(f"Error getting score YAML format docs: {e}")
             return "# Score YAML Format Documentation\nDocumentation not available - proceed with general score configuration principles."
     
-    async def _get_feedback_summary(self, scorecard_name: str, score_name: str, account_id: str, days: int = 7) -> Optional[str]:
+    async def _get_feedback_summary(self, scorecard_name: str, score_name: str, account_id: str, days: int = 30) -> Optional[str]:
         """Get feedback summary for the last N days."""
         try:
             # Use the feedback service directly to get the same data as the MCP tool

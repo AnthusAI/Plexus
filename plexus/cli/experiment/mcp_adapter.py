@@ -102,9 +102,11 @@ class LangChainMCPAdapter:
                         new_loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(new_loop)
                         try:
+                            logger.debug(f"🔧 MCP ADAPTER: Calling tool '{tool_name}' with args: {args}")
                             result = new_loop.run_until_complete(
                                 self.mcp_client.call_tool(tool_name, args)
                             )
+                            logger.debug(f"🔧 MCP ADAPTER: Tool '{tool_name}' returned: {type(result)} - {str(result)[:200]}...")
                             # Track tool usage for conversation flow
                             self.tools_called.add(tool_name)
                             return result
@@ -120,9 +122,11 @@ class LangChainMCPAdapter:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
+                        logger.debug(f"🔧 MCP ADAPTER: Calling tool '{tool_name}' with args: {args}")
                         result = loop.run_until_complete(
                             self.mcp_client.call_tool(tool_name, args)
                         )
+                        logger.debug(f"🔧 MCP ADAPTER: Tool '{tool_name}' returned: {type(result)} - {str(result)[:200]}...")
                         # Track tool usage for conversation flow
                         self.tools_called.add(tool_name)
                     finally:
@@ -229,4 +233,124 @@ class LangChainMCPAdapter:
             args_schema=args_schema,
             func=tool_func
         )
+
+
+def convert_mcp_tools_to_langchain(mcp_tools):
+    """
+    Convert MCP tools to LangChain StructuredTool format.
+    
+    This function takes a list of MCPTool objects and converts them to
+    LangChain StructuredTool objects for use with LangChain agents.
+    
+    Args:
+        mcp_tools: List of MCPTool objects
+        
+    Returns:
+        List of LangChain StructuredTool objects
+    """
+    from langchain.tools import StructuredTool
+    from pydantic import BaseModel, Field
+    from typing import Union, Optional
+    
+    langchain_tools = []
+    
+    # Known tool schemas for proper argument handling
+    known_tool_schemas = {
+        'plexus_feedback_analysis': {
+            'scorecard_name': 'Name of the scorecard',
+            'score_name': 'Name of the score',
+            'days': 'Number of days back to analyze',
+            'output_format': 'Output format - json or yaml'
+        },
+        'plexus_feedback_find': {
+            'scorecard_name': 'Name of the scorecard containing the score',
+            'score_name': 'Name of the specific score to search feedback for',
+            'initial_value': 'Optional filter for the original AI prediction value',
+            'final_value': 'Optional filter for the corrected human value',
+            'limit': 'Maximum number of feedback items to return (default 5, max 50)',
+            'days': 'Number of days back to search',
+            'output_format': 'Output format - json or yaml',
+            'prioritize_edit_comments': 'Whether to prioritize feedback items with edit comments',
+            'offset': 'Simple numeric offset for pagination'
+        },
+        'plexus_item_info': {
+            'item_id': 'The unique ID of the item OR an external identifier value'
+        },
+        'create_experiment_node': {
+            'experiment_id': 'The unique ID of the experiment',
+            'hypothesis_description': 'Clear description following format: GOAL: [target] | METHOD: [changes]',
+            'node_name': 'Descriptive name for the hypothesis node (optional)',
+            'yaml_configuration': 'Optional YAML configuration'
+        },
+        'update_node_content': {
+            'node_id': 'ID of the node to update',
+            'yaml_configuration': 'Updated YAML configuration',
+            'update_description': 'Description of what changed in this update',
+            'computed_value': 'Optional computed results'
+        },
+        'think': {
+            'thought': 'Your internal reasoning or analysis'
+        }
+    }
+    
+    for mcp_tool in mcp_tools:
+        tool_name = mcp_tool.name
+        tool_description = mcp_tool.description
+        tool_func = mcp_tool.func
+        
+        # Get schema for this tool
+        schema_props = known_tool_schemas.get(tool_name, {})
+        
+        # Create wrapper function
+        def make_structured_func(func, name):
+            def wrapper(*args, **kwargs):
+                # Handle different argument patterns from LangChain
+                if args and not kwargs:
+                    if len(args) == 1 and isinstance(args[0], dict):
+                        result = func(args[0])
+                    else:
+                        # Convert positional args to dict
+                        arg_dict = {}
+                        prop_names = list(schema_props.keys()) if schema_props else ['input']
+                        for i, arg in enumerate(args):
+                            if i < len(prop_names):
+                                arg_dict[prop_names[i]] = arg
+                        result = func(arg_dict)
+                elif kwargs:
+                    result = func(kwargs)
+                else:
+                    result = func({})
+                
+                return result
+            return wrapper
+        
+        # Build Pydantic model for arguments
+        if schema_props:
+            annotations = {}
+            field_defaults = {}
+            
+            for prop_name, prop_description in schema_props.items():
+                annotations[prop_name] = Optional[Union[str, int, float, bool]]
+                field_defaults[prop_name] = Field(default="", description=prop_description)
+            
+            class_name = f"{tool_name.replace('-', '_')}_Args"
+            ArgsSchema = type(class_name, (BaseModel,), {
+                '__annotations__': annotations,
+                **field_defaults
+            })
+        else:
+            class ArgsSchema(BaseModel):
+                input: Optional[Union[str, int, float, bool]] = Field(default="", description="Tool input")
+        
+        # Create LangChain StructuredTool
+        langchain_tool = StructuredTool(
+            name=tool_name,
+            description=tool_description,
+            func=make_structured_func(tool_func, tool_name),
+            args_schema=ArgsSchema
+        )
+        
+        langchain_tools.append(langchain_tool)
+    
+    return langchain_tools
 
