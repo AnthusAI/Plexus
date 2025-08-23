@@ -176,13 +176,14 @@ class ExperimentSOPAgent:
     compatibility while using the new architecture under the hood.
     """
     
-    def __init__(self, experiment_id: str, mcp_server, client=None, openai_api_key: Optional[str] = None, experiment_context: Optional[Dict[str, Any]] = None):
+    def __init__(self, experiment_id: str, mcp_server, client=None, openai_api_key: Optional[str] = None, experiment_context: Optional[Dict[str, Any]] = None, model_config: Optional[Dict[str, Any]] = None):
         """Initialize the ExperimentSOPAgent with experiment-specific configuration."""
         self.experiment_id = experiment_id
         self.mcp_server = mcp_server
         self.client = client
         self.openai_api_key = openai_api_key
         self.experiment_context = experiment_context or {}
+        self.model_config = model_config
         
         # Experiment-specific components
         self.procedure_definition = ExperimentProcedureDefinition()
@@ -217,7 +218,8 @@ class ExperimentSOPAgent:
                 flow_manager=self.flow_manager,
                 chat_recorder=self.chat_recorder,
                 openai_api_key=self.openai_api_key,
-                context=self.experiment_context
+                context=self.experiment_context,
+                model_config=self.model_config
             )
             
             # Set up the SOP Agent
@@ -307,7 +309,8 @@ class ExperimentSOPAgent:
 async def run_sop_guided_experiment(experiment_id: str, experiment_yaml: str, 
                                    mcp_server, openai_api_key: Optional[str] = None, 
                                    experiment_context: Optional[Dict[str, Any]] = None,
-                                   client=None) -> Dict[str, Any]:
+                                   client=None, 
+                                   model_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Run SOP-guided experiment using the ExperimentSOPAgent.
     
@@ -321,6 +324,7 @@ async def run_sop_guided_experiment(experiment_id: str, experiment_yaml: str,
         openai_api_key: Optional OpenAI API key for SOP Agent
         experiment_context: Optional experiment context with known information
         client: Optional GraphQL client for recording conversations
+        model_config: Optional model configuration dict (e.g., {"model": "gpt-5", "reasoning_effort": "medium"})
         
     Returns:
         Dictionary with execution results including nodes created, tools used, etc.
@@ -335,7 +339,7 @@ async def run_sop_guided_experiment(experiment_id: str, experiment_yaml: str,
             experiment_context['client'] = client
         
         # Create and set up the ExperimentSOPAgent
-        experiment_agent = ExperimentSOPAgent(experiment_id, mcp_server, client, openai_api_key, experiment_context)
+        experiment_agent = ExperimentSOPAgent(experiment_id, mcp_server, client, openai_api_key, experiment_context, model_config)
         
         setup_success = await experiment_agent.setup(experiment_yaml)
         if not setup_success:
