@@ -552,18 +552,7 @@ class Classifier(BaseNode):
                         reasoning=reasoning_content if reasoning_content else None
                     )
                     
-                    output_state = {
-                        "explanation": completion_text
-                    }
-                    
-                    # Add reasoning to output_state for gpt-oss models
-                    if reasoning_content:
-                        output_state["reasoning"] = reasoning_content
-                    
-                    # Log the state and get a new state object with updated node_results
-                    updated_state = self.log_state(result_state, None, output_state)
-                    
-                    return updated_state
+                    return result_state
 
             except Exception as e:
                 logging.error(f"Error in llm_call: {e}")
