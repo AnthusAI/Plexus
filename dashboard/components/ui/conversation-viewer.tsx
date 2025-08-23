@@ -1,14 +1,16 @@
 "use client"
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
+import { generateClient } from "aws-amplify/data"
+import type { Schema } from "@/amplify/data/resource"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { 
   MessageSquare,
   User,
@@ -17,14 +19,18 @@ import {
   Wrench,
   Terminal,
   Clock,
-  ChevronRight,
-  ChevronLeft,
   PanelLeftOpen,
   PanelLeftClose,
   MoreHorizontal,
-  Trash2
+  Trash2,
+  ChevronRight
 } from "lucide-react"
 import { Timestamp } from "@/components/ui/timestamp"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
+
+const client = generateClient<Schema>()
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -51,23 +57,29 @@ export interface ChatSession {
 }
 
 export interface ConversationViewerProps {
-  sessions: ChatSession[]
-  messages: ChatMessage[]
+  // Data props (for manual data passing - legacy)
+  sessions?: ChatSession[]
+  messages?: ChatMessage[]
   selectedSessionId?: string
   onSessionSelect?: (sessionId: string) => void
   onSessionDelete?: (sessionId: string) => void
   className?: string
+  
+  // OR automatic data loading (recommended)
+  experimentId?: string
 }
 
-// Collapsible text component for long messages
+// Collapsible text component with Markdown support for long messages
 function CollapsibleText({ 
   content, 
   maxLines = 10, 
-  className = "whitespace-pre-wrap break-words" 
+  className = "whitespace-pre-wrap break-words",
+  enableMarkdown = true
 }: { 
   content: string, 
   maxLines?: number,
-  className?: string 
+  className?: string,
+  enableMarkdown?: boolean
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const lines = content.split('\n')
@@ -76,13 +88,48 @@ function CollapsibleText({
     ? lines.slice(0, maxLines).join('\n') + '...'
     : content
 
+  const renderContent = (text: string) => {
+    if (!enableMarkdown) {
+      return <p className={className}>{text}</p>
+    }
+
+    return (
+      <div className={`prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-card prose-pre:text-foreground ${className}`}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkBreaks]}
+          components={{
+            p: ({ children }: { children?: React.ReactNode }) => <p className="mb-2 last:mb-0 leading-normal">{children}</p>,
+            ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+            ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+            li: ({ children }: { children?: React.ReactNode }) => <li className="mb-1">{children}</li>,
+            strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-foreground">{children}</strong>,
+            em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
+            code: ({ children }: { children?: React.ReactNode }) => <code className="bg-card px-1 py-0.5 rounded-md text-xs font-mono">{children}</code>,
+            pre: ({ children }: { children?: React.ReactNode }) => <pre className="bg-card p-3 rounded-md overflow-x-auto text-sm font-mono">{children}</pre>,
+            h1: ({ children }: { children?: React.ReactNode }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+            h2: ({ children }: { children?: React.ReactNode }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+            h3: ({ children }: { children?: React.ReactNode }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+            blockquote: ({ children }: { children?: React.ReactNode }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+            a: ({ children, href }: { children?: React.ReactNode; href?: string }) => <a href={href} className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+            table: ({ children }: { children?: React.ReactNode }) => <table className="border-collapse border border-border text-sm">{children}</table>,
+            th: ({ children }: { children?: React.ReactNode }) => <th className="border border-border px-2 py-1 bg-muted font-medium text-left">{children}</th>,
+            td: ({ children }: { children?: React.ReactNode }) => <td className="border border-border px-2 py-1">{children}</td>,
+            hr: () => <hr className="my-4 border-border" />,
+          }}
+        >
+          {text}
+        </ReactMarkdown>
+      </div>
+    )
+  }
+
   if (!shouldTruncate) {
-    return <p className={className}>{content}</p>
+    return renderContent(content)
   }
 
   return (
     <div>
-      <p className={className}>{displayContent}</p>
+      {renderContent(displayContent)}
       <Button
         variant="ghost"
         size="sm"
@@ -136,15 +183,262 @@ const getMessageTypeColor = (role?: string, messageType?: string) => {
   }
 }
 
-export function ConversationViewer({ 
-  sessions, 
-  messages, 
-  selectedSessionId,
+function ConversationViewer({ 
+  sessions: propSessions, 
+  messages: propMessages, 
+  selectedSessionId: propSelectedSessionId,
   onSessionSelect,
   onSessionDelete,
-  className = ""
+  className = "",
+  experimentId
 }: ConversationViewerProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
+  
+  // Internal state for data loading mode
+  const [internalSessions, setInternalSessions] = useState<ChatSession[]>([])
+  const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([])
+  const [internalSelectedSessionId, setInternalSelectedSessionId] = useState<string>()
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Determine which data source to use
+  const sessions = propSessions || internalSessions
+  const messages = propMessages || internalMessages  
+  const selectedSessionId = propSelectedSessionId || internalSelectedSessionId
+  
+  const handleSessionSelect = (sessionId: string) => {
+    if (onSessionSelect) {
+      onSessionSelect(sessionId)
+    } else {
+      setInternalSelectedSessionId(sessionId)
+    }
+  }
+
+  // Data loading effect for experimentId mode
+  useEffect(() => {
+    if (!experimentId) return
+
+    const loadConversationData = async () => {
+      try {
+        setIsLoading(true)
+        
+        // Load chat sessions for the experiment
+        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByExperimentIdAndCreatedAt as any)({
+          experimentId: experimentId,
+          limit: 100
+        })
+
+        if (sessionsData) {
+          const formattedSessions: ChatSession[] = sessionsData.map((session: any) => ({
+            id: session.id,
+            name: session.name,
+            category: session.category,
+            status: session.status,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+            messageCount: 0 // Will be updated when we load messages
+          }))
+          
+          // Sort sessions by createdAt in descending order (most recent first)
+          const sortedSessions = formattedSessions.sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
+          
+          setInternalSessions(sortedSessions)
+          
+          if (sortedSessions.length > 0) {
+            // Select the most recent session (first in sorted array)
+            setInternalSelectedSessionId(sortedSessions[0].id)
+          }
+        }
+
+        // Load ALL messages for this experiment with proper pagination
+        let allMessages: any[] = []
+        let nextToken: string | null = null
+        
+        do {
+          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByExperimentIdAndCreatedAt as any)({
+            experimentId,
+            limit: 1000,
+            nextToken,
+          }, {
+            selectionSet: [
+              'id',
+              'content', 
+              'role',
+              'messageType',
+              'toolName',
+              'toolParameters',
+              'toolResponse',
+              'createdAt',
+              'sequenceNumber',
+              'sessionId'
+            ]
+          })
+          
+          if (response?.data) {
+            allMessages = [...allMessages, ...response.data]
+          }
+          
+          nextToken = response.nextToken || null
+        } while (nextToken)
+
+        if (allMessages.length > 0) {
+          const formattedMessages: ChatMessage[] = allMessages.map((msg: any) => {
+            // DEBUG: Log raw GraphQL data for tool calls
+            if (msg.messageType === 'TOOL_CALL') {
+              console.log('DEBUG Raw GraphQL Tool Call:', {
+                id: msg.id,
+                messageType: msg.messageType,
+                toolName: msg.toolName,
+                toolParameters: msg.toolParameters,
+                toolResponse: msg.toolResponse,
+                content: msg.content?.substring(0, 100)
+              })
+            }
+            
+            // Parse tool call data from content if structured fields are missing
+            let parsedToolName = msg.toolName
+            let parsedToolParameters = msg.toolParameters ? JSON.parse(msg.toolParameters) : undefined
+            
+            if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
+              // Parse tool call from content string like: "plexus_feedback_find({'scorecard_name': 'SelectQuote HCS Medium-Risk', ...})"
+              const toolCallMatch = msg.content.match(/^([^(]+)\((.+)\)$/s)
+              if (toolCallMatch) {
+                parsedToolName = toolCallMatch[1].trim()
+                try {
+                  // Convert Python-style dict to JSON and parse
+                  const pythonDict = toolCallMatch[2]
+                  const jsonString = pythonDict
+                    .replace(/'/g, '"')  // Convert single quotes to double quotes
+                    .replace(/True/g, 'true')  // Convert Python booleans
+                    .replace(/False/g, 'false')
+                    .replace(/None/g, 'null')
+                  parsedToolParameters = JSON.parse(jsonString)
+                } catch (e) {
+                  console.warn('Failed to parse tool parameters from content:', e)
+                }
+              }
+            }
+            
+            return {
+              id: msg.id,
+              content: msg.content || '',
+              role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
+              messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
+              toolName: parsedToolName,
+              toolParameters: parsedToolParameters,
+              toolResponse: msg.toolResponse ? JSON.parse(msg.toolResponse) : undefined,
+              createdAt: msg.createdAt,
+              sequenceNumber: msg.sequenceNumber,
+              sessionId: msg.sessionId
+            }
+          })
+          
+          // Sort all messages by sequence number and creation time
+          const sortedMessages = formattedMessages.sort((a, b) => {
+            if (a.sequenceNumber && b.sequenceNumber) {
+              return a.sequenceNumber - b.sequenceNumber
+            }
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          })
+          
+          setInternalMessages(sortedMessages)
+          
+          // Update session message counts
+          const sessionCounts = sortedMessages.reduce((acc: Record<string, number>, msg: any) => {
+            acc[msg.sessionId] = (acc[msg.sessionId] || 0) + 1
+            return acc
+          }, {})
+          
+          setInternalSessions(prev => prev.map(session => ({
+            ...session,
+            messageCount: sessionCounts[session.id] || 0
+          })))
+        }
+        
+      } catch (error) {
+        console.error('Error loading conversation data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadConversationData()
+  }, [experimentId])
+
+  // Real-time subscription for new chat messages
+  useEffect(() => {
+    if (!experimentId || !selectedSessionId) return
+
+    const subscription = (client.graphql({
+      query: `
+        subscription OnCreateChatMessage($sessionId: String!, $experimentId: String!) {
+          onCreateChatMessage(sessionId: $sessionId, experimentId: $experimentId) {
+            id
+            content
+            role
+            messageType
+            toolName
+            toolParameters
+            toolResponse
+            createdAt
+            sequenceNumber
+            sessionId
+            experimentId
+          }
+        }
+      `,
+      variables: {
+        sessionId: selectedSessionId,
+        experimentId: experimentId
+      }
+    }) as any).subscribe({
+      next: ({ data }: { data?: { onCreateChatMessage: any } }) => {
+        if (data?.onCreateChatMessage) {
+          const newMessage = data.onCreateChatMessage
+          
+          const formattedMessage: ChatMessage = {
+            id: newMessage.id,
+            content: newMessage.content || '',
+            role: newMessage.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
+            messageType: newMessage.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
+            toolName: newMessage.toolName,
+            toolParameters: newMessage.toolParameters ? JSON.parse(newMessage.toolParameters) : undefined,
+            toolResponse: newMessage.toolResponse ? JSON.parse(newMessage.toolResponse) : undefined,
+            createdAt: newMessage.createdAt,
+            sequenceNumber: newMessage.sequenceNumber,
+            sessionId: newMessage.sessionId
+          }
+          
+          setInternalMessages(prevMessages => {
+            const exists = prevMessages.some(msg => msg.id === formattedMessage.id)
+            if (exists) return prevMessages
+            
+            const updatedMessages = [...prevMessages, formattedMessage]
+            return updatedMessages.sort((a, b) => {
+              if (a.sequenceNumber && b.sequenceNumber) {
+                return a.sequenceNumber - b.sequenceNumber
+              }
+              return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            })
+          })
+          
+          setInternalSessions(prevSessions => prevSessions.map(session => 
+            session.id === selectedSessionId 
+              ? { ...session, messageCount: (session.messageCount || 0) + 1 }
+              : session
+          ))
+        }
+      },
+      error: (error: Error) => {
+        console.error('Chat message subscription error:', error)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [experimentId, selectedSessionId])
   
   // Sort sessions by last update date in reverse chronological order (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
@@ -168,6 +462,15 @@ export function ConversationViewer({
   
   // Get the current selected session
   const selectedSession = selectedSessionId ? sessions.find(s => s.id === selectedSessionId) : null
+
+  // Show loading state when loading data in experimentId mode
+  if (isLoading && experimentId) {
+    return (
+      <div className={`flex h-full bg-background ${className} items-center justify-center`}>
+        <div className="text-muted-foreground">Loading conversation...</div>
+      </div>
+    )
+  }
 
   return (
     <div className={`flex h-full bg-background ${className}`}>
@@ -200,7 +503,7 @@ export function ConversationViewer({
                 key={session.id}
                 variant={selectedSessionId === session.id ? "secondary" : "ghost"}
                 size="sm"
-                onClick={() => onSessionSelect?.(session.id)}
+                onClick={() => handleSessionSelect(session.id)}
                 className="w-full justify-start text-left p-2 h-auto"
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -241,7 +544,7 @@ export function ConversationViewer({
                 key={session.id}
                 variant={selectedSessionId === session.id ? "secondary" : "ghost"}
                 size="sm"
-                onClick={() => onSessionSelect?.(session.id)}
+                onClick={() => handleSessionSelect(session.id)}
                 className="w-full h-8 p-0"
                 title={session.name || session.category || `Session ${session.id.slice(0, 8)}`}
               >
@@ -335,7 +638,17 @@ export function ConversationViewer({
             </div>
           ) : (
             <div className="space-y-4">
-              {sortedMessages.map((message) => (
+              {sortedMessages.map((message) => {
+                // DEBUG: Log all messages to see their structure
+                console.log('DEBUG Message:', {
+                  id: message.id,
+                  role: message.role,
+                  messageType: message.messageType,
+                  toolName: message.toolName,
+                  hasToolParams: !!message.toolParameters,
+                  toolParameters: message.toolParameters
+                })
+                return (
                 <div key={message.id} className="flex items-start gap-3">
                   <div className="flex-shrink-0 mt-1">
                     {getMessageIcon(message.role, message.messageType)}
@@ -368,52 +681,72 @@ export function ConversationViewer({
                       </div>
                     </div>
                     
-                    <div className="text-sm">
-                      <CollapsibleText content={message.content} maxLines={10} />
-                    </div>
-                    
-                    {/* Tool parameters and responses */}
-                    {(message.toolParameters || message.toolResponse) && (
-                      <Collapsible className="mt-3">
-                        <CollapsibleTrigger asChild>
-                          <Button variant="ghost" size="sm" className="p-0 h-auto text-xs text-muted-foreground hover:text-foreground">
-                            <ChevronRight className="h-3 w-3 mr-1 transition-transform group-data-[state=open]:rotate-90" />
-                            View {message.toolParameters ? 'parameters' : 'response'} details
-                          </Button>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="mt-2">
-                          <div className="bg-muted rounded-md p-3 text-xs">
-                            {message.toolParameters && (
-                              <div className="mb-2">
-                                <div className="font-semibold mb-1">Parameters:</div>
-                                <div className="font-mono text-xs">
-                                  <CollapsibleText 
-                                    content={JSON.stringify(message.toolParameters, null, 2)} 
-                                    maxLines={5}
-                                    className="whitespace-pre-wrap break-words font-mono"
-                                  />
+                    {/* Tool call parameters display - primary for tool calls */}
+                    {message.messageType === 'TOOL_CALL' && message.toolParameters ? (
+                      <div>
+                        <div className="bg-card rounded-md p-3">
+                          {message.toolName && (
+                            <h4 className="font-semibold text-sm mb-2 text-foreground">{message.toolName}</h4>
+                          )}
+                          <div className="space-y-1">
+                            {Object.entries(message.toolParameters).map(([key, value]) => (
+                              <div key={key} className="grid grid-cols-3 gap-2 text-xs">
+                                <div className="font-medium text-muted-foreground">{key}:</div>
+                                <div className="col-span-2 font-mono text-foreground break-words">
+                                  {typeof value === 'string' ? value : JSON.stringify(value)}
                                 </div>
                               </div>
-                            )}
-                            {message.toolResponse && (
-                              <div>
-                                <div className="font-semibold mb-1">Response:</div>
-                                <div className="font-mono text-xs">
-                                  <CollapsibleText 
-                                    content={JSON.stringify(message.toolResponse, null, 2)} 
-                                    maxLines={5}
-                                    className="whitespace-pre-wrap break-words font-mono"
-                                  />
-                                </div>
-                              </div>
-                            )}
+                            ))}
                           </div>
-                        </CollapsibleContent>
-                      </Collapsible>
+                        </div>
+                        
+                        {/* Raw tool call - collapsible */}
+                        <div className="mt-3">
+                          <Collapsible>
+                            <CollapsibleTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                              >
+                                <ChevronRight className="h-3 w-3" />
+                                Raw
+                              </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="mt-2 text-sm font-mono">
+                                <CollapsibleText content={message.content} maxLines={10} />
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm">
+                        <CollapsibleText content={message.content} maxLines={10} />
+                      </div>
+                    )}
+                    
+                    {/* Tool response display */}
+                    {message.messageType === 'TOOL_RESPONSE' && message.toolResponse && (
+                      <div className="mt-3">
+                        <div className="bg-card rounded-md p-3 text-xs">
+                          <div className="font-semibold mb-2">Response:</div>
+                          <div className="font-mono">
+                            <CollapsibleText 
+                              content={JSON.stringify(message.toolResponse, null, 2)} 
+                              maxLines={5}
+                              className="whitespace-pre-wrap break-words font-mono"
+                              enableMarkdown={false}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

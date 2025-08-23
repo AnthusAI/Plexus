@@ -27,7 +27,7 @@ export const Square = {
   },
   decorators: [
     (Story: StoryFn<typeof SquareLogo>, context) => (
-      <div className="w-full h-screen flex justify-center items-center bg-white p-8">
+      <div className="w-full h-screen flex justify-center items-center bg-background p-8">
         <div className="w-1/2">
           <Story {...context.args} />
         </div>
@@ -43,7 +43,7 @@ export const Wide = {
   },
   decorators: [
     (Story: StoryFn<typeof SquareLogo>, context) => (
-      <div className="w-full h-screen flex justify-center items-center bg-white p-8">
+      <div className="w-full h-screen flex justify-center items-center bg-background p-8">
         <div className="w-1/2">
           <Story {...context.args} />
         </div>
@@ -59,7 +59,7 @@ export const Narrow = {
   },
   decorators: [
     (Story: StoryFn<typeof SquareLogo>, context) => (
-      <div className="w-full h-screen flex justify-center items-center bg-white p-8">
+      <div className="w-full h-screen flex justify-center items-center bg-background p-8">
         <div className="w-24 aspect-square">
           <Story {...context.args} />
         </div>
@@ -76,7 +76,7 @@ export const WithShadow = {
   },
   decorators: [
     (Story: StoryFn<typeof SquareLogo>, context) => (
-      <div className="w-full h-screen flex justify-center items-center p-8" style={{ backgroundColor: '#ffffff' }}>
+      <div className="w-full h-screen flex justify-center items-center p-8 bg-background">
         <div className="w-1/2">
           <Story {...context.args} />
         </div>
@@ -93,7 +93,7 @@ export const WideWithShadow = {
   },
   decorators: [
     (Story: StoryFn<typeof SquareLogo>, context) => (
-      <div className="w-full h-screen flex justify-center items-center p-8" style={{ backgroundColor: '#ffffff' }}>
+      <div className="w-full h-screen flex justify-center items-center p-8 bg-background">
         <div className="w-1/2">
           <Story {...context.args} />
         </div>
@@ -110,7 +110,7 @@ export const NarrowWithShadow = {
   },
   decorators: [
     (Story: StoryFn<typeof SquareLogo>, context) => (
-      <div className="w-full h-screen flex justify-center items-center p-8" style={{ backgroundColor: '#ffffff' }}>
+      <div className="w-full h-screen flex justify-center items-center p-8 bg-background">
         <div className="w-24 aspect-square">
           <Story {...context.args} />
         </div>
@@ -121,8 +121,8 @@ export const NarrowWithShadow = {
 
 export const ShadowWidths = {
   render: () => (
-    <div className="space-y-8 p-8" style={{ backgroundColor: '#ffffff' }}>
-      <div className="text-lg font-bold">Shadow Widths</div>
+    <div className="space-y-8 p-8 bg-background min-h-screen">
+      <div className="text-lg font-bold text-foreground">Shadow Widths</div>
       <div className="flex items-center justify-around">
         <div className="text-center">
           <div className="text-sm text-muted-foreground mb-2">12px</div>
@@ -143,8 +143,8 @@ export const ShadowWidths = {
 
 export const ShadowIntensities = {
   render: () => (
-    <div className="space-y-8 p-8" style={{ backgroundColor: '#ffffff' }}>
-      <div className="text-lg font-bold">Shadow Intensities</div>
+    <div className="space-y-8 p-8 bg-background min-h-screen">
+      <div className="text-lg font-bold text-foreground">Shadow Intensities</div>
       <div className="flex items-center justify-around">
         <div className="text-center">
           <div className="text-sm text-muted-foreground mb-2">0.25</div>
