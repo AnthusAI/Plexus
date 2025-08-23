@@ -45,6 +45,7 @@ class Extractor(BaseNode, LangChainUser):
 
     class GraphState(BaseNode.GraphState):
         extracted_text: Optional[str] = None
+        reasoning: Optional[str] = None  # Store reasoning content from gpt-oss models
 
     class Parameters(BaseNode.Parameters):
         fuzzy_match_score_cutoff: int = Field(
@@ -173,23 +174,36 @@ class Extractor(BaseNode, LangChainUser):
             if not isinstance(prompt, ChatPromptTemplate):
                 prompt = ChatPromptTemplate.from_template(prompt)
             
-            chain = prompt | model | self.ExtractionOutputParser(
+            # Get the formatted prompt messages
+            formatted_prompt = prompt.format_prompt(**state.model_dump())
+            messages = formatted_prompt.to_messages()
+            
+            # Call the model directly to get the raw response
+            response = model.invoke(messages)
+            
+            # Normalize completion text (handles Responses API content blocks)
+            completion_text = self.normalize_text_output(response)
+            
+            # Extract reasoning content for gpt-oss models
+            reasoning_content = ""
+            if self.is_gpt_oss_model():
+                reasoning_content = self.extract_reasoning_content(response)
+            
+            # Parse the completion using the output parser
+            parser = self.ExtractionOutputParser(
                 FUZZY_MATCH_SCORE_CUTOFF=self.parameters.fuzzy_match_score_cutoff,
                 text=state.text,
                 use_exact_matching=self.parameters.use_exact_matching,
                 trust_model_output=self.parameters.trust_model_output
             )
+            extraction_result = parser.parse(completion_text)
             
-            # Invoke the chain to get the extraction result
-            extraction_result = chain.invoke({
-                **state.model_dump()
-            })
-            
-            # Create the result state with the extracted text
+            # Create the result state with the extracted text and reasoning
             state_dict = state.model_dump()
             
-            # Update the state dictionary with the extracted text
+            # Update the state dictionary with the extracted text and reasoning
             state_dict["extracted_text"] = extraction_result["extracted_text"]
+            state_dict["reasoning"] = reasoning_content if reasoning_content else None
                 
             result_state = self.GraphState(
                 **state_dict
@@ -199,6 +213,10 @@ class Extractor(BaseNode, LangChainUser):
             output_state = {
                 "extracted_text": extraction_result["extracted_text"]
             }
+            
+            # Include reasoning for gpt-oss models
+            if hasattr(result_state, 'reasoning') and result_state.reasoning:
+                output_state["reasoning"] = result_state.reasoning
             
             # Log the state and get a new state object with updated node_results
             updated_state = self.log_state(result_state, None, output_state)
