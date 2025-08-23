@@ -154,7 +154,8 @@ class StandardOperatingProcedureAgent:
                  flow_manager: Optional[FlowManager] = None,
                  chat_recorder: Optional[ChatRecorder] = None,
                  openai_api_key: Optional[str] = None,
-                 context: Optional[Dict[str, Any]] = None):
+                 context: Optional[Dict[str, Any]] = None,
+                 model_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the StandardOperatingProcedureAgent.
         
@@ -166,6 +167,7 @@ class StandardOperatingProcedureAgent:
             chat_recorder: Optional recorder for conversation logging
             openai_api_key: Optional OpenAI API key for SOP guidance LLM
             context: Optional procedure context with known information
+            model_config: Optional model configuration dict for LLM parameters
         """
         self.procedure_id = procedure_id
         self.procedure_definition = procedure_definition
@@ -173,6 +175,20 @@ class StandardOperatingProcedureAgent:
         self.flow_manager = flow_manager
         self.chat_recorder = chat_recorder
         self.context = context or {}
+        self.model_config = model_config or {}
+        
+        # Initialize model configuration system
+        from .model_config import create_configured_llm, ModelConfig, ModelConfigs
+        if self.model_config:
+            self._model_config_instance = ModelConfig.from_dict(self.model_config)
+        else:
+            # Try environment configuration first, then fall back to GPT-4 default
+            env_config = ModelConfigs.from_environment()
+            if env_config.model != "gpt-4o":  # Environment config found
+                self._model_config_instance = env_config
+                logger.info(f"Using environment-based model configuration: {env_config.model}")
+            else:
+                self._model_config_instance = None  # Will use defaults
         
         # Reduce debug noise from verbose modules
         reduce_debug_noise()
@@ -241,16 +257,22 @@ class StandardOperatingProcedureAgent:
         and providing structured guidance based on the procedure definition.
         """
         try:
-            # Import LangChain for SOP guidance LLM
-            from langchain_openai import ChatOpenAI
+            # Import model configuration system
+            from .model_config import create_configured_llm, ModelConfigs
             
-            # Create SOP guidance LLM
-            sop_guidance_llm = ChatOpenAI(
-                model="gpt-4o",
-                temperature=0.1,
-                openai_api_key=self.openai_api_key,
-                stream=False
-            )
+            # Create SOP guidance LLM with configuration
+            if self._model_config_instance:
+                # Use configured model
+                manager_config = self._model_config_instance
+                # Override API key and set manager-appropriate parameters
+                manager_config.openai_api_key = self.openai_api_key
+                sop_guidance_llm = manager_config.create_langchain_llm()
+            else:
+                # Fall back to default manager configuration
+                sop_guidance_llm = create_configured_llm(
+                    model_config=ModelConfigs.gpt_4o_precise(),
+                    openai_api_key=self.openai_api_key
+                )
             
             # Get procedure-specific guidance prompt for manager agent
             manager_system_prompt = self.procedure_definition.get_sop_guidance_prompt(self.context, state_data)
@@ -287,7 +309,8 @@ class StandardOperatingProcedureAgent:
             from .conversation_filter import ManagerAgentConversationFilter
             
             # Use Manager agent conversation filter for proper message list with manager-specific setup
-            manager_filter = ManagerAgentConversationFilter(model="gpt-4o")
+            filter_model = self._model_config_instance.model if self._model_config_instance else "gpt-4o"
+            manager_filter = ManagerAgentConversationFilter(model=filter_model)
             filtered_messages = manager_filter.filter_conversation(
                 conversation_history, 
                 max_tokens=8000,
@@ -487,15 +510,20 @@ Your response will become the next user message to guide the coding assistant.
                     "suggestion": "Please set OPENAI_API_KEY environment variable or pass openai_api_key parameter"
                 }
             
-            # Set up coding assistant with scoped tools
-            from langchain_openai import ChatOpenAI
-            coding_assistant_llm = ChatOpenAI(
-                model="gpt-4o",
-                temperature=0.7,
-                openai_api_key=self.openai_api_key,
-                stream=False,
-                max_tokens=4000
-            )
+            # Set up coding assistant with scoped tools using model configuration
+            from .model_config import create_configured_llm, ModelConfigs
+            
+            if self._model_config_instance:
+                # Use configured model for coding assistant
+                worker_config = self._model_config_instance
+                worker_config.openai_api_key = self.openai_api_key
+                coding_assistant_llm = worker_config.create_langchain_llm()
+            else:
+                # Fall back to default worker configuration
+                coding_assistant_llm = create_configured_llm(
+                    model_config=ModelConfigs.gpt_4o_default(),
+                    openai_api_key=self.openai_api_key
+                )
             
             # Get procedure-specific tools
             async with self.mcp_server.connect({'name': f'Coding Assistant for {self.procedure_id}'}) as mcp_client:
@@ -580,8 +608,9 @@ Your response will become the next user message to guide the coding assistant.
                     try:
                         # Apply worker agent conversation filtering for the coding assistant
                         from .conversation_filter import WorkerAgentConversationFilter
-                        # Using 120K token limit to leave room for response generation (gpt-4o has 128K context)
-                        conversation_filter = WorkerAgentConversationFilter(model="gpt-4o")
+                        # Using appropriate token limit based on configured model
+                        filter_model = self._model_config_instance.model if self._model_config_instance else "gpt-4o"
+                        conversation_filter = WorkerAgentConversationFilter(model=filter_model)
                         filtered_history = conversation_filter.filter_conversation(conversation_history, max_tokens=120000)
                         
                         # Worker agent has access to all tools at all times
@@ -885,14 +914,24 @@ Your response will become the next user message to guide the coding assistant.
             
             logger.info("📝 Requesting final summarization from worker agent")
             
-            # Set up LLM for final summarization (no tools needed)
-            summarization_llm = ChatOpenAI(
-                model="gpt-4o",
-                temperature=0.3,
-                openai_api_key=self.openai_api_key,
-                stream=False,
-                max_tokens=2000
-            )
+            # Set up LLM for final summarization (no tools needed) using model configuration
+            from .model_config import create_configured_llm, ModelConfigs
+            
+            if self._model_config_instance:
+                # Use configured model for summarization
+                summary_config = self._model_config_instance
+                summary_config.openai_api_key = self.openai_api_key
+                summarization_llm = summary_config.create_langchain_llm()
+            else:
+                # Fall back to default summarization configuration
+                summarization_llm = create_configured_llm(
+                    model_config={
+                        "model": "gpt-4o",
+                        "temperature": 0.3,
+                        "max_tokens": 2000
+                    },
+                    openai_api_key=self.openai_api_key
+                )
             
             # Create final conversation for summarization
             summarization_history = conversation_history.copy()
@@ -923,7 +962,8 @@ async def execute_sop_procedure(procedure_id: str,
                                flow_manager: Optional[FlowManager] = None,
                                chat_recorder: Optional[ChatRecorder] = None,
                                openai_api_key: Optional[str] = None,
-                               context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                               context: Optional[Dict[str, Any]] = None,
+                               model_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Execute a Standard Operating Procedure with the SOP Agent.
     
@@ -939,6 +979,7 @@ async def execute_sop_procedure(procedure_id: str,
         chat_recorder: Optional recorder for conversation logging
         openai_api_key: Optional OpenAI API key
         context: Optional procedure context
+        model_config: Optional model configuration dict for LLM parameters
         
     Returns:
         Dictionary with execution results
@@ -954,7 +995,8 @@ async def execute_sop_procedure(procedure_id: str,
             flow_manager=flow_manager,
             chat_recorder=chat_recorder,
             openai_api_key=openai_api_key,
-            context=context
+            context=context,
+            model_config=model_config
         )
         
         setup_success = await sop_agent.setup(procedure_yaml)
