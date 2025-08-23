@@ -15,6 +15,9 @@ import {
 } from 'lucide-react'
 import { Timestamp } from '@/components/ui/timestamp'
 import { Card } from '@/components/ui/card'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 // Individual Chat Message Component
 interface ChatMessageProps {
@@ -28,15 +31,17 @@ interface ChatMessageProps {
   className?: string
 }
 
-// Collapsible text component (duplicated for this story)
+// Collapsible text component with Markdown support
 function CollapsibleText({ 
   content, 
   maxLines = 10, 
-  className = "whitespace-pre-wrap break-words" 
+  className = "whitespace-pre-wrap break-words",
+  enableMarkdown = true
 }: { 
   content: string, 
   maxLines?: number,
-  className?: string 
+  className?: string,
+  enableMarkdown?: boolean
 }) {
   const [isExpanded, setIsExpanded] = React.useState(false)
   const lines = content.split('\n')
@@ -45,13 +50,44 @@ function CollapsibleText({
     ? lines.slice(0, maxLines).join('\n') + '...'
     : content
 
+  const renderContent = (text: string) => {
+    if (!enableMarkdown) {
+      return <p className={className}>{text}</p>
+    }
+
+    return (
+      <div className={`prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground ${className}`}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkBreaks]}
+          components={{
+            p: ({ children }: { children: React.ReactNode }) => <p className="mb-3 last:mb-0">{children}</p>,
+            ul: ({ children }: { children: React.ReactNode }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+            ol: ({ children }: { children: React.ReactNode }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+            li: ({ children }: { children: React.ReactNode }) => <li className="mb-1">{children}</li>,
+            strong: ({ children }: { children: React.ReactNode }) => <strong className="font-semibold text-foreground">{children}</strong>,
+            em: ({ children }: { children: React.ReactNode }) => <em className="italic">{children}</em>,
+            code: ({ children }: { children: React.ReactNode }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+            pre: ({ children }: { children: React.ReactNode }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+            h1: ({ children }: { children: React.ReactNode }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+            h2: ({ children }: { children: React.ReactNode }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+            h3: ({ children }: { children: React.ReactNode }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+            blockquote: ({ children }: { children: React.ReactNode }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+            a: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href} className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+          }}
+        >
+          {text}
+        </ReactMarkdown>
+      </div>
+    )
+  }
+
   if (!shouldTruncate) {
-    return <p className={className}>{content}</p>
+    return renderContent(content)
   }
 
   return (
     <div>
-      <p className={className}>{displayContent}</p>
+      {renderContent(displayContent)}
       <Button
         variant="ghost"
         size="sm"
@@ -142,48 +178,67 @@ function ChatMessage({
           </div>
         </div>
         
-        <div className="text-sm">
-          <CollapsibleText content={content} maxLines={10} />
-        </div>
-        
-        {/* Tool parameters and responses */}
-        {(toolParameters || toolResponse) && (
-          <Collapsible className="mt-3">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="p-0 h-auto text-xs text-muted-foreground hover:text-foreground">
-                <ChevronRight className="h-3 w-3 mr-1 transition-transform group-data-[state=open]:rotate-90" />
-                View {toolParameters ? 'parameters' : 'response'} details
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2">
-              <div className="bg-muted rounded-md p-3 text-xs">
-                {toolParameters && (
-                  <div className="mb-2">
-                    <div className="font-semibold mb-1">Parameters:</div>
-                    <div className="font-mono text-xs">
-                      <CollapsibleText 
-                        content={JSON.stringify(toolParameters, null, 2)} 
-                        maxLines={5}
-                        className="whitespace-pre-wrap break-words font-mono"
-                      />
+        {/* Tool call parameters display - primary for tool calls */}
+        {messageType === 'TOOL_CALL' && toolParameters ? (
+          <div>
+            <div className="bg-card rounded-md p-3">
+              {toolName && (
+                <h4 className="font-semibold text-sm mb-2 text-foreground">{toolName}</h4>
+              )}
+              <div className="space-y-1">
+                {Object.entries(toolParameters).map(([key, value]) => (
+                  <div key={key} className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="font-medium text-muted-foreground">{key}:</div>
+                    <div className="col-span-2 font-mono text-foreground break-words">
+                      {typeof value === 'string' ? value : JSON.stringify(value)}
                     </div>
                   </div>
-                )}
-                {toolResponse && (
-                  <div>
-                    <div className="font-semibold mb-1">Response:</div>
-                    <div className="font-mono text-xs">
-                      <CollapsibleText 
-                        content={JSON.stringify(toolResponse, null, 2)} 
-                        maxLines={5}
-                        className="whitespace-pre-wrap break-words font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
+                ))}
               </div>
-            </CollapsibleContent>
-          </Collapsible>
+            </div>
+            
+            {/* Raw tool call - collapsible */}
+            <div className="mt-3">
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                    Raw
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-2 text-sm font-mono">
+                    <CollapsibleText content={content} maxLines={10} />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm">
+            <CollapsibleText content={content} maxLines={10} />
+          </div>
+        )}
+        
+        {/* Tool response display */}
+        {messageType === 'TOOL_RESPONSE' && toolResponse && (
+          <div className="mt-3">
+            <div className="bg-card rounded-md p-3 text-xs">
+              <div className="font-semibold mb-2">Response:</div>
+              <div className="font-mono">
+                <CollapsibleText 
+                  content={JSON.stringify(toolResponse, null, 2)} 
+                  maxLines={5}
+                  className="whitespace-pre-wrap break-words font-mono"
+                  enableMarkdown={false}
+                />
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -206,10 +261,10 @@ const meta: Meta<typeof ChatMessage> = {
   tags: ['autodocs'],
   decorators: [
     (Story) => (
-      <div className="p-8 min-h-screen bg-card">
-        <Card className="p-4 bg-background">
+      <div className="p-8 min-h-screen bg-background">
+        <div className="p-4">
           <Story />
-        </Card>
+        </div>
       </div>
     ),
   ],
@@ -240,7 +295,15 @@ export const UserMessage: Story = {
 
 export const AssistantMessage: Story = {
   args: {
-    content: 'I\'ll start by examining the feedback patterns to understand how the current "Medication Review" score is performing. Let me get an overview of the confusion matrix and accuracy patterns.',
+    content: `I'll start by examining the feedback patterns to understand how the current **"Medication Review"** score is performing. Let me get an overview of the confusion matrix and accuracy patterns.
+
+## Analysis Plan
+
+1. **Performance Metrics** - Check accuracy and precision
+2. **Pattern Identification** - Look for systematic errors
+3. **Hypothesis Generation** - Create testable improvements
+
+> Note: This analysis will focus on the last 30 days of data for statistical significance.`,
     role: 'ASSISTANT',
     messageType: 'MESSAGE',
     createdAt: '2024-01-15T10:30:10Z',
@@ -338,5 +401,58 @@ export const ComplexToolCall: Story = {
       yaml_configuration: "class: \"MedicationReview\"\nparameters:\n  exclude_routine_refills: true\n  refill_threshold_days: 30"
     },
     createdAt: '2024-01-15T10:30:25Z',
+  },
+}
+
+export const RichMarkdownMessage: Story = {
+  args: {
+    content: `# Experiment Analysis Summary
+
+Based on my analysis of the **SelectQuote HCS Medium-Risk** scorecard data, I've identified several key opportunities for improvement:
+
+## Key Findings
+
+### Performance Metrics
+- **Accuracy**: 73.3% (33/45 items correctly classified)
+- **Precision**: 65.2% (15 true positives out of 23 positive predictions)  
+- **Recall**: 78.9% (15 true positives out of 19 actual positives)
+
+### Problem Areas Identified
+
+1. **False Positives** (8 cases)
+   - Routine medication refills being flagged as requiring review
+   - Standard dosage adjustments triggering unnecessary alerts
+   
+2. **False Negatives** (4 cases)
+   - Complex drug interactions not being detected
+   - Missing review requirements for high-risk medications
+
+## Proposed Hypotheses
+
+I will create \`3 experiment nodes\` to test different improvement strategies:
+
+| Hypothesis | Method | Expected Impact |
+|------------|---------|-----------------|
+| **Routine Refill Filter** | Exclude standard refill patterns | ↓ 5-7 false positives |
+| **Drug Interaction Enhancement** | Enhanced interaction database | ↓ 2-3 false negatives |
+| **Risk Stratification** | Tiered review requirements | ↑ Overall precision |
+
+### Implementation Code
+
+\`\`\`yaml
+class: "MedicationReview"
+parameters:
+  exclude_routine_refills: true
+  refill_threshold_days: 30
+  enhanced_interactions: true
+\`\`\`
+
+> **Next Steps**: Creating experiment nodes to validate these hypotheses with A/B testing on recent feedback data.
+
+---
+*Analysis completed at 2024-01-15 10:30:30Z*`,
+    role: 'ASSISTANT',
+    messageType: 'MESSAGE',
+    createdAt: '2024-01-15T10:30:30Z',
   },
 }
