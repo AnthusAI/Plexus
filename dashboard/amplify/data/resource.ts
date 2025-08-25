@@ -541,7 +541,6 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
             idx("taskId"),
-            idx("name"),
             idx("order"),
             idx("status")
         ]),
