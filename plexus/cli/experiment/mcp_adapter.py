@@ -259,8 +259,7 @@ def convert_mcp_tools_to_langchain(mcp_tools):
         'plexus_feedback_analysis': {
             'scorecard_name': 'Name of the scorecard',
             'score_name': 'Name of the score',
-            'days': 'Number of days back to analyze',
-            'output_format': 'Output format - json or yaml'
+            'days': 'Number of days back to analyze'
         },
         'plexus_feedback_find': {
             'scorecard_name': 'Name of the scorecard containing the score',
@@ -269,7 +268,6 @@ def convert_mcp_tools_to_langchain(mcp_tools):
             'final_value': 'Optional filter for the corrected human value',
             'limit': 'Maximum number of feedback items to return (default 5, max 50)',
             'days': 'Number of days back to search',
-            'output_format': 'Output format - json or yaml',
             'prioritize_edit_comments': 'Whether to prioritize feedback items with edit comments',
             'offset': 'Simple numeric offset for pagination'
         },

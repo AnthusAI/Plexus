@@ -53,7 +53,7 @@ export default function LandingPage() {
   return (
     <Layout>
       <StandardSection
-        headline="Distributed Machine Learning Operating System"
+        headline="Agent Operating System"
         headlinePosition="inline"
         variant="hero"
         useWordReveal={true}

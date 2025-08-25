@@ -712,6 +712,45 @@ class ExperimentService:
             logger.error(f"Error resolving score identifier: {str(e)}")
             return None
     
+    async def _get_existing_experiment_nodes(self, experiment_id: str) -> str:
+        """Get existing experiment nodes formatted for AI system prompt."""
+        try:
+            # Get all nodes for this experiment (excluding root node)
+            all_nodes = ExperimentNode.list_by_experiment(experiment_id, self.client)
+            hypothesis_nodes = [node for node in all_nodes if not node.is_root]
+            
+            if not hypothesis_nodes:
+                return "No existing hypothesis nodes found."
+            
+            # Format nodes for AI consumption
+            nodes_text = "## Existing Hypothesis Experiment Nodes\n\n"
+            nodes_text += "**IMPORTANT:** The following hypothesis nodes already exist in this experiment. "
+            nodes_text += "Avoid creating duplicate or overly similar hypotheses. Build upon these ideas or explore different approaches.\n\n"
+            
+            for i, node in enumerate(hypothesis_nodes, 1):
+                nodes_text += f"### Node {i}: {node.name or 'Unnamed Node'}\n\n"
+                
+                # Add hypothesis description if available
+                if hasattr(node, 'hypothesisDescription') and node.hypothesisDescription:
+                    nodes_text += f"**Hypothesis Description:**\n{node.hypothesisDescription}\n\n"
+                
+                # Add creation timestamp for context
+                if hasattr(node, 'createdAt') and node.createdAt:
+                    nodes_text += f"**Created:** {node.createdAt}\n\n"
+                
+                # Add a separator between nodes
+                if i < len(hypothesis_nodes):
+                    nodes_text += "---\n\n"
+            
+            nodes_text += "**Remember:** Your new hypotheses should address different aspects of the scoring problems "
+            nodes_text += "or explore alternative approaches not covered by the existing nodes above.\n\n"
+            
+            return nodes_text
+            
+        except Exception as e:
+            logger.warning(f"Failed to get existing experiment nodes: {e}")
+            return "Could not retrieve existing experiment nodes."
+    
     async def run_experiment(self, experiment_id: str, **options) -> Dict[str, Any]:
         """
         Run an experiment with the given ID.
@@ -795,12 +834,15 @@ class ExperimentService:
                 # 3. Get current score configuration
                 current_score_config = await self._get_champion_score_config(experiment_info.experiment.scoreId)
                 
-                # 4. Get feedback summary for the last 30 days
+                # 4. Get feedback summary for the last 7 days
                 feedback_summary = await self._get_feedback_summary(
                     experiment_info.scorecard_name, 
                     experiment_info.score_name,
                     experiment_info.experiment.accountId  # Pass the account ID directly
                 )
+                
+                # 5. Get existing experiment nodes to avoid duplication
+                existing_nodes = await self._get_existing_experiment_nodes(experiment_id)
                 
                 # Create experiment context for MCP tools with pre-loaded data
                 experiment_context = {
@@ -817,7 +859,8 @@ class ExperimentService:
                     'feedback_alignment_docs': feedback_docs,
                     'score_yaml_format_docs': score_yaml_docs,
                     'current_score_config': current_score_config,
-                    'feedback_summary': feedback_summary
+                    'feedback_summary': feedback_summary,
+                    'existing_nodes': existing_nodes
                 }
                 
                 logger.info("Successfully pre-loaded all context for AI agent")
@@ -1192,7 +1235,7 @@ class ExperimentService:
             logger.error(f"Error getting score YAML format docs: {e}")
             return "# Score YAML Format Documentation\nDocumentation not available - proceed with general score configuration principles."
     
-    async def _get_feedback_summary(self, scorecard_name: str, score_name: str, account_id: str, days: int = 30) -> Optional[str]:
+    async def _get_feedback_summary(self, scorecard_name: str, score_name: str, account_id: str, days: int = 7) -> Optional[str]:
         """Get feedback summary for the last N days."""
         try:
             # Use the feedback service directly to get the same data as the MCP tool
@@ -1265,30 +1308,89 @@ class ExperimentService:
                 days=days
             )
             
-            # Format as dictionary and convert to YAML (same as MCP tool)
-            result_dict = FeedbackService.format_summary_result_as_dict(summary_result)
-            
-            # Add command context
-            result_dict["command_info"] = {
-                "description": "Comprehensive feedback analysis with confusion matrix and agreement metrics",
-                "period": f"Last {days} days"
-            }
-            
-            # Convert to YAML for better readability in prompts
-            import yaml
-            from datetime import datetime
-            yaml_comment = f"""# Feedback Summary Analysis
-# Scorecard: {scorecard_data['name']}
-# Score: {score_match['name']}
-# Period: Last {days} days
-# Generated: {datetime.now().isoformat()}
-
-"""
-            yaml_output = yaml.dump(result_dict, default_flow_style=False, sort_keys=False)
-            
-            logger.info(f"Retrieved feedback summary for {scorecard_name}/{score_name} (last {days} days)")
-            return yaml_comment + yaml_output
+            # Format the structured data for experiment consumption
+            return self._format_feedback_summary_for_experiment(
+                summary_result, 
+                scorecard_data['name'], 
+                score_match['name'], 
+                days
+            )
             
         except Exception as e:
             logger.error(f"Error getting feedback summary: {e}")
             return f"# Feedback Summary\nError retrieving feedback data: {str(e)}"
+    
+    def _format_feedback_summary_for_experiment(self, summary_result, scorecard_name: str, score_name: str, days: int) -> str:
+        """Format feedback summary result for experiment context consumption."""
+        from datetime import datetime
+        
+        # Extract structured data from the result
+        analysis = summary_result.analysis
+        confusion_matrix = analysis.get('confusion_matrix', {})
+        total_items = analysis.get('total_items', 0)
+        accuracy = analysis.get('accuracy', 0)
+        ac1 = analysis.get('ac1', 0)
+        
+        # Build clean, focused format for confusion matrix interpretation
+        feedback_analysis = f"""## FEEDBACK ANALYSIS - CONFUSION MATRIX DATA
+
+**Scorecard:** {scorecard_name}
+**Score:** {score_name}
+**Period:** Last {days} days (Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')})
+
+### KEY METRICS
+- **Total Feedback Items:** {total_items}
+- **Accuracy:** {accuracy:.1f}%
+- **Agreement (AC1):** {ac1:.2f}
+
+### CONFUSION MATRIX - SCORING CORRECTIONS
+"""
+
+        # Parse confusion matrix data
+        if confusion_matrix and 'matrix' in confusion_matrix:
+            labels = confusion_matrix.get('labels', [])
+            matrix = confusion_matrix.get('matrix', [])
+            
+            feedback_analysis += "**Error Patterns (AI Prediction → Human Correction):**\n\n"
+            
+            total_errors = 0
+            error_details = []
+            
+            for row in matrix:
+                actual_label = row.get('actualClassLabel', '')
+                predicted_counts = row.get('predictedClassCounts', {})
+                
+                for predicted_label, count in predicted_counts.items():
+                    if actual_label != predicted_label and count > 0:
+                        # This is an error - AI predicted wrong
+                        error_details.append((predicted_label, actual_label, count))
+                        total_errors += count
+                        feedback_analysis += f"- **{predicted_label} → {actual_label}:** {count} corrections (AI said '{predicted_label}', human corrected to '{actual_label}')\n"
+            
+            if total_errors == 0:
+                feedback_analysis += "- No scoring errors found in this period\n"
+            
+            feedback_analysis += f"\n**Total Corrections:** {total_errors}\n"
+            
+            # Add correct predictions summary
+            feedback_analysis += "\n**Correct Predictions (for context):**\n"
+            for row in matrix:
+                actual_label = row.get('actualClassLabel', '')
+                predicted_counts = row.get('predictedClassCounts', {})
+                correct_count = predicted_counts.get(actual_label, 0)
+                if correct_count > 0:
+                    feedback_analysis += f"- **{actual_label} → {actual_label}:** {correct_count} correct\n"
+        
+        feedback_analysis += f"""
+
+### ANALYSIS PRIORITIES
+Based on this data, you should prioritize examining error types with the highest correction counts first.
+
+### NEXT STEPS
+1. Interpret these patterns - which errors are most frequent?
+2. Use plexus_feedback_find to examine ALL examples of the most common errors
+3. Sample 1-2 correct predictions for context only
+"""
+        
+        logger.info(f"Retrieved feedback summary for {scorecard_name}/{score_name} (last {days} days)")
+        return feedback_analysis

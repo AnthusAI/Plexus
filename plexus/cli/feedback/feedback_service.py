@@ -29,6 +29,7 @@ class FeedbackItemSummary:
     initial_explanation: Optional[str]
     final_explanation: Optional[str]
     edit_comment: Optional[str]
+    item_text: Optional[str] = None  # Include item text for detailed analysis
 
 
 @dataclass
@@ -110,18 +111,24 @@ class FeedbackService:
         return None
 
     @staticmethod
-    def _convert_feedback_item_to_summary(item: FeedbackItem) -> FeedbackItemSummary:
+    def _convert_feedback_item_to_summary(item: FeedbackItem, include_text: bool = False) -> FeedbackItemSummary:
         """
         Convert a FeedbackItem to a token-efficient summary.
         
         Args:
             item: The FeedbackItem to convert
+            include_text: Whether to include the item text for detailed analysis
             
         Returns:
-            FeedbackItemSummary with only the fields needed for alignment work
+            FeedbackItemSummary with the fields needed for alignment work
         """
         # Extract preferred ID (form_id if available, otherwise external_id)
         external_id = FeedbackService._extract_preferred_id(item)
+        
+        # Extract item text if requested and available
+        item_text = None
+        if include_text and item.item and hasattr(item.item, 'text'):
+            item_text = item.item.text
         
         return FeedbackItemSummary(
             item_id=item.itemId,
@@ -130,7 +137,8 @@ class FeedbackService:
             final_value=item.finalAnswerValue,
             initial_explanation=item.initialCommentValue,
             final_explanation=item.finalCommentValue,
-            edit_comment=item.editCommentValue
+            edit_comment=item.editCommentValue,
+            item_text=item_text
         )
 
     @staticmethod
@@ -577,6 +585,7 @@ class FeedbackService:
         initial_value: Optional[str] = None,
         final_value: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: Optional[int] = None,
         prioritize_edit_comments: bool = True
     ) -> List[FeedbackItem]:
         """
@@ -591,6 +600,7 @@ class FeedbackService:
             initial_value: Optional filter for initial answer value
             final_value: Optional filter for final answer value
             limit: Optional limit on number of items to return
+            offset: Optional offset for pagination (number of items to skip)
             prioritize_edit_comments: Whether to prioritize items with edit comments when limiting
             
         Returns:
@@ -741,6 +751,14 @@ class FeedbackService:
             all_feedback_items = filtered_items
             logger.info(f"After value filtering: {len(all_feedback_items)} items")
         
+        # Apply offset if specified
+        if offset and offset > 0:
+            if offset >= len(all_feedback_items):
+                logger.info(f"Offset {offset} >= total items {len(all_feedback_items)}, returning empty list")
+                return []
+            all_feedback_items = all_feedback_items[offset:]
+            logger.info(f"After applying offset {offset}: {len(all_feedback_items)} items remaining")
+        
         # Apply prioritization and limit if specified
         if limit:
             all_feedback_items = FeedbackService.prioritize_feedback_with_edit_comments(
@@ -766,6 +784,7 @@ class FeedbackService:
         initial_value: Optional[str] = None,
         final_value: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: Optional[int] = None,
         prioritize_edit_comments: bool = True
     ) -> FeedbackSearchResult:
         """
@@ -782,6 +801,7 @@ class FeedbackService:
             initial_value: Optional filter for initial answer value
             final_value: Optional filter for final answer value
             limit: Optional limit on number of items to return
+            offset: Optional offset for pagination (number of items to skip)
             prioritize_edit_comments: Whether to prioritize items with edit comments when limiting
             
         Returns:
@@ -797,12 +817,13 @@ class FeedbackService:
             initial_value=initial_value,
             final_value=final_value,
             limit=limit,
+            offset=offset,
             prioritize_edit_comments=prioritize_edit_comments
         )
         
-        # Convert to token-efficient summaries
+        # Convert to summaries with item text included for detailed analysis
         summaries = [
-            FeedbackService._convert_feedback_item_to_summary(item) 
+            FeedbackService._convert_feedback_item_to_summary(item, include_text=True) 
             for item in feedback_items
         ]
         
@@ -818,6 +839,7 @@ class FeedbackService:
                 "final_value": final_value,
                 "days": days,
                 "limit": limit,
+                "offset": offset,
                 "prioritize_edit_comments": prioritize_edit_comments
             },
             total_found=len(summaries)
@@ -854,7 +876,8 @@ class FeedbackService:
                     "final_value": item.final_value,
                     "initial_explanation": item.initial_explanation,
                     "final_explanation": item.final_explanation,
-                    "edit_comment": item.edit_comment
+                    "edit_comment": item.edit_comment,
+                    "item_text": item.item_text
                 }
                 for item in result.feedback_items
             ]

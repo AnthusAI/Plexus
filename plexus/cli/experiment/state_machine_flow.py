@@ -183,16 +183,20 @@ class StateMachineFlowManager:
         """Check if the conversation should continue."""
         max_total = self.escalation.get('max_total_rounds', 15)
         
+        logger.info(f"🔍 STATE_MACHINE.should_continue: state={self.state_data.current_state}, rounds={self.state_data.total_rounds}/{max_total}")
+        
         # Check completion state
         if self.state_data.current_state == 'complete':
+            logger.info(f"🏁 STATE_MACHINE STOPPING: State is 'complete'")
             return False
         
         # Check if we've hit the maximum rounds
         if self.state_data.total_rounds >= max_total:
-            logger.warning(f"StateMachine: Reached maximum rounds ({max_total})")
+            logger.warning(f"🛑 STATE_MACHINE STOPPING: Reached maximum rounds ({self.state_data.total_rounds}/{max_total})")
             return False
         
         # Continue if we haven't reached completion
+        logger.debug(f"✅ STATE_MACHINE CONTINUING: State={self.state_data.current_state}, rounds={self.state_data.total_rounds}/{max_total}")
         return True
     
     def _check_state_transitions(self) -> None:

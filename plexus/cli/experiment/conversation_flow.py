@@ -551,8 +551,9 @@ Create detailed, comprehensive hypotheses that future developers can understand 
                 if attempting_node_creation:
                     logger.info("TERMINATION ANALYSIS: AI was actively trying to create nodes but couldn't get parameters right despite feedback")
                 else:
-                    logger.info("TERMINATION ANALYSIS: AI never attempted to use create_experiment_node tool")
-                return False  # Force termination, which will trigger emergency node creation
+                    logger.info("TERMINATION ANALYSIS: AI never attempted to use create_experiment_node tool - may still be in data gathering phase")
+                # Don't force termination - let the main procedure definition handle stopping
+                # return False  # Force termination, which will trigger emergency node creation
             else:
                 remaining_rounds = patience_limit - self.state.round_in_stage
                 logger.info(f"HYPOTHESIS STAGE: Continuing with patience - {remaining_rounds} more rounds available (currently round {self.state.round_in_stage}/{patience_limit})")
@@ -563,7 +564,18 @@ Create detailed, comprehensive hypotheses that future developers can understand 
                   self.state.nodes_created < 2)  # Stop at 2 nodes as per completion logic
         
         # Enhanced logging for better debugging of conversation termination
-        logger.debug(f"FLOW_MANAGER.should_continue: stage={self.state.stage.value}, round_in_stage={self.state.round_in_stage}/{self._get_stage_patience_limit()}, total_rounds={self.state.total_rounds}/{max_total}, nodes_created={self.state.nodes_created}/2, attempting_node_creation={'create_experiment_node' in self.state.tools_used}, result={result}")
+        logger.info(f"🔍 FLOW_MANAGER.should_continue: stage={self.state.stage.value}, round_in_stage={self.state.round_in_stage}/{self._get_stage_patience_limit()}, total_rounds={self.state.total_rounds}/{max_total}, nodes_created={self.state.nodes_created}/2, attempting_node_creation={'create_experiment_node' in self.state.tools_used}, result={result}")
+        
+        if not result:
+            if self.state.total_rounds >= max_total:
+                logger.warning(f"🛑 CONVERSATION FLOW STOPPING: Hit maximum total rounds ({self.state.total_rounds}/{max_total})")
+            elif self.state.stage == ConversationStage.COMPLETE:
+                logger.info(f"🏁 CONVERSATION FLOW STOPPING: Stage is COMPLETE")
+            elif self.state.nodes_created >= 2:
+                logger.info(f"🏁 CONVERSATION FLOW STOPPING: Target nodes created ({self.state.nodes_created}/2)")
+            else:
+                logger.error(f"🚨 CONVERSATION FLOW STOPPING: Unknown reason! total_rounds={self.state.total_rounds}, stage={self.state.stage.value}, nodes_created={self.state.nodes_created}")
+        
         return result
     
     def _get_stage_patience_limit(self) -> int:

@@ -56,23 +56,30 @@ function CollapsibleText({
     }
 
     return (
-      <div className={`prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground ${className}`}>
+      <div className={`max-w-none ${className}`} style={{lineHeight: 1, gap: 0}}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkBreaks]}
           components={{
-            p: ({ children }: { children: React.ReactNode }) => <p className="mb-3 last:mb-0">{children}</p>,
-            ul: ({ children }: { children: React.ReactNode }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
-            ol: ({ children }: { children: React.ReactNode }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
-            li: ({ children }: { children: React.ReactNode }) => <li className="mb-1">{children}</li>,
+            p: ({ children }: { children: React.ReactNode }) => {
+              // Hide empty paragraphs that cause spacing
+              if (!children || (typeof children === 'string' && children.trim() === '')) {
+                return null;
+              }
+              return <p className="mb-0 last:mb-0 leading-tight" style={{lineHeight: '1.2', margin: 0, padding: 0, display: 'block'}}>{children}</p>;
+            },
+            ul: ({ children }: { children: React.ReactNode }) => <ul className="mb-0 ml-4 list-disc leading-tight" style={{margin: 0, padding: 0}}>{children}</ul>,
+            ol: ({ children }: { children: React.ReactNode }) => <ol className="mb-0 ml-4 list-decimal leading-tight" style={{margin: 0, padding: 0}}>{children}</ol>,
+            li: ({ children }: { children: React.ReactNode }) => <li className="mb-0 leading-tight" style={{margin: 0, padding: 0}}>{children}</li>,
             strong: ({ children }: { children: React.ReactNode }) => <strong className="font-semibold text-foreground">{children}</strong>,
             em: ({ children }: { children: React.ReactNode }) => <em className="italic">{children}</em>,
             code: ({ children }: { children: React.ReactNode }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
             pre: ({ children }: { children: React.ReactNode }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
-            h1: ({ children }: { children: React.ReactNode }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
-            h2: ({ children }: { children: React.ReactNode }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
-            h3: ({ children }: { children: React.ReactNode }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
-            blockquote: ({ children }: { children: React.ReactNode }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+            h1: ({ children }: { children: React.ReactNode }) => <h1 className="text-lg font-semibold text-foreground" style={{margin: 0, padding: 0, lineHeight: 1}}>{children}</h1>,
+            h2: ({ children }: { children: React.ReactNode }) => <h2 className="text-base font-semibold text-foreground" style={{margin: 0, padding: 0, lineHeight: 1}}>{children}</h2>,
+            h3: ({ children }: { children: React.ReactNode }) => <h3 className="text-sm font-medium text-foreground" style={{margin: 0, padding: 0, lineHeight: 1}}>{children}</h3>,
+            blockquote: ({ children }: { children: React.ReactNode }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground mb-0 leading-tight">{children}</blockquote>,
             a: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href} className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+            br: () => <br style={{margin: 0, padding: 0, lineHeight: 0}} />,
           }}
         >
           {text}
@@ -218,6 +225,9 @@ function ChatMessage({
               </Collapsible>
             </div>
           </div>
+        ) : messageType === 'TOOL_RESPONSE' ? (
+          // Don't show plain text content for tool responses - only show the formatted response card below
+          null
         ) : (
           <div className="text-sm">
             <CollapsibleText content={content} maxLines={10} />
@@ -228,11 +238,10 @@ function ChatMessage({
         {messageType === 'TOOL_RESPONSE' && toolResponse && (
           <div className="mt-3">
             <div className="bg-card rounded-md p-3 text-xs">
-              <div className="font-semibold mb-2">Response:</div>
               <div className="font-mono">
                 <CollapsibleText 
                   content={JSON.stringify(toolResponse, null, 2)} 
-                  maxLines={5}
+                  maxLines={12}
                   className="whitespace-pre-wrap break-words font-mono"
                   enableMarkdown={false}
                 />

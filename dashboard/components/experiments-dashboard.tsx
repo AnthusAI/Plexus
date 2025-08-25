@@ -4,10 +4,11 @@ import { useRouter, usePathname, useParams } from "next/navigation"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { Button } from "@/components/ui/button"
-import { Plus, Waypoints } from "lucide-react"
+import { Plus, Waypoints, FileText, Shrink, BookOpenCheck } from "lucide-react"
 import { toast } from "sonner"
 import ExperimentTask, { ExperimentTaskData } from "@/components/ExperimentTask"
 import ExperimentDetail from "@/components/experiment-detail"
+import ExperimentConversationViewer from "@/components/experiment-conversation-viewer"
 import ScorecardContext from "@/components/ScorecardContext"
 import TemplateSelector from "@/components/template-selector"
 import { motion, AnimatePresence } from "framer-motion"
@@ -42,6 +43,7 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [showTemplateSelector, setShowTemplateSelector] = useState(false)
+  const [isConversationFullscreen, setIsConversationFullscreen] = useState(false)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const lastLoadTimeRef = useRef(0)
 
@@ -216,22 +218,40 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
   }, [])
 
   // Refresh experiments when returning to the dashboard (e.g., from creation page)
-  // Only refresh if data is stale (older than 30 seconds) to prevent excessive re-renders
+  // Only refresh if data is very stale (older than 10 minutes) and user hasn't interacted recently
   useEffect(() => {
+    let focusTimeout: NodeJS.Timeout | null = null
+    
     const handleFocus = () => {
-      const now = Date.now()
-      const isStale = now - lastLoadTimeRef.current > 30000 // 30 seconds
-      
-      // Only refresh if we're on the experiments dashboard page AND data is stale
-      if (isStale && 
-          (window.location.pathname === '/lab/experiments' || 
-           window.location.pathname.startsWith('/lab/experiments/'))) {
-        loadExperiments(true) // Force reload on focus if stale
+      // Clear any pending focus handlers to debounce rapid focus events
+      if (focusTimeout) {
+        clearTimeout(focusTimeout)
       }
+      
+      // Debounce focus events by 1 second to prevent rapid successive reloads
+      focusTimeout = setTimeout(() => {
+        const now = Date.now()
+        const isVeryStale = now - lastLoadTimeRef.current > 600000 // 10 minutes instead of 5 minutes
+        
+        // Only refresh if we're on the experiments dashboard page AND data is very stale
+        // AND user hasn't interacted recently (prevent reloading during active usage)
+        if (isVeryStale && 
+            (window.location.pathname === '/lab/experiments' || 
+             window.location.pathname.startsWith('/lab/experiments/'))) {
+          console.log('Data is stale (>10min), refreshing experiments on focus after navigation')
+          loadExperiments(true) // Force reload on focus if very stale
+        }
+        focusTimeout = null
+      }, 1000) // 1 second debounce
     }
     
     window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      if (focusTimeout) {
+        clearTimeout(focusTimeout)
+      }
+    }
   }, [loadExperiments])
 
   const handleCreateExperiment = () => {
@@ -417,6 +437,7 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
         onDelete={handleDelete}
         onEdit={handleEditExperiment}
         onDuplicate={handleDuplicateExperiment}
+        onConversationFullscreenChange={setIsConversationFullscreen}
       />
     )
   }
@@ -472,17 +493,11 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
               }}
             >
               <div className="@container space-y-3 overflow-visible">
-                {experiments.length === 0 ? (
-                  <div className="text-center p-8">
-                    <Waypoints className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No experiments found</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Get started by creating your first experiment.
-                    </p>
-                    <Button onClick={handleCreateExperiment}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      New Experiment
-                    </Button>
+                {experiments.length === 0 && isLoading ? (
+                  <div className="animate-pulse space-y-4">
+                    <div className="h-32 bg-gray-200 rounded"></div>
+                    <div className="h-32 bg-gray-200 rounded"></div>
+                    <div className="h-32 bg-gray-200 rounded"></div>
                   </div>
                 ) : (
                   <div className={`
@@ -537,7 +552,7 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
 
             {/* Right panel - experiment detail view */}
             <AnimatePresence>
-              {selectedExperimentId && !isNarrowViewport && !isFullWidth && (
+              {selectedExperimentId && !isNarrowViewport && !isFullWidth && !isConversationFullscreen && (
                 <motion.div 
                   key={`experiment-detail-${selectedExperimentId}`}
                   className="h-full overflow-hidden flex-shrink-0"
@@ -566,9 +581,39 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
         </AnimatePresence>
         
         {/* Full-screen view for mobile or full-width mode */}
-        {selectedExperimentId && (isNarrowViewport || isFullWidth) && (
+        {selectedExperimentId && (isNarrowViewport || isFullWidth) && !isConversationFullscreen && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
             {renderSelectedExperiment()}
+          </div>
+        )}
+        
+        {/* Conversation full-screen view - renders when conversation is fullscreen */}
+        {selectedExperimentId && isConversationFullscreen && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-background">
+            <div className="w-full h-screen bg-background py-6 px-3 overflow-y-auto flex flex-col">
+              <div className="flex items-center justify-between mb-4 flex-shrink-0 px-3">
+                <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
+                  <BookOpenCheck className="h-5 w-5" />
+                  Procedures
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                  onClick={() => setIsConversationFullscreen(false)}
+                  aria-label="Exit fullscreen"
+                >
+                  <Shrink className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <ExperimentConversationViewer 
+                  experimentId={selectedExperimentId} 
+                  onSessionCountChange={() => {}} // We don't need to track session count here
+                  isFullscreen={true}
+                />
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -2,7 +2,8 @@ import React, { useCallback, useState, useEffect } from 'react'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck } from 'lucide-react'
 import { Timestamp } from './ui/timestamp'
 import { Button } from '@/components/ui/button'
 import {
@@ -58,6 +59,7 @@ export interface ExperimentTaskProps {
   onDelete?: (experimentId: string) => void
   onEdit?: (experimentId: string) => void
   onDuplicate?: (experimentId: string) => void
+  onConversationFullscreenChange?: (isFullscreen: boolean) => void
 }
 
 
@@ -72,10 +74,20 @@ export default function ExperimentTask({
   isSelected = false,
   onDelete,
   onEdit,
-  onDuplicate
+  onDuplicate,
+  onConversationFullscreenChange
 }: ExperimentTaskProps) {
   const [loadedYaml, setLoadedYaml] = useState<string>('')
   const [isLoadingYaml, setIsLoadingYaml] = useState(false)
+  const [sessionCount, setSessionCount] = useState<number>(0)
+  const [isConversationFullscreen, setIsConversationFullscreen] = useState(false)
+
+  // Notify parent of conversation fullscreen state changes
+  useEffect(() => {
+    if (onConversationFullscreenChange) {
+      onConversationFullscreenChange(isConversationFullscreen)
+    }
+  }, [isConversationFullscreen, onConversationFullscreenChange])
 
   // Load YAML for detail view
   useEffect(() => {
@@ -302,12 +314,40 @@ export default function ExperimentTask({
           
           {/* Experiment Conversation section */}
           <div className="mt-6">
-            <ExperimentConversationViewer experimentId={experiment.id} />
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
+                  <BookOpenCheck className="h-5 w-5" />
+                  Procedures ({sessionCount})
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                  onClick={() => {
+                    setIsConversationFullscreen(true)
+                  }}
+                  aria-label="Fullscreen conversation"
+                >
+                  <Expand className="h-4 w-4" />
+                </Button>
+              </div>
+              <div>
+                <ExperimentConversationViewer 
+                  experimentId={experiment.id} 
+                  onSessionCountChange={setSessionCount}
+                  isFullscreen={false}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
     </TaskContent>
   )
+
+  // Conversation fullscreen is now handled at the parent level
+  // No need to render fullscreen view here anymore
 
   return (
     <Task
