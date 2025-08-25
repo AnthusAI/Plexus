@@ -30,6 +30,9 @@ class FeedbackItemSummary:
     final_explanation: Optional[str]
     edit_comment: Optional[str]
     item_text: Optional[str] = None  # Include item text for detailed analysis
+    item_metadata: Optional[Dict[str, Any]] = None  # Include item metadata for context
+    item_description: Optional[str] = None  # Include item description
+    item_identifiers: Optional[Dict[str, Any]] = None  # Include item identifiers
 
 
 @dataclass
@@ -130,6 +133,37 @@ class FeedbackService:
         if include_text and item.item and hasattr(item.item, 'text'):
             item_text = item.item.text
         
+        # Extract item metadata if available
+        item_metadata = None
+        item_description = None
+        item_identifiers = None
+        
+        if item.item:
+            if hasattr(item.item, 'metadata') and item.item.metadata:
+                # Handle both string (JSON) and dict formats
+                if isinstance(item.item.metadata, str):
+                    try:
+                        import json
+                        item_metadata = json.loads(item.item.metadata)
+                    except (json.JSONDecodeError, TypeError):
+                        item_metadata = {"raw": item.item.metadata}
+                elif isinstance(item.item.metadata, dict):
+                    item_metadata = item.item.metadata
+            
+            if hasattr(item.item, 'description') and item.item.description:
+                item_description = item.item.description
+            
+            if hasattr(item.item, 'identifiers') and item.item.identifiers:
+                # Handle both string (JSON) and dict/list formats
+                if isinstance(item.item.identifiers, str):
+                    try:
+                        import json
+                        item_identifiers = json.loads(item.item.identifiers)
+                    except (json.JSONDecodeError, TypeError):
+                        item_identifiers = {"raw": item.item.identifiers}
+                elif isinstance(item.item.identifiers, (dict, list)):
+                    item_identifiers = item.item.identifiers
+        
         return FeedbackItemSummary(
             item_id=item.itemId,
             external_id=external_id,
@@ -138,7 +172,10 @@ class FeedbackService:
             initial_explanation=item.initialCommentValue,
             final_explanation=item.finalCommentValue,
             edit_comment=item.editCommentValue,
-            item_text=item_text
+            item_text=item_text,
+            item_metadata=item_metadata,
+            item_description=item_description,
+            item_identifiers=item_identifiers
         )
 
     @staticmethod
@@ -877,7 +914,10 @@ class FeedbackService:
                     "initial_explanation": item.initial_explanation,
                     "final_explanation": item.final_explanation,
                     "edit_comment": item.edit_comment,
-                    "item_text": item.item_text
+                    "item_text": item.item_text,
+                    "item_metadata": item.item_metadata,
+                    "item_description": item.item_description,
+                    "item_identifiers": item.item_identifiers
                 }
                 for item in result.feedback_items
             ]
