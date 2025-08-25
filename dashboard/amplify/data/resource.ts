@@ -505,8 +505,7 @@ const schema = a.schema({
             workerNodeId: a.string(),
             updatedAt: a.datetime(),
             evaluation: a.hasOne('Evaluation', 'taskId'),
-            report: a.hasOne('Report', 'taskId'),
-            experiment: a.hasOne('Experiment', 'taskId')
+            report: a.hasOne('Report', 'taskId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -896,8 +895,6 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
-            taskId: a.string(),
-            task: a.belongsTo('Task', 'taskId'),
             nodes: a.hasMany('ExperimentNode', 'experimentId'),
             chatSessions: a.hasMany('ChatSession', 'experimentId'),
             chatMessages: a.hasMany('ChatMessage', 'experimentId'),
