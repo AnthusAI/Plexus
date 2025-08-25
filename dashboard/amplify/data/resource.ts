@@ -42,7 +42,6 @@ type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "
 type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "editedAt";
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
-type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
 type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
 type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "recordType" | "timeRangeStart" | "timeRangeEnd" | "numberOfMinutes" | "count" | "cost" | "decisionCount" | "externalAiApiCount" | "cachedAiApiCount" | "errorCount" | "createdAt" | "updatedAt";
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
@@ -110,7 +109,6 @@ const schema = a.schema({
             feedbackItems: a.hasMany('FeedbackItem', 'scorecardId'),
             externalId: a.string(),
             exampleItems: a.hasMany('ScorecardExampleItem', 'scorecardId'),
-            processedItems: a.hasMany('ScorecardProcessedItem', 'scorecardId'),
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scorecardId'),
             dataSources: a.hasMany('DataSource', 'scorecardId'),
             dataSets: a.hasMany('DataSet', 'scorecardId'),
@@ -326,7 +324,6 @@ const schema = a.schema({
             text: a.string(),
             metadata: a.json(),
             asExampleFor: a.hasMany('ScorecardExampleItem', 'itemId'),
-            processedFor: a.hasMany('ScorecardProcessedItem', 'itemId'),
             itemIdentifiers: a.hasMany('Identifier', 'itemId'),
         })
         .authorization((allow) => [
@@ -762,26 +759,6 @@ const schema = a.schema({
             idx("recordType").sortKeys(["timeRangeStart"]).name("byRecordTypeAndTime")
         ]),
 
-    ScorecardProcessedItem: a
-        .model({
-            scorecardId: a.id().required(),
-            itemId: a.id().required(),
-            processedAt: a.datetime(),
-            lastScoreResultId: a.string(), // Reference to most recent result
-            
-            // Relationships to both ends
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            item: a.belongsTo('Item', 'itemId'),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: ScorecardProcessedItemIndexFields) => any) => [
-            idx("scorecardId"),
-            idx("itemId"),
-            idx("scorecardId").sortKeys(["processedAt"]),
-        ]),
 
     DataSource: a
         .model({
