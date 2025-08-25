@@ -213,9 +213,9 @@ export default function ExperimentNodesList({ experimentId }: Props) {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2">
+        <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
           <GitCompare className="h-5 w-5" />
-          Nodes
+          Hypotheses
         </h3>
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -236,9 +236,9 @@ export default function ExperimentNodesList({ experimentId }: Props) {
   if (error) {
     return (
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2">
+        <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
           <GitCompare className="h-5 w-5" />
-          Nodes
+          Hypotheses
         </h3>
         <Card className="bg-background border-none">
           <CardContent className="p-4">
@@ -255,9 +255,9 @@ export default function ExperimentNodesList({ experimentId }: Props) {
   if (nodes.length === 0) {
     return (
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2">
+        <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
           <GitCompare className="h-5 w-5" />
-          Nodes
+          Hypotheses
         </h3>
         <Card className="bg-background border-none">
           <CardContent className="p-6 text-center">
@@ -274,9 +274,9 @@ export default function ExperimentNodesList({ experimentId }: Props) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold flex items-center gap-2">
+      <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
         <GitCompare className="h-5 w-5" />
-        Nodes ({nodes.length})
+        Hypotheses ({nodes.length})
       </h3>
       
       <div className="space-y-3">

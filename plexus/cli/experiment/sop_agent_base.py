@@ -598,9 +598,12 @@ Your response will become the next user message to guide the coding assistant.
                     
                     # Check if procedure should continue
                     state_data = self._get_current_state(results, round_num)
+                    logger.info(f"🔍 CALLING should_continue on {type(self.procedure_definition).__name__}")
                     should_continue = self.procedure_definition.should_continue(state_data)
                     
                     if not should_continue:
+                        logger.warning(f"🛑 STOPPING CONDITION TRIGGERED: Procedure definition returned should_continue=False")
+                        logger.warning(f"🔍 STOP REASON: Round {round_num}, State data: {state_data}")
                         logger.info(f"🏁 Procedure complete - {self.procedure_definition.get_completion_summary(state_data)}")
                         break
                     
@@ -690,84 +693,24 @@ Your response will become the next user message to guide the coding assistant.
                                 # Handle standard MCP tools
                                 logger.info(f"🔍 Looking for tool '{tool_name}' in {len(available_mcp_tools)} available tools: {[t.name for t in available_mcp_tools]}")
                                 
-                                # DIRECT FIX: Handle plexus_feedback_find directly with CLI
-                                if tool_name == "plexus_feedback_find":
-                                    logger.info(f"🔧 DIRECT FIX: Calling CLI for plexus_feedback_find")
-                                    try:
-                                        import subprocess
-                                            
-                                        cmd = [
-                                            'python', '-m', 'plexus.cli', 'feedback', 'find',
-                                            '--scorecard', tool_args.get('scorecard_name', ''),
-                                            '--score', tool_args.get('score_name', ''),
-                                            '--limit', str(tool_args.get('limit', 1)),
-                                            '--days', str(tool_args.get('days', 30)),
-                                            '--format', 'yaml'
-                                        ]
-                                            
-                                        if tool_args.get('initial_value'):
-                                            cmd.extend(['--initial-value', tool_args['initial_value']])
-                                        if tool_args.get('final_value'):
-                                            cmd.extend(['--final-value', tool_args['final_value']])
-                                                
-                                        logger.info(f"🔧 CLI Command: {' '.join(cmd)}")
-                                        
-                                        result = subprocess.run(cmd, capture_output=True, text=True, cwd='.')
-                                            
-                                        if result.returncode == 0:
-                                            # Clean up the CLI output - remove logging noise
-                                            clean_output = []
-                                            for line in result.stdout.split('\n'):
-                                                # Skip logging lines, error messages, and empty lines
-                                                if any(skip in line for skip in [
-                                                    '[INFO]', '[ERROR]', '[WARNING]', '[DEBUG]',
-                                                    'python-dotenv', 'CloudWatch', 'mlflow', 'pydantic',
-                                                    'SQLite cache', 'Loaded Plexus configuration'
-                                                ]):
-                                                    continue
-                                                if line.strip():
-                                                    clean_output.append(line)
-                                                
-                                            # Convert YAML output to JSON format for MCP compatibility
-                                            clean_yaml = '\n'.join(clean_output)
-                                            try:
-                                                import yaml
-                                                import json
-                                                parsed_data = yaml.safe_load(clean_yaml)
-                                                tool_result = json.dumps(parsed_data, indent=2)
-                                                logger.info(f"🔧 CLI SUCCESS: Found feedback data, converted to JSON")
-                                            except Exception as parse_error:
-                                                # If YAML parsing fails, return the clean text
-                                                tool_result = clean_yaml
-                                                logger.info(f"🔧 CLI SUCCESS: Found feedback data (raw format)")
-                                        else:
-                                            tool_result = f"No feedback items found for score '{tool_args.get('score_name')}' in scorecard '{tool_args.get('scorecard_name')}' with the specified criteria."
-                                            logger.info(f"🔧 CLI returned no results: {result.stderr}")
-                                                
-                                    except Exception as cli_error:
-                                        logger.error(f"🔧 CLI Error: {cli_error}")
-                                        tool_result = f"Error calling feedback tool: {cli_error}"
-                                        
-                                    results["tools_used"].append(tool_name)
-                                else:
-                                    # Handle other MCP tools normally
-                                    for tool in available_mcp_tools:
-                                        if tool.name == tool_name:
-                                            logger.info(f"🔍 Found matching tool '{tool_name}', calling tool.func with args: {tool_args}")
-                                            try:
-                                                tool_result = tool.func(tool_args)
-                                                logger.info(f"🔍 Tool '{tool_name}' returned result type: {type(tool_result)}")
-                                                if isinstance(tool_result, str) and len(tool_result) > 200:
-                                                    logger.info(f"🔍 Tool result preview: {tool_result[:200]}...")
-                                                else:
-                                                    logger.info(f"🔍 Tool result: {tool_result}")
-                                            except Exception as tool_error:
-                                                logger.error(f"🔍 Tool '{tool_name}' execution failed: {tool_error}")
-                                                import traceback
-                                                logger.error(f"🔍 Tool error traceback: {traceback.format_exc()}")
-                                                tool_result = f"Tool execution error: {tool_error}"
-                                            results["tools_used"].append(tool_name)
-                                            break
+                                # Handle all MCP tools the same way (no special cases)
+                                for tool in available_mcp_tools:
+                                    if tool.name == tool_name:
+                                        logger.info(f"🔍 Found matching tool '{tool_name}', calling tool.func with args: {tool_args}")
+                                        try:
+                                            tool_result = tool.func(tool_args)
+                                            logger.info(f"🔍 Tool '{tool_name}' returned result type: {type(tool_result)}")
+                                            if isinstance(tool_result, str) and len(tool_result) > 200:
+                                                logger.info(f"🔍 Tool result preview: {tool_result[:200]}...")
+                                            else:
+                                                logger.info(f"🔍 Tool result: {tool_result}")
+                                        except Exception as tool_error:
+                                            logger.error(f"🔍 Tool '{tool_name}' execution failed: {tool_error}")
+                                            import traceback
+                                            logger.error(f"🔍 Tool error traceback: {traceback.format_exc()}")
+                                            tool_result = f"Tool execution error: {tool_error}"
+                                        results["tools_used"].append(tool_name)
+                                        break
                             
                             if tool_result is None:
                                 tool_result = f"Tool {tool_name} not found"
@@ -804,9 +747,9 @@ Your response will become the next user message to guide the coding assistant.
                             tool_message = ToolMessage(content=str(tool_result), tool_call_id=tool_call['id'])
                             conversation_history.append(tool_message)
                             
-                            # Add system reminder about explaining tool results  
+                            # Add system reminder about explaining tool results and running interpretation
                             reminder_message = SystemMessage(
-                                content="🚨 REMINDER: You must explain what you learned from this tool result in your next response before calling any other tools. Start with '### Summary of Tool Result:' and describe the key findings."
+                                content="🚨 REMINDER: You must provide two things in your next response before calling any other tools:\n\n1. **Summary of This Tool Result**: Start with '### Summary of Tool Result:' and describe what you learned from this specific tool call.\n\n2. **Running Interpretation**: Explain how this result changes or reinforces your overall understanding. What patterns are emerging? How does this fit with what you've seen before? What is your evolving interpretation of what's happening with the scoring problems?\n\n🚨 **OFFSET REMINDER**: If you need to examine more examples from the same segment, remember to INCREMENT your offset (if you just used offset=5, use offset=6 next). Never repeat the same offset or you'll get duplicate results."
                             )
                             conversation_history.append(reminder_message)
                             

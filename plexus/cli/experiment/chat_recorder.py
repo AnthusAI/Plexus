@@ -155,8 +155,12 @@ class ExperimentChatRecorder:
             # Add tool-specific fields if provided
             if tool_name:
                 message_data['toolName'] = tool_name
-            # Note: Omitting tool parameters and response for now due to GraphQL validation
-            # These can be stored in the content field as formatted text instead
+            if tool_parameters:
+                import json
+                message_data['toolParameters'] = json.dumps(tool_parameters)
+            if tool_response:
+                import json
+                message_data['toolResponse'] = json.dumps(tool_response)
             if parent_message_id:
                 message_data['parentMessageId'] = parent_message_id
             

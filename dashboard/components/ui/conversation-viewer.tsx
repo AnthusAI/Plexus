@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
+import { getClient } from '@/utils/data-operations'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -63,10 +64,33 @@ export interface ConversationViewerProps {
   selectedSessionId?: string
   onSessionSelect?: (sessionId: string) => void
   onSessionDelete?: (sessionId: string) => void
+  onSessionCountChange?: (count: number) => void
   className?: string
   
   // OR automatic data loading (recommended)
   experimentId?: string
+}
+
+// Helper function to format JSON with proper newlines
+const formatJsonWithNewlines = (obj: any): string => {
+  // If the object has a 'result' field that's a string, try to parse it as JSON
+  if (obj && typeof obj === 'object' && obj.result && typeof obj.result === 'string') {
+    try {
+      const parsedResult = JSON.parse(obj.result)
+      // Create a new object with the parsed result
+      const newObj = { ...obj, result: parsedResult }
+      const jsonString = JSON.stringify(newObj, null, 2)
+      return jsonString.replace(/\\n/g, '\n')
+    } catch (e) {
+      // If parsing fails, fall back to original behavior
+      const jsonString = JSON.stringify(obj, null, 2)
+      return jsonString.replace(/\\n/g, '\n')
+    }
+  }
+  
+  const jsonString = JSON.stringify(obj, null, 2)
+  // Convert literal \n escape sequences to actual newlines
+  return jsonString.replace(/\\n/g, '\n')
 }
 
 // Collapsible text component with Markdown support for long messages
@@ -94,27 +118,34 @@ function CollapsibleText({
     }
 
     return (
-      <div className={`prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-card prose-pre:text-foreground ${className}`}>
+      <div className={`max-w-none ${className}`} style={{lineHeight: 1}}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkBreaks]}
           components={{
-            p: ({ children }: { children?: React.ReactNode }) => <p className="mb-2 last:mb-0 leading-normal">{children}</p>,
-            ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
-            ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
-            li: ({ children }: { children?: React.ReactNode }) => <li className="mb-1">{children}</li>,
+            p: ({ children }: { children?: React.ReactNode }) => {
+              // Hide empty paragraphs that cause spacing
+              if (!children || (typeof children === 'string' && children.trim() === '')) {
+                return null;
+              }
+              return <p className="mb-0 last:mb-0 leading-tight" style={{lineHeight: '1.2', margin: 0, padding: 0, display: 'block'}}>{children}</p>;
+            },
+            ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-0 ml-4 list-disc leading-tight" style={{lineHeight: '1', margin: 0, padding: 0}}>{children}</ul>,
+            ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-0 ml-4 list-decimal leading-tight" style={{lineHeight: '1', margin: 0, padding: 0}}>{children}</ol>,
+            li: ({ children }: { children?: React.ReactNode }) => <li className="mb-0 leading-tight" style={{lineHeight: '1', margin: 0, padding: 0}}>{children}</li>,
             strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-foreground">{children}</strong>,
             em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
             code: ({ children }: { children?: React.ReactNode }) => <code className="bg-card px-1 py-0.5 rounded-md text-xs font-mono">{children}</code>,
             pre: ({ children }: { children?: React.ReactNode }) => <pre className="bg-card p-3 rounded-md overflow-x-auto text-sm font-mono">{children}</pre>,
-            h1: ({ children }: { children?: React.ReactNode }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
-            h2: ({ children }: { children?: React.ReactNode }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
-            h3: ({ children }: { children?: React.ReactNode }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
-            blockquote: ({ children }: { children?: React.ReactNode }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+            h1: ({ children }: { children?: React.ReactNode }) => <h1 className="text-lg font-semibold text-foreground" style={{margin: 0, padding: 0, lineHeight: 1}}>{children}</h1>,
+            h2: ({ children }: { children?: React.ReactNode }) => <h2 className="text-base font-semibold text-foreground" style={{margin: 0, padding: 0, lineHeight: 1}}>{children}</h2>,
+            h3: ({ children }: { children?: React.ReactNode }) => <h3 className="text-sm font-medium text-foreground" style={{margin: 0, padding: 0, lineHeight: 1}}>{children}</h3>,
+            blockquote: ({ children }: { children?: React.ReactNode }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground mb-0 leading-tight">{children}</blockquote>,
             a: ({ children, href }: { children?: React.ReactNode; href?: string }) => <a href={href} className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">{children}</a>,
             table: ({ children }: { children?: React.ReactNode }) => <table className="border-collapse border border-border text-sm">{children}</table>,
             th: ({ children }: { children?: React.ReactNode }) => <th className="border border-border px-2 py-1 bg-muted font-medium text-left">{children}</th>,
             td: ({ children }: { children?: React.ReactNode }) => <td className="border border-border px-2 py-1">{children}</td>,
             hr: () => <hr className="my-4 border-border" />,
+            br: () => <br style={{margin: 0, padding: 0, lineHeight: 0}} />,
           }}
         >
           {text}
@@ -189,6 +220,7 @@ function ConversationViewer({
   selectedSessionId: propSelectedSessionId,
   onSessionSelect,
   onSessionDelete,
+  onSessionCountChange,
   className = "",
   experimentId
 }: ConversationViewerProps) {
@@ -199,11 +231,44 @@ function ConversationViewer({
   const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([])
   const [internalSelectedSessionId, setInternalSelectedSessionId] = useState<string>()
   const [isLoading, setIsLoading] = useState(false)
+  
+  // Ref for the messages container to handle auto-scrolling
+  const messagesContainerRef = React.useRef<HTMLDivElement>(null)
+
+  // Function to scroll to the most recent message
+  const scrollToLatestMessage = React.useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    // Find the last message element
+    const messageElements = container.querySelectorAll('[data-message-id]')
+    const lastMessageElement = messageElements[messageElements.length - 1] as HTMLElement
+    
+    if (lastMessageElement) {
+      // Calculate the scroll position to show the top of the last message at the top of the container
+      const containerRect = container.getBoundingClientRect()
+      const messageRect = lastMessageElement.getBoundingClientRect()
+      const scrollTop = container.scrollTop + (messageRect.top - containerRect.top)
+      
+      // Smooth scroll to the calculated position
+      container.scrollTo({
+        top: scrollTop,
+        behavior: 'smooth'
+      })
+    }
+  }, [])
 
   // Determine which data source to use
   const sessions = propSessions || internalSessions
   const messages = propMessages || internalMessages  
   const selectedSessionId = propSelectedSessionId || internalSelectedSessionId
+  
+  // Notify parent of session count changes
+  useEffect(() => {
+    if (onSessionCountChange) {
+      onSessionCountChange(sessions.length)
+    }
+  }, [sessions.length, onSessionCountChange])
   
   const handleSessionSelect = (sessionId: string) => {
     if (onSessionSelect) {
@@ -284,17 +349,6 @@ function ConversationViewer({
 
         if (allMessages.length > 0) {
           const formattedMessages: ChatMessage[] = allMessages.map((msg: any) => {
-            // DEBUG: Log raw GraphQL data for tool calls
-            if (msg.messageType === 'TOOL_CALL') {
-              console.log('DEBUG Raw GraphQL Tool Call:', {
-                id: msg.id,
-                messageType: msg.messageType,
-                toolName: msg.toolName,
-                toolParameters: msg.toolParameters,
-                toolResponse: msg.toolResponse,
-                content: msg.content?.substring(0, 100)
-              })
-            }
             
             // Parse tool call data from content if structured fields are missing
             let parsedToolName = msg.toolName
@@ -366,79 +420,238 @@ function ConversationViewer({
     loadConversationData()
   }, [experimentId])
 
-  // Real-time subscription for new chat messages
+  // Real-time subscription for new chat sessions - notification-based pattern
   useEffect(() => {
-    if (!experimentId || !selectedSessionId) return
+    if (!experimentId) return
 
-    const subscription = (client.graphql({
-      query: `
-        subscription OnCreateChatMessage($sessionId: String!, $experimentId: String!) {
-          onCreateChatMessage(sessionId: $sessionId, experimentId: $experimentId) {
-            id
-            content
-            role
-            messageType
-            toolName
-            toolParameters
-            toolResponse
-            createdAt
-            sequenceNumber
-            sessionId
-            experimentId
-          }
-        }
-      `,
-      variables: {
-        sessionId: selectedSessionId,
-        experimentId: experimentId
-      }
-    }) as any).subscribe({
-      next: ({ data }: { data?: { onCreateChatMessage: any } }) => {
-        if (data?.onCreateChatMessage) {
-          const newMessage = data.onCreateChatMessage
+    console.log('Setting up chat session notification subscription for experiment:', experimentId)
+
+    const checkForNewSessions = async () => {
+      try {
+        console.log('Checking for new chat sessions in experiment:', experimentId)
+        
+        // Query for sessions in the current experiment
+        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByExperimentIdAndCreatedAt as any)({
+          experimentId: experimentId,
+          limit: 100
+        })
+
+        if (sessionsData) {
+          const formattedSessions: ChatSession[] = sessionsData.map((session: any) => ({
+            id: session.id,
+            name: session.name,
+            category: session.category,
+            status: session.status,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+            messageCount: 0 // Will be updated when we load messages
+          }))
           
-          const formattedMessage: ChatMessage = {
-            id: newMessage.id,
-            content: newMessage.content || '',
-            role: newMessage.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
-            messageType: newMessage.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
-            toolName: newMessage.toolName,
-            toolParameters: newMessage.toolParameters ? JSON.parse(newMessage.toolParameters) : undefined,
-            toolResponse: newMessage.toolResponse ? JSON.parse(newMessage.toolResponse) : undefined,
-            createdAt: newMessage.createdAt,
-            sequenceNumber: newMessage.sequenceNumber,
-            sessionId: newMessage.sessionId
-          }
+          // Sort sessions by createdAt in descending order (most recent first)
+          const sortedSessions = formattedSessions.sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
           
-          setInternalMessages(prevMessages => {
-            const exists = prevMessages.some(msg => msg.id === formattedMessage.id)
-            if (exists) return prevMessages
+          // Check if we have new sessions compared to current state
+          setInternalSessions(prevSessions => {
+            const currentIds = new Set(prevSessions.map(s => s.id))
+            const newSessions = sortedSessions.filter(s => !currentIds.has(s.id))
             
-            const updatedMessages = [...prevMessages, formattedMessage]
-            return updatedMessages.sort((a, b) => {
-              if (a.sequenceNumber && b.sequenceNumber) {
-                return a.sequenceNumber - b.sequenceNumber
+            if (newSessions.length > 0) {
+              console.log(`Found ${newSessions.length} new chat sessions in experiment`)
+              
+              // Auto-select the newest session when new sessions are created
+              if (sortedSessions.length > 0) {
+                const newestSession = sortedSessions[0]
+                console.log('Auto-selecting newest session:', newestSession.id)
+                
+                // Use handleSessionSelect to properly manage both internal and external session selection
+                if (onSessionSelect) {
+                  onSessionSelect(newestSession.id)
+                } else {
+                  setInternalSelectedSessionId(newestSession.id)
+                }
               }
-              return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            })
+              
+              return sortedSessions // Replace with complete sorted list
+            }
+            
+            return prevSessions // No changes
+          })
+        }
+      } catch (error) {
+        console.error('Error checking for new chat sessions:', error)
+      }
+    }
+
+    try {
+      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
+      const subscription = getClient().models.ChatSession.onCreate().subscribe({
+        next: ({ data }: any) => {
+          console.log('Chat session notification received - checking for updates')
+          // Don't rely on the subscription data, just use it as a notification
+          checkForNewSessions()
+        },
+        error: (error: Error) => {
+          console.error('Chat session subscription error:', error)
+        }
+      })
+
+      return () => {
+        console.log('Unsubscribing from chat session notification')
+        subscription.unsubscribe()
+      }
+    } catch (error) {
+      console.error('Error setting up chat session notification:', error)
+    }
+  }, [experimentId, onSessionSelect])
+
+  // Real-time subscription for new chat messages - notification-based pattern
+  useEffect(() => {
+    if (!experimentId) return
+
+    console.log('Setting up chat message notification subscription for experiment:', experimentId)
+
+    const checkForNewMessages = async () => {
+      try {
+        console.log('Checking for new messages in experiment')
+        
+        // Load ALL messages for this experiment with proper pagination
+        let allMessages: any[] = []
+        let nextToken: string | null = null
+        
+        do {
+          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByExperimentIdAndCreatedAt as any)({
+            experimentId,
+            limit: 1000,
+            nextToken,
+          }, {
+            selectionSet: [
+              'id',
+              'content', 
+              'role',
+              'messageType',
+              'toolName',
+              'toolParameters',
+              'toolResponse',
+              'createdAt',
+              'sequenceNumber',
+              'sessionId'
+            ]
           })
           
-          setInternalSessions(prevSessions => prevSessions.map(session => 
-            session.id === selectedSessionId 
-              ? { ...session, messageCount: (session.messageCount || 0) + 1 }
-              : session
-          ))
-        }
-      },
-      error: (error: Error) => {
-        console.error('Chat message subscription error:', error)
-      }
-    })
+          if (response?.data) {
+            allMessages = [...allMessages, ...response.data]
+          }
+          
+          nextToken = response.nextToken || null
+        } while (nextToken)
 
-    return () => {
-      subscription.unsubscribe()
+        const messagesData = allMessages
+
+        console.log('Raw messagesData received:', messagesData?.length || 0, 'messages')
+        
+        if (messagesData) {
+          const formattedMessages: ChatMessage[] = messagesData.map((msg: any) => {
+            // Parse tool call data from content if structured fields are missing
+            let parsedToolName = msg.toolName
+            let parsedToolParameters = msg.toolParameters ? JSON.parse(msg.toolParameters) : undefined
+            
+            if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
+              // Parse tool call from content string
+              const toolCallMatch = msg.content.match(/^([^(]+)\((.+)\)$/s)
+              if (toolCallMatch) {
+                parsedToolName = toolCallMatch[1].trim()
+                try {
+                  const pythonDict = toolCallMatch[2]
+                  const jsonString = pythonDict
+                    .replace(/'/g, '"')
+                    .replace(/True/g, 'true')
+                    .replace(/False/g, 'false')
+                    .replace(/None/g, 'null')
+                  parsedToolParameters = JSON.parse(jsonString)
+                } catch (e) {
+                  console.warn('Failed to parse tool parameters:', e)
+                }
+              }
+            }
+            
+            return {
+              id: msg.id,
+              content: msg.content || '',
+              role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
+              messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
+              toolName: parsedToolName,
+              toolParameters: parsedToolParameters,
+              toolResponse: msg.toolResponse ? JSON.parse(msg.toolResponse) : undefined,
+              createdAt: msg.createdAt,
+              sequenceNumber: msg.sequenceNumber,
+              sessionId: msg.sessionId
+            }
+          })
+          
+          // Sort messages by sequence number and creation time
+          const sortedMessages = formattedMessages.sort((a, b) => {
+            if (a.sequenceNumber && b.sequenceNumber) {
+              return a.sequenceNumber - b.sequenceNumber
+            }
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          })
+          
+          // Check if we have new messages compared to current state
+          setInternalMessages(prevMessages => {
+            console.log('Current state has', prevMessages.length, 'messages')
+            console.log('Query returned', sortedMessages.length, 'messages')
+            const currentIds = new Set(prevMessages.map(m => m.id))
+            const newMessages = sortedMessages.filter(m => !currentIds.has(m.id))
+            console.log('Detected', newMessages.length, 'new messages')
+            
+            if (newMessages.length > 0) {
+              console.log(`Found ${newMessages.length} new messages in experiment`)
+              
+              // Auto-scroll to the latest message after a brief delay to ensure DOM has updated
+              setTimeout(() => {
+                scrollToLatestMessage()
+              }, 100)
+              
+              return sortedMessages // Replace with complete sorted list
+            }
+            
+            return prevMessages // No changes
+          })
+        } else {
+          console.log('No messagesData returned from GraphQL query')
+        }
+      } catch (error) {
+        console.error('Error checking for new messages:', error)
+      }
     }
-  }, [experimentId, selectedSessionId])
+
+    try {
+      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
+      const subscription = getClient().models.ChatMessage.onCreate().subscribe({
+        next: ({ data }: any) => {
+          console.log('Chat message notification received - checking for updates')
+          console.log('Subscription data:', data)
+          // Don't rely on the subscription data, just use it as a notification
+          checkForNewMessages()
+        },
+        error: (error: Error) => {
+          console.error('Chat message subscription error:', error)
+        }
+      })
+
+      // Also check for new messages when the subscription is first set up
+      checkForNewMessages()
+
+      return () => {
+        console.log('Unsubscribing from chat message notification')
+        subscription.unsubscribe()
+      }
+    } catch (error) {
+      console.error('Error setting up chat message notification:', error)
+    }
+  }, [experimentId, scrollToLatestMessage])
   
   // Sort sessions by last update date in reverse chronological order (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
@@ -559,7 +772,7 @@ function ConversationViewer({
       <div className="flex-1 flex flex-col">
         {/* Session Header */}
         {selectedSession && (
-          <div className="border-b border-border p-4">
+          <div className="border-b border-border p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <MessageSquare className="h-5 w-5 text-muted-foreground" />
@@ -621,7 +834,7 @@ function ConversationViewer({
         )}
         
         {/* Messages List */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3">
           {!selectedSessionId ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
               <div className="text-center">
@@ -638,18 +851,8 @@ function ConversationViewer({
             </div>
           ) : (
             <div className="space-y-4">
-              {sortedMessages.map((message) => {
-                // DEBUG: Log all messages to see their structure
-                console.log('DEBUG Message:', {
-                  id: message.id,
-                  role: message.role,
-                  messageType: message.messageType,
-                  toolName: message.toolName,
-                  hasToolParams: !!message.toolParameters,
-                  toolParameters: message.toolParameters
-                })
-                return (
-                <div key={message.id} className="flex items-start gap-3">
+              {sortedMessages.map((message) => (
+                <div key={message.id} data-message-id={message.id} className="flex items-start gap-3">
                   <div className="flex-shrink-0 mt-1">
                     {getMessageIcon(message.role, message.messageType)}
                   </div>
@@ -721,6 +924,9 @@ function ConversationViewer({
                           </Collapsible>
                         </div>
                       </div>
+                    ) : message.messageType === 'TOOL_RESPONSE' ? (
+                      // Don't show plain text content for tool responses - only show the formatted response card below
+                      null
                     ) : (
                       <div className="text-sm">
                         <CollapsibleText content={message.content} maxLines={10} />
@@ -731,11 +937,10 @@ function ConversationViewer({
                     {message.messageType === 'TOOL_RESPONSE' && message.toolResponse && (
                       <div className="mt-3">
                         <div className="bg-card rounded-md p-3 text-xs">
-                          <div className="font-semibold mb-2">Response:</div>
                           <div className="font-mono">
                             <CollapsibleText 
-                              content={JSON.stringify(message.toolResponse, null, 2)} 
-                              maxLines={5}
+                              content={formatJsonWithNewlines(message.toolResponse)} 
+                              maxLines={12}
                               className="whitespace-pre-wrap break-words font-mono"
                               enableMarkdown={false}
                             />
@@ -745,8 +950,7 @@ function ConversationViewer({
                     )}
                   </div>
                 </div>
-                )
-              })}
+              ))}
             </div>
           )}
         </div>

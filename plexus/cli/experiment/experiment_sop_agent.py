@@ -67,13 +67,19 @@ class ExperimentProcedureDefinition:
         This method only enforces safety limits and respects explicit stop requests.
         """
         round_num = state_data.get("round", 0)
+        tools_used = state_data.get("tools_used", [])
         
-        # Safety limit to prevent infinite loops
-        if round_num >= 50:
+        logger.info(f"🔍 SHOULD_CONTINUE CHECK: Round {round_num}/100, Tools used: {len(tools_used)}")
+        
+        # Safety limit to prevent infinite loops - increased for comprehensive data gathering
+        if round_num >= 100:
+            logger.warning(f"🛑 SAFETY LIMIT REACHED: Hit maximum rounds ({round_num}/100)")
+            logger.warning(f"🔍 FINAL STATE: Tools used: {tools_used}")
             return False
         
         # Let worker agent control stopping via stop_procedure tool
         # The stop tool will set stop_requested=True in results
+        logger.debug(f"✅ CONTINUING: Round {round_num} < 100, no stop requested")
         return True
     
     def get_completion_summary(self, state_data: Dict[str, Any]) -> str:
@@ -152,9 +158,15 @@ class ExperimentChatRecorderAdapter(ChatRecorder):
         """Start an experiment recording session."""
         return await self.experiment_chat_recorder.start_session(context)
     
-    async def record_message(self, role: str, content: str, message_type: str) -> Optional[str]:
+    async def record_message(self, role: str, content: str, message_type: str, 
+                           tool_name: Optional[str] = None,
+                           tool_parameters: Optional[Dict[str, Any]] = None,
+                           tool_response: Optional[Dict[str, Any]] = None,
+                           parent_message_id: Optional[str] = None) -> Optional[str]:
         """Record a message in the experiment session."""
-        return await self.experiment_chat_recorder.record_message(role, content, message_type)
+        return await self.experiment_chat_recorder.record_message(
+            role, content, message_type, tool_name, tool_parameters, tool_response, parent_message_id
+        )
     
     async def record_system_message(self, content: str) -> Optional[str]:
         """Record a system message in the experiment session."""

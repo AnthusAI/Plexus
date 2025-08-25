@@ -16,7 +16,7 @@ def register_think_tool(mcp: FastMCP):
     """Register the think tool with the MCP server."""
 
     @mcp.tool()
-    async def think(thought: str = "", **kwargs) -> str:
+    async def think(thought: str = "") -> str:
         """
         Use this tool as a scratchpad when working with Plexus tools to:
         - Plan your approach for Plexus operations
@@ -73,16 +73,13 @@ def register_think_tool(mcp: FastMCP):
         sys.stdout = temp_stdout
 
         try:
-            # Combine all provided content for flexibility
-            all_content = []
+            # Log the thought content
             if thought:
-                all_content.append(f"thought: {thought}")
-            for key, value in kwargs.items():
-                all_content.append(f"{key}: {value}")
-            
-            combined_content = " | ".join(all_content) if all_content else "empty"
-            logger.info(f"Think tool used: {combined_content[:200]}...")
-            return "Thought processed successfully"
+                logger.info(f"Think tool used: {thought[:200]}...")
+                return "Thought processed successfully"
+            else:
+                logger.info("Think tool used with empty thought")
+                return "Empty thought processed"
         except Exception as e:
             logger.error(f"Error in think tool: {str(e)}", exc_info=True)
             return f"Error processing thought: {str(e)}"

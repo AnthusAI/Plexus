@@ -42,7 +42,7 @@ class TestFeedbackSummaryTool:
         assert error is None
         
         # Test with days parameter
-        valid, error = validate_feedback_summary_params("test-scorecard", "test-score", 30)
+        valid, error = validate_feedback_summary_params("test-scorecard", "test-score", 7)
         assert valid is True
         assert error is None
         
@@ -268,7 +268,7 @@ class TestFeedbackFindTool:
     def test_feedback_find_validation_patterns(self):
         """Test feedback find parameter validation patterns"""
         def validate_feedback_find_params(scorecard_name, score_name, initial_value=None, final_value=None, 
-                                         limit=10, days=30, output_format="json", prioritize_edit_comments=True):
+                                         limit=10, days=7, output_format="json", prioritize_edit_comments=True):
             if not scorecard_name or not scorecard_name.strip():
                 return False, "scorecard_name is required"
             if not score_name or not score_name.strip():
@@ -427,7 +427,7 @@ class TestFeedbackFindTool:
                 except (ValueError, TypeError):
                     return None, None, f"Invalid days parameter '{days}'. Must be a number."
             else:
-                days_int = 30  # Default to 30 days
+                days_int = 7  # Default to 7 days
                 
             limit_int = None
             if limit:
@@ -446,7 +446,7 @@ class TestFeedbackFindTool:
         
         # Test default days
         days_int, limit_int, error = convert_parameters(None, "5")
-        assert days_int == 30
+        assert days_int == 7
         assert limit_int == 5
         assert error is None
         
@@ -481,7 +481,7 @@ class TestFeedbackFindTool:
                 'filters_applied': {
                     'initial_value': 'No',
                     'final_value': 'Yes',
-                    'days': 30
+                    'days': 7
                 }
             }
         }
@@ -506,7 +506,7 @@ class TestFeedbackFindTool:
     def test_no_feedback_response_patterns(self):
         """Test no feedback found response patterns"""
         def generate_no_feedback_message(score_name, scorecard_name, initial_value=None, 
-                                       final_value=None, days=30):
+                                       final_value=None, days=7):
             filter_desc = []
             if initial_value:
                 filter_desc.append(f"initial value '{initial_value}'")
@@ -528,9 +528,9 @@ class TestFeedbackFindTool:
         assert "last 14 days" in message
         
         # Test message with filters
-        message = generate_no_feedback_message('test-score', 'test-scorecard', 'No', 'Yes', 30)
+        message = generate_no_feedback_message('test-score', 'test-scorecard', 'No', 'Yes', 7)
         assert "with initial value 'No' and final value 'Yes'" in message
-        assert "last 30 days" in message
+        assert "last 7 days" in message
 
 
 class TestFeedbackToolsSharedPatterns:
