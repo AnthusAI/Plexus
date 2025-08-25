@@ -341,8 +341,6 @@ const schema = a.schema({
             idx("scoreId").sortKeys(["createdAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
             idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId"),
-            // GSI for efficient querying by creation type (evaluation vs prediction)
-            idx("accountId").sortKeys(["createdByType", "createdAt"]).name("byAccountCreatedByTypeAndCreatedAt"),
         ]),
 
     Identifier: a
