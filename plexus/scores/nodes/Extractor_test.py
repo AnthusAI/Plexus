@@ -150,7 +150,11 @@ def test_end_to_end_chain_integration_with_dummy_model(basic_parameters):
     extractor_instance = Extractor(**basic_parameters)
     
     # Override the model with a dummy model that always returns a fixed output
-    dummy_model = lambda x: 'Quote: "Extract the key sentence."'
+    class DummyModel:
+        def invoke(self, messages):
+            return 'Quote: "Extract the key sentence."'
+    
+    dummy_model = DummyModel()
     extractor_instance.model = dummy_model
     
     # Ensure get_prompt_templates returns a valid prompt template list to avoid index errors
