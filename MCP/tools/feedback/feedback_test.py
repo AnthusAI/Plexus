@@ -678,3 +678,252 @@ class TestFeedbackToolsSharedPatterns:
         error_message = simulate_import_attempt()
         assert "Could not import FeedbackService" in error_message
         assert "Core modules may not be available" in error_message
+
+
+class TestFeedbackFindToolItemFields:
+    """Test that feedback find tool includes both text and metadata fields from items"""
+    
+    def test_feedback_service_conversion_includes_item_metadata(self):
+        """Test that _convert_feedback_item_to_summary extracts all item metadata fields"""
+        from plexus.cli.feedback.feedback_service import FeedbackService
+        from dataclasses import dataclass
+        from typing import Optional, Dict, Any
+        
+        # Mock Item class
+        @dataclass
+        class MockItem:
+            text: Optional[str] = None
+            metadata: Optional[Dict[str, Any]] = None
+            description: Optional[str] = None
+            identifiers: Optional[Dict[str, Any]] = None
+            externalId: Optional[str] = None
+        
+        # Mock FeedbackItem class
+        @dataclass
+        class MockFeedbackItem:
+            itemId: str
+            initialAnswerValue: Optional[str] = None
+            finalAnswerValue: Optional[str] = None
+            initialCommentValue: Optional[str] = None
+            finalCommentValue: Optional[str] = None
+            editCommentValue: Optional[str] = None
+            item: Optional[MockItem] = None
+        
+        # Create test item with comprehensive metadata
+        test_item = MockItem(
+            text="This is the conversation transcript",
+            metadata={
+                "call_duration": 300,
+                "agent_id": "agent-456", 
+                "customer_type": "premium",
+                "channel": "phone"
+            },
+            description="Call review for medication coverage inquiry",
+            identifiers={
+                "form_id": "58896632",
+                "case_number": "CASE-2024-001",
+                "customer_id": "CUST-789"
+            },
+            externalId="ext-123"
+        )
+        
+        # Create feedback item with the test item
+        feedback_item = MockFeedbackItem(
+            itemId="item-123",
+            initialAnswerValue="No",
+            finalAnswerValue="Yes",
+            initialCommentValue="Initial assessment",
+            finalCommentValue="Corrected assessment", 
+            editCommentValue="Reviewed and corrected",
+            item=test_item
+        )
+        
+        # Test conversion with text included
+        summary = FeedbackService._convert_feedback_item_to_summary(feedback_item, include_text=True)
+        
+        # Verify all basic fields
+        assert summary.item_id == "item-123"
+        assert summary.initial_value == "No"
+        assert summary.final_value == "Yes"
+        assert summary.initial_explanation == "Initial assessment"
+        assert summary.final_explanation == "Corrected assessment"
+        assert summary.edit_comment == "Reviewed and corrected"
+        
+        # Verify item text is included
+        assert summary.item_text == "This is the conversation transcript"
+        
+        # Verify item metadata is included and structured correctly
+        assert summary.item_metadata is not None
+        assert summary.item_metadata["call_duration"] == 300
+        assert summary.item_metadata["agent_id"] == "agent-456"
+        assert summary.item_metadata["customer_type"] == "premium"
+        assert summary.item_metadata["channel"] == "phone"
+        
+        # Verify item description is included
+        assert summary.item_description == "Call review for medication coverage inquiry"
+        
+        # Verify item identifiers are included
+        assert summary.item_identifiers is not None
+        assert summary.item_identifiers["form_id"] == "58896632"
+        assert summary.item_identifiers["case_number"] == "CASE-2024-001"
+        assert summary.item_identifiers["customer_id"] == "CUST-789"
+    
+    def test_feedback_service_conversion_handles_json_metadata(self):
+        """Test that _convert_feedback_item_to_summary handles JSON string metadata"""
+        from plexus.cli.feedback.feedback_service import FeedbackService
+        from dataclasses import dataclass
+        from typing import Optional, Dict, Any
+        import json
+        
+        # Mock Item class
+        @dataclass
+        class MockItem:
+            text: Optional[str] = None
+            metadata: Optional[str] = None  # JSON string format
+            description: Optional[str] = None
+            identifiers: Optional[str] = None  # JSON string format
+            externalId: Optional[str] = None
+        
+        # Mock FeedbackItem class
+        @dataclass
+        class MockFeedbackItem:
+            itemId: str
+            initialAnswerValue: Optional[str] = None
+            finalAnswerValue: Optional[str] = None
+            initialCommentValue: Optional[str] = None
+            finalCommentValue: Optional[str] = None
+            editCommentValue: Optional[str] = None
+            item: Optional[MockItem] = None
+        
+        # Create test item with JSON string metadata
+        metadata_dict = {
+            "call_duration": 300,
+            "agent_id": "agent-456"
+        }
+        identifiers_list = [
+            {"name": "form", "value": "58896632"},
+            {"name": "case_number", "value": "CASE-2024-001"}
+        ]
+        
+        test_item = MockItem(
+            text="This is the conversation transcript",
+            metadata=json.dumps(metadata_dict),  # JSON string
+            description="Call review description",
+            identifiers=json.dumps(identifiers_list),  # JSON string
+            externalId="ext-123"
+        )
+        
+        # Create feedback item with the test item
+        feedback_item = MockFeedbackItem(
+            itemId="item-123",
+            initialAnswerValue="No",
+            finalAnswerValue="Yes",
+            item=test_item
+        )
+        
+        # Test conversion with text included
+        summary = FeedbackService._convert_feedback_item_to_summary(feedback_item, include_text=True)
+        
+        # Verify item metadata is parsed from JSON
+        assert summary.item_metadata is not None
+        assert summary.item_metadata["call_duration"] == 300
+        assert summary.item_metadata["agent_id"] == "agent-456"
+        
+        # Verify item identifiers are parsed from JSON
+        assert summary.item_identifiers is not None
+        assert isinstance(summary.item_identifiers, list)
+        assert len(summary.item_identifiers) == 2
+        assert summary.item_identifiers[0]["name"] == "form"
+        assert summary.item_identifiers[0]["value"] == "58896632"
+    
+    def test_feedback_item_summary_dataclass_fields(self):
+        """Test FeedbackItemSummary dataclass includes all expected fields"""
+        # Import the actual dataclass
+        from plexus.cli.feedback.feedback_service import FeedbackItemSummary
+        
+        # Create an instance with all fields
+        summary = FeedbackItemSummary(
+            item_id="test-item",
+            external_id="test-external",
+            initial_value="No",
+            final_value="Yes",
+            initial_explanation="Initial",
+            final_explanation="Final",
+            edit_comment="Edited",
+            item_text="Test conversation text",
+            item_metadata={"key": "value"},
+            item_description="Test description",
+            item_identifiers={"form_id": "123"}
+        )
+        
+        # Verify all fields are accessible
+        assert summary.item_id == "test-item"
+        assert summary.external_id == "test-external"
+        assert summary.initial_value == "No"
+        assert summary.final_value == "Yes"
+        assert summary.initial_explanation == "Initial"
+        assert summary.final_explanation == "Final"
+        assert summary.edit_comment == "Edited"
+        assert summary.item_text == "Test conversation text"
+        assert summary.item_metadata == {"key": "value"}
+        assert summary.item_description == "Test description"
+        assert summary.item_identifiers == {"form_id": "123"}
+    
+    def test_format_search_result_includes_all_fields(self):
+        """Test that format_search_result_as_dict includes all new fields"""
+        # Import the required classes
+        from plexus.cli.feedback.feedback_service import (
+            FeedbackSearchResult, 
+            FeedbackSearchContext, 
+            FeedbackItemSummary,
+            FeedbackService
+        )
+        
+        # Create test data
+        context = FeedbackSearchContext(
+            scorecard_name="Test Scorecard",
+            score_name="Test Score", 
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            account_id="account-789",
+            filters={"limit": 1},
+            total_found=1
+        )
+        
+        item_summary = FeedbackItemSummary(
+            item_id="item-123",
+            external_id="ext-456", 
+            initial_value="No",
+            final_value="Yes",
+            initial_explanation="Initial",
+            final_explanation="Final",
+            edit_comment="Corrected",
+            item_text="Sample conversation text",
+            item_metadata={"duration": 300, "type": "phone"},
+            item_description="Test call description",
+            item_identifiers={"form_id": "123", "case_id": "CASE-001"}
+        )
+        
+        result = FeedbackSearchResult(context=context, feedback_items=[item_summary])
+        
+        # Format to dict
+        result_dict = FeedbackService.format_search_result_as_dict(result)
+        
+        # Verify structure
+        assert "context" in result_dict
+        assert "feedback_items" in result_dict
+        assert len(result_dict["feedback_items"]) == 1
+        
+        # Verify all fields are included in the formatted item
+        item_dict = result_dict["feedback_items"][0]
+        assert item_dict["item_id"] == "item-123"
+        assert item_dict["external_id"] == "ext-456"
+        assert item_dict["initial_value"] == "No"
+        assert item_dict["final_value"] == "Yes"
+        assert item_dict["initial_explanation"] == "Initial"
+        assert item_dict["final_explanation"] == "Final"
+        assert item_dict["edit_comment"] == "Corrected"
+        assert item_dict["item_text"] == "Sample conversation text"
+        assert item_dict["item_metadata"] == {"duration": 300, "type": "phone"}
+        assert item_dict["item_description"] == "Test call description"
+        assert item_dict["item_identifiers"] == {"form_id": "123", "case_id": "CASE-001"}
