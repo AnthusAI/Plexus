@@ -45,6 +45,38 @@ export interface ExperimentTaskData extends BaseTaskData {
   score?: {
     name: string
   } | null
+  taskId?: string
+  task?: {
+    id: string
+    type: string
+    status: string
+    target: string
+    command: string
+    description?: string
+    dispatchStatus?: string
+    metadata?: any
+    createdAt?: string
+    startedAt?: string
+    completedAt?: string
+    estimatedCompletionAt?: string
+    errorMessage?: string
+    errorDetails?: any
+    currentStageId?: string
+    stages?: {
+      items: Array<{
+        id: string
+        name: string
+        order: number
+        status: string
+        statusMessage?: string
+        startedAt?: string
+        completedAt?: string
+        estimatedCompletionAt?: string
+        processedItems?: number
+        totalItems?: number
+      }>
+    }
+  } | null
 }
 
 export interface ExperimentTaskProps {
@@ -177,18 +209,38 @@ export default function ExperimentTask({
   )
 
   // Transform experiment data to match Task component expectations
+  // Use task data if available, otherwise use experiment data
   const taskData = {
-    id: experiment.id,
-    type: 'Experiment',
-    name: undefined, // Don't show a name - we'll display scorecard/score in content
-    description: undefined,
+    id: experiment.task?.id || experiment.id,
+    type: experiment.task?.type || 'Experiment',
+    name: experiment.task?.description || undefined, // Don't show a name - we'll display scorecard/score in content
+    description: experiment.task?.description || undefined,
     scorecard: experiment.scorecard?.name || '',
     score: experiment.score?.name || '',
-    time: experiment.createdAt,
-    command: undefined,
-    output: undefined,
+    time: experiment.task?.createdAt || experiment.createdAt,
+    command: experiment.task?.command || undefined,
+    output: experiment.task?.errorMessage || undefined,
     data: experiment,
-    status: 'PENDING' as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    status: (experiment.task?.status?.toUpperCase() || 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+    stages: experiment.task?.stages?.items?.sort((a, b) => a.order - b.order).map(stage => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-green-500' : 
+             stage.status === 'FAILED' ? 'bg-red-500' : 
+             stage.status === 'RUNNING' ? 'bg-primary' : 'bg-muted-foreground',
+      name: stage.name,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt
+    })) || [],
+    startedAt: experiment.task?.startedAt,
+    completedAt: experiment.task?.completedAt,
+    errorMessage: experiment.task?.errorMessage,
+    errorDetails: experiment.task?.errorDetails
   }
 
   const renderHeader = (props: any) => {
@@ -306,6 +358,7 @@ export default function ExperimentTask({
               </AccordionContent>
             </AccordionItem>
           </Accordion>
+          
           
           {/* Experiment Nodes section */}
           <div className="mt-6">

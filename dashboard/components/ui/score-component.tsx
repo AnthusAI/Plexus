@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -36,6 +36,7 @@ export interface ScoreData {
   id: string
   name: string
   description: string
+  guidelines?: string
   type: string
   order: number
   externalId?: string
@@ -474,6 +475,9 @@ const DetailContent = React.memo(({
   
   // Add state for test score dialog
   const [isTestDialogOpen, setIsTestDialogOpen] = React.useState(false);
+  
+  // Add state for guidelines expansion
+  const [isGuidelinesExpanded, setIsGuidelinesExpanded] = React.useState(false);
   
   // Detect mobile devices on component mount
   React.useEffect(() => {
@@ -1075,6 +1079,62 @@ const DetailContent = React.memo(({
               }}>Save Changes</Button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Guidelines section - hide in fullscreen mode */}
+      {!isEditorFullscreen && (
+        <div className="mt-6">
+          <div className="flex justify-between items-center mb-2">
+            <div className="flex items-center">
+              <h3 
+                className="text-lg font-semibold cursor-pointer flex items-center"
+                onClick={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
+              >
+                Guidelines
+                {isGuidelinesExpanded ? (
+                  <ChevronDown className="h-4 w-4 ml-2 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 ml-2 text-muted-foreground" />
+                )}
+              </h3>
+            </div>
+          </div>
+          
+          {isGuidelinesExpanded && (
+            <div className="mb-6">
+              {(!score.guidelines || score.guidelines.trim() === '') ? (
+                <div className="text-center text-muted-foreground py-4">
+                  <p>No guidelines set</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <textarea
+                    value={score.guidelines || ''}
+                    onChange={(e) => onEditChange?.({ guidelines: e.target.value })}
+                    placeholder="Add guidelines for this score..."
+                    className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm resize-y min-h-[100px]
+                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                             placeholder:text-muted-foreground"
+                    rows={5}
+                  />
+                </div>
+              )}
+              {(score.guidelines || '').trim() === '' && (
+                <div className="mt-2">
+                  <textarea
+                    value={score.guidelines || ''}
+                    onChange={(e) => onEditChange?.({ guidelines: e.target.value })}
+                    placeholder="Add guidelines for this score..."
+                    className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm resize-y min-h-[100px]
+                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                             placeholder:text-muted-foreground"
+                    rows={5}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -471,7 +471,7 @@ Look at the "CONFUSION MATRIX - SCORING CORRECTIONS" section in the feedback ana
 - If the feedback summary shows 4 "Yes→No" errors available, examine ALL of them (offset=0 through offset=3)
 - Only examine 1-2 correct prediction examples for context - focus your time on understanding errors
 
-The goal is to understand what's going wrong and come up with evidence-based ideas for how to improve the scoring."""
+**Start by analyzing the confusion matrix from the feedback summary above. Tell me what you can learn from those numbers about the error patterns and scoring problems before doing anything else.**"""
 
         return user_prompt
     

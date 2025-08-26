@@ -50,6 +50,7 @@ import {
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
+import { observeExperimentNodeUpdates } from "@/utils/subscriptions"
 
 // Types based on our GraphQL schema
 type ExperimentNode = Schema['ExperimentNode']['type']
@@ -175,6 +176,55 @@ export default function ExperimentNodesList({ experimentId }: Props) {
 
     loadExperimentNodes()
   }, [experimentId])
+
+  // Real-time subscription for experiment node updates
+  useEffect(() => {
+    if (!experimentId) return;
+
+    console.log('Setting up ExperimentNode subscriptions for experiment:', experimentId);
+
+    const nodeSubscription = observeExperimentNodeUpdates().subscribe({
+      next: (value: any) => {
+        const { type, data } = value;
+        console.log(`ExperimentNode ${type} update:`, data);
+        
+        // Only process nodes for the current experiment
+        if (data?.experimentId === experimentId) {
+          console.log(`Processing ${type} for experiment ${experimentId}:`, data);
+          
+          setNodes(prevNodes => {
+            if (type === 'create') {
+              // Add new node if it doesn't already exist
+              const exists = prevNodes.some(node => node.id === data.id);
+              if (!exists) {
+                console.log(`Adding new node ${data.id} to experiment ${experimentId}`);
+                return [...prevNodes, data].sort((a, b) => 
+                  new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()
+                );
+              }
+              return prevNodes;
+            } else if (type === 'update') {
+              // Update existing node
+              return prevNodes.map(node => 
+                node.id === data.id 
+                  ? { ...node, ...data }
+                  : node
+              );
+            }
+            return prevNodes;
+          });
+        }
+      },
+      error: (error: any) => {
+        console.error('ExperimentNode subscription error:', error);
+      }
+    });
+
+    return () => {
+      console.log('Cleaning up ExperimentNode subscription for experiment:', experimentId);
+      nodeSubscription.unsubscribe();
+    };
+  }, [experimentId]);
 
   const handleDeleteNode = async (nodeId: string) => {
     if (!nodeId) return
