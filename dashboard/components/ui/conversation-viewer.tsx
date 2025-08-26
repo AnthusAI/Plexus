@@ -487,8 +487,9 @@ function ConversationViewer({
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
       const subscription = getClient().models.ChatSession.onCreate().subscribe({
-        next: ({ data }: any) => {
+        next: (param: any) => {
           console.log('Chat session notification received - checking for updates')
+          console.log('Subscription param:', param)
           // Don't rely on the subscription data, just use it as a notification
           checkForNewSessions()
         },
@@ -630,9 +631,9 @@ function ConversationViewer({
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
       const subscription = getClient().models.ChatMessage.onCreate().subscribe({
-        next: ({ data }: any) => {
+        next: (param: any) => {
           console.log('Chat message notification received - checking for updates')
-          console.log('Subscription data:', data)
+          console.log('Subscription param:', param)
           // Don't rely on the subscription data, just use it as a notification
           checkForNewMessages()
         },

@@ -62,6 +62,32 @@ def get_prediction_stage_configs(total_items: int = 1) -> Dict[str, StageConfig]
     }
 
 
+def get_experiment_stage_configs(total_items: int = 0) -> Dict[str, StageConfig]:
+    """Get stage configuration for experiment operations.
+    
+    Args:
+        total_items: Total number of items to process (for Evaluation stage)
+        
+    Returns:
+        Dictionary mapping stage names to StageConfig objects
+    """
+    return {
+        "Hypothesis": StageConfig(
+            order=1,
+            status_message="Generating experiment hypothesis..."
+        ),
+        "Evaluation": StageConfig(
+            order=2,
+            total_items=total_items,
+            status_message="Running experiment evaluation..."
+        ),
+        "Analysis": StageConfig(
+            order=3,
+            status_message="Analyzing experiment results..."
+        )
+    }
+
+
 def get_stage_configs_for_operation_type(operation_type: str, total_items: int = 0) -> Dict[str, StageConfig]:
     """Get stage configuration for a specific operation type.
     
@@ -79,6 +105,8 @@ def get_stage_configs_for_operation_type(operation_type: str, total_items: int =
         return get_evaluation_stage_configs(total_items)
     elif operation_type.lower() in ['prediction', 'predict']:
         return get_prediction_stage_configs(total_items)
+    elif operation_type.lower() in ['experiment', 'experiments']:
+        return get_experiment_stage_configs(total_items)
     else:
         raise ValueError(f"Unknown operation type: {operation_type}")
 

@@ -32,6 +32,7 @@ export interface ScorecardData {
   name: string
   key: string
   description: string
+  guidelines?: string
   type: string
   order: number
   externalId?: string
@@ -49,6 +50,7 @@ export interface ScorecardData {
           name: string
           key: string
           description: string
+          guidelines?: string
           order: number
           type: string
         }>
@@ -160,6 +162,7 @@ export const DetailContent = React.memo(function DetailContent({
   const { selectedAccount } = useAccount()
   const [sectionNameChanges, setSectionNameChanges] = React.useState<Record<string, string>>({})
   const [isExamplesExpanded, setIsExamplesExpanded] = React.useState(false)
+  const [isGuidelinesExpanded, setIsGuidelinesExpanded] = React.useState(false)
   const [isAddingByExternalId, setIsAddingByExternalId] = React.useState(false)
   const [externalIdSearch, setExternalIdSearch] = React.useState("")
   const [searchResults, setSearchResults] = React.useState<Array<{id: string, externalId: string, description?: string}>>([])
@@ -808,6 +811,59 @@ export const DetailContent = React.memo(function DetailContent({
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center">
+                <h3 
+                  className="text-lg font-semibold cursor-pointer flex items-center"
+                  onClick={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
+                >
+                  Guidelines
+                  {isGuidelinesExpanded ? (
+                    <ChevronDown className="h-4 w-4 ml-2 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 ml-2 text-muted-foreground" />
+                  )}
+                </h3>
+              </div>
+            </div>
+            
+            {isGuidelinesExpanded && (
+              <div className="mb-6">
+                {(!score.guidelines || score.guidelines.trim() === '') ? (
+                  <div className="text-center text-muted-foreground py-4">
+                    <p>No guidelines set</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <textarea
+                      value={score.guidelines || ''}
+                      onChange={(e) => onEditChange?.({ guidelines: e.target.value })}
+                      placeholder="Add guidelines for this scorecard..."
+                      className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm resize-y min-h-[100px]
+                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                               placeholder:text-muted-foreground"
+                      rows={5}
+                    />
+                  </div>
+                )}
+                {(score.guidelines || '').trim() === '' && (
+                  <div className="mt-2">
+                    <textarea
+                      value={score.guidelines || ''}
+                      onChange={(e) => onEditChange?.({ guidelines: e.target.value })}
+                      placeholder="Add guidelines for this scorecard..."
+                      className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm resize-y min-h-[100px]
+                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                               placeholder:text-muted-foreground"
+                      rows={5}
+                    />
                   </div>
                 )}
               </div>

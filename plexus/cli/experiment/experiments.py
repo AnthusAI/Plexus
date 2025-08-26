@@ -480,9 +480,7 @@ def run(experiment_id: str, max_iterations: Optional[int], timeout: Optional[int
         console.print("[red]Error: Could not create API client[/red]")
         return
     
-    service = ExperimentService(client)
-    
-    console.print(f"Running experiment {experiment_id}...")
+    console.print(f"Running experiment {experiment_id} with task tracking...")
     
     # Build options dictionary
     options = {}
@@ -499,9 +497,20 @@ def run(experiment_id: str, max_iterations: Optional[int], timeout: Optional[int
     if openai_api_key:
         options['openai_api_key'] = openai_api_key
     
-    # Run the experiment (async)
+    # Get account ID for task tracking
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    account_id = resolve_account_id_for_command(client, None)
+    
+    # Run the experiment with task tracking (async)
     import asyncio
-    result = asyncio.run(service.run_experiment(experiment_id, **options))
+    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    
+    result = asyncio.run(run_experiment_with_task_tracking(
+        experiment_id=experiment_id,
+        client=client,
+        account_id=account_id,
+        **options
+    ))
     
     if result.get('status') == 'error':
         console.print(f"[red]Error: {result.get('error')}[/red]")

@@ -1121,4 +1121,92 @@ export function observeScoreResultChanges() {
       };
     }
   };
-} 
+}
+
+// ExperimentNode subscription queries
+const onCreateExperimentNodeSubscriptionQuery = /* GraphQL */ `
+  subscription OnCreateExperimentNode {
+    onCreateExperimentNode {
+      id
+      experimentId
+      name
+      hypothesis
+      insight
+      code
+      value
+      status
+      parentNodeId
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const onUpdateExperimentNodeSubscriptionQuery = /* GraphQL */ `
+  subscription OnUpdateExperimentNode {
+    onUpdateExperimentNode {
+      id
+      experimentId
+      name
+      hypothesis
+      insight
+      code
+      value
+      status
+      parentNodeId
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export function observeExperimentNodeUpdates() {
+  return new Observable(observer => {
+    const client = getClient();
+    const subscriptions: { unsubscribe: () => void }[] = [];
+
+    // Subscribe to create events
+    const createSub = (client.graphql({ query: onCreateExperimentNodeSubscriptionQuery }) as any)
+      .subscribe({
+        next: ({ data }: { data: any }) => {
+          console.log('ExperimentNode create subscription event:', {
+            nodeId: data?.onCreateExperimentNode?.id,
+            experimentId: data?.onCreateExperimentNode?.experimentId,
+            name: data?.onCreateExperimentNode?.name,
+            status: data?.onCreateExperimentNode?.status,
+            data: data?.onCreateExperimentNode
+          });
+          observer.next({ type: 'create', data: data?.onCreateExperimentNode });
+        },
+        error: (error: any) => {
+          console.error('ExperimentNode create subscription error:', error);
+          observer.error(error);
+        }
+      });
+    subscriptions.push(createSub);
+
+    // Subscribe to update events
+    const updateSub = (client.graphql({ query: onUpdateExperimentNodeSubscriptionQuery }) as any)
+      .subscribe({
+        next: ({ data }: { data: any }) => {
+          console.log('ExperimentNode update subscription event:', {
+            nodeId: data?.onUpdateExperimentNode?.id,
+            experimentId: data?.onUpdateExperimentNode?.experimentId,
+            name: data?.onUpdateExperimentNode?.name,
+            status: data?.onUpdateExperimentNode?.status,
+            data: data?.onUpdateExperimentNode
+          });
+          observer.next({ type: 'update', data: data?.onUpdateExperimentNode });
+        },
+        error: (error: any) => {
+          console.error('ExperimentNode update subscription error:', error);
+          observer.error(error);
+        }
+      });
+    subscriptions.push(updateSub);
+
+    return () => {
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  });
+}

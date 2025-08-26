@@ -14,8 +14,13 @@ import TemplateSelector from "@/components/template-selector"
 import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
+import { observeTaskUpdates, observeTaskStageUpdates, observeExperimentNodeUpdates } from "@/utils/subscriptions"
 
 type Experiment = Schema['Experiment']['type']
+type Task = Schema['Task']['type']
+type ExperimentWithTask = Experiment & {
+  task?: Task | null
+}
 
 const client = generateClient<Schema>()
 
@@ -33,7 +38,7 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
   const experimentIdFromParams = (params && 'id' in params) ? params.id as string : null
   const finalInitialExperimentId = initialSelectedExperimentId || experimentIdFromParams
   
-  const [experiments, setExperiments] = useState<Experiment[]>([])
+  const [experiments, setExperiments] = useState<ExperimentWithTask[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(finalInitialExperimentId)
@@ -91,12 +96,138 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
       setIsLoading(true)
       lastLoadTimeRef.current = Date.now()
       console.log('Loading experiments for account:', selectedAccount.id)
-      const result = await (client.models.Experiment.listExperimentByAccountIdAndUpdatedAt as any)({
-        accountId: selectedAccount.id,
-        limit: 1000 // Increase limit to get more experiments
+      // First get experiments
+      const experimentsResult = await client.graphql({
+        query: `
+          query ListExperimentByAccountIdAndUpdatedAt(
+            $accountId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+          ) {
+            listExperimentByAccountIdAndUpdatedAt(
+              accountId: $accountId
+              sortDirection: $sortDirection
+              limit: $limit
+            ) {
+              items {
+                id
+                featured
+                templateId
+                code
+                rootNodeId
+                createdAt
+                updatedAt
+                accountId
+                scorecardId
+                scorecard {
+                  id
+                  name
+                }
+                scoreId
+                score {
+                  id
+                  name
+                }
+
+              }
+              nextToken
+            }
+          }
+        `,
+        variables: {
+          accountId: selectedAccount.id,
+          sortDirection: 'DESC',
+          limit: 1000
+        }
       })
-      console.log('Raw experiment query result:', result)
-      const { data } = result
+      console.log('Raw experiment query result:', experimentsResult)
+      const experimentsData = (experimentsResult as any).data?.listExperimentByAccountIdAndUpdatedAt?.items || []
+      
+      // Then get tasks related to experiments (via metadata)
+      const tasksResult = await client.graphql({
+        query: `
+          query ListTaskByAccountIdAndUpdatedAt(
+            $accountId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+          ) {
+            listTaskByAccountIdAndUpdatedAt(
+              accountId: $accountId
+              sortDirection: $sortDirection
+              limit: $limit
+            ) {
+              items {
+                id
+                type
+                status
+                target
+                command
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                currentStageId
+                stages {
+                  items {
+                    id
+                    name
+                    order
+                    status
+                    statusMessage
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    processedItems
+                    totalItems
+                  }
+                }
+              }
+            }
+          }
+        `,
+        variables: {
+          accountId: selectedAccount.id,
+          sortDirection: 'DESC',
+          limit: 1000
+        }
+      })
+      
+      console.log('Raw tasks query result:', tasksResult)
+      const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
+      
+      // Filter tasks that have experiment_id in metadata
+      const experimentTasks = allTasks.filter((task: Task) => {
+        try {
+          const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
+          return metadata && metadata.experiment_id
+        } catch {
+          return false
+        }
+      })
+      
+      // Create a map of experiment_id -> task for quick lookup
+      const experimentTaskMap = new Map()
+      experimentTasks.forEach((task: Task) => {
+        try {
+          const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
+          if (metadata && metadata.experiment_id) {
+            experimentTaskMap.set(metadata.experiment_id, task)
+          }
+        } catch {
+          // Ignore parsing errors
+        }
+      })
+      
+      // Combine experiments with their tasks
+      const data = experimentsData.map((experiment: Experiment): ExperimentWithTask => ({
+        ...experiment,
+        task: experimentTaskMap.get(experiment.id) || null
+      }))
       console.log('Experiments data from query:', data)
       
       // Check if we're looking for a specific experiment (for debugging)
@@ -152,6 +283,99 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
   useEffect(() => {
     loadExperiments()
   }, [loadExperiments])
+
+  // Task monitoring with real-time subscriptions for experiment tasks
+  useEffect(() => {
+    console.log('Setting up task subscriptions for experiments')
+
+    const taskSubscription = observeTaskUpdates().subscribe({
+      next: (value: any) => {
+        const { type, data } = value;
+        console.log(`Task ${type} update for experiments:`, data);
+        
+        // Check if this is an experiment task by looking for experiment_id in metadata
+        if (data?.metadata) {
+          try {
+            const metadata = typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata;
+            if (metadata?.experiment_id) {
+              console.log(`Updating experiment ${metadata.experiment_id} with task data:`, data);
+              
+              // Update the experiments list with new task data
+              setExperiments(prevExperiments => 
+                prevExperiments.map(experiment => 
+                  experiment.id === metadata.experiment_id 
+                    ? { ...experiment, task: data }
+                    : experiment
+                )
+              );
+            }
+          } catch (error) {
+            console.error('Error parsing task metadata:', error);
+          }
+        }
+      },
+      error: (error: any) => {
+        console.error('Task subscription error:', error);
+      }
+    });
+
+    const stageSubscription = observeTaskStageUpdates().subscribe({
+      next: (value: any) => {
+        const { type, data } = value;
+        console.log(`TaskStage ${type} update for experiments:`, data);
+        
+        if (data?.taskId) {
+          // Update the experiments list with new stage data
+          setExperiments(prevExperiments => 
+            prevExperiments.map((experiment: ExperimentWithTask) => {
+              if (experiment.task?.id === data.taskId) {
+                console.log(`Updating experiment ${experiment.id} stages with:`, data);
+                
+                // Handle LazyLoader for stages - access synchronously if available
+                const currentStages = experiment.task?.stages as any;
+                const updatedStages = currentStages?.items ? [...currentStages.items] : [];
+                const existingStageIndex = updatedStages.findIndex((stage: any) => stage.id === data.id);
+                
+                if (existingStageIndex >= 0) {
+                  updatedStages[existingStageIndex] = { ...updatedStages[existingStageIndex], ...data };
+                } else {
+                  updatedStages.push(data);
+                }
+                
+                const updatedTask = {
+                  ...experiment.task!,
+                  stages: currentStages ? {
+                    ...currentStages,
+                    items: updatedStages.sort((a: any, b: any) => a.order - b.order)
+                  } : { items: updatedStages.sort((a: any, b: any) => a.order - b.order) },
+                  currentStageId: data.status === 'RUNNING' ? data.name : experiment.task?.currentStageId
+                };
+
+                console.log('Updated experiment task with stages:', {
+                  experimentId: experiment.id,
+                  taskId: updatedTask.id,
+                  stagesCount: updatedTask.stages?.items?.length,
+                  currentStageId: updatedTask.currentStageId
+                });
+
+                return { ...experiment, task: updatedTask };
+              }
+              return experiment;
+            })
+          );
+        }
+      },
+      error: (error: any) => {
+        console.error('TaskStage subscription error:', error);
+      }
+    });
+
+    return () => {
+      console.log('Cleaning up task subscriptions for experiments');
+      taskSubscription.unsubscribe();
+      stageSubscription.unsubscribe();
+    };
+  }, []); // Empty dependency array since we want this to run once
 
   const handleEditExperiment = useCallback((experimentId: string) => {
     console.log('Edit experiment:', experimentId)
@@ -217,42 +441,8 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
     return () => window.removeEventListener('popstate', syncFromUrl)
   }, [])
 
-  // Refresh experiments when returning to the dashboard (e.g., from creation page)
-  // Only refresh if data is very stale (older than 10 minutes) and user hasn't interacted recently
-  useEffect(() => {
-    let focusTimeout: NodeJS.Timeout | null = null
-    
-    const handleFocus = () => {
-      // Clear any pending focus handlers to debounce rapid focus events
-      if (focusTimeout) {
-        clearTimeout(focusTimeout)
-      }
-      
-      // Debounce focus events by 1 second to prevent rapid successive reloads
-      focusTimeout = setTimeout(() => {
-        const now = Date.now()
-        const isVeryStale = now - lastLoadTimeRef.current > 600000 // 10 minutes instead of 5 minutes
-        
-        // Only refresh if we're on the experiments dashboard page AND data is very stale
-        // AND user hasn't interacted recently (prevent reloading during active usage)
-        if (isVeryStale && 
-            (window.location.pathname === '/lab/experiments' || 
-             window.location.pathname.startsWith('/lab/experiments/'))) {
-          console.log('Data is stale (>10min), refreshing experiments on focus after navigation')
-          loadExperiments(true) // Force reload on focus if very stale
-        }
-        focusTimeout = null
-      }, 1000) // 1 second debounce
-    }
-    
-    window.addEventListener('focus', handleFocus)
-    return () => {
-      window.removeEventListener('focus', handleFocus)
-      if (focusTimeout) {
-        clearTimeout(focusTimeout)
-      }
-    }
-  }, [loadExperiments])
+  // Focus handler disabled to prevent unwanted reloads when returning to browser
+  // Data will refresh naturally through other user interactions or manual refresh
 
   const handleCreateExperiment = () => {
     setShowTemplateSelector(true)
@@ -351,7 +541,7 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
   }
 
   // Transform experiments to ExperimentTaskData - memoized to prevent unnecessary re-renders
-  const transformExperiment = useCallback((experiment: Experiment): ExperimentTaskData => ({
+  const transformExperiment = useCallback((experiment: ExperimentWithTask): ExperimentTaskData => ({
     id: experiment.id,
     title: `${experiment.scorecard?.name || 'Experiment'} - ${experiment.score?.name || 'Score'}`,
     featured: experiment.featured || false,
@@ -360,6 +550,26 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
     updatedAt: experiment.updatedAt,
     scorecard: experiment.scorecard ? { name: experiment.scorecard.name } : null,
     score: experiment.score ? { name: experiment.score.name } : null,
+    task: experiment.task ? {
+      id: experiment.task.id,
+      type: experiment.task.type || 'Experiment',
+      status: experiment.task.status || 'PENDING',
+      target: experiment.task.target || '',
+      command: experiment.task.command || '',
+      description: experiment.task.description || undefined,
+      dispatchStatus: experiment.task.dispatchStatus || undefined,
+      metadata: experiment.task.metadata,
+      createdAt: experiment.task.createdAt || undefined,
+      startedAt: experiment.task.startedAt || undefined,
+      completedAt: experiment.task.completedAt || undefined,
+      estimatedCompletionAt: experiment.task.estimatedCompletionAt || undefined,
+      errorMessage: experiment.task.errorMessage || undefined,
+      errorDetails: experiment.task.errorDetails || undefined,
+      currentStageId: experiment.task.currentStageId || undefined,
+      stages: experiment.task.stages ? {
+        items: (experiment.task.stages as any)?.items || []
+      } : undefined
+    } : undefined
   }), [])
   
 
