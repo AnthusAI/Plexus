@@ -536,7 +536,6 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
             idx("taskId"),
-            idx("order"),
             idx("status")
         ]),
 
@@ -842,7 +841,6 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: DataSetIndexFields) => any) => [
-            idx("accountId").sortKeys(["updatedAt"]),
             idx("accountId").sortKeys(["createdAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["createdAt"]),
