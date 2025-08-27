@@ -949,39 +949,46 @@ export default function ScorecardsComponent({
 
   // Handle creating a new scorecard
   const handleCreate = async () => {
-    if (!accountId) return
+    if (!accountId) {
+      console.error('No accountId available for scorecard creation');
+      return;
+    }
 
-    const blankScorecard = {
-      id: '',
-      name: '',
-      key: '',
-      externalId: '',
-      description: '',
-      accountId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      account: async () => amplifyClient.Account.get({ id: accountId }),
-      sections: async () => ({ 
-        data: [],
-        nextToken: null
-      }),
-      evaluations: async () => ({ data: [], nextToken: null }),
-      batchJobs: async () => ({ data: [], nextToken: null }),
-      item: async () => ({ data: null }),
-      scoringJobs: async () => ({ data: [], nextToken: null }),
-      scoreResults: async () => ({ data: [], nextToken: null }),
-      actions: [],
-      datasets: async () => ({ data: [], nextToken: null }),
-      tasks: async (): Promise<AmplifyListResult<Schema['Task']['type']>> => {
-        return listFromModel<Schema['Task']['type']>(
-          client.models.Task,
-          { scorecardId: { eq: '' } }
-        );
+    try {
+      const createData = {
+        name: 'New Scorecard',
+        key: `scorecard_${Date.now()}`, // Generate a unique key
+        accountId
+      };
+      console.log('Creating scorecard with data:', createData);
+
+      // Create a new scorecard in the database first
+      const newScorecardData = await amplifyClient.Scorecard.create(createData);
+
+      console.log('Scorecard creation response:', newScorecardData);
+      console.log('Response data:', newScorecardData?.data);
+      console.log('Response errors:', newScorecardData?.errors);
+
+      if (!newScorecardData.data) {
+        console.error('Failed to create scorecard - no data returned');
+        console.error('Full response object:', JSON.stringify(newScorecardData, null, 2));
+        return;
       }
-    } as unknown as Schema['Scorecard']['type']
 
-    handleSelectScorecard(blankScorecard);
-    setSelectedScorecardSections({ items: [] });
+      // Refresh the scorecards list to include the new one
+      await fetchScorecards();
+
+      // Select the newly created scorecard
+      handleSelectScorecard(newScorecardData.data);
+      setSelectedScorecardSections({ items: [] });
+    } catch (error) {
+      console.error('Error creating new scorecard:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+        fullError: error
+      });
+    }
   }
 
   // Handle editing an existing scorecard

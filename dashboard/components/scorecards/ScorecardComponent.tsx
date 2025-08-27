@@ -910,7 +910,12 @@ export const DetailContent = React.memo(function DetailContent({
                     <CardButton
                       icon={Plus}
                       label="Create Score"
-                      onClick={() => {}}
+                      onClick={() => {
+                        // Navigate to score creation page
+                        if (typeof window !== 'undefined') {
+                          window.location.href = `/scorecards/${score.id}/scores/new/edit?sectionId=${section.id}`
+                        }
+                      }}
                     />
                   </div>
                 </div>
