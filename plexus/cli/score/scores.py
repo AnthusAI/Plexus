@@ -924,8 +924,11 @@ def push(scorecard: str, score: str):
         flags=re.MULTILINE
     )
     
-    # Normalize newlines to avoid false positives due to whitespace
-    cleaned_yaml_content = re.sub(r'\n\n+', '\n', cleaned_yaml_content)
+    # Trim only leading/trailing whitespace but preserve internal formatting
+    cleaned_yaml_content = cleaned_yaml_content.strip()
+    
+    # Create a normalized version for comparison only
+    normalized_yaml_content = re.sub(r'\n\n+', '\n', cleaned_yaml_content)
     
     # Get the current version from the API to compare
     if current_version_id:
@@ -954,11 +957,14 @@ def push(scorecard: str, score: str):
             flags=re.MULTILINE
         )
         
-        # Normalize newlines
-        cleaned_cloud_yaml = re.sub(r'\n\n+', '\n', cleaned_cloud_yaml)
+        # Trim only leading/trailing whitespace but preserve internal formatting
+        cleaned_cloud_yaml = cleaned_cloud_yaml.strip()
         
-        # Compare the cleaned YAML content with the cloud version
-        if cleaned_yaml_content.strip() == cleaned_cloud_yaml.strip():
+        # Create normalized versions for comparison only
+        normalized_cloud_yaml = re.sub(r'\n\n+', '\n', cleaned_cloud_yaml)
+        
+        # Compare the normalized YAML content with the cloud version
+        if normalized_yaml_content.strip() == normalized_cloud_yaml.strip():
             console.print("[yellow]No changes detected in the YAML configuration. Skipping push.[/yellow]")
             return
         else:
@@ -1002,10 +1008,27 @@ def push(scorecard: str, score: str):
             console.print(f"[green]Successfully created new version for score: {score_name}[/green]")
             console.print(f"[green]New version ID: {new_version_id}[/green]")
             
-            # Update the local YAML file with the new version information only; do NOT promote champion
-            name_match = re.search(r'^name:\s*[^\n]+\n', yaml_content, re.MULTILINE)
-            id_match = re.search(r'^id:\s*[^\n]+\n', yaml_content, re.MULTILINE)
-            key_match = re.search(r'^key:\s*[^\n]+\n', yaml_content, re.MULTILINE)
+            # First remove any existing version/parent lines to avoid duplication
+            cleaned_yaml = re.sub(
+                r'^version:\s*["\']?[^"\'\n]+["\']?(\s*parent:\s*["\']?[^"\'\n]+["\']?)?', 
+                '', 
+                yaml_content, 
+                flags=re.MULTILINE
+            )
+            cleaned_yaml = re.sub(
+                r'^parent:\s*["\']?[^"\'\n]+["\']?', 
+                '', 
+                cleaned_yaml, 
+                flags=re.MULTILINE
+            )
+            
+            # Trim only leading/trailing whitespace but preserve internal formatting
+            cleaned_yaml = cleaned_yaml.strip()
+            
+            # Find insertion point in the cleaned YAML (after removing version/parent lines)
+            name_match = re.search(r'^name:\s*[^\n]+\n', cleaned_yaml, re.MULTILINE)
+            id_match = re.search(r'^id:\s*[^\n]+\n', cleaned_yaml, re.MULTILINE)
+            key_match = re.search(r'^key:\s*[^\n]+\n', cleaned_yaml, re.MULTILINE)
             
             # Prioritize insertion after name, then id, then key
             insertion_point = None
@@ -1017,28 +1040,11 @@ def push(scorecard: str, score: str):
                 insertion_point = key_match.end()
             
             if insertion_point is not None:
-                # First remove any existing version/parent lines to avoid duplication
-                cleaned_yaml = re.sub(
-                    r'^version:\s*["\']?[^"\'\n]+["\']?(\s*parent:\s*["\']?[^"\'\n]+["\']?)?', 
-                    '', 
-                    yaml_content, 
-                    flags=re.MULTILINE
-                )
-                cleaned_yaml = re.sub(
-                    r'^parent:\s*["\']?[^"\'\n]+["\']?', 
-                    '', 
-                    cleaned_yaml, 
-                    flags=re.MULTILINE
-                )
-                
-                # Normalize newlines to prepare for insertion
-                cleaned_yaml = re.sub(r'\n\n+', '\n', cleaned_yaml)
-                
                 # Update the YAML content with new version and parent information
                 updated_yaml = (
                     cleaned_yaml[:insertion_point] + 
                     f"version: {new_version_id}\n" + 
-                    f"parent: {parent_version_id}\n" + 
+                    f"parent: {parent_version_id}" +
                     cleaned_yaml[insertion_point:]
                 )
                 
