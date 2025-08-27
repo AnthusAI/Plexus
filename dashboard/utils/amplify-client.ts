@@ -75,12 +75,20 @@ export const amplifyClient = {
     create: async (data: {
       name: string
       key: string
-      externalId: string
+      externalId?: string
       description?: string
       accountId: string
-      itemId?: string
     }) => {
-      const response = await (getClient().models.Scorecard as any).create(data)
+      console.log('amplifyClient.Scorecard.create called with:', data);
+      const client = getClient();
+      console.log('Client models available:', Object.keys(client.models));
+      console.log('Scorecard model available:', !!client.models.Scorecard);
+      
+      const response = await (client.models.Scorecard as any).create(data);
+      console.log('Raw Amplify response:', response);
+      console.log('Response data:', response?.data);
+      console.log('Response errors:', response?.errors);
+      
       return { data: response.data as Schema['Scorecard']['type'] }
     },
     update: async (data: {
@@ -89,7 +97,6 @@ export const amplifyClient = {
       key?: string
       externalId?: string
       description?: string
-      itemId?: string
     }) => {
       const response = await (getClient().models.Scorecard as any).update(data)
       return { data: response.data as Schema['Scorecard']['type'] }
