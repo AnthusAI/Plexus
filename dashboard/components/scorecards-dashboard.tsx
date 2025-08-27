@@ -426,7 +426,7 @@ export default function ScorecardsComponent({
       }
       
       // Load sections and example items for the selected scorecard and wait for all data before setting state
-      if (scorecard) {
+      if (scorecard && scorecard.id) {
         console.log('🔵 Loading data for scorecard:', {
           scorecardId: scorecard.id,
           scorecardName: scorecard.name
