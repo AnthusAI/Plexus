@@ -208,7 +208,7 @@ conversation_flow:
     # When to apply firm pressure within each state  
     firm_pressure_after: 5
     # Maximum total rounds before emergency termination
-    max_total_rounds: 15
+    max_total_rounds: 120
     
   # Guidance for specific situations
   guidance:

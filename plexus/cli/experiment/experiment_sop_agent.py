@@ -69,17 +69,25 @@ class ExperimentProcedureDefinition:
         round_num = state_data.get("round", 0)
         tools_used = state_data.get("tools_used", [])
         
-        logger.info(f"🔍 SHOULD_CONTINUE CHECK: Round {round_num}/100, Tools used: {len(tools_used)}")
+        # Get max rounds from experiment configuration (dynamic limit from template)
+        max_rounds = 500  # High default fallback to respect template settings
+        if hasattr(self, 'experiment_config') and self.experiment_config:
+            conversation_flow = self.experiment_config.get('conversation_flow', {})
+            escalation = conversation_flow.get('escalation', {})
+            max_rounds = escalation.get('max_total_rounds', 500)
         
-        # Safety limit to prevent infinite loops - increased for comprehensive data gathering
-        if round_num >= 100:
-            logger.warning(f"🛑 SAFETY LIMIT REACHED: Hit maximum rounds ({round_num}/100)")
+        logger.info(f"🔍 SHOULD_CONTINUE CHECK: Round {round_num}/{max_rounds}, Tools used: {len(tools_used)}")
+        
+        # Safety limit to prevent infinite loops - uses dynamic limit from template
+        if round_num >= max_rounds:
+            logger.warning(f"🛑 SAFETY LIMIT REACHED: Hit maximum rounds ({round_num}/{max_rounds})")
+            logger.warning(f"🛑 STOP REASON: SOP Agent safety limit reached after {max_rounds} rounds (from template config)")
             logger.warning(f"🔍 FINAL STATE: Tools used: {tools_used}")
             return False
         
         # Let worker agent control stopping via stop_procedure tool
         # The stop tool will set stop_requested=True in results
-        logger.debug(f"✅ CONTINUING: Round {round_num} < 100, no stop requested")
+        logger.debug(f"✅ CONTINUING: Round {round_num} < {max_rounds}, no stop requested")
         return True
     
     def get_completion_summary(self, state_data: Dict[str, Any]) -> str:
@@ -221,6 +229,9 @@ class ExperimentSOPAgent:
             
             if self.client:
                 self.chat_recorder = ExperimentChatRecorderAdapter(self.client, self.experiment_id, None)
+            
+            # Pass experiment config to procedure definition
+            self.procedure_definition.experiment_config = experiment_config
             
             # Create the general-purpose SOP Agent with experiment-specific components
             self.sop_agent = StandardOperatingProcedureAgent(

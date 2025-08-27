@@ -61,15 +61,25 @@ class ConversationFlowManager:
         self.conversation_stages = self.config.get('conversation_stages', {})
         self.escalation = self.config.get('escalation', {})
         
+        # DEBUG: Log the actual experiment config to see where the 15 is coming from
+        logger.info(f"🔧 CONVERSATION_FLOW INIT: Full experiment_config keys = {list(experiment_config.keys())}")
+        logger.info(f"🔧 CONVERSATION_FLOW INIT: conversation_flow section = {self.config}")
+        logger.info(f"🔧 CONVERSATION_FLOW INIT: escalation section = {self.escalation}")
+        if 'max_total_rounds' in self.escalation:
+            logger.info(f"🔧 CONVERSATION_FLOW INIT: max_total_rounds found in config = {self.escalation['max_total_rounds']}")
+        else:
+            logger.info(f"🔧 CONVERSATION_FLOW INIT: max_total_rounds NOT found in config - will use default 500")
+        
         # Set up transition triggers with sensible defaults to prevent immediate transitions
         default_triggers = {
             'exploration_to_synthesis': [
                 'used_feedback_summary',  # Must use feedback summary tool first
-                'min_tool_calls: 2',      # Must make at least 2 tool calls
+                'min_tool_calls: 8',      # Must make at least 8 tool calls (more thorough analysis)
             ],
             'synthesis_to_hypothesis': [
-                'min_insights: 2',        # Must capture at least 2 insights
+                'min_insights: 5',        # Must capture at least 5 insights (more comprehensive understanding)
                 'identified_patterns',    # Must identify patterns
+                'min_tool_calls: 15',     # Must have examined many examples before hypothesis generation
             ]
         }
         self.transition_triggers = {**default_triggers, **self.config.get('transition_triggers', {})}
@@ -303,7 +313,7 @@ class ConversationFlowManager:
 Great progress! Next, focus on: {', '.join(missing_analyses[:2])}
 {context_reminder}
 
-**Aim for 5-6 examples** of each type of scoring mistake you find, but be flexible - if there are only 2 examples available, that's sufficient to move forward.
+**CRITICAL: Examine AT LEAST 5-6 examples** of each type of scoring mistake you find. Do NOT create hypotheses until you have thoroughly analyzed multiple examples from each confusion matrix segment (No→Yes, Yes→No, etc.). One example per category is insufficient.
 
 {prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Continue your analysis using the available feedback tools.'}
 """
@@ -315,7 +325,7 @@ You still need to examine: {', '.join(missing_analyses)}
 
 {prompts[min(self.state.round_in_stage - 1, len(prompts) - 1)] if prompts else 'Please use the feedback analysis tools to complete your investigation.'}
 
-**Target**: Examine multiple examples of each scoring mistake type you identify. If limited examples are available, analyze what you can find thoroughly.
+**MANDATORY**: You must examine AT LEAST 5-6 examples from each confusion matrix segment before proceeding. Do not rush to create experiment nodes with insufficient data.
 
 This analysis is essential for generating effective hypotheses.
 """
@@ -524,7 +534,12 @@ Create detailed, comprehensive hypotheses that future developers can understand 
     
     def should_continue(self) -> bool:
         """Check if the conversation should continue."""
-        max_total = self.escalation.get('max_total_rounds', 50)  # Further increased to allow more patient handling of tool errors
+        max_total = self.escalation.get('max_total_rounds', 500)  # High default to respect template settings
+        
+        # DEBUG: Log the actual escalation config to see where 15 is coming from
+        logger.info(f"🔧 CONVERSATION_FLOW DEBUG: escalation config = {self.escalation}")
+        logger.info(f"🔧 CONVERSATION_FLOW DEBUG: max_total_rounds from config = {self.escalation.get('max_total_rounds', 'NOT_SET')}")
+        logger.info(f"🔧 CONVERSATION_FLOW DEBUG: max_total resolved to = {max_total}")
         
         # ENHANCED: Much more patient termination logic that prioritizes feedback over termination
         if (self.state.stage == ConversationStage.HYPOTHESIS_GENERATION and 
@@ -569,12 +584,16 @@ Create detailed, comprehensive hypotheses that future developers can understand 
         if not result:
             if self.state.total_rounds >= max_total:
                 logger.warning(f"🛑 CONVERSATION FLOW STOPPING: Hit maximum total rounds ({self.state.total_rounds}/{max_total})")
+                logger.warning(f"🛑 STOP REASON: ConversationFlow max_total_rounds limit reached - escalation config had max_total_rounds={self.escalation.get('max_total_rounds', 'NOT_SET')}")
             elif self.state.stage == ConversationStage.COMPLETE:
                 logger.info(f"🏁 CONVERSATION FLOW STOPPING: Stage is COMPLETE")
+                logger.info(f"🏁 STOP REASON: ConversationFlow reached COMPLETE stage")
             elif self.state.nodes_created >= 2:
                 logger.info(f"🏁 CONVERSATION FLOW STOPPING: Target nodes created ({self.state.nodes_created}/2)")
+                logger.info(f"🏁 STOP REASON: ConversationFlow reached target node count")
             else:
                 logger.error(f"🚨 CONVERSATION FLOW STOPPING: Unknown reason! total_rounds={self.state.total_rounds}, stage={self.state.stage.value}, nodes_created={self.state.nodes_created}")
+                logger.error(f"🚨 STOP REASON: ConversationFlow stopped for unknown reason - escalation config had max_total_rounds={self.escalation.get('max_total_rounds', 'NOT_SET')}")
         
         return result
     

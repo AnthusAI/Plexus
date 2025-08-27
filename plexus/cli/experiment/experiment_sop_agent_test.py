@@ -81,8 +81,12 @@ class TestExperimentProcedureDefinition:
         state_normal = {"round": 25}
         assert procedure_def.should_continue(state_normal) == True
         
-        # Should stop only at safety limit (round >= 100)
-        state_safety = {"round": 105}
+        # Should continue until safety limit (round >= 500)
+        state_below_safety = {"round": 105}
+        assert procedure_def.should_continue(state_below_safety) == True
+        
+        # Should stop only at safety limit (round >= 500)
+        state_safety = {"round": 500}
         assert procedure_def.should_continue(state_safety) == False
     
     def test_experiment_completion_summary(self):
