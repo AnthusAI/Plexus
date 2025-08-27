@@ -225,9 +225,11 @@ export default function ExperimentTask({
     stages: experiment.task?.stages?.items?.sort((a, b) => a.order - b.order).map(stage => ({
       key: stage.name,
       label: stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-green-500' : 
-             stage.status === 'FAILED' ? 'bg-red-500' : 
-             stage.status === 'RUNNING' ? 'bg-primary' : 'bg-muted-foreground',
+      color: stage.name === 'Processing' ? 'bg-secondary' : (
+        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+        stage.status === 'FAILED' ? 'bg-false' :
+        'bg-neutral'
+      ),
       name: stage.name,
       order: stage.order,
       status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
