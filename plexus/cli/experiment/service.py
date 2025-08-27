@@ -221,7 +221,7 @@ conversation_flow:
     # When to apply firm pressure within each state  
     firm_pressure_after: 5
     # Maximum total rounds before emergency termination
-    max_total_rounds: 15
+    max_total_rounds: 500
     
   # Guidance for specific situations
   guidance:
@@ -808,7 +808,7 @@ class ExperimentService:
             await self._ensure_experiment_structure(experiment_info)
             
             # Extract options for future use
-            max_iterations = options.get('max_iterations', 100)
+            max_iterations = options.get('max_iterations', 500)
             timeout = options.get('timeout', 3600)  # 1 hour default
             async_mode = options.get('async_mode', False)
             dry_run = options.get('dry_run', False)

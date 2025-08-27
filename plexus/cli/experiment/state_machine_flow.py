@@ -181,9 +181,12 @@ class StateMachineFlowManager:
     
     def should_continue(self) -> bool:
         """Check if the conversation should continue."""
-        max_total = self.escalation.get('max_total_rounds', 15)
+        max_total = self.escalation.get('max_total_rounds', 500)
         
+        # DEBUG: Log the actual escalation config to see where 15 is coming from
         logger.info(f"🔍 STATE_MACHINE.should_continue: state={self.state_data.current_state}, rounds={self.state_data.total_rounds}/{max_total}")
+        logger.info(f"🔧 DEBUG: escalation config = {self.escalation}")
+        logger.info(f"🔧 DEBUG: max_total_rounds from config = {self.escalation.get('max_total_rounds', 'NOT_SET')}")
         
         # Check completion state
         if self.state_data.current_state == 'complete':
@@ -193,6 +196,7 @@ class StateMachineFlowManager:
         # Check if we've hit the maximum rounds
         if self.state_data.total_rounds >= max_total:
             logger.warning(f"🛑 STATE_MACHINE STOPPING: Reached maximum rounds ({self.state_data.total_rounds}/{max_total})")
+            logger.warning(f"🛑 STOP REASON: max_total_rounds limit reached - config had max_total_rounds={self.escalation.get('max_total_rounds', 'NOT_SET')}")
             return False
         
         # Continue if we haven't reached completion

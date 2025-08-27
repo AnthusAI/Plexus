@@ -583,13 +583,21 @@ Your response will become the next user message to guide the coding assistant.
                 
                 # Execute the ReAct loop
                 round_num = 0
-                safety_limit = 50
+                safety_limit = 500  # High safety limit to respect experiment template settings
                 results = {"tools_used": [], "phases_completed": [], "artifacts_created": 0}
                 
                 logger.info(f"🚀 Starting SOP-guided procedure execution: {self.procedure_id}")
                 
                 while round_num < safety_limit:
                     round_num += 1
+                    
+                    # Check if we're approaching safety limit
+                    if round_num >= safety_limit - 5:
+                        logger.warning(f"🚨 APPROACHING SAFETY LIMIT: Round {round_num}/{safety_limit}")
+                    
+                    # Log every 10 rounds for visibility
+                    if round_num % 10 == 0:
+                        logger.info(f"📍 PROGRESS: Round {round_num}/{safety_limit}")
                     
                     # Check if worker requested to stop
                     if results.get("stop_requested", False):
@@ -604,6 +612,11 @@ Your response will become the next user message to guide the coding assistant.
                     if not should_continue:
                         logger.warning(f"🛑 STOPPING CONDITION TRIGGERED: Procedure definition returned should_continue=False")
                         logger.warning(f"🔍 STOP REASON: Round {round_num}, State data: {state_data}")
+                        logger.warning(f"🔍 DETAILED STOP ANALYSIS:")
+                        logger.warning(f"   - Round: {round_num}")
+                        logger.warning(f"   - Tools used: {state_data.get('tools_used', [])}")
+                        logger.warning(f"   - Stop requested: {state_data.get('stop_requested', False)}")
+                        logger.warning(f"   - Procedure type: {type(self.procedure_definition).__name__}")
                         logger.info(f"🏁 Procedure complete - {self.procedure_definition.get_completion_summary(state_data)}")
                         break
                     
@@ -780,6 +793,13 @@ Your response will become the next user message to guide the coding assistant.
                     except Exception as e:
                         logger.error(f"Error in procedure round {round_num}: {e}")
                         break
+                
+                # Check why the loop exited
+                if round_num >= safety_limit:
+                    logger.error(f"🛑🛑🛑 SAFETY LIMIT HIT: Experiment stopped at round {round_num}/{safety_limit}")
+                    logger.error(f"🔍 SAFETY LIMIT STOP REASON: SOP Agent base class hardcoded safety limit reached")
+                else:
+                    logger.info(f"🏁 Loop exited normally at round {round_num}/{safety_limit}")
                 
                 # Generate final results
                 final_state = self._get_current_state(results, round_num)
