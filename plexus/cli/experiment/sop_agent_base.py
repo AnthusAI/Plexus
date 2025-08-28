@@ -317,6 +317,33 @@ class StandardOperatingProcedureAgent:
                 manager_system_prompt=manager_system_prompt
             )
             
+            # Add manager user prompt if available from procedure definition
+            if hasattr(self.procedure_definition, 'get_manager_user_prompt'):
+                try:
+                    # Get the current state for template variables  
+                    results = {}  # Basic results dict for state
+                    state_data = self._get_current_state(results, len(conversation_history))
+                    manager_user_prompt = self.procedure_definition.get_manager_user_prompt(self.context, state_data)
+                    
+                    # Insert the manager user prompt as a HumanMessage after system prompt but before conversation
+                    try:
+                        from langchain_core.messages import HumanMessage
+                    except ImportError:
+                        try:
+                            from langchain.schema.messages import HumanMessage
+                        except ImportError:
+                            from langchain.schema import HumanMessage
+                    
+                    # Insert after system prompt (first message) but before conversation context
+                    insert_position = 1  # After system prompt
+                    manager_initial_message = HumanMessage(content=manager_user_prompt)
+                    filtered_messages.insert(insert_position, manager_initial_message)
+                    
+                    logger.info("✅ Added manager user prompt to conversation")
+                    
+                except Exception as e:
+                    logger.warning(f"Error adding manager user prompt: {e}")
+            
             return filtered_messages
             
         except Exception as e:
