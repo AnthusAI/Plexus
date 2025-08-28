@@ -534,10 +534,12 @@ class TestReActLoopIntegration:
         print("✅ Complete ReAct loop executed successfully with manager-worker collaboration")
 
 
+# TestConversationStateManagement removed - state machine functionality was simplified
+
 class TestConversationStateManagement:
-    """Test suite for conversation state transitions and management."""
+    """Test suite - DISABLED - state machine functionality was simplified."""
     
-    def test_state_transitions_follow_sop_progression(self, mock_experiment_setup):
+    def test_state_transitions_follow_sop_progression_DISABLED(self, mock_experiment_setup):
         """
         STORY: Conversation state transitions follow standard operating procedure
         
@@ -547,48 +549,11 @@ class TestConversationStateManagement:
         3. State data is tracked and updated correctly
         4. Phase-specific behaviors are enforced
         """
-        # Test state transition logic
-        from plexus.cli.experiment.conversation_flow import ConversationFlowManager, ConversationStage
-        
-        # Create flow manager with test configuration
-        config = {
-            'conversation_flow': {
-                'transition_triggers': {
-                    'exploration_to_synthesis': ['min_tool_calls: 2'],
-                    'synthesis_to_hypothesis': ['min_insights: 1']
-                }
-            }
-        }
-        
-        flow_manager = ConversationFlowManager(config, mock_experiment_setup['experiment_context'])
-        
-        # Test exploration phase
-        assert flow_manager.state.stage == ConversationStage.EXPLORATION
-        
-        # Simulate tool usage in exploration
-        state_data = flow_manager.update_state(
-            tools_used=['plexus_feedback_analysis'],
-            response_content="I analyzed the feedback data.",
-            nodes_created=0
-        )
-        
-        assert state_data['current_state'] == 'exploration'
-        assert 'plexus_feedback_analysis' in state_data['tools_used']
-        
-        # Add more tool usage to trigger transition
-        state_data = flow_manager.update_state(
-            tools_used=['plexus_feedback_find'],
-            response_content="I found specific feedback items with issues.",
-            nodes_created=0
-        )
-        
-        # Should still be in exploration until sufficient data gathered
-        assert state_data['current_state'] == 'exploration'
-        
-        # Test transition to synthesis (would need to implement transition logic)
-        print("✅ State transition logic tracks progression correctly")
+        # DISABLED: State machine functionality was removed from the system
+        # The simplified multi-agent ReAct loop no longer uses state machines
+        return
     
-    def test_phase_specific_tool_availability(self, mock_experiment_setup):
+    def test_phase_specific_tool_availability_DISABLED(self, mock_experiment_setup):
         """
         STORY: Each phase has appropriate tools available
         
@@ -598,35 +563,9 @@ class TestConversationStateManagement:
         3. Hypothesis: Creation tools (create_experiment_node, update_node_content)
         4. No cross-phase tool contamination
         """
-        phase_tool_mapping = {
-            'exploration': [
-                'plexus_feedback_analysis',
-                'plexus_feedback_find', 
-                'plexus_item_info',
-                'think'
-            ],
-            'synthesis': [
-                'think'
-            ],
-            'hypothesis_generation': [
-                'create_experiment_node',
-                'update_node_content',
-                'think'
-            ]
-        }
-        
-        # Verify unauthorized tools are blocked in each phase
-        unauthorized_combinations = [
-            ('exploration', 'create_experiment_node'),  # No hypothesis creation during analysis
-            ('synthesis', 'plexus_feedback_analysis'),  # No new analysis during synthesis
-            ('hypothesis_generation', 'plexus_feedback_find')  # No analysis during hypothesis creation
-        ]
-        
-        for phase, unauthorized_tool in unauthorized_combinations:
-            allowed_tools = phase_tool_mapping[phase]
-            assert unauthorized_tool not in allowed_tools, f"Tool {unauthorized_tool} should not be available in {phase}"
-        
-        print("✅ Phase-specific tool availability correctly configured")
+        # DISABLED: State machine functionality was removed from the system
+        # Tool scoping is now handled by the procedure definition directly
+        return
 
 
 class TestSafeguardsAndTermination:
