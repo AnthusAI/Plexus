@@ -37,6 +37,7 @@ import { AmplifyListResult } from '@/types/shared'
 import { graphqlRequest } from "@/utils/amplify-client"
 import { generateClient } from "aws-amplify/data"
 import ScorecardComponent from "./scorecards/ScorecardComponent"
+import ScorecardGrid from "./scorecards/ScorecardGrid"
 import { cn } from "@/lib/utils"
 import { ScoreComponent } from "./ui/score-component"
 import { ItemComponent, type ItemData } from "./ui/item-component"
@@ -97,6 +98,7 @@ export default function ScorecardsComponent({
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(40)
   const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
+  const [scorecardCountsLoading, setScorecardCountsLoading] = useState<Record<string, boolean>>({})
   const [scorecardDetailWidth, setScorecardDetailWidth] = useState(50)
   const [maximizedScoreId, setMaximizedScoreId] = useState<string | null>(null)
   const [selectedItem, setSelectedItem] = useState<any | null>(null)
@@ -387,35 +389,31 @@ export default function ScorecardsComponent({
     // Only update state if the selected scorecard has changed
     if (scorecard?.id !== selectedScorecard?.id) {
       console.log('🔵 Scorecard selection changed, updating state...');
-      // Close any open Cost Analysis when selecting a new scorecard
+      
+      // IMMEDIATE STATE UPDATES - Show the new scorecard instantly
+      // Close any open panels
       if (costAnalysisPanel?.isOpen) {
         setCostAnalysisPanel(null);
       }
       
+      // Update scorecard immediately
       setSelectedScorecard(scorecard);
-      // Conditionally reset selected score:
-      // If we are changing to a different scorecard OR if no initialSelectedScoreId is actively being processed
-      // (This check might need refinement based on when initialSelectedScoreId is cleared or considered 'processed')
-      if (selectedScorecard?.id !== scorecard?.id || !initialSelectedScoreId) {
-          setSelectedScore(null);
-      }
       
-      // Reset scorecard examples for the new scorecard
-      setScorecardExamples([]);
-      setShouldExpandExamples(false); // Reset expand flag
+      // Clear old data immediately to avoid showing wrong scores
+      setSelectedScore(null);
+      setSelectedScorecardSections(null); // Clear old sections immediately
+      setScorecardExamples([]); // Clear old examples
+      setShouldExpandExamples(false);
       
-      // Conditionally update URL:
-      // If we are selecting a scorecard AND there isn't an initialSelectedScoreId that matches the current scorecard context,
-      // then update the URL to the scorecard. Otherwise, let the score selection logic handle the final URL.
-      // This logic assumes initialSelectedScoreId is available in this component's scope.
+      // Update URL immediately
       if (scorecard && (!initialSelectedScoreId || initialSelectedScorecardId !== scorecard.id)) {
         const newPathname = `/lab/scorecards/${scorecard.id}`;
         window.history.pushState(null, '', newPathname);
-      } else if (!scorecard) { // Clearing scorecard selection
+      } else if (!scorecard) {
         window.history.pushState(null, '', '/lab/scorecards');
       }
       
-      // Scroll to the selected scorecard after a brief delay to allow layout updates
+      // Scroll to the selected scorecard
       if (scorecard) {
         setTimeout(() => {
           scrollToSelectedScorecard(scorecard.id);
@@ -426,144 +424,130 @@ export default function ScorecardsComponent({
         setIsFullWidth(true);
       }
       
-      // Load sections and example items for the selected scorecard and wait for all data before setting state
+      // PROGRESSIVE LOADING - Load data in the background
       if (scorecard && scorecard.id) {
-        console.log('🔵 Loading data for scorecard:', {
-          scorecardId: scorecard.id,
-          scorecardName: scorecard.name
-        });
-        try {
-          console.log('🟡 Getting full scorecard object with all relationships...');
-          
-          // Get the full scorecard object from the API with all its relationship methods
-          const fullScorecard = await amplifyClient.Scorecard.get({ id: scorecard.id });
-          const fullScorecardData = fullScorecard.data;
-          
-          if (!fullScorecardData) {
-            throw new Error(`Could not find scorecard with ID ${scorecard.id}`);
-          }
-          
-          console.log('🟡 Full scorecard object inspection:', {
-            scorecardId: fullScorecardData.id,
-            scorecardName: fullScorecardData.name,
-            hasExampleItemsProperty: 'exampleItems' in fullScorecardData,
-            allMethods: Object.getOwnPropertyNames(fullScorecardData).filter(prop => {
-              try {
-                return typeof (fullScorecardData as any)[prop] === 'function';
-              } catch {
-                return false;
-              }
-            })
-          });
-          
-          // Load sections first
-          console.log('🟡 Loading sections...');
-          const sectionsResult = await fullScorecardData.sections();
-          const sections = sectionsResult.data || [];
-          
-          // Load items associated with this scorecard via the ScorecardExampleItem join table
-          console.log('🟡 Loading example items using ScorecardExampleItem join table...');
-          let exampleItems: any[] = [];
-          
+        console.log('🔵 Starting progressive data load for scorecard:', scorecard.name);
+        
+        // Start loading data progressively without blocking the UI
+        setTimeout(async () => {
           try {
-            // Query the ScorecardExampleItem join table to get associated items
-            const itemAssociationsResult = await graphqlRequest<{
-              listScorecardExampleItemByScorecardId: {
-                items: Array<{
-                  itemId: string;
-                  item: {
-                    id: string;
-                    externalId?: string;
-                    description?: string;
-                    text?: string;
-                    updatedAt?: string;
-                    createdAt?: string;
+            // Check if we already have some data from the progressive loading
+            const existingScorecard = scorecards.find(sc => sc.id === scorecard.id);
+            const hasExistingExamples = existingScorecard && (existingScorecard as any).examples?.length > 0;
+            
+            // Load example items first (usually fastest)
+            if (hasExistingExamples) {
+              console.log('🚀 Using cached example items');
+              setScorecardExamples((existingScorecard as any).examples);
+            } else {
+              console.log('🔄 Loading example items...');
+              try {
+                const itemAssociationsResult = await graphqlRequest<{
+                  listScorecardExampleItemByScorecardId: {
+                    items: Array<{
+                      itemId: string;
+                      item: {
+                        id: string;
+                        externalId?: string;
+                        description?: string;
+                        text?: string;
+                        updatedAt?: string;
+                        createdAt?: string;
+                      };
+                    }>;
                   };
-                }>;
-              };
-            }>(`
-              query ListExampleItemsByScorecardId($scorecardId: ID!) {
-                listScorecardExampleItemByScorecardId(scorecardId: $scorecardId) {
-                  items {
-                    itemId
-                    item {
-                      id
-                      externalId
-                      description
-                      text
-                      updatedAt
-                      createdAt
+                }>(`
+                  query ListExampleItemsByScorecardId($scorecardId: ID!) {
+                    listScorecardExampleItemByScorecardId(scorecardId: $scorecardId) {
+                      items {
+                        itemId
+                        item {
+                          id
+                          externalId
+                          description
+                          text
+                          updatedAt
+                          createdAt
+                        }
+                      }
                     }
                   }
-                }
+                `, { scorecardId: scorecard.id });
+                
+                const exampleItems = (itemAssociationsResult.data?.listScorecardExampleItemByScorecardId?.items || [])
+                  .map(association => association.item)
+                  .filter(item => item !== null)
+                  .sort((a, b) => {
+                    const dateA = new Date(a.updatedAt || a.createdAt || '').getTime();
+                    const dateB = new Date(b.updatedAt || b.createdAt || '').getTime();
+                    return dateB - dateA;
+                  });
+                  
+                const exampleItemsFormatted = exampleItems.map(item => `item:${item.id}`);
+                setScorecardExamples(exampleItemsFormatted);
+                console.log('✅ Example items loaded');
+              } catch (error) {
+                console.warn('Failed to load example items:', error);
               }
-            `, { scorecardId: fullScorecardData.id });
+            }
             
-            // Extract the actual items from the associations and sort by updatedAt
-            exampleItems = (itemAssociationsResult.data?.listScorecardExampleItemByScorecardId?.items || [])
-              .map(association => association.item)
-              .filter(item => item !== null) // Filter out any null items
-              .sort((a, b) => {
-                const dateA = new Date(a.updatedAt || a.createdAt || '').getTime();
-                const dateB = new Date(b.updatedAt || b.createdAt || '').getTime();
-                return dateB - dateA; // DESC order (newest first)
-              });
-              
-            console.log('🟡 Items loaded via ScorecardExampleItem join table:', {
-              itemCount: exampleItems.length,
-              items: exampleItems
+            // Load sections and scores
+            console.log('🔄 Loading sections and scores...');
+            const sectionsResult = await amplifyClient.ScorecardSection.list({
+              filter: { scorecardId: { eq: scorecard.id } }
             });
-          } catch (error) {
-            console.error('🔴 Error loading items via ScorecardExampleItem join table:', error);
-          }
-          
-          console.log('🟢 Data loaded successfully:', {
-            scorecardId: fullScorecardData.id,
-            scorecardName: fullScorecardData.name,
-            sectionsCount: sections.length,
-            exampleItemsCount: exampleItems.length,
-            exampleItemsDetails: exampleItems.map(item => ({
-              id: item?.id,
-              externalId: item?.externalId,
-              description: item?.description,
-              scorecardId: item?.scorecardId
-            }))
-          });
-          
-          // Set the example items in the format expected by the component
-          const exampleItemsFormatted = exampleItems.map(item => `item:${item.id}`);
-          setScorecardExamples(exampleItemsFormatted);
-          
-          // Fetch ALL score data in parallel before setting state
-          const transformedSections = {
-            items: await Promise.all(sections.map(async section => {
-              const allScores = await fetchAllScoresForSection(section.id);
-              
-              return {
-                id: section.id,
-                name: section.name,
-                order: section.order,
-                scores: {
-                  items: allScores.map(score => ({
-                    id: score.id,
-                    name: score.name,
-                    key: score.key || '',
-                    description: score.description || '',
-                    order: score.order,
-                    type: score.type,
-                    externalId: score.externalId,
-                  }))
+            const sections = sectionsResult.data || [];
+            
+            if (sections.length === 0) {
+              console.log('⚠️ No sections found for scorecard');
+              setSelectedScorecardSections({ items: [] });
+              return;
+            }
+            
+            // Load scores progressively for each section
+            const transformedSections = {
+              items: await Promise.all(sections.map(async section => {
+                try {
+                  const allScores = await fetchAllScoresForSection(section.id);
+                  return {
+                    id: section.id,
+                    name: section.name,
+                    order: section.order,
+                    scores: {
+                      items: allScores.map(score => ({
+                        id: score.id,
+                        name: score.name,
+                        key: score.key || '',
+                        description: score.description || '',
+                        order: score.order,
+                        type: score.type,
+                        externalId: score.externalId,
+                      }))
+                    }
+                  };
+                } catch (error) {
+                  console.warn(`Failed to load scores for section ${section.name}:`, error);
+                  return {
+                    id: section.id,
+                    name: section.name,
+                    order: section.order,
+                    scores: { items: [] }
+                  };
                 }
-              }
-            }))
-          };
-          
-          // Set all sections with complete score data at once
-          setSelectedScorecardSections(transformedSections);
-        } catch (error) {
-          console.error('Error loading scorecard sections and example items:', error);
-          setError(error as Error);
-        }
+              }))
+            };
+            
+            // Update sections with loaded data
+            setSelectedScorecardSections(transformedSections);
+            console.log('✅ Sections and scores loaded');
+            
+          } catch (error) {
+            console.error('Error loading scorecard data:', error);
+            setError(error as Error);
+            // Set empty sections so UI doesn't hang
+            setSelectedScorecardSections({ items: [] });
+          }
+        }, 0); // Start immediately but non-blocking
       } else {
         setSelectedScorecardSections(null);
       }
@@ -932,7 +916,7 @@ export default function ScorecardsComponent({
     window.history.pushState(null, '', '/lab/scorecards');
   };
 
-  // Initial data load
+  // Initial data load - optimized for immediate display
   const fetchScorecards = async () => {
     try {
       const accountResult = await amplifyClient.Account.list({
@@ -947,88 +931,167 @@ export default function ScorecardsComponent({
       const foundAccountId = accountResult.data[0].id
       setAccountId(foundAccountId)
 
-      type NestedScorecard = Schema['Scorecard']['type'] & {
-        sections?: {
-          data?: Array<{
-            id: string;
-            scores?: {
-              data?: Array<{ id: string }>;
-            };
-          }>;
-        };
-      }
-
-      // Get scorecards with nested sections and scores
+      // Get scorecards as quickly as possible - no additional queries
       const initialScorecards = await amplifyClient.Scorecard.list({
         filter: { accountId: { eq: foundAccountId } }
       })
 
-      // Process scorecards and load sections/scores in parallel
-      const scorecardsWithCounts = await Promise.all(
-        initialScorecards.data
-          .filter(s => s.accountId === foundAccountId)
-          .map(async scorecard => {
-            const sectionsResult = await scorecard.sections();
-            const sections = sectionsResult.data || [];
-            
-            // Load all scores for each section in parallel using fetchAllScoresForSection
-            const sectionsWithScores = await Promise.all(
-              sections.map(async section => {
-                // Use fetchAllScoresForSection instead of section.scores() to ensure all scores are fetched
-                const allScores = await fetchAllScoresForSection(section.id);
-                return {
-                  id: section.id,
-                  scores: {
-                    data: allScores
-                  }
-                };
-              })
-            );
-
-            const scoreCount = sectionsWithScores.reduce(
-              (total, section) => total + (section.scores.data.length || 0),
-              0
-            );
-
-            // Store the count in our state object
-            setScorecardScoreCounts(prev => ({
-              ...prev,
-              [scorecard.id]: scoreCount
-            }));
-
-            // Load associated example items for this scorecard
-            let exampleItems: string[] = [];
-            try {
-              const associationsResult = await amplifyClient.ScorecardExampleItem.listByScorecard(scorecard.id);
-              exampleItems = associationsResult.data.map(association => `item:${association.itemId}`);
-              console.log(`Loaded ${exampleItems.length} example items for scorecard ${scorecard.name}:`, exampleItems);
-            } catch (error) {
-              console.error(`Error loading example items for scorecard ${scorecard.id}:`, error);
-            }
-
-            return {
-              ...scorecard,
-              examples: exampleItems,
-              sections: async () => ({
-                data: sections,
-                nextToken: null
-              })
-            } as Schema['Scorecard']['type'] & { examples: string[] };
+      // Immediately set scorecards with placeholder data to show them instantly
+      const quickScorecards = initialScorecards.data
+        .filter(s => s.accountId === foundAccountId)
+        .map(scorecard => ({
+          ...scorecard,
+          examples: [] as string[],
+          sections: async () => ({
+            data: [],
+            nextToken: null
           })
-      );
+        } as Schema['Scorecard']['type'] & { examples: string[] }));
 
-      setScorecards(scorecardsWithCounts);
+      // Show scorecards immediately without any loading states
+      setScorecards(quickScorecards);
       setIsLoading(false);
+
+      // Don't initialize score counts - let them be undefined until actually loaded
+      // setScorecardScoreCounts will be updated progressively as data loads
+
+      // Set loading states for progressive updates
+      const loadingStates = quickScorecards.reduce((acc, scorecard) => ({
+        ...acc,
+        [scorecard.id]: true
+      }), {} as Record<string, boolean>);
+      setScorecardCountsLoading(loadingStates);
+
+      // Start progressive loading in the background (non-blocking)
+      console.log('🚀 Starting progressive loading for', quickScorecards.length, 'scorecards');
+      setTimeout(() => {
+        loadScoreCountsAndExamples(quickScorecards);
+      }, 0);
       
-      // Return the updated scorecards for immediate use
-      return scorecardsWithCounts;
+      return quickScorecards;
     } catch (error) {
       console.error('Error fetching scorecards:', error)
       setError(error as Error)
       setIsLoading(false)
-      return null; // Return null on error
+      return null;
     }
   }
+
+  // Progressive loading of score counts and example items (optimized)
+  const loadScoreCountsAndExamples = React.useCallback(async (scorecards: (Schema['Scorecard']['type'] & { examples: string[] })[]) => {
+    console.log('🔄 loadScoreCountsAndExamples called with', scorecards.length, 'scorecards');
+    
+    // Process scorecards in small batches to avoid overwhelming the API
+    const BATCH_SIZE = 3;
+    const batches = [];
+    for (let i = 0; i < scorecards.length; i += BATCH_SIZE) {
+      batches.push(scorecards.slice(i, i + BATCH_SIZE));
+    }
+    console.log('📦 Created', batches.length, 'batches of scorecards');
+
+    // Process batches with small delays to improve perceived performance
+    for (const [batchIndex, batch] of batches.entries()) {
+      // Add a small delay between batches to let the UI breathe
+      if (batchIndex > 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Process all scorecards in this batch in parallel
+      const batchPromises = batch.map(async (scorecard) => {
+        try {
+          console.log(`🔍 Processing scorecard: ${scorecard.name} (${scorecard.id})`);
+          
+          // Load sections directly from API (the scorecard.sections() method might not work on our placeholder objects)
+          const sectionsResult = await amplifyClient.ScorecardSection.list({
+            filter: { scorecardId: { eq: scorecard.id } }
+          });
+          const sections = sectionsResult.data || [];
+          
+          console.log(`📂 Found ${sections.length} sections for scorecard ${scorecard.name}`);
+          
+          if (sections.length === 0) {
+            // No sections = no scores, update immediately
+            console.log(`⚠️ No sections found for scorecard ${scorecard.name}, setting count to 0`);
+            setScorecardScoreCounts(prev => ({ ...prev, [scorecard.id]: 0 }));
+            setScorecardCountsLoading(prev => ({ ...prev, [scorecard.id]: false }));
+            return;
+          }
+
+          // Load score counts for each section in parallel with timeout
+          const sectionScorePromises = sections.map(async (section, index) => {
+            try {
+              console.log(`  📊 Loading scores for section ${index + 1}/${sections.length}: ${section.name} (${section.id})`);
+              
+              // Add timeout to prevent hanging requests
+              const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout')), 10000)
+              );
+              const scoresPromise = fetchAllScoresForSection(section.id);
+              
+              const allScores = await Promise.race([scoresPromise, timeoutPromise]);
+              const scoreCount = (allScores as any[]).length;
+              console.log(`  ✅ Section ${section.name} has ${scoreCount} scores`);
+              return scoreCount;
+            } catch (error) {
+              console.warn(`  ❌ Error loading scores for section ${section.id} (${section.name}):`, error);
+              return 0;
+            }
+          });
+
+          const sectionScoreCounts = await Promise.all(sectionScorePromises);
+          const totalScoreCount = sectionScoreCounts.reduce((sum, count) => sum + count, 0);
+
+          // Update score count immediately for this scorecard
+          console.log(`✅ Loaded ${totalScoreCount} scores for scorecard ${scorecard.name} (${scorecard.id})`);
+          setScorecardScoreCounts(prev => ({
+            ...prev,
+            [scorecard.id]: totalScoreCount
+          }));
+
+          setScorecardCountsLoading(prev => ({
+            ...prev,
+            [scorecard.id]: false
+          }));
+
+          // Load example items in the background (non-blocking)
+          setTimeout(async () => {
+            try {
+              const associationsResult = await amplifyClient.ScorecardExampleItem.listByScorecard(scorecard.id);
+              const exampleItems = associationsResult.data.map(association => `item:${association.itemId}`);
+
+              // Only update if examples have changed to avoid unnecessary re-renders
+              setScorecards(prevScorecards => 
+                prevScorecards.map(sc => {
+                  if (sc.id === scorecard.id) {
+                    const currentExamples = (sc as any).examples || [];
+                    if (JSON.stringify(currentExamples) !== JSON.stringify(exampleItems)) {
+                      return {
+                        ...sc,
+                        examples: exampleItems,
+                        sections: async () => ({ data: sections, nextToken: null })
+                      } as Schema['Scorecard']['type'] & { examples: string[] };
+                    }
+                  }
+                  return sc;
+                })
+              );
+            } catch (error) {
+              console.warn(`Error loading example items for scorecard ${scorecard.id}:`, error);
+            }
+          }, 50);
+
+        } catch (error) {
+          console.error(`Error loading data for scorecard ${scorecard.id}:`, error);
+          // Show error state with 0 count
+          setScorecardScoreCounts(prev => ({ ...prev, [scorecard.id]: 0 }));
+          setScorecardCountsLoading(prev => ({ ...prev, [scorecard.id]: false }));
+        }
+      });
+
+      // Wait for this batch to complete before moving to the next
+      await Promise.allSettled(batchPromises);
+    }
+  }, [])
 
   useEffect(() => {
     fetchScorecards()
@@ -1526,7 +1589,18 @@ export default function ScorecardsComponent({
   }
 
   if (isLoading) {
-    return <ScorecardDashboardSkeleton />
+    return (
+      <div className="@container flex flex-col h-full p-3">
+        <div className="flex justify-end mb-3">
+          <div className="h-10 w-32 bg-muted animate-pulse rounded"></div>
+        </div>
+        <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-32 bg-muted animate-pulse rounded-lg"></div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1562,42 +1636,17 @@ export default function ScorecardsComponent({
               </Button>
             </div>
             <div className="@container">
-              <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4">
-                {scorecards
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map(scorecard => {
-                    const scorecardData = {
-                      id: scorecard.id,
-                      name: scorecard.name,
-                      key: scorecard.key || '',
-                      description: scorecard.description || '',
-                      type: 'scorecard',
-                      configuration: {},
-                      order: 0,
-                      externalId: scorecard.externalId || '',
-                      scoreCount: scorecardScoreCounts[scorecard.id] || 0
-                    }
-
-                    return (
-                      <div
-                        key={scorecard.id}
-                        ref={(el) => {
-                          scorecardRefsMap.current.set(scorecard.id, el);
-                        }}
-                      >
-                        <ScorecardComponent
-                          variant="grid"
-                          score={scorecardData}
-                          isSelected={selectedScorecard?.id === scorecard.id}
-                          onClick={() => handleSelectScorecard(scorecard)}
-                          onEdit={() => handleEdit(scorecard)}
-                          onFeedbackAnalysis={() => handleScorecardFeedbackAnalysis(scorecard.id)}
-                          onCostAnalysis={() => handleScorecardCostAnalysis(scorecard.id)}
-                        />
-                      </div>
-                    )
-                  })}
-              </div>
+              <ScorecardGrid 
+                scorecards={scorecards as (Schema['Scorecard']['type'] & { examples: string[] })[]}
+                scorecardScoreCounts={scorecardScoreCounts}
+                scorecardCountsLoading={scorecardCountsLoading}
+                selectedScorecardId={selectedScorecard?.id}
+                onSelectScorecard={handleSelectScorecard}
+                onEdit={handleEdit}
+                onFeedbackAnalysis={handleScorecardFeedbackAnalysis}
+                onCostAnalysis={handleScorecardCostAnalysis}
+                scorecardRefsMap={scorecardRefsMap}
+              />
             </div>
           </div>
         </motion.div>
