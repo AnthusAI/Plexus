@@ -202,8 +202,23 @@ def test_sop_story_analyze_then_apply_two_nodes(monkeypatch):
     # Minimal experiment YAML and context
     experiment_yaml = """
 class: "BeamSearch"
+
+value: |
+  local score = experiment_node.value.accuracy or 0
+  return score
+
 exploration: |
   Tell a short story about analyzing feedback, then propose hypotheses.
+
+prompts:
+  worker_system_prompt: |
+    You are an AI assistant helping with SOP story testing.
+  worker_user_prompt: |
+    Begin the story experiment by analyzing feedback and creating hypotheses.
+  manager_system_prompt: |
+    You are a manager overseeing the story experiment.
+  manager_user_prompt: |
+    Welcome to the story experiment session.
 """
 
     experiment_context = {

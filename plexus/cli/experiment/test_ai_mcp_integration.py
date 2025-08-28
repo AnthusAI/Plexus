@@ -42,6 +42,17 @@ exploration: |
   
   Please use at least 3 different tools to show the integration is working properly.
   Be thorough and provide detailed responses about what you discover.
+
+prompts:
+  worker_system_prompt: |
+    You are an AI assistant testing Plexus MCP tool integration.
+    Use the available tools to demonstrate the integration works properly.
+  worker_user_prompt: |
+    Begin testing the MCP tool integration by using at least 3 different tools.
+  manager_system_prompt: |
+    You are a test manager overseeing MCP integration testing.
+  manager_user_prompt: |
+    Welcome to the MCP integration test session.
 """
 
 class TestAIMCPIntegration:
