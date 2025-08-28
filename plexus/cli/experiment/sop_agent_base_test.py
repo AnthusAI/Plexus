@@ -376,8 +376,7 @@ class TestSOPAgentIntegrationBehavior:
         assert "feedback" in summary_text.lower()
         assert any(indicator in summary_text.lower() for indicator in ["patterns", "synthesis", "analysis"])
 
-    @pytest.mark.asyncio
-    async def test_manager_user_prompt_integration(self):
+    def test_manager_user_prompt_integration(self):
         """Test that manager user prompt is automatically added to conversation when available."""
         # Create SOP agent with procedure definition that has manager user prompt
         context = {"procedure_id": "test-integration"}
@@ -398,46 +397,35 @@ class TestSOPAgentIntegrationBehavior:
             AIMessage(content="Assistant response")
         ]
         
-        # Mock the manager LLM response
-        mock_response = Mock()
-        mock_response.content = "Manager guidance response"
-        
-        # Mock the conversation filter and _get_current_state method
-        with patch.object(sop_agent, '_build_filtered_conversation_for_manager') as mock_filter, \
-             patch.object(sop_agent, '_get_current_state') as mock_get_state:
+        # Test the _build_filtered_conversation_for_manager method directly
+        # to verify manager user prompt integration
+        with patch('plexus.cli.experiment.conversation_filter.ManagerAgentConversationFilter') as mock_filter_class:
+            mock_filter = Mock()
             
-            # Set up mock return values
-            mock_get_state.return_value = {"round": 2, "tools_used": ["test_tool"]}
-            
-            # Mock filtered conversation that should include manager user prompt
-            expected_filtered_messages = [
+            # Simulate the basic filtered conversation without manager user prompt
+            basic_filtered_messages = [
                 SystemMessage(content="Manager system prompt"),
-                HumanMessage(content="Welcome to procedure test-integration round 2"),  # Manager user prompt
                 SystemMessage(content="Context from conversation"),
-                AIMessage(content="Assistant response"),
-                SystemMessage(content="SOP explanation")
+                AIMessage(content="Assistant response")
             ]
-            mock_filter.return_value = expected_filtered_messages
+            mock_filter.filter_conversation.return_value = basic_filtered_messages
+            mock_filter_class.return_value = mock_filter
             
-            # Call the method that should integrate manager user prompt
-            with patch('plexus.cli.experiment.sop_agent_base.create_configured_llm') as mock_llm_factory:
-                mock_llm = Mock()
-                mock_llm.invoke.return_value = mock_response
-                mock_llm_factory.return_value = mock_llm
-                
-                # Test the SOP guidance generation that includes manager user prompt integration
-                result = await sop_agent._generate_sop_guidance(conversation_history, {"round": 2})
-                
-                # Verify the method was called with conversation history and manager system prompt
-                mock_filter.assert_called_once()
-                call_args = mock_filter.call_args
-                assert len(call_args[0]) == 2  # conversation_history and manager_system_prompt
-                
-                # Verify LLM was called with the filtered messages that include manager user prompt
-                mock_llm.invoke.assert_called_once_with(expected_filtered_messages)
-                
-                # Verify the result
-                assert result == "Manager guidance response"
+            # Call the conversation filtering method
+            result = sop_agent._build_filtered_conversation_for_manager(
+                conversation_history, "Test manager system prompt"
+            )
+            
+            # Verify that manager user prompt was inserted
+            assert len(result) == 4  # Original 3 + 1 manager user prompt
+            
+            # The manager user prompt should be inserted at position 1 (after system prompt)
+            manager_user_message = result[1]
+            assert hasattr(manager_user_message, 'content')
+            assert "Welcome to procedure test-integration round" in manager_user_message.content
+            
+            # Verify it's a HumanMessage (manager user prompt)
+            assert manager_user_message.__class__.__name__ == 'HumanMessage'
 
     def test_manager_user_prompt_optional(self):
         """Test that SOP agent works when manager user prompt is not available."""

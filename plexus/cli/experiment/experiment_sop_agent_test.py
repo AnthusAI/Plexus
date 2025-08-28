@@ -258,6 +258,17 @@ class TestExperimentSOPAgent:
         mcp_server = MockMCPServer()
         experiment_agent = ExperimentSOPAgent("test_exp", mcp_server)
         
+        # Set up mock experiment config for the procedure definition
+        mock_config = {
+            'prompts': {
+                'worker_system_prompt': 'Test worker system prompt',
+                'worker_user_prompt': 'Test worker user prompt',
+                'manager_system_prompt': 'Test manager system prompt',
+                'manager_user_prompt': 'Test manager user prompt'
+            }
+        }
+        experiment_agent.procedure_definition.experiment_config = mock_config
+        
         # Mock SOP Agent execution
         mock_sop_agent = Mock()
         mock_sop_agent.execute_procedure = AsyncMock(return_value={
@@ -288,6 +299,17 @@ class TestExperimentSOPAgent:
             mcp_server=mcp_server,
             experiment_context=experiment_context
         )
+        
+        # Set up mock experiment config for the procedure definition
+        mock_config = {
+            'prompts': {
+                'worker_system_prompt': 'Test worker system prompt',
+                'worker_user_prompt': 'Test worker user prompt',
+                'manager_system_prompt': 'Test manager system prompt',
+                'manager_user_prompt': 'Test manager user prompt'
+            }
+        }
+        experiment_agent.procedure_definition.experiment_config = mock_config
         
         # These methods should work for backward compatibility
         exploration_prompt = experiment_agent.get_exploration_prompt()
@@ -429,10 +451,26 @@ async def test_experiment_sop_agent_story():
             experiment_context=experiment_context
         )
         
+        # Set up mock experiment config for the story
+        mock_config = {
+            'prompts': {
+                'worker_system_prompt': 'Story worker system prompt',
+                'worker_user_prompt': 'Story worker user prompt',
+                'manager_system_prompt': 'Story manager system prompt',
+                'manager_user_prompt': 'Story manager user prompt'
+            }
+        }
+        experiment_agent.procedure_definition.experiment_config = mock_config
+        
         setup_success = await experiment_agent.setup(experiment_yaml)
         assert setup_success == True
         
-        result = await experiment_agent.execute_sop_guided_experiment()
+        # Since we mocked the SOP agent execution, we need to ensure the real
+        # prompt methods are still accessible during result processing
+        with patch.object(experiment_agent.procedure_definition, 'get_system_prompt', return_value='Mocked system prompt'), \
+             patch.object(experiment_agent.procedure_definition, 'get_user_prompt', return_value='Mocked user prompt'):
+            
+            result = await experiment_agent.execute_sop_guided_experiment()
         
         # Assert: Verify the story unfolded correctly
         assert result["success"] == True
