@@ -72,6 +72,7 @@ export default function ScorecardsComponent({
     order: number
     type: string
     sectionId: string
+    externalId?: string
   } | null>(null)
   const [selectedScorecardSections, setSelectedScorecardSections] = useState<{
     items: Array<{
@@ -797,6 +798,129 @@ export default function ScorecardsComponent({
     }
   };
 
+  // Handle creating a new score
+  const handleCreateScore = async (sectionId: string) => {
+    if (!selectedScorecard || !accountId) {
+      console.error('No selected scorecard or accountId for score creation');
+      return;
+    }
+
+    try {
+      console.log('Creating score in section:', sectionId);
+      console.log('Selected scorecard:', selectedScorecard.id, selectedScorecard.name);
+      console.log('Available sections:', selectedScorecardSections?.items.map(s => ({id: s.id, name: s.name})));
+      
+      // Get the next order number for this section
+      const section = selectedScorecardSections?.items.find(s => s.id === sectionId);
+      console.log('Target section found:', section);
+      const existingScoresCount = section?.scores?.items?.length || 0;
+      const nextOrder = existingScoresCount + 1;
+
+      // Create a new score
+      const newScoreData = await amplifyClient.Score.create({
+        name: 'New Score',
+        type: 'Score',
+        order: nextOrder,
+        sectionId: sectionId,
+        scorecardId: selectedScorecard.id,
+        externalId: `score_${Date.now()}` // Generate a unique external ID
+      });
+
+      if (!newScoreData.data) {
+        console.error('Failed to create score - no data returned');
+        return;
+      }
+
+      console.log('✅ Score created successfully:', newScoreData.data);
+
+      // OPTIMISTIC UPDATE: Immediately add the new score to the local state
+      console.log('🔄 Adding score to local state optimistically...');
+      setSelectedScorecardSections(prevSections => {
+        if (!prevSections) return prevSections;
+        
+        return {
+          ...prevSections,
+          items: prevSections.items.map(s => {
+            if (s.id === sectionId) {
+              return {
+                ...s,
+                scores: {
+                  ...s.scores,
+                  items: [...(s.scores?.items || []), {
+                    id: newScoreData.data.id,
+                    name: newScoreData.data.name,
+                    description: newScoreData.data.description || '',
+                    key: newScoreData.data.key || '',
+                    type: newScoreData.data.type,
+                    order: newScoreData.data.order,
+                    externalId: newScoreData.data.externalId,
+                    guidelines: newScoreData.data.guidelines
+                  }]
+                }
+              };
+            }
+            return s;
+          })
+        };
+      });
+      
+      // Select the newly created score
+      console.log('🎯 Selecting newly created score');
+      handleScoreSelect({
+        ...newScoreData.data,
+        sectionId: sectionId
+      }, sectionId);
+    } catch (error) {
+      console.error('Error creating new score:', error);
+    }
+  };
+
+  // Handle deleting a score
+  const handleDeleteScore = async (scoreId: string) => {
+    if (!selectedScorecard) {
+      console.error('No selected scorecard for score deletion');
+      return;
+    }
+
+    try {
+      console.log('🗑️ Deleting score:', scoreId);
+      
+      // Delete the score from the database
+      await amplifyClient.Score.delete({ id: scoreId });
+      
+      console.log('✅ Score deleted from database');
+      
+      // Close the score if it's currently selected
+      if (selectedScore?.id === scoreId) {
+        setSelectedScore(null);
+        setMaximizedScoreId(null);
+      }
+      
+      // OPTIMISTIC UPDATE: Immediately remove the score from local state
+      console.log('🔄 Removing score from local state optimistically...');
+      setSelectedScorecardSections(prevSections => {
+        if (!prevSections) return prevSections;
+        
+        return {
+          ...prevSections,
+          items: prevSections.items.map(s => ({
+            ...s,
+            scores: {
+              ...s.scores,
+              items: (s.scores?.items || []).filter(score => score.id !== scoreId)
+            }
+          }))
+        };
+      });
+      
+      console.log('✅ Score removed from UI optimistically');
+      
+    } catch (error) {
+      console.error('Error deleting score:', error);
+      alert('Failed to delete score. Please try again.');
+    }
+  };
+
   // Handle closing the selected scorecard
   const handleCloseScorecard = () => {
     setSelectedScorecard(null);
@@ -914,6 +1038,7 @@ export default function ScorecardsComponent({
 
   // Helper function to fetch all scores for a section
   const fetchAllScoresForSection = async (sectionId: string) => {
+    console.log('🔍 fetchAllScoresForSection called for sectionId:', sectionId);
     let allScores: Schema['Score']['type'][] = []
     let nextToken: string | null = null
     
@@ -922,6 +1047,8 @@ export default function ScorecardsComponent({
         filter: { sectionId: { eq: sectionId } },
         ...(nextToken ? { nextToken } : {})
       })
+      
+      console.log('🔍 Scores result for section', sectionId, ':', scoresResult.data?.length, 'scores found');
       
 
       
@@ -942,6 +1069,7 @@ export default function ScorecardsComponent({
       nextToken = scoresResult.nextToken
     } while (nextToken)
     
+    console.log('🔍 Final scores for section', sectionId, ':', allScores.map(s => ({id: s.id, name: s.name})));
     return allScores
   }
 
@@ -967,7 +1095,6 @@ export default function ScorecardsComponent({
 
       console.log('Scorecard creation response:', newScorecardData);
       console.log('Response data:', newScorecardData?.data);
-      console.log('Response errors:', newScorecardData?.errors);
 
       if (!newScorecardData.data) {
         console.error('Failed to create scorecard - no data returned');
@@ -1160,6 +1287,7 @@ export default function ScorecardsComponent({
           shouldExpandExamples={shouldExpandExamples}
           onExamplesExpanded={() => setShouldExpandExamples(false)}
           onTaskCreated={handleTaskCreated}
+          onCreateScore={handleCreateScore}
         />
       </div>
     );
@@ -1169,15 +1297,21 @@ export default function ScorecardsComponent({
   const processedScore = React.useMemo(() => {
     if (!selectedScore) return null;
     
+    console.log('Processing score data for ScoreComponent:', selectedScore);
+    
     // Pre-process the score data to ensure name and description render together
-    return {
+    const processed = {
       id: selectedScore.id,
       name: selectedScore.name,
       description: selectedScore.description || '',
       type: selectedScore.type,
       order: selectedScore.order,
-      key: selectedScore.key || ''
+      key: selectedScore.key || '',
+      externalId: selectedScore.externalId || ''
     };
+    
+    console.log('Processed score data:', processed);
+    return processed;
   }, [selectedScore]);
 
   // Add back the renderSelectedScore function
@@ -1204,6 +1338,7 @@ export default function ScorecardsComponent({
               setFeedbackAnalysisPanel(null);
             }
           }}
+          onDelete={() => handleDeleteScore(selectedScore.id)}
           onSave={async () => {
             // Refresh the scorecard data to get updated score information
             await fetchScorecards();

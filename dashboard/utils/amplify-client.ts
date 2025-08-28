@@ -150,6 +150,8 @@ export const amplifyClient = {
       type: string
       order: number
       sectionId: string
+      scorecardId: string
+      externalId: string
       accuracy?: number
       version?: string
       aiProvider?: string
@@ -408,55 +410,7 @@ export const amplifyClient = {
       return response as AmplifyResponse<Schema['ScorecardExampleItem']['type'][]>
     }
   },
-  ScorecardProcessedItem: {
-    create: async (data: {
-      itemId: string;
-      scorecardId: string;
-      processedAt?: string;
-      lastScoreResultId?: string;
-    }) => {
-      const response = await (getClient().models.ScorecardProcessedItem as any).create(data)
-      return { data: response.data as Schema['ScorecardProcessedItem']['type'] }
-    },
-    delete: async (params: {
-      itemId: string;
-      scorecardId: string;
-    }) => {
-      // First find the record by the composite key
-      const listResponse = await (getClient().models.ScorecardProcessedItem as any).list({
-        filter: {
-          and: [
-            { itemId: { eq: params.itemId } },
-            { scorecardId: { eq: params.scorecardId } }
-          ]
-        }
-      });
-      
-      if (listResponse.data && listResponse.data.length > 0) {
-        const record = listResponse.data[0];
-        const response = await (getClient().models.ScorecardProcessedItem as any).delete({ id: record.id });
-        return { data: response.data as Schema['ScorecardProcessedItem']['type'] };
-      } else {
-        throw new Error('ScorecardProcessedItem association not found');
-      }
-    },
-    listByScorecard: async (scorecardId: string) => {
-      const response = await (getClient().models.ScorecardProcessedItem as any).list({
-        filter: { scorecardId: { eq: scorecardId } }
-      });
-      return response as AmplifyResponse<Schema['ScorecardProcessedItem']['type'][]>;
-    },
-    listByItem: async (itemId: string) => {
-      const response = await (getClient().models.ScorecardProcessedItem as any).list({
-        filter: { itemId: { eq: itemId } }
-      });
-      return response as AmplifyResponse<Schema['ScorecardProcessedItem']['type'][]>;
-    },
-    list: async (params?: any) => {
-      const response = await (getClient().models.ScorecardProcessedItem as any).list(params)
-      return response as AmplifyResponse<Schema['ScorecardProcessedItem']['type'][]>
-    }
-  },
+
   ScoringJob: {
     list: async (params: any) => {
       const response = await (getClient().models.ScoringJob as any).list(params)

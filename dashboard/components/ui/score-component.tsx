@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2 } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -9,6 +9,7 @@ import {
   DropdownMenu as ShadcnDropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from '@/components/ui/button'
@@ -111,6 +112,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onSave?: () => void
   onFeedbackAnalysis?: () => void
   onCostAnalysis?: () => void
+  onDelete?: () => void
   exampleItems?: Array<{
     id: string
     displayValue: string
@@ -129,6 +131,7 @@ interface DetailContentProps {
   onCancel?: () => void
   onFeedbackAnalysis?: () => void
   onCostAnalysis?: () => void
+  onDelete?: () => void
   hasChanges?: boolean
   versions?: ScoreVersion[]
   championVersionId?: string
@@ -257,6 +260,7 @@ const DetailContent = React.memo(({
   onCancel,
   onFeedbackAnalysis,
   onCostAnalysis,
+  onDelete,
   hasChanges,
   versions,
   championVersionId,
@@ -729,6 +733,18 @@ const DetailContent = React.memo(({
                     Analyze Cost
                   </DropdownMenuItem>
                 )}
+                {onDelete && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={onDelete}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Score
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </ShadcnDropdownMenu>
             {onToggleFullWidth && (
@@ -1176,6 +1192,7 @@ export function ScoreComponent({
   onSave,
   onFeedbackAnalysis,
   onCostAnalysis,
+  onDelete,
   exampleItems = [],
   scorecardName,
   onTaskCreated,
@@ -1533,11 +1550,17 @@ export function ScoreComponent({
 
   const handleSave = async () => {
     try {
+      console.log('ScoreComponent handleSave called for score:', score);
+      console.log('editedScore data:', editedScore);
+      console.log('versions array:', versions);
+      console.log('championVersionId:', championVersionId);
+      
       // Signal to DetailContent to reset editing state
       setResetEditingCounter(prev => prev + 1)
       
       // Update the Score record with the new values
-      await client.graphql({
+      console.log('Updating Score record...');
+      const updateResult = await client.graphql({
         query: `
           mutation UpdateScore($input: UpdateScoreInput!) {
             updateScore(input: $input) {
@@ -1559,6 +1582,8 @@ export function ScoreComponent({
           }
         }
       });
+      
+      console.log('Score record update result:', updateResult);
 
       // Check if we're editing an existing version or creating a new one
       const isEditingExistingVersion = selectedVersionId && versions.some(v => v.id === selectedVersionId);
@@ -1651,13 +1676,17 @@ export function ScoreComponent({
       }
 
       
+      const now = new Date().toISOString();
       const versionPayload = {
         scoreId: String(score.id),
         configuration: configurationYaml,
         isFeatured: false,
         note: versionNote || 'Updated score configuration',
+        createdAt: now,
+        updatedAt: now
       };
 
+      console.log('Creating ScoreVersion with payload:', versionPayload);
       const createVersionResponse = await client.graphql({
         query: `
           mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
@@ -1677,9 +1706,12 @@ export function ScoreComponent({
         }
       }) as GraphQLResult<CreateScoreVersionResponse>;
       
+      console.log('CreateScoreVersion response:', createVersionResponse);
+      
       const newVersion = 'data' in createVersionResponse && createVersionResponse.data?.createScoreVersion;
       
       // Update local state with the new version
+      console.log('newVersion data:', newVersion);
       if (newVersion) {
         const placeholderVersion = {
           ...newVersion,
@@ -1734,6 +1766,11 @@ export function ScoreComponent({
       onSave?.();
     } catch (error) {
       console.error('Error saving score:', error);
+      console.error('Full error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+        fullError: error
+      });
       toast.error(error instanceof Error ? error.message : 'Error updating score');
     }
   };
@@ -1826,6 +1863,7 @@ export function ScoreComponent({
               onCancel={handleCancel}
               onFeedbackAnalysis={onFeedbackAnalysis}
               onCostAnalysis={onCostAnalysis}
+              onDelete={onDelete}
               hasChanges={hasChanges}
               versions={versions}
               championVersionId={championVersionId}
