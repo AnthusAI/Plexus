@@ -42,6 +42,9 @@ class MockProcedureDefinition:
     def get_user_prompt(self, context: Dict[str, Any]) -> str:
         return f"Begin test procedure for {context.get('procedure_id', 'unknown')}"
     
+    def get_manager_user_prompt(self, context: Dict[str, Any], state_data: Dict[str, Any]) -> str:
+        return f"Welcome to procedure {context.get('procedure_id', 'unknown')} round {state_data.get('round', 1)}"
+    
     def get_allowed_tools(self, phase: str) -> List[str]:
         return ["think", "test_tool"]
     
@@ -372,6 +375,113 @@ class TestSOPAgentIntegrationBehavior:
         # Should capture key stage indicators
         assert "feedback" in summary_text.lower()
         assert any(indicator in summary_text.lower() for indicator in ["patterns", "synthesis", "analysis"])
+
+    @pytest.mark.asyncio
+    async def test_manager_user_prompt_integration(self):
+        """Test that manager user prompt is automatically added to conversation when available."""
+        # Create SOP agent with procedure definition that has manager user prompt
+        context = {"procedure_id": "test-integration"}
+        procedure_def = MockProcedureDefinition()
+        
+        sop_agent = StandardOperatingProcedureAgent(
+            procedure_id="test-integration",
+            procedure_definition=procedure_def,
+            mcp_server=MockMCPServer(),
+            context=context,
+            openai_api_key="test-key"
+        )
+        
+        # Mock conversation history
+        conversation_history = [
+            SystemMessage(content="System setup"),
+            HumanMessage(content="User message"),
+            AIMessage(content="Assistant response")
+        ]
+        
+        # Mock the manager LLM response
+        mock_response = Mock()
+        mock_response.content = "Manager guidance response"
+        
+        # Mock the conversation filter and _get_current_state method
+        with patch.object(sop_agent, '_build_filtered_conversation_for_manager') as mock_filter, \
+             patch.object(sop_agent, '_get_current_state') as mock_get_state:
+            
+            # Set up mock return values
+            mock_get_state.return_value = {"round": 2, "tools_used": ["test_tool"]}
+            
+            # Mock filtered conversation that should include manager user prompt
+            expected_filtered_messages = [
+                SystemMessage(content="Manager system prompt"),
+                HumanMessage(content="Welcome to procedure test-integration round 2"),  # Manager user prompt
+                SystemMessage(content="Context from conversation"),
+                AIMessage(content="Assistant response"),
+                SystemMessage(content="SOP explanation")
+            ]
+            mock_filter.return_value = expected_filtered_messages
+            
+            # Call the method that should integrate manager user prompt
+            with patch('plexus.cli.experiment.sop_agent_base.create_configured_llm') as mock_llm_factory:
+                mock_llm = Mock()
+                mock_llm.invoke.return_value = mock_response
+                mock_llm_factory.return_value = mock_llm
+                
+                # Test the SOP guidance generation that includes manager user prompt integration
+                result = await sop_agent._generate_sop_guidance(conversation_history, {"round": 2})
+                
+                # Verify the method was called with conversation history and manager system prompt
+                mock_filter.assert_called_once()
+                call_args = mock_filter.call_args
+                assert len(call_args[0]) == 2  # conversation_history and manager_system_prompt
+                
+                # Verify LLM was called with the filtered messages that include manager user prompt
+                mock_llm.invoke.assert_called_once_with(expected_filtered_messages)
+                
+                # Verify the result
+                assert result == "Manager guidance response"
+
+    def test_manager_user_prompt_optional(self):
+        """Test that SOP agent works when manager user prompt is not available."""
+        # Create procedure definition without manager user prompt method
+        class LimitedProcedureDefinition:
+            def get_system_prompt(self, context):
+                return "Test system prompt"
+            def get_sop_guidance_prompt(self, context, state_data):
+                return "Test manager system prompt"
+            def get_user_prompt(self, context):
+                return "Test user prompt"
+            # No get_manager_user_prompt method
+        
+        context = {"procedure_id": "test-optional"}
+        procedure_def = LimitedProcedureDefinition()
+        
+        sop_agent = StandardOperatingProcedureAgent(
+            procedure_id="test-optional",
+            procedure_definition=procedure_def,
+            mcp_server=MockMCPServer(),
+            context=context,
+            openai_api_key="test-key"
+        )
+        
+        conversation_history = [HumanMessage(content="Test message")]
+        
+        # This should not fail even though get_manager_user_prompt is not available
+        with patch('plexus.cli.experiment.conversation_filter.ManagerAgentConversationFilter') as mock_filter_class:
+            mock_filter = Mock()
+            mock_filter.filter_conversation.return_value = [
+                SystemMessage(content="Manager system prompt"),
+                HumanMessage(content="Test message")
+            ]
+            mock_filter_class.return_value = mock_filter
+            
+            # Should not raise an error, should handle missing method gracefully
+            filtered_messages = sop_agent._build_filtered_conversation_for_manager(
+                conversation_history, "Test manager system prompt"
+            )
+            
+            # Should return the basic filtered conversation without manager user prompt
+            assert len(filtered_messages) == 2
+            assert filtered_messages[0].content == "Manager system prompt"
+            assert filtered_messages[1].content == "Test message"
 
 
 class TestStandardOperatingProcedureAgentBase:

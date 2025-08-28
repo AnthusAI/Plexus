@@ -84,6 +84,19 @@ class ExperimentProcedureDefinition:
         yaml_prompt = prompts['worker_user_prompt']
         return self._process_prompt_template(yaml_prompt, context)
     
+    def get_manager_user_prompt(self, context: Dict[str, Any], state_data: Optional[Dict[str, Any]] = None) -> str:
+        """Get the initial manager user prompt from YAML configuration."""
+        if not self.experiment_config or 'prompts' not in self.experiment_config:
+            raise ValueError("Experiment configuration must include 'prompts' section with 'manager_user_prompt'")
+        
+        prompts = self.experiment_config['prompts']
+        if 'manager_user_prompt' not in prompts:
+            raise ValueError("Experiment configuration missing 'manager_user_prompt' in prompts section")
+        
+        # Load prompt from YAML and process template variables
+        yaml_prompt = prompts['manager_user_prompt']
+        return self._process_prompt_template(yaml_prompt, context, state_data)
+    
     def _process_prompt_template(self, prompt_template: str, context: Dict[str, Any], state_data: Optional[Dict[str, Any]] = None) -> str:
         """
         Process a prompt template with variable substitution.

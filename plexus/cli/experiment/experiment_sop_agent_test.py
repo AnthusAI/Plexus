@@ -50,19 +50,112 @@ class TestExperimentProcedureDefinition:
         # Should have exactly 3 tools (simplified from dynamic scoping)
         assert len(available_tools) == 3
     
-    def test_experiment_prompts_delegate_to_experiment_prompts_class(self):
-        """Test that experiment procedure definition uses ExperimentPrompts."""
+    def test_experiment_prompts_load_from_yaml_config(self):
+        """Test that experiment procedure definition loads prompts from YAML configuration."""
         procedure_def = ExperimentProcedureDefinition()
-        context = {"scorecard_name": "TestCard", "score_name": "TestScore"}
         
+        # Set up mock experiment config with all required prompts
+        mock_config = {
+            'prompts': {
+                'worker_system_prompt': 'Test worker system prompt with {experiment_id}',
+                'worker_user_prompt': 'Test worker user prompt for {scorecard_name} → {score_name}',
+                'manager_system_prompt': 'Test manager system prompt for coaching',
+                'manager_user_prompt': 'Welcome to experiment {experiment_id} for {scorecard_name} → {score_name}'
+            }
+        }
+        procedure_def.experiment_config = mock_config
+        
+        context = {
+            "experiment_id": "test-123",
+            "scorecard_name": "TestCard", 
+            "score_name": "TestScore"
+        }
+        state_data = {"round": 1, "tools_used": ["test_tool"]}
+        
+        # Test all prompt methods
         system_prompt = procedure_def.get_system_prompt(context)
         user_prompt = procedure_def.get_user_prompt(context)
+        manager_system_prompt = procedure_def.get_sop_guidance_prompt(context, state_data)
+        manager_user_prompt = procedure_def.get_manager_user_prompt(context, state_data)
         
-        # These should delegate to ExperimentPrompts
+        # Verify prompts load correctly
         assert isinstance(system_prompt, str)
         assert isinstance(user_prompt, str)
+        assert isinstance(manager_system_prompt, str)
+        assert isinstance(manager_user_prompt, str)
         assert len(system_prompt) > 0
         assert len(user_prompt) > 0
+        assert len(manager_system_prompt) > 0
+        assert len(manager_user_prompt) > 0
+        
+        # Verify template variable substitution
+        assert "test-123" in system_prompt
+        assert "TestCard" in user_prompt
+        assert "TestScore" in user_prompt
+        assert "test-123" in manager_user_prompt
+        assert "TestCard" in manager_user_prompt
+        assert "TestScore" in manager_user_prompt
+    
+    def test_get_manager_user_prompt_error_cases(self):
+        """Test error handling for get_manager_user_prompt method."""
+        procedure_def = ExperimentProcedureDefinition()
+        context = {"experiment_id": "test", "scorecard_name": "Test", "score_name": "Test"}
+        
+        # Test missing experiment config
+        with pytest.raises(ValueError, match="Experiment configuration must include 'prompts' section"):
+            procedure_def.get_manager_user_prompt(context)
+        
+        # Test missing prompts section
+        procedure_def.experiment_config = {}
+        with pytest.raises(ValueError, match="Experiment configuration must include 'prompts' section"):
+            procedure_def.get_manager_user_prompt(context)
+        
+        # Test missing manager_user_prompt in prompts section
+        procedure_def.experiment_config = {'prompts': {'worker_system_prompt': 'test'}}
+        with pytest.raises(ValueError, match="Experiment configuration missing 'manager_user_prompt'"):
+            procedure_def.get_manager_user_prompt(context)
+    
+    def test_template_variable_processing(self):
+        """Test template variable processing in prompts."""
+        procedure_def = ExperimentProcedureDefinition()
+        
+        # Set up config with template variables
+        procedure_def.experiment_config = {
+            'prompts': {
+                'manager_user_prompt': 'Experiment {experiment_id} for {scorecard_name} round {round} tools {tools_used}'
+            }
+        }
+        
+        context = {"experiment_id": "exp-456", "scorecard_name": "TestCard"}
+        state_data = {"round": 5, "tools_used": ["tool1", "tool2"]}
+        
+        result = procedure_def.get_manager_user_prompt(context, state_data)
+        
+        # Verify all template variables are substituted
+        assert "exp-456" in result
+        assert "TestCard" in result
+        assert "5" in result
+        assert "['tool1', 'tool2']" in result
+    
+    def test_missing_template_variables_handled_gracefully(self):
+        """Test that missing template variables are handled gracefully."""
+        procedure_def = ExperimentProcedureDefinition()
+        
+        procedure_def.experiment_config = {
+            'prompts': {
+                'manager_user_prompt': 'Experiment {experiment_id} has {missing_variable} round {round}'
+            }
+        }
+        
+        context = {"experiment_id": "exp-789"}
+        state_data = {"round": 3}
+        
+        # Should not raise error, should handle missing variables gracefully
+        result = procedure_def.get_manager_user_prompt(context, state_data)
+        # Current behavior: returns template as-is when any variable is missing
+        # This is a limitation of the current implementation using .format(**template_vars)
+        assert result == 'Experiment {experiment_id} has {missing_variable} round {round}'
+        assert "{missing_variable}" in result
     
     def test_experiment_continuation_criteria(self):
         """Test experiment-specific continuation logic."""
