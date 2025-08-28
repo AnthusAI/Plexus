@@ -13,7 +13,6 @@ from types import SimpleNamespace
 from .experiment_sop_agent import (
     ExperimentSOPAgent,
     ExperimentProcedureDefinition,
-    ExperimentFlowManagerAdapter,
     ExperimentChatRecorderAdapter,
     run_sop_guided_experiment
 )
@@ -129,7 +128,7 @@ class TestExperimentSOPAgent:
     
     @pytest.mark.asyncio
     async def test_experiment_setup_creates_components(self):
-        """Test experiment setup creates flow manager and chat recorder."""
+        """Test experiment setup creates chat recorder (simplified - no flow manager)."""
         mcp_server = MockMCPServer()
         mock_client = Mock()
         experiment_context = {"scorecard_name": "TestCard"}
@@ -144,6 +143,7 @@ class TestExperimentSOPAgent:
         experiment_yaml = """
         class: "BeamSearch"
         exploration: "Analyze feedback data"
+        max_total_rounds: 500
         """
         
         # Mock the StandardOperatingProcedureAgent class itself
@@ -155,7 +155,7 @@ class TestExperimentSOPAgent:
             setup_result = await experiment_agent.setup(experiment_yaml)
             
             assert setup_result == True
-            assert isinstance(experiment_agent.flow_manager, ExperimentFlowManagerAdapter)
+            # No flow manager in simplified version
             assert isinstance(experiment_agent.chat_recorder, ExperimentChatRecorderAdapter)
             mock_sop_agent.setup.assert_called_once_with(experiment_yaml)
     
@@ -250,26 +250,7 @@ class TestExperimentSOPIntegration:
 class TestExperimentAdapters:
     """Test the adapter classes that bridge experiment components to SOP Agent."""
     
-    def test_experiment_flow_manager_adapter(self):
-        """Test ExperimentFlowManagerAdapter wraps ConversationFlowManager."""
-        experiment_config = {"conversation_flow": {"initial_state": "exploration"}}
-        experiment_context = {"scorecard_name": "TestCard"}
-        
-        adapter = ExperimentFlowManagerAdapter(experiment_config, experiment_context)
-        
-        # Test adapter methods
-        state = adapter.update_state(["plexus_feedback_analysis"], "test response")
-        assert isinstance(state, dict)
-        
-        should_continue = adapter.should_continue()
-        assert isinstance(should_continue, bool)
-        
-        guidance = adapter.get_next_guidance()
-        # Guidance could be None or string
-        assert guidance is None or isinstance(guidance, str)
-        
-        summary = adapter.get_completion_summary()
-        assert isinstance(summary, str)
+    # Removed test_experiment_flow_manager_adapter - using simplified multi-agent ReAct loop
     
     @pytest.mark.asyncio
     async def test_experiment_chat_recorder_adapter(self):

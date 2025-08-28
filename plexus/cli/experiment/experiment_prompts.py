@@ -114,7 +114,7 @@ You have access to these tools to help with your analysis:
 **Step 1: Understand the Problems (REQUIRED BEFORE HYPOTHESES)**
 1. **MANDATORY:** Use `plexus_feedback_find` to examine specific scoring mistakes and corrections
    - **CRITICAL:** Always use `limit=1` - examine only ONE feedback item at a time to maintain focus
-   - **COMPREHENSIVE ANALYSIS:** Your goal is to examine ALL available examples up to 20 per confusion matrix segment
+   - **COMPREHENSIVE ANALYSIS:** Your goal is to examine ALL available examples up to 5 per confusion matrix segment
 2. **🚨 MANDATORY: TARGET SPECIFIC SCORING CORRECTIONS 🚨**
    - **ALWAYS specify both `initial_value` and `final_value` parameters** - never search without them
    - **Start with the most problematic corrections first** (highest error counts from feedback summary)
@@ -134,11 +134,11 @@ You have access to these tools to help with your analysis:
    - **NEVER:** Run another tool call without first explaining the previous tool's results in text
 5. **GATHER COMPREHENSIVE EVIDENCE:** Focus on INCORRECT classifications, examine correct ones for context only
    - **🚨 MANDATORY PARAMETERS:** Every `plexus_feedback_find` call MUST include both `initial_value` AND `final_value`
-   - **🚨 FOCUS ON ERRORS:** Examine ALL incorrect classifications (where initial ≠ final) up to 20 examples each
+   - **🚨 FOCUS ON ERRORS:** Examine ALL incorrect classifications (where initial ≠ final) up to 5 examples each
    - **INCORRECT CLASSIFICATIONS (PRIORITIZE - EXAMINE ALL):** Based on feedback summary:
-     - `initial_value="High"` + `final_value="Medium"` → Use offset=0,1,2,3... until ALL examined (up to 20)
-     - `initial_value="Medium"` + `final_value="Low"` → Use offset=0,1,2,3... until ALL examined (up to 20)
-     - `initial_value="Yes"` + `final_value="No"` → Use offset=0,1,2,3... until ALL examined (up to 20)
+     - `initial_value="High"` + `final_value="Medium"` → Use offset=0,1,2,3... until ALL examined (up to 5)
+     - `initial_value="Medium"` + `final_value="Low"` → Use offset=0,1,2,3... until ALL examined (up to 5)
+     - `initial_value="Yes"` + `final_value="No"` → Use offset=0,1,2,3... until ALL examined (up to 5)
    - **CORRECT PREDICTIONS (CONTEXT ONLY - SAMPLE 1-2):** Only for basic understanding:
      - `initial_value="High"` + `final_value="High"` → Examine only offset=0, maybe offset=1 for context
      - `initial_value="Medium"` + `final_value="Medium"` → Examine only offset=0, maybe offset=1 for context
@@ -147,7 +147,7 @@ You have access to these tools to help with your analysis:
 
 **🚨 CRITICAL: DO NOT CREATE HYPOTHESES PREMATURELY 🚨**
 **⚠️ EXAMINING 1-5 EXAMPLES IS INSUFFICIENT** - You need comprehensive analysis first
-**⚠️ DO NOT CREATE EXPERIMENT NODES UNTIL YOU HAVE EXAMINED AT LEAST 15-20 ERROR EXAMPLES**
+**⚠️ DO NOT CREATE EXPERIMENT NODES UNTIL YOU HAVE EXAMINED AT LEAST 3-5 ERROR EXAMPLES**
 **⚠️ DO NOT EXPAND TIME RANGES - WORK WITHIN THE 7-DAY PERIOD ONLY**
 **⚠️ IF FEW RESULTS: Try different value combinations, offsets, or segments - NOT longer time periods**
 
@@ -163,10 +163,10 @@ You have access to these tools to help with your analysis:
 
 🚨 **BEFORE YOU CAN CREATE ANY HYPOTHESES** 🚨
 **YOU MUST HAVE COMPLETED COMPREHENSIVE ERROR ANALYSIS FIRST:**
-- Examined ALL available error examples from EACH incorrect classification type (up to 20 each)
+- Examined ALL available error examples from EACH incorrect classification type (up to 5 each)
 - Used incremental offsets (0,1,2,3...) to see patterns across ALL error examples
 - Sampled 1-2 correct examples for context only
-- **MINIMUM:** 15-20 total error examples examined before creating ANY experiment nodes
+- **MINIMUM:** 3-5 total error examples examined before creating ANY experiment nodes
 
 4. **ONLY AFTER COMPREHENSIVE ANALYSIS:** Describe your first hypothesis at a high level (NO CODE)
 5. Create ONE detailed brief using `create_experiment_node` (CONCEPTUAL ONLY) ← **THIS COUNTS AS 1 CREATED**
@@ -299,7 +299,7 @@ The user may ask coaching questions to help you think through next steps, but yo
 Use the `stop_procedure` tool when you believe your work is complete. Reasons to stop include:
 
 **✅ SUCCESSFUL COMPLETION:**
-- You've examined at least 15-20 error examples from EACH incorrect classification type FIRST
+- You've examined at least 3-5 error examples from EACH incorrect classification type FIRST
 - You've created at least 3 ACTUAL experiment nodes using `create_experiment_node` tool (not just described them)
 - Each hypothesis addresses a different aspect of the scoring problems you identified based on comprehensive error analysis
 - Your briefs contain enough detail for coding assistants to implement changes
@@ -373,12 +373,12 @@ Your goal is to create at least 3 detailed hypothesis experiment nodes that will
 
 **MANDATORY WORKFLOW - NO SHORTCUTS ALLOWED:**
 1. **FIRST:** Interpret the confusion matrix numbers from the feedback summary to understand error patterns
-2. **SECOND:** Examine ALL available error examples from EACH incorrect classification type (15-20 per type minimum)
+2. **SECOND:** Examine ALL available error examples from EACH incorrect classification type (3-5 per type minimum)
 3. **THIRD:** Sample 1-2 correct examples for context only  
 4. **FOURTH:** Synthesize patterns from your comprehensive error analysis
 5. **ONLY THEN:** Create 3+ detailed briefs describing problems and solutions
 
-**🚨 ENFORCEMENT:** Creating hypotheses from insufficient data (1-10 examples) will result in immediate termination. You must gather comprehensive evidence first.
+**🚨 ENFORCEMENT:** Creating hypotheses from insufficient data (1-2 examples) will result in immediate termination. You must gather comprehensive evidence first.
 
 **START BY INTERPRETING THE CONFUSION MATRIX FIRST**
 
@@ -427,11 +427,11 @@ Look at the "CONFUSION MATRIX - SCORING CORRECTIONS" section in the feedback ana
    - **EXPERIMENT TIME PERIOD IS FIXED** - respect the boundaries set for this analysis
 6. **🚨 FOCUS ON INCORRECT CLASSIFICATIONS - EXAMINE ALL ERRORS 🚨**
    - **MANDATORY:** Always specify both `initial_value` AND `final_value` - never search without them
-   - **🚨 PRIORITIZE ERRORS:** Focus on incorrect classifications (initial ≠ final) - examine ALL available examples up to 20 each
+   - **🚨 PRIORITIZE ERRORS:** Focus on incorrect classifications (initial ≠ final) - examine ALL available examples up to 5 each
    - **INCORRECT CLASSIFICATIONS (MAIN FOCUS):** Based on the feedback summary, examine ALL errors like:
-     - `initial_value="High"` + `final_value="Medium"` with offset=0,1,2,3... until ALL examined (up to 20)
-     - `initial_value="Medium"` + `final_value="Low"` with offset=0,1,2,3... until ALL examined (up to 20)  
-     - `initial_value="Yes"` + `final_value="No"` with offset=0,1,2,3... until ALL examined (up to 20)
+     - `initial_value="High"` + `final_value="Medium"` with offset=0,1,2,3... until ALL examined (up to 5)
+     - `initial_value="Medium"` + `final_value="Low"` with offset=0,1,2,3... until ALL examined (up to 5)  
+     - `initial_value="Yes"` + `final_value="No"` with offset=0,1,2,3... until ALL examined (up to 5)
    - **CORRECT PREDICTIONS (MINIMAL CONTEXT ONLY):** Sample only 1-2 examples for basic understanding:
      - `initial_value="High"` + `final_value="High"` → Only offset=0, maybe offset=1 (don't need many)
      - `initial_value="Medium"` + `final_value="Medium"` → Only offset=0, maybe offset=1 (don't need many)
@@ -440,10 +440,10 @@ Look at the "CONFUSION MATRIX - SCORING CORRECTIONS" section in the feedback ana
 7. **ERROR-FOCUSED ANALYSIS WORKFLOW:** Prioritize understanding what went wrong
    - **GOAL:** Focus on errors (incorrect classifications) to understand problems and fix them
    - **EXAMPLE WORKFLOW:** If feedback summary shows 18 "High→Medium" ERRORS available:
-     - Call with initial_value="High", final_value="Medium", offset=0,1,2,3... up to offset=17 to see ALL 18 error examples
-     - Don't stop at offset=0 or offset=1 - examine ALL error examples to understand the pattern
+     - Call with initial_value="High", final_value="Medium", offset=0,1,2,3,4 to see up to 5 error examples
+     - Don't stop at offset=0 only - examine up to 5 error examples to understand the pattern
    - **PRIORITY ORDER:** Based on what's shown in the feedback summary:
-     - **FIRST:** ALL INCORRECT CLASSIFICATIONS: Like "High→Medium", "Medium→Low", "Yes→No" (examine ALL examples up to 20 each)
+     - **FIRST:** ALL INCORRECT CLASSIFICATIONS: Like "High→Medium", "Medium→Low", "Yes→No" (examine ALL examples up to 5 each)
      - **SECOND:** MINIMAL CORRECT SAMPLES: Like "High→High", "Medium→Medium" (examine only 1-2 examples for context)
 8. **CREATE HYPOTHESES SEQUENTIALLY:** Describe each hypothesis conceptually, then create it with `create_experiment_node`
 9. **ONE AT A TIME:** Do not create multiple experiment nodes in a single response
@@ -459,15 +459,15 @@ Look at the "CONFUSION MATRIX - SCORING CORRECTIONS" section in the feedback ana
 **🚨 ABSOLUTELY NO YAML CODE:** Do not include any YAML configurations, Python code, or technical implementations in your hypothesis descriptions. Write conceptual briefs in plain English only.
 
 **🚨 DON'T STOP EARLY - FOCUS ON ERRORS:** 
-- **ONE ERROR EXAMPLE IS INSUFFICIENT** - you need to see patterns across ALL available error examples (up to 20 each)
+- **ONE ERROR EXAMPLE IS INSUFFICIENT** - you need to see patterns across ALL available error examples (up to 5 each)
 - **PRIORITIZE INCORRECT CLASSIFICATIONS** - where initial ≠ final (these are the problems to solve)
 - **SAMPLE CORRECT PREDICTIONS MINIMALLY** - only 1-2 examples for context, don't spend time exhaustively examining correct cases
 - **USE INCREMENTAL OFFSETS FOR ERRORS** - offset=0,1,2,3... until ALL error examples examined
 
 **🚨 MANDATORY ERROR-FOCUSED DATA GATHERING:**
-- You MUST examine ALL available examples from EACH incorrect classification type (up to 20 each) before creating ANY hypotheses
+- You MUST examine ALL available examples from EACH incorrect classification type (up to 5 each) before creating ANY hypotheses
 - You CANNOT create hypotheses until you have comprehensive evidence about what went wrong
-- If the feedback summary shows 18 "High→Medium" errors available, examine ALL of them (offset=0 through offset=17)
+- If the feedback summary shows 18 "High→Medium" errors available, examine up to 5 of them (offset=0 through offset=4)
 - If the feedback summary shows 4 "Yes→No" errors available, examine ALL of them (offset=0 through offset=3)
 - Only examine 1-2 correct prediction examples for context - focus your time on understanding errors
 
@@ -571,7 +571,7 @@ Your job is to:
 
 **Use this information to guide the assistant:**
 - Know how many examples are available in each confusion matrix segment
-- Coach them to examine ALL available examples up to 15-20 per segment
+- Coach them to examine ALL available examples up to 3-5 per segment
 - Help them understand if they've found enough examples or need to search more
 - Guide them based on actual data availability, not theoretical maximums
 
@@ -646,8 +646,8 @@ Your goal is to coach the assistant toward creating **at least 3 detailed hypoth
 **🚨 CRITICAL: ENFORCE THE REQUIRED WORKFLOW PHASES:**
 
 **PHASE 1: COMPREHENSIVE DATA GATHERING (REQUIRED FIRST)**
-- Worker must examine ALL available examples from the feedback summary, up to 20 per segment
-- If 18 false positives are available, they must examine most/all of them
+- Worker must examine ALL available examples from the feedback summary, up to 5 per segment
+- If 18 false positives are available, they must examine up to 5 of them
 - If 4 false negatives are available, they must examine ALL of them  
 - ABSOLUTELY NO hypothesis creation until comprehensive data is gathered
 - STOP them if they try to create hypotheses from 1-2 examples
@@ -697,11 +697,11 @@ Your goal is to coach the assistant toward creating **at least 3 detailed hypoth
 
 🚨 **IF THEY STOP AFTER EXAMINING ONLY 1-2 ERROR EXAMPLES:**
 - STOP: "You've only examined 1-2 error examples - you need to see ALL available error examples to understand patterns"
-- REDIRECT: "Continue with offset=1, offset=2, offset=3... until you've seen ALL available examples for that error type (up to 20)"
+- REDIRECT: "Continue with offset=1, offset=2, offset=3... until you've seen ALL available examples for that error type (up to 5)"
 - PRIORITIZE: "Focus on incorrect classifications (initial ≠ final) - examine ALL errors, sample only 1-2 correct examples"
 
 🚨 **IF THEY TRY TO CREATE HYPOTHESES WITH INSUFFICIENT DATA:**
-- STOP IMMEDIATELY: "ABSOLUTELY NOT - You've only examined X examples. You need 15-20 error examples minimum before creating ANY hypotheses"
+- STOP IMMEDIATELY: "ABSOLUTELY NOT - You've only examined X examples. You need 3-5 error examples minimum before creating ANY hypotheses"
 - BLOCK: "You are FORBIDDEN from using create_experiment_node until you have comprehensive error analysis"
 - REDIRECT: "Continue examining ALL available error examples with incremental offsets before attempting hypothesis creation"
 

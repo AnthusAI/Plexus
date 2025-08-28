@@ -17,7 +17,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from .sop_agent_base import StandardOperatingProcedureAgent, ProcedureDefinition, FlowManager, ChatRecorder
 from .experiment_prompts import ExperimentPrompts
-from .conversation_flow import ConversationFlowManager
+# Removed ConversationFlowManager import - using simplified multi-agent ReAct loop
 from .chat_recorder import ExperimentChatRecorder
 from .mcp_adapter import LangChainMCPAdapter
 
@@ -69,12 +69,12 @@ class ExperimentProcedureDefinition:
         round_num = state_data.get("round", 0)
         tools_used = state_data.get("tools_used", [])
         
-        # Get max rounds from experiment configuration (dynamic limit from template)
+        # Get max rounds from experiment configuration (simplified - no state machine)
         max_rounds = 500  # High default fallback to respect template settings
         if hasattr(self, 'experiment_config') and self.experiment_config:
-            conversation_flow = self.experiment_config.get('conversation_flow', {})
-            escalation = conversation_flow.get('escalation', {})
-            max_rounds = escalation.get('max_total_rounds', 500)
+            # Look for max_total_rounds in the top level or under escalation
+            max_rounds = self.experiment_config.get('max_total_rounds', 
+                        self.experiment_config.get('escalation', {}).get('max_total_rounds', 500))
         
         logger.info(f"🔍 SHOULD_CONTINUE CHECK: Round {round_num}/{max_rounds}, Tools used: {len(tools_used)}")
         
@@ -106,49 +106,7 @@ class ExperimentProcedureDefinition:
             return f"Experiment completed successfully with {create_node_calls} hypothesis nodes created in {round_num} rounds."
 
 
-class ExperimentFlowManagerAdapter(FlowManager):
-    """
-    Adapter that wraps ConversationFlowManager to implement the FlowManager interface.
-    
-    This allows the existing experiment flow logic to work with the general-purpose
-    StandardOperatingProcedureAgent while maintaining backward compatibility.
-    """
-    
-    def __init__(self, experiment_config: Dict[str, Any], experiment_context: Dict[str, Any]):
-        self.conversation_flow_manager = ConversationFlowManager(experiment_config, experiment_context)
-    
-    def initialize(self, config: Dict[str, Any], context: Dict[str, Any]):
-        """Initialize with config and context (called by SOP Agent setup)."""
-        # ConversationFlowManager is already initialized in __init__
-        pass
-    
-    def update_state(self, tools_used: List[str], response_content: str, **kwargs) -> Dict[str, Any]:
-        """Update the experiment conversation flow state."""
-        nodes_created = kwargs.get("nodes_created", 0)
-        
-        # Update the conversation flow manager
-        state_data = self.conversation_flow_manager.update_state(
-            tools_used=tools_used,
-            response_content=response_content,
-            nodes_created=nodes_created
-        )
-        
-        # Add flow manager continuation decision
-        state_data["flow_manager_should_continue"] = self.conversation_flow_manager.should_continue()
-        
-        return state_data
-    
-    def should_continue(self) -> bool:
-        """Determine if the experiment flow should continue."""
-        return self.conversation_flow_manager.should_continue()
-    
-    def get_next_guidance(self) -> Optional[str]:
-        """Get template guidance for the next experiment step."""
-        return self.conversation_flow_manager.get_next_guidance()
-    
-    def get_completion_summary(self) -> str:
-        """Get experiment completion summary."""
-        return self.conversation_flow_manager.get_completion_summary()
+# Removed ExperimentFlowManagerAdapter - using simplified multi-agent ReAct loop without state machine
 
 
 class ExperimentChatRecorderAdapter(ChatRecorder):
@@ -207,7 +165,6 @@ class ExperimentSOPAgent:
         
         # Experiment-specific components
         self.procedure_definition = ExperimentProcedureDefinition()
-        self.flow_manager = None
         self.chat_recorder = None
         self.sop_agent = None
         
@@ -224,21 +181,19 @@ class ExperimentSOPAgent:
             experiment_config = yaml.safe_load(experiment_yaml)
             self.experiment_config = experiment_config  # Store for backward compatibility
             
-            # Create experiment-specific components
-            self.flow_manager = ExperimentFlowManagerAdapter(experiment_config, self.experiment_context)
-            
+            # Create experiment-specific components (simplified - no flow manager)
             if self.client:
                 self.chat_recorder = ExperimentChatRecorderAdapter(self.client, self.experiment_id, None)
             
             # Pass experiment config to procedure definition
             self.procedure_definition.experiment_config = experiment_config
             
-            # Create the general-purpose SOP Agent with experiment-specific components
+            # Create the general-purpose SOP Agent with experiment-specific components (no flow manager)
             self.sop_agent = StandardOperatingProcedureAgent(
                 procedure_id=self.experiment_id,
                 procedure_definition=self.procedure_definition,
                 mcp_server=self.mcp_server,
-                flow_manager=self.flow_manager,
+                flow_manager=None,  # Simplified - no state machine
                 chat_recorder=self.chat_recorder,
                 openai_api_key=self.openai_api_key,
                 context=self.experiment_context,
