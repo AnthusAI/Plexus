@@ -1005,9 +1005,443 @@ def register_score_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
     @mcp.tool()
+    async def plexus_score_create(
+        name: str,
+        scorecard_identifier: str,
+        section_identifier: Optional[str] = None,
+        score_type: str = "SimpleLLMScore",
+        external_id: Optional[str] = None,
+        key: Optional[str] = None,
+        description: Optional[str] = None,
+        ai_provider: Optional[str] = None,
+        ai_model: Optional[str] = None,
+        order: Optional[int] = None,
+        is_disabled: bool = False
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Creates a new score in the specified scorecard and section.
+        
+        Parameters:
+        - name: Display name for the score (required)
+        - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID) (required)
+        - section_identifier: Identifier for the section (name or ID). If not provided, uses the first available section
+        - score_type: Type of score (default: "SimpleLLMScore"). Options: "SimpleLLMScore", "LangGraphScore", "ClassifierScore", "STANDARD"
+        - external_id: External ID for the score. If not provided, generates a unique ID
+        - key: Unique key for the score. If not provided, generates from name
+        - description: Optional description for the score
+        - ai_provider: AI provider (default: "unknown")
+        - ai_model: AI model (default: "unknown")
+        - order: Display order in section. If not provided, uses next available order
+        - is_disabled: Whether the score is disabled (default: False)
+        
+        Returns:
+        - Information about the created score including its ID and dashboard URL
+        """
+        import uuid
+        import re
+        
+        # Temporarily redirect stdout to capture any unexpected output
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        
+        try:
+            # Validate required parameters
+            if not name or not name.strip():
+                return "Error: name is required and cannot be empty"
+            
+            if not scorecard_identifier or not scorecard_identifier.strip():
+                return "Error: scorecard_identifier is required and cannot be empty"
+            
+            # Validate score_type
+            valid_types = ["SimpleLLMScore", "LangGraphScore", "ClassifierScore", "STANDARD"]
+            if score_type not in valid_types:
+                return f"Error: score_type must be one of: {', '.join(valid_types)}"
+            
+            # Try to import required modules directly
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
+                from plexus.cli.report.utils import resolve_account_id_for_command
+            except ImportError as e:
+                return f"Error: Could not import required modules: {e}. Core modules may not be available."
+            
+            # Check if we have the necessary credentials
+            api_url = os.environ.get('PLEXUS_API_URL', '')
+            api_key = os.environ.get('PLEXUS_API_KEY', '')
+            
+            if not api_url or not api_key:
+                logger.warning("Missing API credentials. Ensure .env file is loaded.")
+                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+            
+            # Create the client
+            try:
+                client_stdout = StringIO()
+                saved_stdout = sys.stdout
+                sys.stdout = client_stdout
+                
+                try:
+                    client = create_dashboard_client()
+                finally:
+                    client_output = client_stdout.getvalue()
+                    if client_output:
+                        logger.warning(f"Captured unexpected stdout during client creation in plexus_score_create: {client_output}")
+                    sys.stdout = saved_stdout
+            except Exception as client_err:
+                logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+                return f"Error creating dashboard client: {str(client_err)}"
+                
+            if not client:
+                return "Error: Could not create dashboard client."
+
+            # Resolve scorecard ID
+            scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+            if not scorecard_id:
+                return f"Error: Scorecard '{scorecard_identifier}' not found."
+            
+            # Get default account ID
+            account_id = resolve_account_id_for_command(client, None)
+            if not account_id:
+                return "Error: No default account available for score creation."
+            
+            # Get scorecard details including sections
+            scorecard_query = f"""
+            query GetScorecardForScoreCreation {{
+                getScorecard(id: "{scorecard_id}") {{
+                    id
+                    name
+                    sections {{
+                        items {{
+                            id
+                            name
+                            order
+                            scores {{
+                                items {{
+                                    id
+                                    name
+                                    order
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+            """
+            
+            result = client.execute(scorecard_query)
+            scorecard_data = result.get('getScorecard')
+            if not scorecard_data:
+                return f"Error: Could not retrieve scorecard data for '{scorecard_identifier}'."
+            
+            sections = scorecard_data.get('sections', {}).get('items', [])
+            if not sections:
+                return f"Error: No sections found in scorecard '{scorecard_identifier}'. Cannot create score without a section."
+            
+            # Find target section
+            target_section = None
+            if section_identifier:
+                # Search for section by name or ID
+                for section in sections:
+                    if (section.get('id') == section_identifier or 
+                        section.get('name', '').lower() == section_identifier.lower()):
+                        target_section = section
+                        break
+                
+                if not target_section:
+                    return f"Error: Section '{section_identifier}' not found in scorecard '{scorecard_identifier}'."
+            else:
+                # Use first available section
+                target_section = sections[0]
+            
+            # Generate defaults if not provided
+            if not key:
+                # Generate key from name: lowercase, replace spaces with underscores, remove special chars
+                key = name.lower().replace(' ', '_')
+                key = re.sub(r'[^a-z0-9_]', '', key)
+                if not key:
+                    key = f"score_{uuid.uuid4().hex[:8]}"
+            
+            if not external_id:
+                external_id = f"score_{uuid.uuid4().hex[:8]}"
+            
+            if ai_provider is None:
+                ai_provider = "unknown"
+            
+            if ai_model is None:
+                ai_model = "unknown"
+            
+            # Calculate order if not provided
+            if order is None:
+                existing_scores = target_section.get('scores', {}).get('items', [])
+                order = len(existing_scores)
+            
+            # Prepare mutation variables
+            is_disabled_str = "true" if is_disabled else "false"
+            
+            # Create score mutation
+            create_score_mutation = f"""
+            mutation CreateScore {{
+                createScore(input: {{
+                    name: "{name}"
+                    key: "{key}"
+                    externalId: "{external_id}"
+                    order: {order}
+                    type: "{score_type}"
+                    aiProvider: "{ai_provider}"
+                    aiModel: "{ai_model}"
+                    sectionId: "{target_section['id']}"
+                    scorecardId: "{scorecard_id}"
+                    isDisabled: {is_disabled_str}
+                    {f'description: "{description}"' if description else ''}
+                }}) {{
+                    id
+                    name
+                    key
+                    externalId
+                    type
+                    order
+                    sectionId
+                    scorecardId
+                    isDisabled
+                    description
+                    createdAt
+                }}
+            }}
+            """
+            
+            create_result = client.execute(create_score_mutation)
+            created_score = create_result.get('createScore')
+            
+            if not created_score:
+                error_msg = "Failed to create score"
+                if 'errors' in create_result:
+                    error_details = '; '.join([error.get('message', str(error)) for error in create_result['errors']])
+                    error_msg += f": {error_details}"
+                return f"Error: {error_msg}"
+            
+            return {
+                "success": True,
+                "scoreId": created_score['id'],
+                "scoreName": created_score['name'],
+                "scoreKey": created_score['key'],
+                "externalId": created_score['externalId'],
+                "scoreType": created_score['type'],
+                "order": created_score['order'],
+                "isDisabled": created_score.get('isDisabled', False),
+                "description": created_score.get('description'),
+                "location": {
+                    "scorecardId": scorecard_id,
+                    "scorecardName": scorecard_data['name'],
+                    "sectionId": target_section['id'],
+                    "sectionName": target_section['name']
+                },
+                "createdAt": created_score.get('createdAt'),
+                "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{created_score['id']}")
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating score: {str(e)}", exc_info=True)
+            return f"Error creating score: {str(e)}"
+        finally:
+            # Check if anything was written to stdout
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(f"Captured unexpected stdout during plexus_score_create: {captured_output}")
+            # Restore original stdout
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_score_metadata_update(
+        score_id: str,
+        name: Optional[str] = None,
+        key: Optional[str] = None,
+        external_id: Optional[str] = None,
+        description: Optional[str] = None,
+        is_disabled: bool = False,
+        ai_provider: Optional[str] = None,
+        ai_model: Optional[str] = None,
+        order: Optional[int] = None
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Updates metadata properties of an existing score.
+        
+        Parameters:
+        - score_id: The ID of the score to update (required)
+        - name: New display name for the score
+        - key: New unique key for the score
+        - external_id: New external ID for the score
+        - description: New description for the score
+        - is_disabled: Whether the score should be disabled
+        - ai_provider: New AI provider
+        - ai_model: New AI model
+        - order: New display order
+        
+        Returns:
+        - Information about the updated score and what fields were changed
+        """
+        import re
+        
+        # Temporarily redirect stdout to capture any unexpected output
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        
+        try:
+            # Handle boolean parameter conversion (MCP may send strings)
+            if isinstance(is_disabled, str):
+                is_disabled = is_disabled.lower() in ['true', '1', 'yes']
+            elif not isinstance(is_disabled, bool):
+                return f"Error: is_disabled must be a boolean value, got {type(is_disabled)}"
+            
+            # Validate required parameters
+            if not score_id or not score_id.strip():
+                return "Error: score_id is required and cannot be empty"
+            
+            # Validate that at least one update field is provided
+            update_fields = {
+                'name': name,
+                'key': key, 
+                'externalId': external_id,
+                'description': description,
+                'isDisabled': is_disabled,
+                'aiProvider': ai_provider,
+                'aiModel': ai_model,
+                'order': order
+            }
+            # For optional fields, only include if not None; is_disabled always has a value
+            provided_updates = {k: v for k, v in update_fields.items() 
+                              if (k == 'isDisabled') or (v is not None)}
+            
+            if len(provided_updates) == 1 and 'isDisabled' in provided_updates and is_disabled == False:
+                return "Error: At least one field to update must be provided (is_disabled=False is default)"
+            
+            # Validate field values
+            if name is not None and not name.strip():
+                return "Error: name cannot be empty when provided"
+            
+            if key is not None and not re.match(r'^[a-z0-9_]+$', key):
+                return "Error: key must contain only lowercase letters, numbers, and underscores"
+            
+            if order is not None and (not isinstance(order, int) or order < 0):
+                return "Error: order must be a non-negative integer"
+            
+            # Try to import required modules directly
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+            except ImportError as e:
+                return f"Error: Could not import required modules: {e}. Core modules may not be available."
+            
+            # Check if we have the necessary credentials
+            api_url = os.environ.get('PLEXUS_API_URL', '')
+            api_key = os.environ.get('PLEXUS_API_KEY', '')
+            
+            if not api_url or not api_key:
+                logger.warning("Missing API credentials. Ensure .env file is loaded.")
+                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+            
+            # Create the client
+            try:
+                client_stdout = StringIO()
+                saved_stdout = sys.stdout
+                sys.stdout = client_stdout
+                
+                try:
+                    client = create_dashboard_client()
+                finally:
+                    client_output = client_stdout.getvalue()
+                    if client_output:
+                        logger.warning(f"Captured unexpected stdout during client creation in plexus_score_metadata_update: {client_output}")
+                    sys.stdout = saved_stdout
+            except Exception as client_err:
+                logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+                return f"Error creating dashboard client: {str(client_err)}"
+                
+            if not client:
+                return "Error: Could not create dashboard client."
+
+            # Build update mutation with only provided fields
+            update_input_parts = []
+            for field, value in provided_updates.items():
+                if field == 'isDisabled':
+                    update_input_parts.append(f'{field}: {str(value).lower()}')
+                elif isinstance(value, str):
+                    # Escape quotes in string values
+                    escaped_value = value.replace('"', '\\"')
+                    update_input_parts.append(f'{field}: "{escaped_value}"')
+                else:
+                    update_input_parts.append(f'{field}: {value}')
+            
+            # Build the GraphQL mutation
+            update_mutation = f"""
+            mutation UpdateScore {{
+                updateScore(input: {{
+                    id: "{score_id}"
+                    {', '.join(update_input_parts)}
+                }}) {{
+                    id
+                    name
+                    key
+                    externalId
+                    description
+                    isDisabled
+                    aiProvider
+                    aiModel
+                    order
+                    updatedAt
+                }}
+            }}
+            """
+            
+            # Execute the update
+            result = client.execute(update_mutation)
+            updated_score = result.get('updateScore')
+            
+            if not updated_score:
+                error_msg = "Failed to update score"
+                if 'errors' in result:
+                    error_details = '; '.join([error.get('message', str(error)) for error in result['errors']])
+                    error_msg += f": {error_details}"
+                return f"Error: {error_msg}"
+            
+            # Build response with updated fields
+            response_updated_fields = {}
+            for original_field, graphql_field in [
+                ('name', 'name'),
+                ('key', 'key'),
+                ('external_id', 'externalId'),
+                ('description', 'description'),
+                ('is_disabled', 'isDisabled'),
+                ('ai_provider', 'aiProvider'),
+                ('ai_model', 'aiModel'),
+                ('order', 'order')
+            ]:
+                if locals()[original_field] is not None:
+                    response_updated_fields[graphql_field] = updated_score.get(graphql_field)
+            
+            return {
+                "success": True,
+                "scoreId": updated_score['id'],
+                "scoreName": updated_score['name'],
+                "updatedFields": response_updated_fields,
+                "updatedAt": updated_score.get('updatedAt'),
+                "dashboardUrl": _get_plexus_url(f"lab/scores/{score_id}")
+            }
+            
+        except Exception as e:
+            logger.error(f"Error updating score metadata: {str(e)}", exc_info=True)
+            return f"Error updating score metadata: {str(e)}"
+        finally:
+            # Check if anything was written to stdout
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(f"Captured unexpected stdout during plexus_score_metadata_update: {captured_output}")
+            # Restore original stdout
+            sys.stdout = old_stdout
+
+    @mcp.tool()
     async def plexus_score_delete(
         score_id: str,
-        confirm: Optional[bool] = False
+        confirm: bool = False
     ) -> Union[str, Dict[str, Any]]:
         """
         Deletes a specific score by its ID.
@@ -1028,6 +1462,12 @@ def register_score_tools(mcp: FastMCP):
         sys.stdout = temp_stdout
         
         try:
+            # Handle boolean parameter conversion (MCP may send strings)
+            if isinstance(confirm, str):
+                confirm = confirm.lower() in ['true', '1', 'yes']
+            elif not isinstance(confirm, bool):
+                return f"Error: confirm must be a boolean value, got {type(confirm)}"
+            
             # Check if Plexus core modules are available
             try:
                 from plexus.cli.shared.client_utils import create_client as create_dashboard_client
@@ -1042,7 +1482,7 @@ def register_score_tools(mcp: FastMCP):
             
             try:
                 # Use the shared score service
-                from plexus.cli.score.scores import ScoreService
+                from plexus.cli.score.score_service import ScoreService
                 logger.info("Successfully imported ScoreService")
                 
                 score_service = ScoreService()

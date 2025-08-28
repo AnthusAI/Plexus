@@ -446,3 +446,312 @@ def register_scorecard_tools(mcp: FastMCP):
             except Exception as e:
                 logger.error(f"Local evaluation failed: {e}", exc_info=True)
                 return f"Error: Local evaluation failed: {e}"
+
+    @mcp.tool()
+    async def plexus_scorecard_create(
+        name: str,
+        account_identifier: str,
+        key: Optional[str] = None,
+        external_id: Optional[str] = None,
+        description: Optional[str] = None
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Creates a new scorecard in the specified account.
+        
+        Parameters:
+        - name: Display name for the scorecard (required)
+        - account_identifier: Identifier for the account (ID, name, key, or external ID) (required)
+        - key: Unique key for the scorecard. If not provided, generates from name
+        - external_id: External ID for the scorecard. If not provided, generates a unique ID
+        - description: Optional description for the scorecard
+        
+        Returns:
+        - Information about the created scorecard including its ID and dashboard URL
+        """
+        import re
+        import uuid
+        
+        # Temporarily redirect stdout to capture any unexpected output
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        
+        try:
+            # Validate required parameters
+            if not name or not name.strip():
+                return "Error: name is required and cannot be empty"
+            
+            if not account_identifier or not account_identifier.strip():
+                return "Error: account_identifier is required and cannot be empty"
+            
+            # Auto-generate key from name if not provided
+            if not key:
+                # Convert name to snake_case key
+                key = re.sub(r'[^a-zA-Z0-9]+', '_', name.strip().lower()).strip('_')
+                if not key:
+                    key = "scorecard_" + str(uuid.uuid4()).replace('-', '')[:8]
+            
+            # Auto-generate external_id if not provided
+            if not external_id:
+                external_id = f"scorecard_{str(uuid.uuid4()).replace('-', '')[:8]}"
+            
+            # Try to import required modules
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.cli.report.utils import resolve_account_id_for_command
+            except ImportError as e:
+                return f"Error: Could not import required modules: {e}. Core modules may not be available."
+            
+            # Check if we have the necessary credentials
+            api_url = os.environ.get('PLEXUS_API_URL', '')
+            api_key = os.environ.get('PLEXUS_API_KEY', '')
+            
+            if not api_url or not api_key:
+                logger.warning("Missing API credentials. Ensure .env file is loaded.")
+                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+            
+            # Create the client
+            client = create_dashboard_client()
+            if not client:
+                return "Error: Could not create Dashboard client."
+            
+            # Resolve the account ID - if account_identifier is provided, use it; otherwise use default
+            if account_identifier.lower() in ['default', 'call-criteria']:
+                account_id = resolve_account_id_for_command(client, None)  # Use default account
+            else:
+                # For now, we'll use the CLI scorecard function for other account identifiers
+                try:
+                    from plexus.cli.scorecard.scorecards import resolve_account_identifier
+                    account_id = resolve_account_identifier(client, account_identifier)
+                except ImportError:
+                    return f"Error: Could not import account resolution function for identifier: {account_identifier}"
+            
+            if not account_id:
+                return f"Error: Could not resolve account identifier: {account_identifier}"
+            
+            # Build and execute the GraphQL mutation
+            mutation = f"""
+            mutation CreateScorecard {{
+                createScorecard(input: {{
+                    name: "{name}"
+                    key: "{key}"
+                    externalId: "{external_id}"
+                    accountId: "{account_id}"
+                    description: "{description or ''}"
+                }}) {{
+                    id
+                    name
+                    key
+                    externalId
+                    description
+                    accountId
+                    createdAt
+                    updatedAt
+                }}
+            }}
+            """
+            
+            logger.info(f"Executing createScorecard mutation for name: {name}")
+            result = client.execute(mutation)
+            
+            if not result or 'createScorecard' not in result:
+                return f"Error: Failed to create scorecard '{name}'. No response from server."
+            
+            created_scorecard = result['createScorecard']
+            if not created_scorecard:
+                return f"Error: Failed to create scorecard '{name}'. Mutation returned null."
+            
+            scorecard_id = created_scorecard.get('id')
+            if not scorecard_id:
+                return f"Error: Failed to create scorecard '{name}'. No ID returned."
+            
+            # Generate dashboard URL
+            dashboard_url = f"https://plexus.anth.us/lab/scorecards/{scorecard_id}"
+            
+            # Return structured success response
+            return {
+                "success": True,
+                "scorecardId": scorecard_id,
+                "scorecardName": created_scorecard.get('name', name),
+                "scorecardKey": created_scorecard.get('key', key),
+                "externalId": created_scorecard.get('externalId', external_id),
+                "description": created_scorecard.get('description', description or ''),
+                "accountId": created_scorecard.get('accountId', account_id),
+                "createdAt": created_scorecard.get('createdAt'),
+                "dashboardUrl": dashboard_url
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating scorecard: {str(e)}", exc_info=True)
+            return f"Error creating scorecard: {str(e)}"
+        finally:
+            # Check if anything was written to stdout
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(f"Captured unexpected stdout during plexus_scorecard_create: {captured_output}")
+            # Restore original stdout
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_scorecard_update(
+        scorecard_id: str,
+        name: Optional[str] = None,
+        key: Optional[str] = None,
+        external_id: Optional[str] = None,
+        description: Optional[str] = None
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Updates metadata properties of an existing scorecard.
+        
+        Parameters:
+        - scorecard_id: The ID of the scorecard to update (required)
+        - name: New display name for the scorecard
+        - key: New unique key for the scorecard
+        - external_id: New external ID for the scorecard
+        - description: New description for the scorecard
+        
+        Returns:
+        - Information about the updated scorecard and what fields were changed
+        """
+        import re
+        
+        # Temporarily redirect stdout to capture any unexpected output
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        
+        try:
+            # Validate required parameters
+            if not scorecard_id or not scorecard_id.strip():
+                return "Error: scorecard_id is required and cannot be empty"
+            
+            # Validate that at least one update field is provided
+            update_fields = {
+                'name': name,
+                'key': key,
+                'externalId': external_id,
+                'description': description
+            }
+            provided_updates = {k: v for k, v in update_fields.items() if v is not None}
+            
+            if not provided_updates:
+                return "Error: At least one field to update must be provided"
+            
+            # Validate field values
+            if name is not None and not name.strip():
+                return "Error: name cannot be empty when provided"
+            
+            if key is not None and not key.strip():
+                return "Error: key cannot be empty when provided"
+            
+            # Try to import required modules
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.cli.shared.memoized_resolvers import memoized_resolve_scorecard_identifier
+            except ImportError as e:
+                return f"Error: Could not import required modules: {e}. Core modules may not be available."
+            
+            # Check if we have the necessary credentials
+            api_url = os.environ.get('PLEXUS_API_URL', '')
+            api_key = os.environ.get('PLEXUS_API_KEY', '')
+            
+            if not api_url or not api_key:
+                logger.warning("Missing API credentials. Ensure .env file is loaded.")
+                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+            
+            # Create the client
+            client = create_dashboard_client()
+            if not client:
+                return "Error: Could not create Dashboard client."
+            
+            # Resolve the scorecard ID (supports ID, name, key, external ID)
+            resolved_scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_id)
+            if not resolved_scorecard_id:
+                return f"Error: Could not resolve scorecard identifier: {scorecard_id}"
+            
+            # Build the update fields for GraphQL
+            update_input = {"id": resolved_scorecard_id}
+            changed_fields = []
+            
+            if name is not None:
+                update_input["name"] = name
+                changed_fields.append("name")
+            
+            if key is not None:
+                update_input["key"] = key
+                changed_fields.append("key")
+                
+            if external_id is not None:
+                update_input["externalId"] = external_id
+                changed_fields.append("externalId")
+                
+            if description is not None:
+                update_input["description"] = description
+                changed_fields.append("description")
+            
+            # Build and execute the GraphQL mutation
+            # Create the input fields string for the mutation
+            input_fields = []
+            for field, value in update_input.items():
+                if field != "id":  # ID is handled separately
+                    input_fields.append(f'{field}: "{value}"')
+            
+            input_fields_str = ", ".join(input_fields)
+            
+            mutation = f"""
+            mutation UpdateScorecard {{
+                updateScorecard(input: {{
+                    id: "{resolved_scorecard_id}"
+                    {input_fields_str}
+                }}) {{
+                    id
+                    name
+                    key
+                    externalId
+                    description
+                    updatedAt
+                }}
+            }}
+            """
+            
+            logger.info(f"Executing updateScorecard mutation for ID: {resolved_scorecard_id}")
+            result = client.execute(mutation)
+            
+            if not result or 'updateScorecard' not in result:
+                return f"Error: Failed to update scorecard with ID '{resolved_scorecard_id}'. No response from server."
+            
+            updated_scorecard = result['updateScorecard']
+            if not updated_scorecard:
+                return f"Error: Failed to update scorecard with ID '{resolved_scorecard_id}'. Mutation returned null."
+            
+            # Generate dashboard URL
+            dashboard_url = f"https://plexus.anth.us/lab/scorecards/{resolved_scorecard_id}"
+            
+            # Build the response with changed fields
+            updated_fields = {}
+            for field in changed_fields:
+                if field == 'externalId':
+                    updated_fields[field] = updated_scorecard.get('externalId')
+                else:
+                    updated_fields[field] = updated_scorecard.get(field)
+            
+            # Return structured success response
+            return {
+                "success": True,
+                "scorecardId": resolved_scorecard_id,
+                "scorecardName": updated_scorecard.get('name'),
+                "updatedFields": updated_fields,
+                "updatedAt": updated_scorecard.get('updatedAt'),
+                "dashboardUrl": dashboard_url
+            }
+            
+        except Exception as e:
+            logger.error(f"Error updating scorecard: {str(e)}", exc_info=True)
+            return f"Error updating scorecard: {str(e)}"
+        finally:
+            # Check if anything was written to stdout
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(f"Captured unexpected stdout during plexus_scorecard_update: {captured_output}")
+            # Restore original stdout
+            sys.stdout = old_stdout
