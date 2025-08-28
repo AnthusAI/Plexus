@@ -79,6 +79,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
   onTaskCreated?: (task: any) => void
+  onCreateScore?: (sectionId: string) => void
 }
 
 const GridContent = React.memo(({ 
@@ -134,6 +135,7 @@ interface DetailContentProps {
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
   onTaskCreated?: (task: any) => void
+  onCreateScore?: (sectionId: string) => void
 }
 
 export const DetailContent = React.memo(function DetailContent({

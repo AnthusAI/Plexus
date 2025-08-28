@@ -4,6 +4,9 @@ import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import ScorecardsComponent from '../scorecards-dashboard'
 
+// Mock scrollIntoView which doesn't exist in JSDOM
+Element.prototype.scrollIntoView = jest.fn()
+
 // Mock amplify client with jest.mock
 jest.mock('@/utils/amplify-client', () => ({
   amplifyClient: {
@@ -13,8 +16,24 @@ jest.mock('@/utils/amplify-client', () => ({
       })
     },
     Scorecard: {
-      get: jest.fn(),
-      list: jest.fn().mockResolvedValue({ data: [] })
+      get: jest.fn().mockResolvedValue({
+        data: {
+          id: 'new-scorecard-id',
+          name: 'New Scorecard',
+          key: 'scorecard_123456789',
+          accountId: 'account-1',
+          sections: jest.fn().mockResolvedValue({ data: [] })
+        }
+      }),
+      list: jest.fn().mockResolvedValue({ data: [] }),
+      create: jest.fn().mockResolvedValue({
+        data: {
+          id: 'new-scorecard-id',
+          name: 'New Scorecard',
+          key: 'scorecard_123456789',
+          accountId: 'account-1'
+        }
+      })
     },
     ScorecardExampleItem: {
       listByScorecard: jest.fn().mockResolvedValue({
@@ -115,7 +134,35 @@ jest.mock('../loading-skeleton', () => ({
 
 describe('ScorecardsComponent', () => {
   beforeEach(() => {
+    // Reset mocks before each test
     jest.clearAllMocks()
+    
+    // Reset default mocks for common operations
+    mockAmplifyClient.amplifyClient.Account.list.mockResolvedValue({
+      data: [{ id: 'account-1', key: 'call-criteria' }]
+    })
+    mockAmplifyClient.amplifyClient.Scorecard.list.mockResolvedValue({ data: [] })
+    mockAmplifyClient.amplifyClient.Scorecard.get.mockResolvedValue({
+      data: {
+        id: 'new-scorecard-id',
+        name: 'New Scorecard',
+        key: 'scorecard_123456789',
+        accountId: 'account-1',
+        sections: jest.fn().mockResolvedValue({ data: [] })
+      }
+    })
+    mockAmplifyClient.amplifyClient.Scorecard.create.mockResolvedValue({
+      data: {
+        id: 'new-scorecard-id',
+        name: 'New Scorecard',
+        key: 'scorecard_123456789',
+        accountId: 'account-1'
+      }
+    })
+    mockAmplifyClient.amplifyClient.ScorecardExampleItem.listByScorecard.mockResolvedValue({
+      data: []
+    })
+    
     // Reset window.history
     delete (window as any).history
     window.history = {
@@ -150,6 +197,20 @@ describe('ScorecardsComponent', () => {
   describe('New Scorecard Creation', () => {
     it('should handle new scorecard button click without API errors', async () => {
       const user = userEvent.setup()
+      
+      // Mock the creation flow - after creation, list should include the new scorecard
+      mockAmplifyClient.amplifyClient.Scorecard.list
+        .mockResolvedValueOnce({ data: [] }) // Initial empty list
+        .mockResolvedValue({ 
+          data: [{
+            id: 'new-scorecard-id',
+            name: 'New Scorecard',
+            key: 'scorecard_123456789',
+            accountId: 'account-1',
+            sections: jest.fn().mockResolvedValue({ data: [] })
+          }]
+        }) // After creation, include the new scorecard with sections method
+      
       render(<ScorecardsComponent />)
       
       // Wait for loading to complete
@@ -172,6 +233,20 @@ describe('ScorecardsComponent', () => {
 
     it('should create blank scorecard with proper default values', async () => {
       const user = userEvent.setup()
+      
+      // Mock the creation flow
+      mockAmplifyClient.amplifyClient.Scorecard.list
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValue({ 
+          data: [{
+            id: 'new-scorecard-id',
+            name: 'New Scorecard',
+            key: 'scorecard_123456789',
+            accountId: 'account-1',
+            sections: jest.fn().mockResolvedValue({ data: [] })
+          }]
+        })
+      
       render(<ScorecardsComponent />)
       
       await waitFor(() => {
@@ -185,20 +260,31 @@ describe('ScorecardsComponent', () => {
       await waitFor(() => {
         const detailView = screen.getByTestId('scorecard-detail')
         expect(detailView).toBeInTheDocument()
-        expect(detailView).toHaveTextContent('new scorecard')
+        expect(detailView).toHaveTextContent('New Scorecard')
       })
     })
 
-    it('should not make any API calls for blank scorecard creation', async () => {
+    it('should verify new scorecard appears in the list after creation', async () => {
       const user = userEvent.setup()
+      
+      // Mock the creation flow
+      mockAmplifyClient.amplifyClient.Scorecard.list
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValue({ 
+          data: [{
+            id: 'new-scorecard-id',
+            name: 'New Scorecard',
+            key: 'scorecard_123456789',
+            accountId: 'account-1',
+            sections: jest.fn().mockResolvedValue({ data: [] })
+          }]
+        })
+      
       render(<ScorecardsComponent />)
       
       await waitFor(() => {
         expect(screen.queryByTestId('loading-skeleton')).not.toBeInTheDocument()
       })
-
-      // Clear any calls made during initial load
-      mockAmplifyClient.amplifyClient.Scorecard.get.mockClear()
 
       const newButton = screen.getByRole('button', { name: /new scorecard/i })
       await user.click(newButton)
@@ -207,8 +293,8 @@ describe('ScorecardsComponent', () => {
         expect(screen.getByTestId('scorecard-detail')).toBeInTheDocument()
       })
 
-      // Verify no additional API calls were made
-      expect(mockAmplifyClient.amplifyClient.Scorecard.get).not.toHaveBeenCalled()
+      // Verify the scorecard appears in the list
+      expect(screen.getByTestId('scorecard-new-scorecard-id')).toBeInTheDocument()
     })
   })
 
@@ -278,6 +364,20 @@ describe('ScorecardsComponent', () => {
   describe('URL Management', () => {
     it('should update URL when creating new scorecard', async () => {
       const user = userEvent.setup()
+      
+      // Mock the creation flow
+      mockAmplifyClient.amplifyClient.Scorecard.list
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValue({ 
+          data: [{
+            id: 'new-scorecard-id',
+            name: 'New Scorecard',
+            key: 'scorecard_123456789',
+            accountId: 'account-1',
+            sections: jest.fn().mockResolvedValue({ data: [] })
+          }]
+        })
+      
       render(<ScorecardsComponent />)
       
       await waitFor(() => {
@@ -292,7 +392,7 @@ describe('ScorecardsComponent', () => {
       })
 
       // URL should be updated when creating new scorecard
-      expect(window.history.pushState).toHaveBeenCalledWith(null, '', '/lab/scorecards/')
+      expect(window.history.pushState).toHaveBeenCalledWith(null, '', '/lab/scorecards/new-scorecard-id')
     })
   })
 
