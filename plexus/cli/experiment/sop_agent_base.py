@@ -890,12 +890,11 @@ Your response will become the next user message to guide the coding assistant.
             Dictionary with 'request' and 'response' or None if failed
         """
         try:
-            from .experiment_prompts import ExperimentPrompts
             from langchain_openai import ChatOpenAI
             from langchain_core.messages import HumanMessage, AIMessage
             
             # Create summarization request
-            summarization_request = ExperimentPrompts.get_summarization_request(self.context)
+            summarization_request = self._get_summarization_request()
             
             logger.info("📝 Requesting final summarization from worker agent")
             
@@ -936,6 +935,22 @@ Your response will become the next user message to guide the coding assistant.
         except Exception as e:
             logger.error(f"Error requesting final summarization: {e}")
             return None
+    
+    def _get_summarization_request(self) -> str:
+        """Get the request for AI to summarize the conversation."""
+        # Simple summarization request without ExperimentPrompts dependency
+        return f"""
+Please provide a comprehensive summary of our entire conversation about this procedure.
+
+Your summary should include:
+1. **Analysis Performed**: What tools were used and what data was examined
+2. **Key Findings**: What patterns, issues, or insights were discovered
+3. **Actions Taken**: What was accomplished during this session
+4. **Overall Assessment**: How effective was this session
+5. **Recommendations**: What should be done next
+
+Focus on actionable insights and concrete findings from our work.
+"""
 
 
 

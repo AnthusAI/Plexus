@@ -41,8 +41,22 @@ except Exception:
     # Non-fatal: tests will still patch/mocks as needed
     pass
 
-# Default YAML template for new experiments
-DEFAULT_EXPERIMENT_YAML = """class: "BeamSearch"
+# Default YAML template loaded from file
+# This ensures the default template always has the latest prompts
+def _load_default_experiment_yaml():
+    """Load the default experiment YAML template."""
+    try:
+        import os
+        # Look for the current-hardcoded-prompts.yaml in the project root
+        template_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'current-hardcoded-prompts.yaml')
+        if os.path.exists(template_path):
+            with open(template_path, 'r') as f:
+                return f.read()
+    except Exception:
+        pass
+    
+    # Fallback minimal template if file not found
+    return """class: "BeamSearch"
 
 value: |
   -- Extract accuracy score from experiment node's structured data
@@ -55,21 +69,23 @@ value: |
 exploration: |
   You are a hypothesis engine in an automated experiment running process for 
   optimizing scorecard score configurations in a reinforcement learning feedback loop system.
-  
-  Your role is to analyze feedback alignment data and generate testable hypotheses 
-  for improving AI score accuracy based on human reviewer corrections.
-  
-  You have access to feedback analysis tools that show where human reviewers 
-  corrected AI scores, plus detailed item information for understanding the 
-  underlying content that caused misalignment.
-  
-  Your goal is to identify patterns in misclassification and propose specific 
-  configuration changes that could reduce these errors.
 
-# Simple configuration for multi-agent ReAct loop (no state machine)
-# Maximum total rounds before emergency termination  
+# REQUIRED: Experiments must include prompts section
+# Copy from current-hardcoded-prompts.yaml or create custom prompts
 max_total_rounds: 500
+
+prompts:
+  worker_system_prompt: |
+    ERROR: Default template must be loaded from current-hardcoded-prompts.yaml
+    Please specify a complete YAML configuration with prompts section.
+  worker_user_prompt: |
+    ERROR: Missing prompts configuration
+  manager_system_prompt: |
+    ERROR: Missing prompts configuration
 """
+
+# Load the default template
+DEFAULT_EXPERIMENT_YAML = _load_default_experiment_yaml()
 
 @dataclass
 class ExperimentCreationResult:

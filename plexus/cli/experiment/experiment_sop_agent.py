@@ -16,7 +16,7 @@ Architecture:
 import logging
 from typing import Dict, Any, List, Optional
 from .sop_agent_base import StandardOperatingProcedureAgent, ProcedureDefinition, FlowManager, ChatRecorder
-from .experiment_prompts import ExperimentPrompts
+# ExperimentPrompts no longer used - all prompts come from YAML configuration
 # Removed ConversationFlowManager import - using simplified multi-agent ReAct loop
 from .chat_recorder import ExperimentChatRecorder
 from .mcp_adapter import LangChainMCPAdapter
@@ -29,7 +29,7 @@ class ExperimentProcedureDefinition:
     Experiment-specific procedure definition for the StandardOperatingProcedureAgent.
     
     This class encapsulates all experiment-specific knowledge:
-    - Experiment hypothesis generation prompts
+    - Experiment hypothesis generation prompts (configurable via YAML)
     - Experiment tool scoping by phase
     - Experiment completion criteria
     - Experiment-specific guidance logic
@@ -42,18 +42,91 @@ class ExperimentProcedureDefinition:
             "create_experiment_node", 
             "stop_procedure"
         ]
+        # Will be set by ExperimentSOPAgent.setup() when YAML is parsed
+        self.experiment_config = None
     
     def get_system_prompt(self, context: Dict[str, Any]) -> str:
-        """Get the experiment hypothesis generation system prompt."""
-        return ExperimentPrompts.get_system_prompt(context)
+        """Get the experiment hypothesis generation system prompt from YAML configuration."""
+        if not self.experiment_config or 'prompts' not in self.experiment_config:
+            raise ValueError("Experiment configuration must include 'prompts' section with 'worker_system_prompt'")
+        
+        prompts = self.experiment_config['prompts']
+        if 'worker_system_prompt' not in prompts:
+            raise ValueError("Experiment configuration missing 'worker_system_prompt' in prompts section")
+        
+        # Load prompt from YAML and process template variables
+        yaml_prompt = prompts['worker_system_prompt']
+        return self._process_prompt_template(yaml_prompt, context)
     
     def get_sop_guidance_prompt(self, context: Dict[str, Any], state_data: Dict[str, Any]) -> str:
-        """Get the SOP Agent guidance prompt for experiment procedures."""
-        return ExperimentPrompts.get_sop_agent_system_prompt(context, state_data)
+        """Get the SOP Agent guidance prompt from YAML configuration."""
+        if not self.experiment_config or 'prompts' not in self.experiment_config:
+            raise ValueError("Experiment configuration must include 'prompts' section with 'manager_system_prompt'")
+        
+        prompts = self.experiment_config['prompts']
+        if 'manager_system_prompt' not in prompts:
+            raise ValueError("Experiment configuration missing 'manager_system_prompt' in prompts section")
+        
+        # Load prompt from YAML and process template variables
+        yaml_prompt = prompts['manager_system_prompt']
+        return self._process_prompt_template(yaml_prompt, context, state_data)
     
     def get_user_prompt(self, context: Dict[str, Any]) -> str:
-        """Get the initial experiment user prompt."""
-        return ExperimentPrompts.get_user_prompt(context)
+        """Get the initial experiment user prompt from YAML configuration."""
+        if not self.experiment_config or 'prompts' not in self.experiment_config:
+            raise ValueError("Experiment configuration must include 'prompts' section with 'worker_user_prompt'")
+        
+        prompts = self.experiment_config['prompts']
+        if 'worker_user_prompt' not in prompts:
+            raise ValueError("Experiment configuration missing 'worker_user_prompt' in prompts section")
+        
+        # Load prompt from YAML and process template variables
+        yaml_prompt = prompts['worker_user_prompt']
+        return self._process_prompt_template(yaml_prompt, context)
+    
+    def _process_prompt_template(self, prompt_template: str, context: Dict[str, Any], state_data: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Process a prompt template with variable substitution.
+        
+        Supports template variables from context and state_data:
+        - {experiment_id}
+        - {scorecard_name}
+        - {score_name}
+        - {current_score_config}
+        - {feedback_summary}
+        - etc.
+        
+        Args:
+            prompt_template: The YAML prompt template string
+            context: Experiment context with variables
+            state_data: Optional state data for additional variables
+            
+        Returns:
+            Processed prompt with variables substituted
+        """
+        try:
+            # Combine all available variables
+            template_vars = {}
+            
+            # Add context variables
+            if context:
+                template_vars.update(context)
+            
+            # Add state data variables
+            if state_data:
+                template_vars.update(state_data)
+            
+            # Use simple string formatting for now (could upgrade to Jinja2 later)
+            return prompt_template.format(**template_vars)
+            
+        except KeyError as e:
+            # If template variable is missing, log warning and return template as-is
+            logger.warning(f"Template variable {e} not found in context, using template as-is")
+            return prompt_template
+        except Exception as e:
+            # If any other formatting error occurs, log and return template as-is
+            logger.error(f"Error processing prompt template: {e}")
+            return prompt_template
     
     def get_allowed_tools(self) -> List[str]:
         """Get all available tools for the worker agent."""

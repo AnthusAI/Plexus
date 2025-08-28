@@ -711,8 +711,8 @@ class ManagerAgentConversationFilter(ConversationFilterBase, ConversationFilter)
             logger.info("   ✅ Added most recent assistant message for context")
         
         # 6. Add SOP agent explanation and instruction for manager-style response
-        from .experiment_prompts import ExperimentPrompts
-        sop_explanation = ExperimentPrompts.get_sop_agent_explanation_message()
+        # Simple SOP agent explanation message
+        sop_explanation = "You are a coaching manager who helps AI assistants by asking thoughtful questions about their next steps. Ask questions that help the assistant think through what they should do next, rather than giving direct orders. Be supportive and give the assistant agency to decide based on your coaching questions."
         manager_instruction = SystemMessage(content=sop_explanation)
         filtered_messages.append(manager_instruction)
         
