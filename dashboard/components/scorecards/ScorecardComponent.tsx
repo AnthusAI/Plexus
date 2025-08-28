@@ -37,6 +37,7 @@ export interface ScorecardData {
   order: number
   externalId?: string
   scoreCount?: number
+  isCountLoading?: boolean
   icon?: React.ReactNode
   examples?: string[]
   sections?: {
@@ -89,8 +90,22 @@ const GridContent = React.memo(({
   score: ScorecardData
   isSelected?: boolean
 }) => {
-  const scoreCount = score.scoreCount || 0
-  const scoreText = scoreCount === 1 ? 'Score' : 'Scores'
+  const scoreCount = score.scoreCount
+  const isCountLoading = score.isCountLoading || false
+  const hasLoadedCount = scoreCount !== undefined
+
+  // Determine display text and styling
+  let displayText: string
+  let textColor: string
+
+  if (!hasLoadedCount) {
+    displayText = "- Scores"
+    textColor = "text-muted-foreground" // Dim when unknown
+  } else {
+    const scoreText = scoreCount === 1 ? 'Score' : 'Scores'
+    displayText = `${scoreCount} ${scoreText}`
+    textColor = "text-foreground" // Normal foreground when loaded
+  }
 
   return (
     <div className="flex justify-between items-start w-full">
@@ -100,7 +115,9 @@ const GridContent = React.memo(({
           <IdCard className="h-3 w-3" />
           <span>{score.externalId || '-'}</span>
         </div>
-        <div className="text-sm text-muted-foreground">{scoreCount} {scoreText}</div>
+        <div className={`text-sm ${textColor}`}>
+          <span>{displayText}</span>
+        </div>
       </div>
       <div className="flex flex-col items-center gap-1">
         <div className="text-muted-foreground">
@@ -872,7 +889,30 @@ export const DetailContent = React.memo(function DetailContent({
             )}
           </div>
 
-          {score.sections?.items?.map((section, index) => {
+          {!score.sections ? (
+            // Loading state when sections haven't been loaded yet
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">Loading sections...</div>
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="space-y-3">
+                  <div className="h-6 bg-muted animate-pulse rounded"></div>
+                  <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4">
+                    {Array.from({ length: 3 }).map((_, j) => (
+                      <div key={j} className="h-24 bg-muted animate-pulse rounded"></div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : score.sections.items.length === 0 ? (
+            // Empty state when no sections exist
+            <div className="text-center py-8 text-muted-foreground">
+              <ListChecks className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No sections found</p>
+            </div>
+          ) : (
+            // Normal rendering when sections are loaded
+            score.sections.items.map((section, index) => {
             // Process scores for this section
             const processedScores = section.scores?.items?.map((score) => ({
               id: score.id,
@@ -968,7 +1008,7 @@ export const DetailContent = React.memo(function DetailContent({
                 </div>
               </div>
             );
-          })}
+          }))}
           <div className="flex justify-end w-full">
             <CardButton
               icon={Plus}
