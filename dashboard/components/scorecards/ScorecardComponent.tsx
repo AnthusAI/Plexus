@@ -544,7 +544,7 @@ export const DetailContent = React.memo(function DetailContent({
   return (
     <div className="w-full flex flex-col min-h-0">
       <div className="flex justify-between items-start w-full">
-        <div className="space-y-2 flex-1">
+        <div className="space-y-2 flex-1 px-2">
           <div className="flex items-center gap-2 mb-3">
             <ListChecks className="h-5 w-5 text-foreground" />
             <span className="text-lg font-semibold">Scorecard</span>
@@ -553,8 +553,7 @@ export const DetailContent = React.memo(function DetailContent({
             value={score.name}
             onChange={(e) => onEditChange?.({ name: e.target.value })}
             className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
-                     placeholder:text-muted-foreground rounded-md"
+                     placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
             placeholder="Scorecard Name"
           />
           <div className="flex gap-4 w-full">
@@ -562,20 +561,17 @@ export const DetailContent = React.memo(function DetailContent({
               value={score.key}
               onChange={(e) => onEditChange?.({ key: e.target.value })}
               className="font-mono bg-background border-0 px-2 h-auto flex-1
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
+                       placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
               placeholder="scorecard-key"
             />
             <Input
               value={score.externalId ?? ''}
               onChange={(e) => onEditChange?.({ externalId: e.target.value })}
               className="font-mono bg-background border-0 px-2 h-auto flex-1
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
+                       placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
               placeholder="External ID"
             />
           </div>
-          <p className="text-sm text-muted-foreground">{score.description}</p>
         </div>
         <div className="flex gap-2 ml-4">
           <DropdownMenu.Root>
@@ -655,7 +651,142 @@ export const DetailContent = React.memo(function DetailContent({
       )}
 
       <div className="flex-1 overflow-y-auto mt-6 w-full">
-        <div className="space-y-6 w-full">
+        <div className="space-y-6 w-full px-2">
+          {/* Description Section */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Description</h3>
+            <textarea
+              value={score.description || ''}
+              onChange={(e) => onEditChange?.({ description: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg bg-background text-sm resize-none border-0 
+                       placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              rows={2}
+            />
+          </div>
+
+          {/* Guidelines Section */}
+          <div className="mb-6">
+            {/* Header with action buttons - always visible */}
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-semibold">Guidelines</h3>
+              <div className="flex gap-1">
+                {score.guidelines && score.guidelines.trim() !== '' && !isGuidelinesEditing && onStartInlineEdit && (
+                  <CardButton
+                    icon={Edit}
+                    onClick={onStartInlineEdit}
+                    aria-label="Edit guidelines inline"
+                  />
+                )}
+                {onOpenGuidelinesEditor && (
+                  <CardButton
+                    icon={Expand}
+                    onClick={onOpenGuidelinesEditor}
+                    aria-label="Open guidelines editor"
+                  />
+                )}
+              </div>
+            </div>
+            
+            {/* Guidelines content */}
+            {isGuidelinesEditing ? (
+              // Inline editing mode - show ~12 lines
+              <div className="space-y-3">
+                <textarea
+                  value={guidelinesEditValue || ''}
+                  onChange={(e) => onGuidelinesChange?.(e.target.value)}
+                  placeholder="Enter guidelines in Markdown format..."
+                  className="w-full px-3 py-2 rounded-lg bg-background text-sm resize-none font-mono border-0
+                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  rows={12}
+                  style={{ minHeight: '300px' }}
+                />
+                {hasGuidelinesChanges && (
+                  <div className="flex justify-end gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={onCancelGuidelinesEdit}
+                      disabled={isSavingGuidelines}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      onClick={() => {
+                        console.log('🔧 Inline save button clicked - calling onSaveGuidelines');
+                        onSaveGuidelines?.();
+                      }}
+                      disabled={isSavingGuidelines}
+                    >
+                      {isSavingGuidelines ? (
+                        <>
+                          <div className="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save'
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : score.guidelines && score.guidelines.trim() !== '' ? (
+              // Display mode with markdown rendering and expand/collapse
+              <div 
+                className="rounded-lg bg-background p-4 cursor-pointer transition-all duration-200 hover:bg-accent/10"
+                onClick={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
+              >
+                <div 
+                  className={`prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground transition-all duration-200 ${
+                    !isGuidelinesExpanded ? 'overflow-hidden' : ''
+                  }`}
+                  style={!isGuidelinesExpanded ? { 
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    maxHeight: '5.25rem'
+                  } : {}}
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                    components={{
+                      p: ({ children }) => <p className="mb-3 last:mb-0 text-muted-foreground leading-relaxed">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc pl-6 mb-3 space-y-1">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal pl-6 mb-3 space-y-1">{children}</ol>,
+                      li: ({ children }) => <li className="text-muted-foreground">{children}</li>,
+                      strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground">{children}</code>,
+                      pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto mb-3">{children}</pre>,
+                      blockquote: ({ children }) => <blockquote className="border-l-4 border-muted pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
+                      h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                    }}
+                  >
+                    {score.guidelines}
+                  </ReactMarkdown>
+                </div>
+                {/* Expand/Collapse indicator */}
+                <div className="mt-3 flex flex-col items-center">
+                  <div className="w-full h-px bg-muted"></div>
+                  <div className="mt-1">
+                    {!isGuidelinesExpanded ? (
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // No guidelines placeholder
+              <div className="rounded-lg bg-background p-4 text-center py-8 text-muted-foreground text-sm">
+                No guidelines.
+              </div>
+            )}
+          </div>
+
           <div>
             <div className="flex justify-between items-center mb-2">
               <div className="flex items-center">
@@ -855,128 +986,6 @@ export const DetailContent = React.memo(function DetailContent({
                     })}
                   </div>
                 )}
-              </div>
-            )}
-          </div>
-
-          {/* Guidelines Section */}
-          <div className="mb-6">
-            {/* Header with action buttons - always visible */}
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-lg font-semibold">Guidelines</h3>
-              <div className="flex gap-1">
-                {score.guidelines && score.guidelines.trim() !== '' && !isGuidelinesEditing && onStartInlineEdit && (
-                  <CardButton
-                    icon={Edit}
-                    onClick={onStartInlineEdit}
-                    aria-label="Edit guidelines inline"
-                  />
-                )}
-                {onOpenGuidelinesEditor && (
-                  <CardButton
-                    icon={Expand}
-                    onClick={onOpenGuidelinesEditor}
-                    aria-label="Open guidelines editor"
-                  />
-                )}
-              </div>
-            </div>
-            
-            {/* Guidelines content */}
-            {isGuidelinesEditing ? (
-              // Inline editing mode - show ~12 lines
-              <div className="space-y-3">
-                <textarea
-                  value={guidelinesEditValue || ''}
-                  onChange={(e) => onGuidelinesChange?.(e.target.value)}
-                  placeholder="Enter guidelines in Markdown format..."
-                  className="w-full px-3 py-2 rounded-lg bg-background text-sm resize-none font-mono"
-                  rows={12}
-                  style={{ minHeight: '300px' }}
-                />
-                {hasGuidelinesChanges && (
-                  <div className="flex justify-end gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={onCancelGuidelinesEdit}
-                      disabled={isSavingGuidelines}
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      onClick={() => {
-                        console.log('🔧 Inline save button clicked - calling onSaveGuidelines');
-                        onSaveGuidelines?.();
-                      }}
-                      disabled={isSavingGuidelines}
-                    >
-                      {isSavingGuidelines ? (
-                        <>
-                          <div className="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        'Save'
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : score.guidelines && score.guidelines.trim() !== '' ? (
-              // Display mode with markdown rendering and expand/collapse
-              <div 
-                className="rounded-lg bg-background p-4 cursor-pointer transition-all duration-200 hover:bg-accent/10"
-                onClick={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
-              >
-                <div 
-                  className={`prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground transition-all duration-200 ${
-                    !isGuidelinesExpanded ? 'overflow-hidden' : ''
-                  }`}
-                  style={!isGuidelinesExpanded ? { 
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    maxHeight: '5.25rem'
-                  } : {}}
-                >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkBreaks]}
-                    components={{
-                      p: ({ children }) => <p className="mb-3 last:mb-0 text-muted-foreground leading-relaxed">{children}</p>,
-                      ul: ({ children }) => <ul className="list-disc pl-6 mb-3 space-y-1">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal pl-6 mb-3 space-y-1">{children}</ol>,
-                      li: ({ children }) => <li className="text-muted-foreground">{children}</li>,
-                      strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                      code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground">{children}</code>,
-                      pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto mb-3">{children}</pre>,
-                      blockquote: ({ children }) => <blockquote className="border-l-4 border-muted pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
-                      h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
-                      h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
-                      h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
-                    }}
-                  >
-                    {score.guidelines}
-                  </ReactMarkdown>
-                </div>
-                {/* Expand/Collapse indicator */}
-                <div className="mt-3 flex flex-col items-center">
-                  <div className="w-full h-px bg-muted"></div>
-                  <div className="mt-1">
-                    {!isGuidelinesExpanded ? (
-                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                    ) : (
-                      <ChevronUp className="h-3 w-3 text-muted-foreground" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              // No guidelines placeholder
-              <div className="rounded-lg bg-background p-4 text-center py-8 text-muted-foreground text-sm">
-                No guidelines.
               </div>
             )}
           </div>
