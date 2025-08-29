@@ -65,18 +65,76 @@ export const amplifyClient = {
   },
   Scorecard: {
     list: async (params?: any) => {
-      const response = await (getClient().models.Scorecard as any).list(params)
-      return response as AmplifyResponse<Schema['Scorecard']['type'][]>
+      // Use direct GraphQL query to ensure guidelines field is included
+      const filter = params?.filter;
+      const variables: any = {};
+      let filterQuery = '';
+      
+      if (filter) {
+        variables.filter = filter;
+        filterQuery = '(filter: $filter)';
+      }
+      
+      const query = `
+        query ListScorecards${filter ? '($filter: ModelScorecardFilterInput)' : ''} {
+          listScorecards${filterQuery} {
+            items {
+              id
+              name
+              key
+              description
+              guidelines
+              accountId
+              externalId
+              createdAt
+              updatedAt
+            }
+            nextToken
+          }
+        }
+      `;
+      
+      const response = await graphqlRequest<{
+        listScorecards: {
+          items: Schema['Scorecard']['type'][];
+          nextToken: string | null;
+        }
+      }>(query, variables);
+      
+      return {
+        data: response.data?.listScorecards?.items || [],
+        nextToken: response.data?.listScorecards?.nextToken || null
+      } as AmplifyResponse<Schema['Scorecard']['type'][]>;
     },
     get: async (params: any) => {
-      const response = await (getClient().models.Scorecard as any).get(params)
-      return { data: response.data as Schema['Scorecard']['type'] | null }
+      const query = `
+        query GetScorecard($id: ID!) {
+          getScorecard(id: $id) {
+            id
+            name
+            key
+            description
+            guidelines
+            accountId
+            externalId
+            createdAt
+            updatedAt
+          }
+        }
+      `;
+      
+      const response = await graphqlRequest<{
+        getScorecard: Schema['Scorecard']['type'] | null;
+      }>(query, { id: params.id });
+      
+      return { data: response.data?.getScorecard || null };
     },
     create: async (data: {
       name: string
       key: string
       externalId?: string
       description?: string
+      guidelines?: string
       accountId: string
     }) => {
       console.log('amplifyClient.Scorecard.create called with:', data);
@@ -97,6 +155,7 @@ export const amplifyClient = {
       key?: string
       externalId?: string
       description?: string
+      guidelines?: string
     }) => {
       const response = await (getClient().models.Scorecard as any).update(data)
       return { data: response.data as Schema['Scorecard']['type'] }

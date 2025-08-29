@@ -1208,6 +1208,9 @@ export function ScoreComponent({
   const [versionNote, setVersionNote] = React.useState('')
   const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
   const [forceExpandHistory, setForceExpandHistory] = React.useState(false)
+  const [isGuidelinesFullscreen, setIsGuidelinesFullscreen] = React.useState(false)
+  const [guidelinesEditValue, setGuidelinesEditValue] = React.useState('')
+  const [hasGuidelinesChanges, setHasGuidelinesChanges] = React.useState(false)
   
 
   
@@ -1340,6 +1343,41 @@ export function ScoreComponent({
     fetchVersions();
   }, [score])
 
+  const handleOpenGuidelinesEditor = () => {
+    setGuidelinesEditValue(editedScore.guidelines || '')
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesFullscreen(true)
+  }
+
+  const handleSaveGuidelines = async () => {
+    try {
+      // Update the editedScore with the new guidelines
+      handleEditChange({ guidelines: guidelinesEditValue })
+      setIsGuidelinesFullscreen(false)
+      setHasGuidelinesChanges(false)
+      
+      // Auto-save if there's an onSave handler
+      if (onSave) {
+        await onSave()
+        toast.success('Guidelines saved successfully')
+      }
+    } catch (error) {
+      console.error('Error saving guidelines:', error)
+      toast.error('Failed to save guidelines')
+    }
+  }
+
+  const handleCancelGuidelinesEdit = () => {
+    setGuidelinesEditValue(editedScore.guidelines || '')
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesFullscreen(false)
+  }
+
+  const handleGuidelinesChange = (value: string | undefined) => {
+    setGuidelinesEditValue(value || '')
+    setHasGuidelinesChanges((value || '') !== (editedScore.guidelines || ''))
+  }
+
   const handleEditChange = (changes: Partial<ScoreData>) => {
     
     // Always update the editedScore state with the changes
@@ -1352,7 +1390,7 @@ export function ScoreComponent({
       
       // If we're changing fields other than the note, reset onlyNoteChanged flag
       if ('name' in changes || 'key' in changes || 'externalId' in changes || 
-          'description' in changes || 'configuration' in changes) {
+          'description' in changes || 'configuration' in changes || 'guidelines' in changes) {
         // Mark field changes detected
       }
       

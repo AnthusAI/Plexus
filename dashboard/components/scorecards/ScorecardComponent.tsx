@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube, MessageCircleMore, Coins } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube, MessageCircleMore, Coins, Expand } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -26,6 +26,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useAccount } from '@/app/contexts/AccountContext'
 import { TestItemDialog } from './test-item-dialog'
+import Editor from "@monaco-editor/react"
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from "@/lib/monaco-theme"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 export interface ScorecardData {
   id: string
@@ -153,6 +158,15 @@ interface DetailContentProps {
   onExamplesExpanded?: () => void
   onTaskCreated?: (task: any) => void
   onCreateScore?: (sectionId: string) => void
+  onOpenGuidelinesEditor?: () => void
+  onStartInlineEdit?: () => void
+  isGuidelinesEditing?: boolean
+  guidelinesEditValue?: string
+  hasGuidelinesChanges?: boolean
+  isSavingGuidelines?: boolean
+  onGuidelinesChange?: (value: string) => void
+  onSaveGuidelines?: () => void
+  onCancelGuidelinesEdit?: () => void
 }
 
 export const DetailContent = React.memo(function DetailContent({
@@ -176,7 +190,16 @@ export const DetailContent = React.memo(function DetailContent({
   onEditItem,
   shouldExpandExamples,
   onExamplesExpanded,
-  onTaskCreated
+  onTaskCreated,
+  onOpenGuidelinesEditor,
+  onStartInlineEdit,
+  isGuidelinesEditing,
+  guidelinesEditValue,
+  hasGuidelinesChanges,
+  isSavingGuidelines,
+  onGuidelinesChange,
+  onSaveGuidelines,
+  onCancelGuidelinesEdit
 }: DetailContentProps) {
   const { selectedAccount } = useAccount()
   const [sectionNameChanges, setSectionNameChanges] = React.useState<Record<string, string>>({})
@@ -836,55 +859,124 @@ export const DetailContent = React.memo(function DetailContent({
             )}
           </div>
 
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <div className="flex items-center">
-                <h3 
-                  className="text-lg font-semibold cursor-pointer flex items-center"
-                  onClick={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
-                >
-                  Guidelines
-                  {isGuidelinesExpanded ? (
-                    <ChevronDown className="h-4 w-4 ml-2 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 ml-2 text-muted-foreground" />
-                  )}
-                </h3>
+          {/* Guidelines Section */}
+          <div className="mb-6">
+            {/* Header with action buttons - always visible */}
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-semibold">Guidelines</h3>
+              <div className="flex gap-1">
+                {score.guidelines && score.guidelines.trim() !== '' && !isGuidelinesEditing && onStartInlineEdit && (
+                  <CardButton
+                    icon={Edit}
+                    onClick={onStartInlineEdit}
+                    aria-label="Edit guidelines inline"
+                  />
+                )}
+                {onOpenGuidelinesEditor && (
+                  <CardButton
+                    icon={Expand}
+                    onClick={onOpenGuidelinesEditor}
+                    aria-label="Open guidelines editor"
+                  />
+                )}
               </div>
             </div>
             
-            {isGuidelinesExpanded && (
-              <div className="mb-6">
-                {(!score.guidelines || score.guidelines.trim() === '') ? (
-                  <div className="text-center text-muted-foreground py-4">
-                    <p>No guidelines set</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <textarea
-                      value={score.guidelines || ''}
-                      onChange={(e) => onEditChange?.({ guidelines: e.target.value })}
-                      placeholder="Add guidelines for this scorecard..."
-                      className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm resize-y min-h-[100px]
-                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                               placeholder:text-muted-foreground"
-                      rows={5}
-                    />
+            {/* Guidelines content */}
+            {isGuidelinesEditing ? (
+              // Inline editing mode - show ~12 lines
+              <div className="space-y-3">
+                <textarea
+                  value={guidelinesEditValue || ''}
+                  onChange={(e) => onGuidelinesChange?.(e.target.value)}
+                  placeholder="Enter guidelines in Markdown format..."
+                  className="w-full px-3 py-2 rounded-lg bg-background text-sm resize-none font-mono"
+                  rows={12}
+                  style={{ minHeight: '300px' }}
+                />
+                {hasGuidelinesChanges && (
+                  <div className="flex justify-end gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={onCancelGuidelinesEdit}
+                      disabled={isSavingGuidelines}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      onClick={() => {
+                        console.log('🔧 Inline save button clicked - calling onSaveGuidelines');
+                        onSaveGuidelines?.();
+                      }}
+                      disabled={isSavingGuidelines}
+                    >
+                      {isSavingGuidelines ? (
+                        <>
+                          <div className="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save'
+                      )}
+                    </Button>
                   </div>
                 )}
-                {(score.guidelines || '').trim() === '' && (
-                  <div className="mt-2">
-                    <textarea
-                      value={score.guidelines || ''}
-                      onChange={(e) => onEditChange?.({ guidelines: e.target.value })}
-                      placeholder="Add guidelines for this scorecard..."
-                      className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm resize-y min-h-[100px]
-                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                               placeholder:text-muted-foreground"
-                      rows={5}
-                    />
+              </div>
+            ) : score.guidelines && score.guidelines.trim() !== '' ? (
+              // Display mode with markdown rendering and expand/collapse
+              <div 
+                className="rounded-lg bg-background p-4 cursor-pointer transition-all duration-200 hover:bg-accent/10"
+                onClick={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
+              >
+                <div 
+                  className={`prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground transition-all duration-200 ${
+                    !isGuidelinesExpanded ? 'overflow-hidden' : ''
+                  }`}
+                  style={!isGuidelinesExpanded ? { 
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    maxHeight: '5.25rem'
+                  } : {}}
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                    components={{
+                      p: ({ children }) => <p className="mb-3 last:mb-0 text-muted-foreground leading-relaxed">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc pl-6 mb-3 space-y-1">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal pl-6 mb-3 space-y-1">{children}</ol>,
+                      li: ({ children }) => <li className="text-muted-foreground">{children}</li>,
+                      strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground">{children}</code>,
+                      pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto mb-3">{children}</pre>,
+                      blockquote: ({ children }) => <blockquote className="border-l-4 border-muted pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
+                      h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                    }}
+                  >
+                    {score.guidelines}
+                  </ReactMarkdown>
+                </div>
+                {/* Expand/Collapse indicator */}
+                <div className="mt-3 flex flex-col items-center">
+                  <div className="w-full h-px bg-muted"></div>
+                  <div className="mt-1">
+                    {!isGuidelinesExpanded ? (
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                    )}
                   </div>
-                )}
+                </div>
+              </div>
+            ) : (
+              // No guidelines placeholder
+              <div className="rounded-lg bg-background p-4 text-center py-8 text-muted-foreground text-sm">
+                No guidelines.
               </div>
             )}
           </div>
@@ -1078,21 +1170,130 @@ export default function ScorecardComponent({
 }: ScorecardComponentProps) {
   const [editedScore, setEditedScore] = React.useState<ScorecardData>(score)
   const [hasChanges, setHasChanges] = React.useState(false)
+  const [isGuidelinesFullscreen, setIsGuidelinesFullscreen] = React.useState(false)
+  const [isGuidelinesEditing, setIsGuidelinesEditing] = React.useState(false)
+  const [guidelinesEditValue, setGuidelinesEditValue] = React.useState('')
+  const [hasGuidelinesChanges, setHasGuidelinesChanges] = React.useState(false)
+  const [isSavingGuidelines, setIsSavingGuidelines] = React.useState(false)
+  const previewRef = React.useRef<HTMLDivElement>(null)
+  const editorRef = React.useRef<any>(null)
 
   React.useEffect(() => {
+    console.log('🔍 ScorecardComponent received score:', {
+      id: score.id,
+      name: score.name,
+      guidelines: score.guidelines,
+      guidelinesType: typeof score.guidelines,
+      guidelinesLength: score.guidelines?.length,
+      hasGuidelines: 'guidelines' in score,
+      allScoreFields: Object.keys(score)
+    });
     setEditedScore(score)
   }, [score])
 
   const handleEditChange = (changes: Partial<ScorecardData>) => {
     setEditedScore(prev => {
       const updated = { ...prev, ...changes }
-      // Only set hasChanges if name, key, or externalId were changed
-      if ('name' in changes || 'key' in changes || 'externalId' in changes || 'examples' in changes) {
+      // Only set hasChanges if name, key, externalId, or guidelines were changed
+      if ('name' in changes || 'key' in changes || 'externalId' in changes || 'examples' in changes || 'guidelines' in changes) {
         setHasChanges(true)
       }
       return updated
     })
   }
+
+  const handleOpenGuidelinesEditor = () => {
+    setGuidelinesEditValue(editedScore.guidelines || '')
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesFullscreen(true)
+  }
+
+  const handleStartInlineEdit = () => {
+    setGuidelinesEditValue(editedScore.guidelines || '')
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesEditing(true)
+  }
+
+  const handleSaveGuidelines = async () => {
+    if (isSavingGuidelines) return; // Prevent double-clicks
+    
+    try {
+      setIsSavingGuidelines(true);
+      console.log('🔧 handleSaveGuidelines called - Saving guidelines:', {
+        scorecardId: editedScore.id,
+        scorecardName: editedScore.name,
+        guidelines: guidelinesEditValue,
+        guidelinesLength: guidelinesEditValue.length,
+        source: 'handleSaveGuidelines function'
+      });
+
+      // First, save to database via amplify client
+      console.log('🔧 Updating scorecard in database...');
+      await amplifyClient.Scorecard.update({
+        id: editedScore.id,
+        guidelines: guidelinesEditValue
+      });
+      console.log('🔧 Database update completed');
+
+      // Update the local editedScore with the new guidelines
+      handleEditChange({ guidelines: guidelinesEditValue })
+      setIsGuidelinesFullscreen(false)
+      setIsGuidelinesEditing(false)
+      setHasGuidelinesChanges(false)
+      
+      // Auto-save if there's an onSave handler (this will refresh the data)
+      if (onSave) {
+        console.log('🔧 Calling onSave handler...');
+        await onSave()
+        console.log('🔧 onSave completed');
+      }
+      
+      toast.success('Guidelines saved successfully')
+    } catch (error) {
+      console.error('Error saving guidelines:', error)
+      toast.error('Failed to save guidelines')
+    } finally {
+      setIsSavingGuidelines(false);
+    }
+  }
+
+  const handleCancelGuidelinesEdit = () => {
+    setGuidelinesEditValue(editedScore.guidelines || '')
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesFullscreen(false)
+    setIsGuidelinesEditing(false)
+    // Clear refs when closing
+    editorRef.current = null
+  }
+
+  const handleGuidelinesChange = (value: string | undefined) => {
+    setGuidelinesEditValue(value || '')
+    setHasGuidelinesChanges((value || '') !== (editedScore.guidelines || ''))
+  }
+
+  // Synchronized scrolling handler
+  const handleEditorScroll = React.useCallback(() => {
+    if (!editorRef.current || !previewRef.current) return
+    
+    const editor = editorRef.current
+    const preview = previewRef.current
+    
+    // Get scroll position as percentage of total scrollable height
+    const scrollTop = editor.getScrollTop()
+    const scrollHeight = editor.getScrollHeight()
+    const clientHeight = editor.getLayoutInfo().height
+    const maxScroll = scrollHeight - clientHeight
+    
+    if (maxScroll <= 0) return
+    
+    const scrollPercentage = scrollTop / maxScroll
+    
+    // Apply the same scroll percentage to preview
+    const previewMaxScroll = preview.scrollHeight - preview.clientHeight
+    if (previewMaxScroll > 0) {
+      preview.scrollTop = scrollPercentage * previewMaxScroll
+    }
+  }, [])
 
   const handleAddSection = () => {
     const maxOrder = Math.max(0, ...(editedScore.sections?.items || []).map(s => s.order))
@@ -1231,10 +1432,142 @@ export default function ScorecardComponent({
               shouldExpandExamples={shouldExpandExamples}
               onExamplesExpanded={onExamplesExpanded}
               onTaskCreated={onTaskCreated}
+              onOpenGuidelinesEditor={handleOpenGuidelinesEditor}
+              onStartInlineEdit={handleStartInlineEdit}
+              isGuidelinesEditing={isGuidelinesEditing}
+              guidelinesEditValue={guidelinesEditValue}
+              hasGuidelinesChanges={hasGuidelinesChanges}
+              isSavingGuidelines={isSavingGuidelines}
+              onGuidelinesChange={handleGuidelinesChange}
+              onSaveGuidelines={handleSaveGuidelines}
+              onCancelGuidelinesEdit={handleCancelGuidelinesEdit}
             />
           )}
         </div>
       </div>
+
+      {/* Fullscreen Guidelines Editor */}
+      {isGuidelinesFullscreen && (
+        <div className="fixed inset-0 z-50 bg-card">
+          <div className="flex flex-col h-full p-4">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-muted-foreground" />
+                <h2 className="text-lg font-semibold">Guidelines - {editedScore.name}</h2>
+              </div>
+              <CardButton
+                icon={X}
+                onClick={hasGuidelinesChanges ? handleCancelGuidelinesEdit : () => setIsGuidelinesFullscreen(false)}
+                aria-label="Close"
+              />
+            </div>
+
+            {/* Split Editor and Preview - Two rounded rectangles */}
+            <div className="flex-1 flex gap-4 overflow-hidden">
+              {/* Editor Card */}
+              <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
+                <div className="px-4 py-2 bg-card-selected text-sm font-medium text-muted-foreground">
+                  Markdown Editor
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <Editor
+                    height="100%"
+                    defaultLanguage="markdown"
+                    value={guidelinesEditValue}
+                    onChange={handleGuidelinesChange}
+                    onMount={(editor, monaco) => {
+                      // Store editor reference for scroll synchronization
+                      editorRef.current = editor
+                      
+                      // Configure Monaco editor
+                      defineCustomMonacoThemes(monaco)
+                      applyMonacoTheme(monaco)
+                      setupMonacoThemeWatcher(monaco)
+                      
+                      // Set up scroll synchronization
+                      editor.onDidScrollChange(handleEditorScroll)
+                    }}
+                    options={{
+                      ...getCommonMonacoOptions(),
+                      wordWrap: 'on',
+                      lineNumbers: 'on',
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 14,
+                      tabSize: 2,
+                      insertSpaces: true,
+                      automaticLayout: true,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Preview Card */}
+              <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
+                <div className="px-4 py-2 bg-card-selected text-sm font-medium text-muted-foreground">
+                  Preview
+                </div>
+                <div ref={previewRef} className="flex-1 overflow-y-auto p-4">
+                  {guidelinesEditValue ? (
+                    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        components={{
+                          // Customize components for better styling
+                          p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                          ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                          ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                          pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                          h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                        }}
+                      >
+                        {guidelinesEditValue}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                      Start typing to see preview...
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer with save/cancel buttons if changes exist */}
+            {hasGuidelinesChanges && (
+              <div className="flex justify-end items-center gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelGuidelinesEdit}
+                  disabled={isSavingGuidelines}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveGuidelines}
+                  disabled={isSavingGuidelines}
+                >
+                  {isSavingGuidelines ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full mr-2" />
+                      Saving Guidelines...
+                    </>
+                  ) : (
+                    'Save Guidelines'
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 } 
