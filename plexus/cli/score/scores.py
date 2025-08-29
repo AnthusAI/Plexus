@@ -814,7 +814,8 @@ def pull(scorecard: str, score: str, use_cache: bool = False, verbose: bool = Fa
 @scores.command()
 @click.option('--scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--score', required=True, help='Score identifier (ID, name, key, or external ID)')
-def push(scorecard: str, score: str):
+@click.option('--note', default='Updated via CLI push command', help='Note to attach to the new version (default: "Updated via CLI push command")')
+def push(scorecard: str, score: str, note: str):
     """Push a score's YAML configuration to the server.
     
     This command reads the local YAML file for a score, compares it with the cloud version,
@@ -994,7 +995,7 @@ def push(scorecard: str, score: str):
                 'scoreId': score_id,
                 'configuration': cleaned_yaml_content,
                 'parentVersionId': parent_version_id,
-                'note': 'Updated via CLI push command',
+                'note': note,
                 # Never auto-promote to champion via CLI push
                 'isFeatured': False
             }
