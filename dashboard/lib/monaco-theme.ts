@@ -489,7 +489,7 @@ export const defineCustomMonacoThemes = (monaco: Monaco): void => {
     colors: {
       'editor.background': '#' + getCssVar('--background'),
       'editor.foreground': '#' + getCssVar('--foreground'),
-      'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
+      'editor.lineHighlightBackground': '#' + getCssVar('--muted') + '50',
       'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
       'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
       'editor.selectionBackground': '#' + getCssVar('--primary') + '30', // primary with transparency
@@ -512,7 +512,7 @@ export const defineCustomMonacoThemes = (monaco: Monaco): void => {
     colors: {
       'editor.background': '#' + getCssVar('--background'),
       'editor.foreground': '#' + getCssVar('--foreground'),
-      'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
+      'editor.lineHighlightBackground': '#' + getCssVar('--muted') + '50',
       'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
       'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
       'editor.selectionBackground': '#' + getCssVar('--primary') + '30', // primary with transparency
