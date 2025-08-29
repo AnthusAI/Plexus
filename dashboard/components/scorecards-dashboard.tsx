@@ -435,45 +435,49 @@ export default function ScorecardsComponent({
             const existingScorecard = scorecards.find(sc => sc.id === scorecard.id);
             const hasExistingExamples = existingScorecard && (existingScorecard as any).examples?.length > 0;
             
-            // Load example items first (usually fastest)
+            console.log('🔄 Loading scorecard data in parallel...');
+            
+            // Start all data loading operations in parallel
+            const dataPromises = [];
+            
+            // Example items promise
+            let exampleItemsPromise;
             if (hasExistingExamples) {
               console.log('🚀 Using cached example items');
               setScorecardExamples((existingScorecard as any).examples);
+              exampleItemsPromise = Promise.resolve();
             } else {
-              console.log('🔄 Loading example items...');
-              try {
-                const itemAssociationsResult = await graphqlRequest<{
-                  listScorecardExampleItemByScorecardId: {
-                    items: Array<{
-                      itemId: string;
-                      item: {
-                        id: string;
-                        externalId?: string;
-                        description?: string;
-                        text?: string;
-                        updatedAt?: string;
-                        createdAt?: string;
-                      };
-                    }>;
-                  };
-                }>(`
-                  query ListExampleItemsByScorecardId($scorecardId: ID!) {
-                    listScorecardExampleItemByScorecardId(scorecardId: $scorecardId) {
-                      items {
-                        itemId
-                        item {
-                          id
-                          externalId
-                          description
-                          text
-                          updatedAt
-                          createdAt
-                        }
+              exampleItemsPromise = graphqlRequest<{
+                listScorecardExampleItemByScorecardId: {
+                  items: Array<{
+                    itemId: string;
+                    item: {
+                      id: string;
+                      externalId?: string;
+                      description?: string;
+                      text?: string;
+                      updatedAt?: string;
+                      createdAt?: string;
+                    };
+                  }>;
+                };
+              }>(`
+                query ListExampleItemsByScorecardId($scorecardId: ID!) {
+                  listScorecardExampleItemByScorecardId(scorecardId: $scorecardId) {
+                    items {
+                      itemId
+                      item {
+                        id
+                        externalId
+                        description
+                        text
+                        updatedAt
+                        createdAt
                       }
                     }
                   }
-                `, { scorecardId: scorecard.id });
-                
+                }
+              `, { scorecardId: scorecard.id }).then(itemAssociationsResult => {
                 const exampleItems = (itemAssociationsResult.data?.listScorecardExampleItemByScorecardId?.items || [])
                   .map(association => association.item)
                   .filter(item => item !== null)
@@ -486,16 +490,22 @@ export default function ScorecardsComponent({
                 const exampleItemsFormatted = exampleItems.map(item => `item:${item.id}`);
                 setScorecardExamples(exampleItemsFormatted);
                 console.log('✅ Example items loaded');
-              } catch (error) {
+              }).catch(error => {
                 console.warn('Failed to load example items:', error);
-              }
+              });
             }
             
-            // Load sections and scores
-            console.log('🔄 Loading sections and scores...');
-            const sectionsResult = await amplifyClient.ScorecardSection.list({
+            // Sections promise
+            const sectionsPromise = amplifyClient.ScorecardSection.list({
               filter: { scorecardId: { eq: scorecard.id } }
             });
+            
+            // Wait for both to complete
+            const [sectionsResult] = await Promise.all([
+              sectionsPromise,
+              exampleItemsPromise
+            ]);
+            
             const sections = sectionsResult.data || [];
             
             if (sections.length === 0) {
@@ -504,7 +514,8 @@ export default function ScorecardsComponent({
               return;
             }
             
-            // Load scores progressively for each section
+            // Load scores for all sections in parallel
+            console.log('🔄 Loading scores for all sections in parallel...');
             const transformedSections = {
               items: await Promise.all(sections.map(async section => {
                 try {
@@ -539,7 +550,7 @@ export default function ScorecardsComponent({
             
             // Update sections with loaded data
             setSelectedScorecardSections(transformedSections);
-            console.log('✅ Sections and scores loaded');
+            console.log('✅ All scorecard data loaded in parallel');
             
           } catch (error) {
             console.error('Error loading scorecard data:', error);
@@ -936,17 +947,38 @@ export default function ScorecardsComponent({
         filter: { accountId: { eq: foundAccountId } }
       })
 
+      // Debug: Log the first scorecard to check if guidelines are included
+      if (initialScorecards.data.length > 0) {
+        console.log('🔍 First scorecard data (checking for guidelines):', {
+          id: initialScorecards.data[0].id,
+          name: initialScorecards.data[0].name,
+          guidelines: initialScorecards.data[0].guidelines,
+          guidelinesType: typeof initialScorecards.data[0].guidelines,
+          guidelinesLength: initialScorecards.data[0].guidelines?.length,
+          hasGuidelines: 'guidelines' in initialScorecards.data[0],
+          allFields: Object.keys(initialScorecards.data[0])
+        });
+      }
+
       // Immediately set scorecards with placeholder data to show them instantly
       const quickScorecards = initialScorecards.data
         .filter(s => s.accountId === foundAccountId)
-        .map(scorecard => ({
-          ...scorecard,
-          examples: [] as string[],
-          sections: async () => ({
-            data: [],
-            nextToken: null
-          })
-        } as Schema['Scorecard']['type'] & { examples: string[] }));
+        .map(scorecard => {
+          console.log('🔍 Mapping scorecard:', {
+            id: scorecard.id,
+            name: scorecard.name,
+            guidelines: scorecard.guidelines,
+            hasGuidelines: 'guidelines' in scorecard
+          });
+          return {
+            ...scorecard,
+            examples: [] as string[],
+            sections: async () => ({
+              data: [],
+              nextToken: null
+            })
+          } as Schema['Scorecard']['type'] & { examples: string[] };
+        });
 
       // Show scorecards immediately without any loading states
       setScorecards(quickScorecards);
@@ -1192,6 +1224,15 @@ export default function ScorecardsComponent({
         return
       }
 
+      // Debug: Log scorecard data to check if guidelines are included
+      console.log('🔍 Full scorecard data (checking for guidelines):', {
+        id: scorecardData.id,
+        name: scorecardData.name,
+        guidelines: scorecardData.guidelines,
+        hasGuidelines: 'guidelines' in scorecardData,
+        allFields: Object.keys(scorecardData)
+      });
+
       // Get all sections for this scorecard
       const sectionsResult = await amplifyClient.ScorecardSection.list({
         filter: { scorecardId: { eq: scorecard.id } }
@@ -1304,6 +1345,7 @@ export default function ScorecardsComponent({
       name: selectedScorecard.name,
       key: selectedScorecard.key || '',
       description: selectedScorecard.description || '',
+      guidelines: selectedScorecard.guidelines || '',
       type: 'scorecard',
       configuration: {},
       order: 0,
@@ -1312,6 +1354,15 @@ export default function ScorecardsComponent({
       // Combine existing examples with newly created ones
       examples: [...(scorecardExamples || [])]
     }
+
+    // Debug: Log what we're passing to ScorecardComponent
+    console.log('🔍 scorecardData being passed to ScorecardComponent:', {
+      id: scorecardData.id,
+      name: scorecardData.name,
+      guidelines: scorecardData.guidelines,
+      guidelinesLength: scorecardData.guidelines?.length,
+      hasGuidelines: 'guidelines' in scorecardData
+    });
 
     // Check if we're in scorecard + task two-column layout
     const isInScorecardTaskLayout = selectedScorecard && selectedTask && !selectedScore;
@@ -1338,7 +1389,20 @@ export default function ScorecardsComponent({
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
           onClose={handleCloseScorecard}
           onSave={async () => {
-            await fetchScorecards()
+            console.log('🔄 onSave called - refreshing scorecards and updating selectedScorecard...');
+            const refreshedScorecards = await fetchScorecards();
+            
+            // Update selectedScorecard with fresh data from the API
+            if (selectedScorecard && refreshedScorecards) {
+              const updatedScorecard = refreshedScorecards.find(sc => sc.id === selectedScorecard.id);
+              if (updatedScorecard) {
+                console.log('🔄 Updating selectedScorecard with fresh guidelines:', {
+                  oldGuidelines: selectedScorecard.guidelines,
+                  newGuidelines: updatedScorecard.guidelines
+                });
+                setSelectedScorecard(updatedScorecard);
+              }
+            }
           }}
           onScoreSelect={handleScoreSelect}
           selectedScoreId={selectedScore?.id}
@@ -1589,18 +1653,7 @@ export default function ScorecardsComponent({
   }
 
   if (isLoading) {
-    return (
-      <div className="@container flex flex-col h-full p-3">
-        <div className="flex justify-end mb-3">
-          <div className="h-10 w-32 bg-muted animate-pulse rounded"></div>
-        </div>
-        <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-32 bg-muted animate-pulse rounded-lg"></div>
-          ))}
-        </div>
-      </div>
-    )
+    return <ScorecardDashboardSkeleton />
   }
 
   return (

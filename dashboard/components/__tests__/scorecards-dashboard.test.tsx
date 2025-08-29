@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import ScorecardsComponent from '../scorecards-dashboard'
@@ -37,6 +37,11 @@ jest.mock('@/utils/amplify-client', () => ({
     },
     ScorecardExampleItem: {
       listByScorecard: jest.fn().mockResolvedValue({
+        data: []
+      })
+    },
+    ScorecardSection: {
+      list: jest.fn().mockResolvedValue({
         data: []
       })
     }
@@ -100,16 +105,25 @@ jest.mock('@/utils/subscriptions', () => ({
 }))
 
 // Mock child components to avoid complex rendering
+jest.mock('../scorecards/ScorecardGrid', () => {
+  return function MockScorecardGrid({ scorecards, onSelectScorecard, onEdit }: any) {
+    return (
+      <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4">
+        {scorecards.map((scorecard: any) => (
+          <div key={scorecard.id}>
+            <div data-testid={`scorecard-${scorecard.id}`} onClick={() => onSelectScorecard(scorecard)}>
+              <h3>{scorecard.name || 'New Scorecard'}</h3>
+              <button onClick={() => onEdit(scorecard)}>Edit</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+})
+
 jest.mock('../scorecards/ScorecardComponent', () => {
   return function MockScorecardComponent({ variant, onClick, score, onEdit }: any) {
-    if (variant === 'grid') {
-      return (
-        <div data-testid={`scorecard-${score.id}`} onClick={onClick}>
-          <h3>{score.name || 'New Scorecard'}</h3>
-          <button onClick={onEdit}>Edit</button>
-        </div>
-      )
-    }
     if (variant === 'detail') {
       return (
         <div data-testid="scorecard-detail">
@@ -137,11 +151,15 @@ describe('ScorecardsComponent', () => {
     // Reset mocks before each test
     jest.clearAllMocks()
     
-    // Reset default mocks for common operations
+    // Reset account mocks for each test
     mockAmplifyClient.amplifyClient.Account.list.mockResolvedValue({
       data: [{ id: 'account-1', key: 'call-criteria' }]
     })
-    mockAmplifyClient.amplifyClient.Scorecard.list.mockResolvedValue({ data: [] })
+    
+    // Reset default scorecard list to empty
+    mockAmplifyClient.amplifyClient.Scorecard.list.mockResolvedValue({
+      data: []
+    })
     mockAmplifyClient.amplifyClient.Scorecard.get.mockResolvedValue({
       data: {
         id: 'new-scorecard-id',
@@ -179,7 +197,9 @@ describe('ScorecardsComponent', () => {
 
   describe('Initial Loading', () => {
     it('should show loading skeleton while fetching data', () => {
-      render(<ScorecardsComponent />)
+      act(() => {
+        render(<ScorecardsComponent />)
+      })
       expect(screen.getByTestId('loading-skeleton')).toBeInTheDocument()
     })
 
@@ -267,9 +287,9 @@ describe('ScorecardsComponent', () => {
     it('should verify new scorecard appears in the list after creation', async () => {
       const user = userEvent.setup()
       
-      // Mock the creation flow
+      // Mock the creation flow - first empty, then with new scorecard after creation
       mockAmplifyClient.amplifyClient.Scorecard.list
-        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] }) // Initial load (empty)
         .mockResolvedValue({ 
           data: [{
             id: 'new-scorecard-id',
@@ -278,7 +298,7 @@ describe('ScorecardsComponent', () => {
             accountId: 'account-1',
             sections: jest.fn().mockResolvedValue({ data: [] })
           }]
-        })
+        }) // After creation, always return the new scorecard
       
       render(<ScorecardsComponent />)
       
@@ -293,8 +313,10 @@ describe('ScorecardsComponent', () => {
         expect(screen.getByTestId('scorecard-detail')).toBeInTheDocument()
       })
 
-      // Verify the scorecard appears in the list
-      expect(screen.getByTestId('scorecard-new-scorecard-id')).toBeInTheDocument()
+      // The scorecard should appear in the grid after creation
+      await waitFor(() => {
+        expect(screen.getByTestId('scorecard-new-scorecard-id')).toBeInTheDocument()
+      })
     })
   })
 
@@ -323,7 +345,7 @@ describe('ScorecardsComponent', () => {
       })
     })
 
-    it('should make API call when selecting existing scorecard', async () => {
+    it('should select scorecard and show detail view when clicking existing scorecard', async () => {
       const user = userEvent.setup()
       render(<ScorecardsComponent />)
       
@@ -334,15 +356,24 @@ describe('ScorecardsComponent', () => {
       const scorecardCard = screen.getByTestId('scorecard-scorecard-1')
       await user.click(scorecardCard)
 
+      // Should show the detail view for the selected scorecard
       await waitFor(() => {
-        expect(mockAmplifyClient.amplifyClient.Scorecard.get).toHaveBeenCalledWith({ id: 'scorecard-1' })
+        expect(screen.getByTestId('scorecard-detail')).toBeInTheDocument()
+        expect(screen.getByText('Detail view for scorecard-1')).toBeInTheDocument()
       })
+      
+      // Verify the detail view specifically contains the scorecard name
+      const detailView = screen.getByTestId('scorecard-detail')
+      expect(detailView).toHaveTextContent('Test Scorecard')
+      
+      // Should NOT call get() for just selecting - only for editing
+      expect(mockAmplifyClient.amplifyClient.Scorecard.get).not.toHaveBeenCalled()
     })
 
-    it('should handle API errors gracefully when loading existing scorecard', async () => {
+    it('should handle edit button click and call API with proper error handling', async () => {
       const user = userEvent.setup()
       
-      // Mock API error
+      // Mock API error for get() call
       mockAmplifyClient.amplifyClient.Scorecard.get.mockRejectedValue(new Error('API Error'))
       
       render(<ScorecardsComponent />)
@@ -351,10 +382,11 @@ describe('ScorecardsComponent', () => {
         expect(screen.getByTestId('scorecard-scorecard-1')).toBeInTheDocument()
       })
 
-      const scorecardCard = screen.getByTestId('scorecard-scorecard-1')
-      await user.click(scorecardCard)
+      // Click the edit button (not the scorecard itself)
+      const editButton = screen.getByRole('button', { name: 'Edit' })
+      await user.click(editButton)
 
-      // Should still attempt the API call but handle the error
+      // Should call get() when editing (not just selecting)
       await waitFor(() => {
         expect(mockAmplifyClient.amplifyClient.Scorecard.get).toHaveBeenCalledWith({ id: 'scorecard-1' })
       })
