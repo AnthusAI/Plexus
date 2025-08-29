@@ -691,15 +691,31 @@ export const DetailContent = React.memo(function DetailContent({
             {isGuidelinesEditing ? (
               // Inline editing mode - show ~12 lines
               <div className="space-y-3">
-                <textarea
-                  value={guidelinesEditValue || ''}
-                  onChange={(e) => onGuidelinesChange?.(e.target.value)}
-                  placeholder="Enter guidelines in Markdown format..."
-                  className="w-full px-3 py-2 rounded-lg bg-background text-sm resize-none font-mono border-0
-                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  rows={12}
-                  style={{ minHeight: '300px' }}
-                />
+                <div className="rounded-lg bg-background overflow-hidden border-0 ring-2 ring-transparent focus-within:ring-ring">
+                  <Editor
+                    height="300px"
+                    defaultLanguage="markdown"
+                    value={guidelinesEditValue || ''}
+                    onChange={(value) => onGuidelinesChange?.(value || '')}
+                    onMount={(editor, monaco) => {
+                      // Configure Monaco editor
+                      defineCustomMonacoThemes(monaco)
+                      applyMonacoTheme(monaco)
+                      setupMonacoThemeWatcher(monaco)
+                    }}
+                    options={{
+                      ...getCommonMonacoOptions(),
+                      wordWrap: 'on',
+                      lineNumbers: 'off',
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 14,
+                      tabSize: 2,
+                      insertSpaces: true,
+                      automaticLayout: true,
+                    }}
+                  />
+                </div>
                 {hasGuidelinesChanges && (
                   <div className="flex justify-end gap-2">
                     <Button 
@@ -1500,7 +1516,7 @@ export default function ScorecardComponent({
                     options={{
                       ...getCommonMonacoOptions(),
                       wordWrap: 'on',
-                      lineNumbers: 'on',
+                      lineNumbers: 'off',
                       minimap: { enabled: false },
                       scrollBeyondLastLine: false,
                       fontSize: 14,
