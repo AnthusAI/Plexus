@@ -815,9 +815,7 @@ const DetailContent = React.memo(({
               <div className="p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {selectedVersion.id === championVersionId ? (
-                      <Crown className="h-5 w-5 text-primary" />
-                    ) : (
+                    {selectedVersion.id !== championVersionId && (
                       <Clock className="h-5 w-5 text-muted-foreground" />
                     )}
                     <div>
@@ -830,6 +828,9 @@ const DetailContent = React.memo(({
                       </div>
                     </div>
                   </div>
+                  {selectedVersion.id === championVersionId && (
+                    <Crown className="h-6 w-6 text-muted-foreground" />
+                  )}
                 </div>
               </div>
             )}

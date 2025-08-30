@@ -1,6 +1,7 @@
 import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { action } from '@storybook/addon-actions'
+import { Crown } from 'lucide-react'
 import { ScoreSidebarVersionHistory } from '../components/ui/score-sidebar-version-history'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { stringify as stringifyYaml } from 'yaml'
@@ -122,6 +123,9 @@ const InteractiveStoryWrapper = ({
                     </p>
                   </div>
                 </div>
+                {selectedVersionId === championVersionId && (
+                  <Crown className="h-6 w-6 text-muted-foreground" />
+                )}
               </div>
             </div>
           )}
