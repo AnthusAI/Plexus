@@ -848,8 +848,7 @@ export default function ScorecardsComponent({
                     key: newScoreData.data.key || '',
                     type: newScoreData.data.type,
                     order: newScoreData.data.order,
-                    externalId: newScoreData.data.externalId,
-                    guidelines: newScoreData.data.guidelines
+                    externalId: newScoreData.data.externalId
                   }]
                 }
               };
@@ -1474,51 +1473,47 @@ export default function ScorecardsComponent({
             if (selectedScorecard) {
               console.log('🔄 Reloading scorecard sections after save...');
               try {
-                // Get the full scorecard object from the API with all its relationship methods
-                const fullScorecard = await amplifyClient.Scorecard.get({ id: selectedScorecard.id });
-                const fullScorecardData = fullScorecard.data;
+                // Use GraphQL query to fetch sections for this scorecard
+                const sectionsResult = await amplifyClient.ScorecardSection.list({
+                  filter: { scorecardId: { eq: selectedScorecard.id } }
+                });
+                const sections = sectionsResult.data || [];
                 
-                if (fullScorecardData) {
-                  // Load sections with fresh score data
-                  const sectionsResult = await fullScorecardData.sections();
-                  const sections = sectionsResult.data || [];
-                  
-                  // Fetch ALL score data in parallel before setting state
-                  const transformedSections = {
-                    items: await Promise.all(sections.map(async section => {
-                      const allScores = await fetchAllScoresForSection(section.id);
-                      
-                      return {
-                        id: section.id,
-                        name: section.name,
-                        order: section.order,
-                        scores: {
-                          items: allScores.map(score => ({
-                            id: score.id,
-                            name: score.name,
-                            key: score.key || '',
-                            description: score.description || '',
-                            order: score.order,
-                            type: score.type,
-                            externalId: score.externalId,
-                          }))
-                        }
+                // Fetch ALL score data in parallel before setting state
+                const transformedSections = {
+                  items: await Promise.all(sections.map(async section => {
+                    const allScores = await fetchAllScoresForSection(section.id);
+                    
+                    return {
+                      id: section.id,
+                      name: section.name,
+                      order: section.order,
+                      scores: {
+                        items: allScores.map(score => ({
+                          id: score.id,
+                          name: score.name,
+                          key: score.key || '',
+                          description: score.description || '',
+                          order: score.order,
+                          type: score.type,
+                          externalId: score.externalId,
+                        }))
                       }
-                    }))
-                  };
-                  
-                  // Set all sections with complete score data at once
-                  setSelectedScorecardSections(transformedSections);
-                  
-                  // Update the selectedScore state with the fresh data
-                  if (selectedScore) {
-                    for (const section of transformedSections.items) {
-                      const updatedScore = section.scores.items.find(s => s.id === selectedScore.id);
-                      if (updatedScore) {
-                        setSelectedScore({...updatedScore, sectionId: section.id});
-                        console.log('✅ Updated selectedScore with fresh data:', updatedScore.name);
-                        break;
-                      }
+                    }
+                  }))
+                };
+                
+                // Set all sections with complete score data at once
+                setSelectedScorecardSections(transformedSections);
+                
+                // Update the selectedScore state with the fresh data
+                if (selectedScore) {
+                  for (const section of transformedSections.items) {
+                    const updatedScore = section.scores.items.find(s => s.id === selectedScore.id);
+                    if (updatedScore) {
+                      setSelectedScore({...updatedScore, sectionId: section.id});
+                      console.log('✅ Updated selectedScore with fresh data:', updatedScore.name);
+                      break;
                     }
                   }
                 }

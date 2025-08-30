@@ -242,6 +242,7 @@ def register_score_tools(mcp: FastMCP):
                                     items {{
                                         id
                                         configuration
+                                        guidelines
                                         createdAt
                                         updatedAt
                                         isFeatured
@@ -302,6 +303,7 @@ def register_score_tools(mcp: FastMCP):
                             query GetScoreVersion {{
                                 getScoreVersion(id: "{champion_version_id}") {{
                                     configuration
+                                    guidelines
                                 }}
                             }}
                             """
@@ -533,6 +535,7 @@ def register_score_tools(mcp: FastMCP):
                     getScoreVersion(id: "{version_id}") {{
                         id
                         configuration
+                        guidelines
                         createdAt
                         updatedAt
                         note
@@ -571,6 +574,7 @@ def register_score_tools(mcp: FastMCP):
                     "versionId": version_data['id'],
                     "isChampionVersion": is_champion,
                     "configuration": configuration,
+                    "guidelines": version_data.get('guidelines'),
                     "versionMetadata": {
                         "createdAt": version_data.get('createdAt'),
                         "updatedAt": version_data.get('updatedAt'),
@@ -606,6 +610,8 @@ def register_score_tools(mcp: FastMCP):
                     query GetScoreVersion {{
                         getScoreVersion(id: "{champion_version_id}") {{
                             id
+                            configuration
+                            guidelines
                             createdAt
                             updatedAt
                             note
@@ -627,6 +633,7 @@ def register_score_tools(mcp: FastMCP):
                     "versionId": champion_version_id,
                     "isChampionVersion": True,
                     "configuration": configuration,
+                    "guidelines": version_data.get('guidelines'),
                     "versionMetadata": {
                         "createdAt": version_data.get('createdAt'),
                         "updatedAt": version_data.get('updatedAt'),

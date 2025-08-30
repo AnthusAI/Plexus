@@ -30,6 +30,7 @@ import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
+import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 
 const client = generateClient();
 
@@ -52,6 +53,7 @@ interface ScoreVersion {
   id: string
   scoreId: string
   configuration: string // YAML string
+  guidelines?: string
   isFeatured: boolean
   isChampion?: boolean
   note?: string
@@ -98,6 +100,7 @@ interface GetScoreResponse {
     name: string
     externalId?: string
     championVersionId?: string
+    description?: string
   }
 }
 
@@ -150,6 +153,18 @@ interface DetailContentProps {
   selectedAccount?: { id: string } | null
   scorecardName?: string
   onTaskCreated?: (task: any) => void
+  // Guidelines editing props
+  isGuidelinesExpanded?: boolean
+  onToggleGuidelinesExpanded?: () => void
+  isGuidelinesEditing?: boolean
+  guidelinesEditValue?: string
+  hasGuidelinesChanges?: boolean
+  isSavingGuidelines?: boolean
+  onStartInlineEdit?: () => void
+  onOpenGuidelinesEditor?: () => void
+  onGuidelinesChange?: (value: string) => void
+  onSaveGuidelines?: () => void
+  onCancelGuidelinesEdit?: () => void
 }
 
 const GridContent = React.memo(({ 
@@ -276,6 +291,18 @@ const DetailContent = React.memo(({
   selectedAccount,
   scorecardName,
   onTaskCreated,
+  // Guidelines editing props
+  isGuidelinesExpanded = false,
+  onToggleGuidelinesExpanded,
+  isGuidelinesEditing = false,
+  guidelinesEditValue = '',
+  hasGuidelinesChanges = false,
+  isSavingGuidelines = false,
+  onStartInlineEdit,
+  onOpenGuidelinesEditor,
+  onGuidelinesChange,
+  onSaveGuidelines,
+  onCancelGuidelinesEdit,
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -480,8 +507,7 @@ const DetailContent = React.memo(({
   // Add state for test score dialog
   const [isTestDialogOpen, setIsTestDialogOpen] = React.useState(false);
   
-  // Add state for guidelines expansion
-  const [isGuidelinesExpanded, setIsGuidelinesExpanded] = React.useState(false);
+
   
   // Detect mobile devices on component mount
   React.useEffect(() => {
@@ -619,6 +645,8 @@ const DetailContent = React.memo(({
     }
   };
 
+
+
   return (
     <div className={cn(
       "w-full flex flex-col overflow-y-auto max-h-full",
@@ -627,7 +655,7 @@ const DetailContent = React.memo(({
       {/* Hide the header section when in fullscreen mode */}
       {!isEditorFullscreen && (
         <div className="flex justify-between items-start w-full">
-          <div className="space-y-2 flex-1">
+          <div className="space-y-2 flex-1 px-2">
             <div className="flex items-center gap-2 mb-3">
               <ListCheck className="h-5 w-5 text-foreground" />
               <span className="text-lg font-semibold">Score</span>
@@ -639,8 +667,7 @@ const DetailContent = React.memo(({
               }
               onFocus={() => setIsEditing(true)}
               className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
+                       placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
               placeholder="Score Name"
             />
             <div className="flex gap-2 w-full">
@@ -651,8 +678,7 @@ const DetailContent = React.memo(({
                 }
                 onFocus={() => setIsEditing(true)}
                 className="font-mono bg-background border-0 px-2 h-auto flex-1
-                         focus-visible:ring-0 focus-visible:ring-offset-0 
-                         placeholder:text-muted-foreground rounded-md"
+                         placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
                 placeholder="score-key"
               />
               <Input
@@ -662,8 +688,7 @@ const DetailContent = React.memo(({
                 }
                 onFocus={() => setIsEditing(true)}
                 className="font-mono bg-background border-0 px-2 h-auto flex-1
-                         focus-visible:ring-0 focus-visible:ring-offset-0 
-                         placeholder:text-muted-foreground rounded-md"
+                         placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
                 placeholder="External ID"
               />
             </div>
@@ -682,15 +707,17 @@ const DetailContent = React.memo(({
                 Disabled
               </label>
             </div>
-            <textarea
-              value={versionNote}
-              onChange={handleNoteChange}
-              placeholder="Add a note about this version..."
-              className="w-full px-2 py-1.5 rounded-md bg-background border-0 text-sm resize-none
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground"
-              rows={2}
-            />
+            {/* Version note field - only show when there are no changes to save */}
+            {!hasChanges && !hasGuidelinesChanges && (
+              <textarea
+                value={versionNote}
+                onChange={handleNoteChange}
+                placeholder="Add a note about this version..."
+                className="w-full px-2 py-1.5 rounded-md bg-background border-0 text-sm resize-none
+                         placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                rows={2}
+              />
+            )}
           </div>
           <div className="flex gap-2 ml-4">
             <ShadcnDropdownMenu>
@@ -762,6 +789,70 @@ const DetailContent = React.memo(({
               />
             )}
           </div>
+        </div>
+      )}
+
+      {/* Description Section */}
+      {!isEditorFullscreen && (
+        <div className="mt-6 px-2">
+          <h3 className="text-sm font-medium mb-3">Description</h3>
+          <textarea
+            value={parsedConfig.description || ''}
+            onChange={(e) => handleFormChange('description', e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-background text-sm resize-none border-0 
+                     placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            rows={2}
+          />
+        </div>
+      )}
+
+      {/* Unified Save/Cancel Bar - appears when there are changes */}
+      {(hasChanges || hasGuidelinesChanges) && !isEditorFullscreen && (
+        <div className="mt-6 px-2">
+          <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCancel}
+              className="shrink-0"
+            >
+              Cancel
+            </Button>
+            <input
+              type="text"
+              value={versionNote}
+              onChange={(e) => onNoteChange(e.target.value)}
+              placeholder="Add a note about this version..."
+              className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-sm
+                       placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <Button
+              size="sm"
+              onClick={hasGuidelinesChanges ? onSaveGuidelines : onSave}
+              className="shrink-0"
+            >
+              Save Changes
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Guidelines Section */}
+      {!isEditorFullscreen && (
+        <div className="mt-6 px-2">
+          <GuidelinesEditor
+            guidelines={isGuidelinesEditing ? guidelinesEditValue : score.guidelines}
+            isEditing={isGuidelinesEditing}
+            isExpanded={isGuidelinesExpanded}
+            onToggleExpanded={onToggleGuidelinesExpanded}
+            onStartInlineEdit={onStartInlineEdit}
+            onOpenFullscreenEditor={onOpenGuidelinesEditor}
+            onGuidelinesChange={onGuidelinesChange}
+            onSaveGuidelines={onSaveGuidelines}
+            onCancelEdit={onCancelGuidelinesEdit}
+            hasChanges={hasGuidelinesChanges}
+            isSaving={isSavingGuidelines}
+          />
         </div>
       )}
 
@@ -1060,8 +1151,8 @@ const DetailContent = React.memo(({
         </div>
       )}
 
-      {/* Action buttons - show in both normal and fullscreen modes */}
-      {hasChanges && (
+      {/* Action buttons - only show in fullscreen mode (unified bar handles normal mode) */}
+      {hasChanges && isEditorFullscreen && (
         <div className={cn(
           "mt-3 space-y-4",
           isEditorFullscreen && "mt-4"
@@ -1095,62 +1186,6 @@ const DetailContent = React.memo(({
               }}>Save Changes</Button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Guidelines section - hide in fullscreen mode */}
-      {!isEditorFullscreen && (
-        <div className="mt-6">
-          <div className="flex justify-between items-center mb-2">
-            <div className="flex items-center">
-              <h3 
-                className="text-lg font-semibold cursor-pointer flex items-center"
-                onClick={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
-              >
-                Guidelines
-                {isGuidelinesExpanded ? (
-                  <ChevronDown className="h-4 w-4 ml-2 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 ml-2 text-muted-foreground" />
-                )}
-              </h3>
-            </div>
-          </div>
-          
-          {isGuidelinesExpanded && (
-            <div className="mb-6">
-              {(!score.guidelines || score.guidelines.trim() === '') ? (
-                <div className="text-center text-muted-foreground py-4">
-                  <p>No guidelines set</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <textarea
-                    value={score.guidelines || ''}
-                    onChange={(e) => onEditChange?.({ guidelines: e.target.value })}
-                    placeholder="Add guidelines for this score..."
-                    className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm resize-y min-h-[100px]
-                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                             placeholder:text-muted-foreground"
-                    rows={5}
-                  />
-                </div>
-              )}
-              {(score.guidelines || '').trim() === '' && (
-                <div className="mt-2">
-                  <textarea
-                    value={score.guidelines || ''}
-                    onChange={(e) => onEditChange?.({ guidelines: e.target.value })}
-                    placeholder="Add guidelines for this score..."
-                    className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm resize-y min-h-[100px]
-                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                             placeholder:text-muted-foreground"
-                    rows={5}
-                  />
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -1208,10 +1243,12 @@ export function ScoreComponent({
   const [versionNote, setVersionNote] = React.useState('')
   const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
   const [forceExpandHistory, setForceExpandHistory] = React.useState(false)
+  const [isGuidelinesExpanded, setIsGuidelinesExpanded] = React.useState(false)
+  const [isGuidelinesEditing, setIsGuidelinesEditing] = React.useState(false)
   const [isGuidelinesFullscreen, setIsGuidelinesFullscreen] = React.useState(false)
   const [guidelinesEditValue, setGuidelinesEditValue] = React.useState('')
   const [hasGuidelinesChanges, setHasGuidelinesChanges] = React.useState(false)
-  
+  const [isSavingGuidelines, setIsSavingGuidelines] = React.useState(false)
 
   
   // Ensure editedScore is updated when score prop changes
@@ -1237,6 +1274,7 @@ export function ScoreComponent({
                 name
                 externalId
                 championVersionId
+                description
               }
             }
           `,
@@ -1254,6 +1292,12 @@ export function ScoreComponent({
           if (championId) {
             setChampionVersionId(championId);
           }
+          
+          // Update the editedScore with the fetched description
+          setEditedScore(prev => ({
+            ...prev,
+            description: scoreData.description || prev.description
+          }));
         }
         
         // Then fetch all versions using the secondary index query
@@ -1270,6 +1314,7 @@ export function ScoreComponent({
                   id
                   scoreId
                   configuration
+                  guidelines
                   isFeatured
                   note
                   createdAt
@@ -1284,8 +1329,13 @@ export function ScoreComponent({
           }
         }) as GraphQLResult<GetScoreVersionsByScoreIdResponse>;
         
+        if ('errors' in response && response.errors) {
+          console.error('🚨 GraphQL errors loading versions:', response.errors);
+        }
+        
         if ('data' in response && response.data?.listScoreVersionByScoreIdAndCreatedAt?.items) {
           const versionItems = response.data.listScoreVersionByScoreIdAndCreatedAt.items;
+          console.log('🔍 Loaded versions:', versionItems.map(v => ({ id: v.id, guidelines: v.guidelines })));
           setVersions(versionItems);
           
           // Sort versions by createdAt in descending order
@@ -1343,6 +1393,15 @@ export function ScoreComponent({
     fetchVersions();
   }, [score])
 
+
+
+  // Guidelines handlers for main component
+  const handleStartInlineEdit = () => {
+    setGuidelinesEditValue(editedScore.guidelines || '')
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesEditing(true)
+  }
+
   const handleOpenGuidelinesEditor = () => {
     setGuidelinesEditValue(editedScore.guidelines || '')
     setHasGuidelinesChanges(false)
@@ -1350,32 +1409,38 @@ export function ScoreComponent({
   }
 
   const handleSaveGuidelines = async () => {
+    if (isSavingGuidelines) return
+    
     try {
-      // Update the editedScore with the new guidelines
+      setIsSavingGuidelines(true)
+      
+      // Update the score guidelines
       handleEditChange({ guidelines: guidelinesEditValue })
+      setIsGuidelinesEditing(false)
       setIsGuidelinesFullscreen(false)
       setHasGuidelinesChanges(false)
       
-      // Auto-save if there's an onSave handler
-      if (onSave) {
-        await onSave()
-        toast.success('Guidelines saved successfully')
-      }
+      // Call the internal handleSave with the current guidelines value
+      await handleSave(guidelinesEditValue)
+      toast.success('Guidelines saved successfully')
     } catch (error) {
       console.error('Error saving guidelines:', error)
       toast.error('Failed to save guidelines')
+    } finally {
+      setIsSavingGuidelines(false)
     }
   }
 
   const handleCancelGuidelinesEdit = () => {
     setGuidelinesEditValue(editedScore.guidelines || '')
     setHasGuidelinesChanges(false)
+    setIsGuidelinesEditing(false)
     setIsGuidelinesFullscreen(false)
   }
 
-  const handleGuidelinesChange = (value: string | undefined) => {
-    setGuidelinesEditValue(value || '')
-    setHasGuidelinesChanges((value || '') !== (editedScore.guidelines || ''))
+  const handleGuidelinesChange = (value: string) => {
+    setGuidelinesEditValue(value)
+    setHasGuidelinesChanges(value !== (editedScore.guidelines || ''))
   }
 
   const handleEditChange = (changes: Partial<ScoreData>) => {
@@ -1497,6 +1562,7 @@ export function ScoreComponent({
   }
 
   const handleVersionSelect = (version: ScoreVersion) => {
+    console.log('🔍 Loading version:', version.id, 'Guidelines:', version.guidelines)
     setSelectedVersionId(version.id)
     setVersionNote(version.note || '')
     
@@ -1514,8 +1580,8 @@ export function ScoreComponent({
          (config.id !== undefined ? config.id : undefined));
 
       
-      // Update the editedScore with values from the YAML configuration
-      // This ensures we're using the YAML as the source of truth
+      // Update the editedScore with values from the YAML configuration and version record
+      // YAML is source of truth for most fields, but guidelines come from ScoreVersion.guidelines
       setEditedScore(prev => {
         const updated = {
           ...prev,
@@ -1525,9 +1591,12 @@ export function ScoreComponent({
           externalId: externalIdValue !== undefined ? String(externalIdValue) : prev.externalId,
           key: config.key !== undefined ? config.key : prev.key,
           description: config.description !== undefined ? config.description : prev.description,
+          // Guidelines come from ScoreVersion.guidelines, not from YAML
+          guidelines: version.guidelines !== undefined ? version.guidelines : prev.guidelines,
           // Store the complete configuration for the editor
           configuration: version.configuration
         };
+        console.log('🔧 Setting editedScore guidelines to:', updated.guidelines)
         return updated;
       })
       
@@ -1586,7 +1655,7 @@ export function ScoreComponent({
     setHasChanges(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (overrideGuidelines?: string) => {
     try {
       console.log('ScoreComponent handleSave called for score:', score);
       console.log('editedScore data:', editedScore);
@@ -1718,6 +1787,7 @@ export function ScoreComponent({
       const versionPayload = {
         scoreId: String(score.id),
         configuration: configurationYaml,
+        guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
         isFeatured: false,
         note: versionNote || 'Updated score configuration',
         createdAt: now,
@@ -1725,6 +1795,7 @@ export function ScoreComponent({
       };
 
       console.log('Creating ScoreVersion with payload:', versionPayload);
+      console.log('🔍 Guidelines being saved:', overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''));
       const createVersionResponse = await client.graphql({
         query: `
           mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
@@ -1732,6 +1803,7 @@ export function ScoreComponent({
               id
               scoreId
               configuration
+              guidelines
               isFeatured
               note
               createdAt
@@ -1749,7 +1821,7 @@ export function ScoreComponent({
       const newVersion = 'data' in createVersionResponse && createVersionResponse.data?.createScoreVersion;
       
       // Update local state with the new version
-      console.log('newVersion data:', newVersion);
+      console.log('🔍 Created newVersion with guidelines:', newVersion && 'guidelines' in newVersion ? newVersion.guidelines : 'N/A');
       if (newVersion) {
         const placeholderVersion = {
           ...newVersion,
@@ -1917,10 +1989,34 @@ export function ScoreComponent({
               selectedAccount={selectedAccount}
               scorecardName={scorecardName}
               onTaskCreated={onTaskCreated}
+              // Guidelines editing props
+              isGuidelinesExpanded={isGuidelinesExpanded}
+              onToggleGuidelinesExpanded={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
+              isGuidelinesEditing={isGuidelinesEditing}
+              guidelinesEditValue={guidelinesEditValue}
+              hasGuidelinesChanges={hasGuidelinesChanges}
+              isSavingGuidelines={isSavingGuidelines}
+              onStartInlineEdit={handleStartInlineEdit}
+              onOpenGuidelinesEditor={handleOpenGuidelinesEditor}
+              onGuidelinesChange={handleGuidelinesChange}
+              onSaveGuidelines={handleSaveGuidelines}
+              onCancelGuidelinesEdit={handleCancelGuidelinesEdit}
             />
           )}
         </div>
       </div>
+
+      {/* Fullscreen Guidelines Editor */}
+      <FullscreenGuidelinesEditor
+        isOpen={isGuidelinesFullscreen}
+        title={`Guidelines - ${score.name}`}
+        value={guidelinesEditValue}
+        onChange={handleGuidelinesChange}
+        onSave={handleSaveGuidelines}
+        onCancel={handleCancelGuidelinesEdit}
+        hasChanges={hasGuidelinesChanges}
+        isSaving={isSavingGuidelines}
+      />
     </div>
   )
 } 
