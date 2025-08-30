@@ -31,6 +31,7 @@ import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, ge
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
+import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 
 export interface ScorecardData {
   id: string
@@ -654,7 +655,7 @@ export const DetailContent = React.memo(function DetailContent({
         <div className="space-y-6 w-full px-2">
           {/* Description Section */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">Description</h3>
+            <h3 className="text-sm font-medium mb-3">Description</h3>
             <textarea
               value={score.description || ''}
               onChange={(e) => onEditChange?.({ description: e.target.value })}
@@ -665,149 +666,25 @@ export const DetailContent = React.memo(function DetailContent({
           </div>
 
           {/* Guidelines Section */}
-          <div className="mb-6">
-            {/* Header with action buttons - always visible */}
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-lg font-semibold">Guidelines</h3>
-              <div className="flex gap-1">
-                {score.guidelines && score.guidelines.trim() !== '' && !isGuidelinesEditing && onStartInlineEdit && (
-                  <CardButton
-                    icon={Edit}
-                    onClick={onStartInlineEdit}
-                    aria-label="Edit guidelines inline"
-                  />
-                )}
-                {onOpenGuidelinesEditor && (
-                  <CardButton
-                    icon={Expand}
-                    onClick={onOpenGuidelinesEditor}
-                    aria-label="Open guidelines editor"
-                  />
-                )}
-              </div>
-            </div>
-            
-            {/* Guidelines content */}
-            {isGuidelinesEditing ? (
-              // Inline editing mode - show ~12 lines
-              <div className="space-y-3">
-                <div className="rounded-lg bg-background overflow-hidden border-0 ring-2 ring-transparent focus-within:ring-ring">
-                  <Editor
-                    height="300px"
-                    defaultLanguage="markdown"
-                    value={guidelinesEditValue || ''}
-                    onChange={(value) => onGuidelinesChange?.(value || '')}
-                    onMount={(editor, monaco) => {
-                      // Configure Monaco editor
-                      defineCustomMonacoThemes(monaco)
-                      applyMonacoTheme(monaco)
-                      setupMonacoThemeWatcher(monaco)
-                    }}
-                    options={{
-                      ...getCommonMonacoOptions(),
-                      wordWrap: 'on',
-                      lineNumbers: 'off',
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      fontSize: 14,
-                      tabSize: 2,
-                      insertSpaces: true,
-                      automaticLayout: true,
-                    }}
-                  />
-                </div>
-                {hasGuidelinesChanges && (
-                  <div className="flex justify-end gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={onCancelGuidelinesEdit}
-                      disabled={isSavingGuidelines}
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      onClick={() => {
-                        console.log('🔧 Inline save button clicked - calling onSaveGuidelines');
-                        onSaveGuidelines?.();
-                      }}
-                      disabled={isSavingGuidelines}
-                    >
-                      {isSavingGuidelines ? (
-                        <>
-                          <div className="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        'Save'
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : score.guidelines && score.guidelines.trim() !== '' ? (
-              // Display mode with markdown rendering and expand/collapse
-              <div 
-                className="rounded-lg bg-background p-4 cursor-pointer transition-all duration-200 hover:bg-accent/10"
-                onClick={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
-              >
-                <div 
-                  className={`prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground transition-all duration-200 ${
-                    !isGuidelinesExpanded ? 'overflow-hidden' : ''
-                  }`}
-                  style={!isGuidelinesExpanded ? { 
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    maxHeight: '5.25rem'
-                  } : {}}
-                >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkBreaks]}
-                    components={{
-                      p: ({ children }) => <p className="mb-3 last:mb-0 text-muted-foreground leading-relaxed">{children}</p>,
-                      ul: ({ children }) => <ul className="list-disc pl-6 mb-3 space-y-1">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal pl-6 mb-3 space-y-1">{children}</ol>,
-                      li: ({ children }) => <li className="text-muted-foreground">{children}</li>,
-                      strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                      code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground">{children}</code>,
-                      pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto mb-3">{children}</pre>,
-                      blockquote: ({ children }) => <blockquote className="border-l-4 border-muted pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
-                      h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
-                      h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
-                      h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
-                    }}
-                  >
-                    {score.guidelines}
-                  </ReactMarkdown>
-                </div>
-                {/* Expand/Collapse indicator */}
-                <div className="mt-3 flex flex-col items-center">
-                  <div className="w-full h-px bg-muted"></div>
-                  <div className="mt-1">
-                    {!isGuidelinesExpanded ? (
-                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                    ) : (
-                      <ChevronUp className="h-3 w-3 text-muted-foreground" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              // No guidelines placeholder
-              <div className="rounded-lg bg-background p-4 text-center py-8 text-muted-foreground text-sm">
-                No guidelines.
-              </div>
-            )}
-          </div>
+          <GuidelinesEditor
+            guidelines={isGuidelinesEditing ? guidelinesEditValue : score.guidelines}
+            isEditing={isGuidelinesEditing}
+            isExpanded={isGuidelinesExpanded}
+            onToggleExpanded={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
+            onStartInlineEdit={onStartInlineEdit}
+            onOpenFullscreenEditor={onOpenGuidelinesEditor}
+            onGuidelinesChange={onGuidelinesChange}
+            onSaveGuidelines={onSaveGuidelines}
+            onCancelEdit={onCancelGuidelinesEdit}
+            hasChanges={hasGuidelinesChanges}
+            isSaving={isSavingGuidelines}
+          />
 
           <div>
             <div className="flex justify-between items-center mb-2">
               <div className="flex items-center">
                 <h3 
-                  className="text-lg font-semibold cursor-pointer flex items-center"
+                  className="text-sm font-medium cursor-pointer flex items-center"
                   onClick={() => setIsExamplesExpanded(!isExamplesExpanded)}
                 >
                   Example Items
@@ -1593,6 +1470,18 @@ export default function ScorecardComponent({
           </div>
         </div>
       )}
+
+      {/* Fullscreen Guidelines Editor */}
+      <FullscreenGuidelinesEditor
+        isOpen={isGuidelinesFullscreen}
+        title={`Guidelines - ${editedScore.name}`}
+        value={guidelinesEditValue}
+        onChange={handleGuidelinesChange}
+        onSave={handleSaveGuidelines}
+        onCancel={handleCancelGuidelinesEdit}
+        hasChanges={hasGuidelinesChanges}
+        isSaving={isSavingGuidelines}
+      />
     </div>
   )
 } 
