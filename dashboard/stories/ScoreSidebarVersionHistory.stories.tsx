@@ -1,7 +1,7 @@
 import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { action } from '@storybook/addon-actions'
-import { Crown } from 'lucide-react'
+import { Crown, Expand, X } from 'lucide-react'
 import { ScoreSidebarVersionHistory } from '../components/ui/score-sidebar-version-history'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { stringify as stringifyYaml } from 'yaml'
@@ -83,6 +83,8 @@ const InteractiveStoryWrapper = ({
   const [selectedVersionId, setSelectedVersionId] = React.useState(initialSelectedVersionId)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(initialIsSidebarCollapsed)
   const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+  const [isFullscreen, setIsFullscreen] = React.useState(false)
+  const [hasChanges, setHasChanges] = React.useState(false)
 
   const handleVersionSelect = (version: any) => {
     setSelectedVersionId(version.id)
@@ -133,26 +135,34 @@ const InteractiveStoryWrapper = ({
                     {/* Mock Content Tabs */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
-              <TabsList className="h-auto p-0 bg-transparent border-b border-border justify-start">
-                <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2">Guidelines</TabsTrigger>
-                <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2">Code</TabsTrigger>
-              </TabsList>
+              <div className="flex items-center justify-between border-b border-border">
+                <TabsList className="h-auto p-0 bg-transparent justify-start">
+                  <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
+                  <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                </TabsList>
+                <div className="flex gap-1 pr-4">
+                  <button 
+                    className="p-1 rounded hover:bg-accent" 
+                    aria-label="Open fullscreen editor"
+                    onClick={() => setIsFullscreen(true)}
+                  >
+                    <Expand className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
               
-              <TabsContent value="guidelines" className="flex-1 flex flex-col min-h-0 mt-0">
-                <div className="flex-1 p-4 overflow-y-auto bg-background">
-                  <div className="text-sm text-muted-foreground space-y-2">
-                    <p>This is a mock guidelines section to demonstrate the layout.</p>
-                    <p>In the actual component, this would show the score guidelines and allow editing.</p>
-                    <p>The content is responsive and should not cause width overflow issues.</p>
-                    <p>Guidelines help evaluators understand how to consistently apply the scoring criteria.</p>
-                    <p>They provide context, examples, and edge case handling instructions.</p>
-                  </div>
+              <TabsContent value="guidelines" className="flex-1 p-4 overflow-y-auto bg-background mt-0 data-[state=inactive]:hidden">
+                <div className="text-sm text-muted-foreground space-y-2">
+                  <p>This is a mock guidelines section to demonstrate the layout.</p>
+                  <p>In the actual component, this would show the score guidelines and allow editing.</p>
+                  <p>The content is responsive and should not cause width overflow issues.</p>
+                  <p>Guidelines help evaluators understand how to consistently apply the scoring criteria.</p>
+                  <p>They provide context, examples, and edge case handling instructions.</p>
                 </div>
               </TabsContent>
               
-              <TabsContent value="code" className="flex-1 flex flex-col min-h-0 mt-0">
-                <div className="flex-1 p-4 overflow-auto bg-background">
-                  <pre className="text-xs text-muted-foreground bg-muted/50 rounded p-3 overflow-x-auto">
+              <TabsContent value="code" className="flex-1 p-4 overflow-auto bg-background mt-0 data-[state=inactive]:hidden">
+                <pre className="text-xs text-muted-foreground bg-muted/50 rounded p-3 overflow-x-auto">
 {`name: "Sample Score"
 type: "SimpleLLMScore"
 description: "A sample score configuration"
@@ -165,13 +175,120 @@ prompt: |
 output_schema:
   type: "string"
   enum: ["Yes", "No"]`}
-                  </pre>
-                </div>
+                </pre>
               </TabsContent>
             </Tabs>
           </div>
         </div>
       </div>
+      
+      {/* Fullscreen Interface */}
+      {isFullscreen && (
+        <div className="absolute inset-0 z-50 bg-background flex flex-col">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+            <div className="flex items-center justify-between border-b border-border">
+              <TabsList className="h-auto p-0 bg-transparent justify-start">
+                <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
+                <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+              </TabsList>
+              <div className="flex gap-2 pr-4">
+                <button 
+                  className="p-1 rounded hover:bg-accent" 
+                  aria-label="Close fullscreen"
+                  onClick={() => setIsFullscreen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Guidelines Tab - 50/50 split */}
+            <TabsContent value="guidelines" className="flex-1 mt-0 data-[state=inactive]:hidden">
+              <div className="flex h-full">
+                <div className="w-1/2 border-r border-border p-4">
+                  <div className="text-sm font-medium mb-2">Markdown Editor</div>
+                  <textarea 
+                    className="w-full h-full resize-none border rounded p-2 font-mono text-sm"
+                    placeholder="Edit guidelines here..."
+                    defaultValue="# Guidelines&#10;&#10;This is where you would edit the guidelines in markdown format.&#10;&#10;## Features&#10;- Real-time preview&#10;- Markdown syntax&#10;- Full-screen editing"
+                    onChange={() => setHasChanges(true)}
+                  />
+                </div>
+                <div className="w-1/2 p-4 overflow-y-auto bg-background">
+                  <div className="text-sm font-medium mb-2">Preview</div>
+                  <div className="prose prose-sm max-w-none">
+                    <h1>Guidelines</h1>
+                    <p>This is where you would edit the guidelines in markdown format.</p>
+                    <h2>Features</h2>
+                    <ul>
+                      <li>Real-time preview</li>
+                      <li>Markdown syntax</li>
+                      <li>Full-screen editing</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+            
+            {/* Code Tab - 2/3 + 1/3 split */}
+            <TabsContent value="code" className="flex-1 mt-0 data-[state=inactive]:hidden">
+              <div className="flex h-full">
+                <div className="w-2/3 border-r border-border p-4">
+                  <div className="text-sm font-medium mb-2">YAML Editor</div>
+                  <textarea 
+                    className="w-full h-full resize-none border rounded p-2 font-mono text-sm"
+                    defaultValue={`name: "Sample Score"
+type: "SimpleLLMScore"
+description: "A sample score configuration"
+prompt: |
+  Analyze the following content and provide a score.
+
+  Content: {{content}}
+
+  Respond with either "Yes" or "No".
+output_schema:
+  type: "string"
+  enum: ["Yes", "No"]`}
+                    onChange={() => setHasChanges(true)}
+                  />
+                </div>
+                <div className="w-1/3 p-4 bg-background">
+                  <div className="text-sm font-medium mb-2">Validation</div>
+                  <div className="text-xs text-green-600 bg-green-50 rounded p-2">
+                    ✓ YAML syntax is valid<br/>
+                    ✓ All required fields present<br/>
+                    ✓ Schema validation passed
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+          
+          {/* Save/Cancel Bar - only show when there are changes */}
+          {hasChanges && (
+            <div className="flex items-center gap-3 p-4 border-t border-border">
+              <button 
+                className="px-3 py-1.5 text-sm border rounded hover:bg-accent" 
+                onClick={() => setIsFullscreen(false)}
+              >
+                Cancel
+              </button>
+              <textarea
+                placeholder="Please say what you changed and why..."
+                className="flex-1 px-3 py-2 rounded-md bg-background border text-sm resize-none
+                         placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                rows={1}
+              />
+              <button 
+                className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90"
+                onClick={() => setHasChanges(false)}
+              >
+                Save
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -653,6 +653,9 @@ const DetailContent = React.memo(({
   // Add sidebar state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+  const [isGuidelinesInlineEdit, setIsGuidelinesInlineEdit] = React.useState(false)
+  const [fullscreenActiveTab, setFullscreenActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+  const [newVersionNote, setNewVersionNote] = React.useState('')
 
   // Sort versions by creation date (newest first)
   const sortedVersions = React.useMemo(() => {
@@ -838,65 +841,56 @@ const DetailContent = React.memo(({
             {/* Tabbed Content */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
-                <TabsList className="h-auto p-0 bg-transparent border-b border-border justify-start">
-                  <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2">Guidelines</TabsTrigger>
-                  <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2">Code</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="guidelines" className="flex-1 flex flex-col min-h-0 mt-0">
-                  <div className="flex items-center justify-end p-4 border-b border-border">
-                    <div className="flex gap-1">
-                      <CardButton
-                        icon={Edit}
-                        onClick={handleStartInlineEdit}
-                        aria-label="Edit guidelines inline"
-                      />
-                      <CardButton
-                        icon={Expand}
-                        onClick={handleOpenGuidelinesEditor}
-                        aria-label="Open guidelines editor"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex-1 p-4 overflow-y-auto bg-background">
-                    <GuidelinesEditor
-                      guidelines={isGuidelinesEditing ? guidelinesEditValue : (selectedVersion?.guidelines || score.guidelines)}
-                      isEditing={isGuidelinesEditing}
-                      isExpanded={true}
-                      onStartInlineEdit={handleStartInlineEdit}
-                      onOpenFullscreenEditor={handleOpenGuidelinesEditor}
-                      onGuidelinesChange={onGuidelinesChange}
-                      onSaveGuidelines={onSaveGuidelines}
-                      onCancelEdit={onCancelGuidelinesEdit}
-                      hasChanges={hasGuidelinesChanges}
-                      isSaving={isSavingGuidelines}
-                      title=""
-                    />
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="code" className="flex-1 flex flex-col min-h-0 mt-0">
-                  <div className="flex items-center justify-end p-4 border-b border-border">
+                <div className="flex items-center justify-between border-b border-border">
+                  <TabsList className="h-auto p-0 bg-transparent justify-start">
+                    <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
+                    <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                  </TabsList>
+                  <div className="flex gap-1 pr-4">
                     <CardButton
                       icon={Expand}
-                      onClick={() => setIsEditorFullscreen(true)}
-                      aria-label="Open configuration editor"
+                      onClick={() => {
+                        setFullscreenActiveTab(activeTab)
+                        setIsEditorFullscreen(true)
+                      }}
+                      aria-label="Open fullscreen editor"
                     />
                   </div>
-                  <div className="flex-1 bg-background">
+                </div>
+                
+                <TabsContent value="guidelines" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden">
+                  {isGuidelinesInlineEdit ? (
                     <Editor
                       height="100%"
-                      defaultLanguage="yaml"
-                      value={score.configuration || ''}
+                      defaultLanguage="markdown"
+                      value={guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
                       onChange={(value) => {
-                        handleFormChange('configuration', value || '')
-                        setIsEditing(true)
+                        onGuidelinesChange?.(value || '')
                       }}
                       onMount={(editor, monaco) => {
                         defineCustomMonacoThemes(monaco)
                         applyMonacoTheme(monaco)
                         setupMonacoThemeWatcher(monaco)
-                        configureYamlLanguage(monaco)
+                        
+                        // Add click outside handler
+                        const handleClickOutside = (e: MouseEvent) => {
+                          const editorElement = editor.getDomNode()
+                          if (editorElement && !editorElement.contains(e.target as Node)) {
+                            setIsGuidelinesInlineEdit(false)
+                            // Only exit edit mode, don't save a new version
+                            // The changes are already stored in guidelinesEditValue via onGuidelinesChange
+                          }
+                        }
+                        
+                        // Add the event listener after a short delay to avoid immediate triggering
+                        setTimeout(() => {
+                          document.addEventListener('mousedown', handleClickOutside)
+                        }, 100)
+                        
+                        // Cleanup function
+                        return () => {
+                          document.removeEventListener('mousedown', handleClickOutside)
+                        }
                       }}
                       options={{
                         ...getCommonMonacoOptions(),
@@ -909,6 +903,69 @@ const DetailContent = React.memo(({
                         automaticLayout: true,
                       }}
                     />
+                  ) : (
+                    <div 
+                      className="flex-1 p-4 overflow-y-auto cursor-text hover:bg-muted/30 transition-colors"
+                      onClick={() => {
+                        setIsGuidelinesInlineEdit(true)
+                        handleStartInlineEdit?.()
+                      }}
+                    >
+                      <div className="prose prose-sm max-w-none">
+                        {(selectedVersion?.guidelines || score.guidelines) ? (
+                          <div 
+                            dangerouslySetInnerHTML={{ 
+                              __html: (selectedVersion?.guidelines || score.guidelines || '').replace(/\n/g, '<br/>') 
+                            }} 
+                          />
+                        ) : (
+                          <div className="text-muted-foreground italic">
+                            Click to add guidelines...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+                
+                <TabsContent value="code" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden">
+                  <div className="flex flex-col h-full">
+                    {/* Code Editor */}
+                    <div className="flex-1 min-h-0">
+                      <Editor
+                        height="100%"
+                        defaultLanguage="yaml"
+                        value={score.configuration || ''}
+                        onChange={(value) => {
+                          handleFormChange('configuration', value || '')
+                          setIsEditing(true)
+                        }}
+                        onMount={(editor, monaco) => {
+                          defineCustomMonacoThemes(monaco)
+                          applyMonacoTheme(monaco)
+                          setupMonacoThemeWatcher(monaco)
+                          configureYamlLanguage(monaco)
+                          setupMonacoIntegration(editor, monaco)
+                        }}
+                        options={{
+                          ...getCommonMonacoOptions(),
+                          wordWrap: 'on',
+                          minimap: { enabled: false },
+                          scrollBeyondLastLine: false,
+                          fontSize: 14,
+                          tabSize: 2,
+                          insertSpaces: true,
+                          automaticLayout: true,
+                        }}
+                      />
+                    </div>
+                    {/* Validation Panel underneath */}
+                    <div className="border-t border-border bg-background p-3 min-h-[200px]">
+                      <YamlLinterPanel 
+                        result={lintResult || undefined}
+                        onMessageClick={handleLintMessageClick}
+                      />
+                    </div>
                   </div>
                 </TabsContent>
               </Tabs>
@@ -919,141 +976,146 @@ const DetailContent = React.memo(({
 
       {/* Fullscreen Editor Mode */}
       {isEditorFullscreen && (
-        <div className="flex justify-between items-start w-full">
-          <div className="space-y-2 flex-1 px-2">
-            <div className="flex items-center gap-2 mb-3">
-              <ListCheck className="h-5 w-5 text-foreground" />
-              <span className="text-lg font-semibold">Score</span>
+        <div className="flex flex-col h-full w-full">
+          {/* Fullscreen Tabs */}
+          <Tabs value={fullscreenActiveTab} onValueChange={(value) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+            <div className="flex items-center justify-between border-b border-border">
+              <TabsList className="h-auto p-0 bg-transparent justify-start">
+                <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
+                <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+              </TabsList>
+              <div className="flex gap-2 pr-4">
+                <CardButton
+                  icon={X}
+                  onClick={() => setIsEditorFullscreen(false)}
+                  aria-label="Close fullscreen"
+                />
+              </div>
             </div>
-            <Input
-              value={parsedConfig.name || ''}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                handleFormChange('name', e.target.value)
-              }
-              onFocus={() => setIsEditing(true)}
-              className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                       placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
-              placeholder="Score Name"
-            />
-            <div className="flex gap-2 w-full">
-              <Input
-                value={parsedConfig.key || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                  handleFormChange('key', e.target.value)
-                }
-                onFocus={() => setIsEditing(true)}
-                className="font-mono bg-background border-0 px-2 h-auto flex-1
-                         placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
-                placeholder="score-key"
-              />
-              <Input
-                value={parsedConfig.externalId || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                  handleFormChange('externalId', e.target.value)
-                }
-                onFocus={() => setIsEditing(true)}
-                className="font-mono bg-background border-0 px-2 h-auto flex-1
-                         placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
-                placeholder="External ID"
-              />
-            </div>
-            <div className="flex items-center space-x-2 pt-2">
-              <Checkbox
-                id="isDisabled"
-                checked={parsedConfig.isDisabled || false}
-                onCheckedChange={(checked) => 
-                  handleFormChange('isDisabled', checked as boolean)
-                }
-              />
-              <label
-                htmlFor="isDisabled"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            
+            {/* Guidelines Tab - 50/50 split */}
+            <TabsContent value="guidelines" className="flex-1 mt-0 data-[state=inactive]:hidden">
+              <div className="flex h-full">
+                {/* Left: Markdown Editor */}
+                <div className="w-1/2 border-r border-border">
+                  <Editor
+                    height="100%"
+                    defaultLanguage="markdown"
+                    value={guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
+                    onChange={(value) => {
+                      onGuidelinesChange?.(value || '')
+                    }}
+                    onMount={(editor, monaco) => {
+                      defineCustomMonacoThemes(monaco)
+                      applyMonacoTheme(monaco)
+                      setupMonacoThemeWatcher(monaco)
+                    }}
+                    options={{
+                      ...getCommonMonacoOptions(),
+                      wordWrap: 'on',
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 14,
+                      tabSize: 2,
+                      insertSpaces: true,
+                      automaticLayout: true,
+                    }}
+                  />
+                </div>
+                {/* Right: Preview */}
+                <div className="w-1/2 p-4 overflow-y-auto bg-background">
+                  <div className="prose prose-sm max-w-none">
+                    {(guidelinesEditValue || selectedVersion?.guidelines || score.guidelines) ? (
+                      <div 
+                        dangerouslySetInnerHTML={{ 
+                          __html: (guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || '').replace(/\n/g, '<br/>') 
+                        }} 
+                      />
+                    ) : (
+                      <div className="text-muted-foreground italic">
+                        No guidelines yet. Start typing in the editor to add guidelines.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+            
+            {/* Code Tab - 2/3 + 1/3 split */}
+            <TabsContent value="code" className="flex-1 mt-0 data-[state=inactive]:hidden">
+              <div className="flex h-full">
+                {/* Left: YAML Editor (2/3) */}
+                <div className="w-2/3 border-r border-border">
+                  <Editor
+                    height="100%"
+                    defaultLanguage="yaml"
+                    value={score.configuration || ''}
+                    onChange={(value) => {
+                      handleFormChange('configuration', value || '')
+                      setIsEditing(true)
+                    }}
+                    onMount={(editor, monaco) => {
+                      defineCustomMonacoThemes(monaco)
+                      applyMonacoTheme(monaco)
+                      setupMonacoThemeWatcher(monaco)
+                      configureYamlLanguage(monaco)
+                      setupMonacoIntegration(editor, monaco)
+                    }}
+                    options={{
+                      ...getCommonMonacoOptions(),
+                      wordWrap: 'on',
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 14,
+                      tabSize: 2,
+                      insertSpaces: true,
+                      automaticLayout: true,
+                    }}
+                  />
+                </div>
+                {/* Right: Validation Panel (1/3) */}
+                <div className="w-1/3 bg-background p-3">
+                  <YamlLinterPanel 
+                    result={lintResult || undefined}
+                    onMessageClick={handleLintMessageClick}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+          
+          {/* Save/Cancel buttons - only show when there are changes */}
+          {(hasChanges || hasGuidelinesChanges) && (
+            <div className="flex items-center gap-3 p-4 border-t border-border">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setNewVersionNote('')
+                  setIsEditorFullscreen(false)
+                }}
+                disabled={isSavingGuidelines}
               >
-                Disabled
-              </label>
-            </div>
-            {/* Version note field - only show when there are no changes to save */}
-            {!hasChanges && !hasGuidelinesChanges && (
+                Cancel
+              </Button>
               <textarea
-                value={versionNote}
-                onChange={handleNoteChange}
-                placeholder="Add a note about this version..."
-                className="w-full px-2 py-1.5 rounded-md bg-background border-0 text-sm resize-none
+                value={newVersionNote}
+                onChange={(e) => {
+                  setNewVersionNote(e.target.value)
+                  onNoteChange?.(e.target.value)
+                }}
+                placeholder="Please say what you changed and why..."
+                className="flex-1 px-3 py-2 rounded-md bg-background border text-sm resize-none
                          placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                rows={2}
+                rows={1}
               />
-            )}
-          </div>
-          <div className="flex gap-2 ml-4">
-            <ShadcnDropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
-                  aria-label="More options"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleTestScore}>
-                  <TestTube className="mr-2 h-4 w-4" />
-                  Test
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateAccuracy}>
-                  <FlaskConical className="mr-2 h-4 w-4" />
-                  Evaluate Accuracy
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateConsistency}>
-                  <FlaskRound className="mr-2 h-4 w-4" />
-                  Evaluate Consistency
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateAlignment}>
-                  <TestTubes className="mr-2 h-4 w-4" />
-                  Evaluate Alignment
-                </DropdownMenuItem>
-                {onFeedbackAnalysis && (
-                  <DropdownMenuItem onClick={onFeedbackAnalysis}>
-                    <MessageCircleMore className="mr-2 h-4 w-4" />
-                    Analyze Feedback
-                  </DropdownMenuItem>
-                )}
-                {onCostAnalysis && (
-                  <DropdownMenuItem onClick={onCostAnalysis}>
-                    <Coins className="mr-2 h-4 w-4" />
-                    Analyze Cost
-                  </DropdownMenuItem>
-                )}
-                {onDelete && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={onDelete}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete Score
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </ShadcnDropdownMenu>
-            {onToggleFullWidth && (
-              <CardButton
-                icon={isFullWidth ? Columns2 : Square}
-                onClick={onToggleFullWidth}
-                aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
-              />
-            )}
-            {onClose && (
-              <CardButton
-                icon={X}
-                onClick={onClose}
-                aria-label="Close"
-              />
-            )}
-          </div>
+              <Button
+                onClick={hasGuidelinesChanges ? onSaveGuidelines : onSave}
+                disabled={isSavingGuidelines}
+              >
+                {isSavingGuidelines ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1066,16 +1128,22 @@ const DetailContent = React.memo(({
             <Button
               variant="outline"
               size="sm"
-              onClick={onCancel}
+              onClick={() => {
+                setNewVersionNote('')
+                onCancel()
+              }}
               className="shrink-0"
             >
               Cancel
             </Button>
             <input
               type="text"
-              value={versionNote}
-              onChange={(e) => onNoteChange(e.target.value)}
-              placeholder="Add a note about this version..."
+              value={newVersionNote}
+              onChange={(e) => {
+                setNewVersionNote(e.target.value)
+                onNoteChange(e.target.value)
+              }}
+              placeholder="Please say what you changed and why..."
               className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-sm
                        placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
@@ -1509,6 +1577,9 @@ export function ScoreComponent({
     setEditedScore(score)
     setVersionNote('') // Reset note on cancel
     setHasChanges(false)
+    setHasGuidelinesChanges(false) // Also reset guidelines changes
+    setGuidelinesEditValue(editedScore.guidelines || '') // Reset guidelines to original value
+    setIsGuidelinesEditing(false) // Exit guidelines editing mode
     setSelectedVersionId(undefined) // Reset selection to champion
     setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
   }
