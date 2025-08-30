@@ -655,13 +655,13 @@ export const DetailContent = React.memo(function DetailContent({
         <div className="space-y-6 w-full px-2">
           {/* Description Section */}
           <div>
-            <h3 className="text-sm font-medium mb-3">Description</h3>
             <textarea
               value={score.description || ''}
               onChange={(e) => onEditChange?.({ description: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg bg-background text-sm resize-none border-0 
+              placeholder="No description"
+              className="w-full px-3 py-2 rounded-lg bg-background text-xs resize-none border-0 
                        placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              rows={2}
+              rows={1}
             />
           </div>
 

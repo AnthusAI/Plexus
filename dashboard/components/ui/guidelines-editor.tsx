@@ -53,26 +53,28 @@ export const GuidelinesEditor = React.memo(({
 }: GuidelinesEditorProps) => {
   return (
     <div className={cn("mb-6", className)}>
-      {/* Header with action buttons - always visible */}
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="text-sm font-medium">{title}</h3>
-        <div className="flex gap-1">
-          {!isEditing && onStartInlineEdit && (
-            <CardButton
-              icon={Edit}
-              onClick={onStartInlineEdit}
-              aria-label="Edit guidelines inline"
-            />
-          )}
-          {onOpenFullscreenEditor && (
-            <CardButton
-              icon={Expand}
-              onClick={onOpenFullscreenEditor}
-              aria-label="Open guidelines editor"
-            />
-          )}
+      {/* Header with action buttons - only show if title is provided */}
+      {title && title.trim() !== '' && (
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-sm font-medium">{title}</h3>
+          <div className="flex gap-1">
+            {!isEditing && onStartInlineEdit && (
+              <CardButton
+                icon={Edit}
+                onClick={onStartInlineEdit}
+                aria-label="Edit guidelines inline"
+              />
+            )}
+            {onOpenFullscreenEditor && (
+              <CardButton
+                icon={Expand}
+                onClick={onOpenFullscreenEditor}
+                aria-label="Open guidelines editor"
+              />
+            )}
+          </div>
         </div>
-      </div>
+      )}
       
       {/* Guidelines content */}
       {isEditing ? (
@@ -103,6 +105,33 @@ export const GuidelinesEditor = React.memo(({
               }}
             />
           </div>
+          {/* Save/Cancel buttons for inline editing */}
+          {hasChanges && (
+            <div className="flex justify-end items-center gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCancelEdit}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={onSaveGuidelines}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Guidelines'
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       ) : guidelines && guidelines.trim() !== '' ? (
         // Display mode with markdown rendering and expand/collapse
