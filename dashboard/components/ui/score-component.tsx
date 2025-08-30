@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2 } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Clock, PanelLeftOpen, PanelLeftClose, Edit } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -15,9 +15,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ScoreSidebarVersionHistory } from '@/components/ui/score-sidebar-version-history'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { generateClient } from 'aws-amplify/api'
 import { toast } from 'sonner'
-import { ScoreVersionHistory } from './score-version-history'
+
 import type { GraphQLResult } from '@aws-amplify/api'
 import Editor, { Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
@@ -31,6 +33,7 @@ import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
+import { Timestamp } from "@/components/ui/timestamp"
 
 const client = generateClient();
 
@@ -49,7 +52,7 @@ export interface ScoreData {
   isDisabled?: boolean // Whether the score is disabled
 }
 
-interface ScoreVersion {
+export interface ScoreVersion {
   id: string
   scoreId: string
   configuration: string // YAML string
@@ -338,7 +341,7 @@ const DetailContent = React.memo(({
   })
   const handleLintMessageClick = useLintMessageHandler(jumpToLine)
   
-  // Let ScoreVersionHistory component handle its own featured filtering with smart defaults
+
   
   // Reset isEditing when resetEditingCounter changes
   React.useEffect(() => {
@@ -647,13 +650,274 @@ const DetailContent = React.memo(({
 
 
 
+  // Add sidebar state
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false)
+  const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+
+  // Sort versions by creation date (newest first)
+  const sortedVersions = React.useMemo(() => {
+    if (!versions) return []
+    return [...versions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  }, [versions])
+
+  // Find champion version
+  const championVersion = React.useMemo(() => {
+    if (!versions) return undefined
+    return versions.find(v => v.id === championVersionId)
+  }, [versions, championVersionId])
+
+  // Get currently selected version or champion
+  const selectedVersion = React.useMemo(() => {
+    if (!versions) return undefined
+    if (selectedVersionId) {
+      return versions.find(v => v.id === selectedVersionId)
+    }
+    return championVersion
+  }, [selectedVersionId, championVersion, versions])
+
+
+
+  // Guidelines handlers (moved up for sidebar use)
+  const handleStartInlineEdit = () => {
+    onStartInlineEdit?.()
+  }
+
+  const handleOpenGuidelinesEditor = () => {
+    onOpenGuidelinesEditor?.()
+  }
+
   return (
     <div className={cn(
-      "w-full flex flex-col overflow-y-auto max-h-full",
+      "w-full h-full flex flex-col",
       isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
     )}>
-      {/* Hide the header section when in fullscreen mode */}
+      {/* Description Section - Above sidebar, not versioned */}
       {!isEditorFullscreen && (
+        <div className="border-b border-border">
+          <div className="space-y-3 mb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ListCheck className="h-5 w-5 text-foreground" />
+                <span className="text-lg font-semibold">Score</span>
+              </div>
+              <div className="flex gap-2">
+                <ShadcnDropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                      aria-label="More options"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleTestScore}>
+                      <TestTube className="mr-2 h-4 w-4" />
+                      Test
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleEvaluateAccuracy}>
+                      <FlaskConical className="mr-2 h-4 w-4" />
+                      Evaluate Accuracy
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleEvaluateConsistency}>
+                      <FlaskRound className="mr-2 h-4 w-4" />
+                      Evaluate Consistency
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleEvaluateAlignment}>
+                      <TestTubes className="mr-2 h-4 w-4" />
+                      Evaluate Alignment
+                    </DropdownMenuItem>
+                    {onFeedbackAnalysis && (
+                      <DropdownMenuItem onClick={onFeedbackAnalysis}>
+                        <MessageCircleMore className="mr-2 h-4 w-4" />
+                        Analyze Feedback
+                      </DropdownMenuItem>
+                    )}
+                    {onCostAnalysis && (
+                      <DropdownMenuItem onClick={onCostAnalysis}>
+                        <Coins className="mr-2 h-4 w-4" />
+                        Analyze Cost
+                      </DropdownMenuItem>
+                    )}
+                    {onDelete && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          onClick={onDelete}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Score
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </ShadcnDropdownMenu>
+                {onToggleFullWidth && (
+                  <CardButton
+                    icon={isFullWidth ? Columns2 : Square}
+                    onClick={onToggleFullWidth}
+                    aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
+                  />
+                )}
+                {onClose && (
+                  <CardButton
+                    icon={X}
+                    onClick={onClose}
+                    aria-label="Close"
+                  />
+                )}
+              </div>
+            </div>
+            <div className="space-y-px">
+              <Input
+                value={parsedConfig.name || ''}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                  handleFormChange('name', e.target.value)
+                }
+                onFocus={() => setIsEditing(true)}
+                className="text-base font-semibold bg-background border-0 px-3 py-2 h-auto w-full
+                         placeholder:text-muted-foreground rounded-t-md rounded-b-none focus-visible:ring-2 focus-visible:z-10 relative"
+                placeholder="Score name"
+              />
+              <textarea
+                value={parsedConfig.description || ''}
+                onChange={(e) => handleFormChange('description', e.target.value)}
+                placeholder="No description"
+                className="w-full px-3 py-2 rounded-b-md rounded-t-none bg-background text-xs resize-none border-0 
+                         placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:z-10 relative"
+                rows={1}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Layout - Sidebar + Content */}
+      {!isEditorFullscreen && (
+        <div className="flex flex-1 min-h-0 bg-background rounded-lg overflow-hidden">
+          {/* Left Sidebar - Version History */}
+          <ScoreSidebarVersionHistory
+            versions={versions}
+            championVersionId={championVersionId}
+            selectedVersionId={selectedVersionId}
+            onVersionSelect={onVersionSelect}
+            isSidebarCollapsed={isSidebarCollapsed}
+            onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          />
+
+          {/* Main Content - Versioned Content */}
+          <div className="flex-1 flex flex-col">
+            {/* Version Header */}
+            {selectedVersion && (
+              <div className="p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {selectedVersion.id === championVersionId ? (
+                      <Crown className="h-5 w-5 text-primary" />
+                    ) : (
+                      <Clock className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    <div>
+                      <h3 className="font-medium text-sm">
+                        {selectedVersion.id === championVersionId ? 'Champion Version' : 'Version'}
+                      </h3>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                        <span>{selectedVersion.note || 'No note'}</span>
+                        <Timestamp time={selectedVersion.createdAt} variant="relative" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tabbed Content */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+                <TabsList className="h-auto p-0 bg-transparent border-b border-border justify-start">
+                  <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2">Guidelines</TabsTrigger>
+                  <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2">Code</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="guidelines" className="flex-1 flex flex-col min-h-0 mt-0">
+                  <div className="flex items-center justify-end p-4 border-b border-border">
+                    <div className="flex gap-1">
+                      <CardButton
+                        icon={Edit}
+                        onClick={handleStartInlineEdit}
+                        aria-label="Edit guidelines inline"
+                      />
+                      <CardButton
+                        icon={Expand}
+                        onClick={handleOpenGuidelinesEditor}
+                        aria-label="Open guidelines editor"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1 p-4 overflow-y-auto bg-background">
+                    <GuidelinesEditor
+                      guidelines={isGuidelinesEditing ? guidelinesEditValue : (selectedVersion?.guidelines || score.guidelines)}
+                      isEditing={isGuidelinesEditing}
+                      isExpanded={true}
+                      onStartInlineEdit={handleStartInlineEdit}
+                      onOpenFullscreenEditor={handleOpenGuidelinesEditor}
+                      onGuidelinesChange={onGuidelinesChange}
+                      onSaveGuidelines={onSaveGuidelines}
+                      onCancelEdit={onCancelGuidelinesEdit}
+                      hasChanges={hasGuidelinesChanges}
+                      isSaving={isSavingGuidelines}
+                      title=""
+                    />
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="code" className="flex-1 flex flex-col min-h-0 mt-0">
+                  <div className="flex items-center justify-end p-4 border-b border-border">
+                    <CardButton
+                      icon={Expand}
+                      onClick={() => setIsEditorFullscreen(true)}
+                      aria-label="Open configuration editor"
+                    />
+                  </div>
+                  <div className="flex-1 bg-background">
+                    <Editor
+                      height="100%"
+                      defaultLanguage="yaml"
+                      value={score.configuration || ''}
+                      onChange={(value) => {
+                        handleFormChange('configuration', value || '')
+                        setIsEditing(true)
+                      }}
+                      onMount={(editor, monaco) => {
+                        defineCustomMonacoThemes(monaco)
+                        applyMonacoTheme(monaco)
+                        setupMonacoThemeWatcher(monaco)
+                        configureYamlLanguage(monaco)
+                      }}
+                      options={{
+                        ...getCommonMonacoOptions(),
+                        wordWrap: 'on',
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        fontSize: 14,
+                        tabSize: 2,
+                        insertSpaces: true,
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Editor Mode */}
+      {isEditorFullscreen && (
         <div className="flex justify-between items-start w-full">
           <div className="space-y-2 flex-1 px-2">
             <div className="flex items-center gap-2 mb-3">
@@ -792,24 +1056,12 @@ const DetailContent = React.memo(({
         </div>
       )}
 
-      {/* Description Section */}
-      {!isEditorFullscreen && (
-        <div className="mt-6 px-2">
-          <h3 className="text-sm font-medium mb-3">Description</h3>
-          <textarea
-            value={parsedConfig.description || ''}
-            onChange={(e) => handleFormChange('description', e.target.value)}
-            className="w-full px-3 py-2 rounded-lg bg-background text-sm resize-none border-0 
-                     placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            rows={2}
-          />
-        </div>
-      )}
+
 
       {/* Unified Save/Cancel Bar - appears when there are changes */}
       {(hasChanges || hasGuidelinesChanges) && !isEditorFullscreen && (
-        <div className="mt-6 px-2">
-          <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border">
+        <div className="mt-3">
+          <div className="flex items-center gap-3 bg-muted/50 rounded-lg border">
             <Button
               variant="outline"
               size="sm"
@@ -828,7 +1080,7 @@ const DetailContent = React.memo(({
             />
             <Button
               size="sm"
-              onClick={hasGuidelinesChanges ? onSaveGuidelines : onSave}
+              onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
               className="shrink-0"
             >
               Save Changes
@@ -837,372 +1089,13 @@ const DetailContent = React.memo(({
         </div>
       )}
 
-      {/* Guidelines Section */}
-      {!isEditorFullscreen && (
-        <div className="mt-6 px-2">
-          <GuidelinesEditor
-            guidelines={isGuidelinesEditing ? guidelinesEditValue : score.guidelines}
-            isEditing={isGuidelinesEditing}
-            isExpanded={isGuidelinesExpanded}
-            onToggleExpanded={onToggleGuidelinesExpanded}
-            onStartInlineEdit={onStartInlineEdit}
-            onOpenFullscreenEditor={onOpenGuidelinesEditor}
-            onGuidelinesChange={onGuidelinesChange}
-            onSaveGuidelines={onSaveGuidelines}
-            onCancelEdit={onCancelGuidelinesEdit}
-            hasChanges={hasGuidelinesChanges}
-            isSaving={isSavingGuidelines}
-          />
-        </div>
-      )}
 
-      {/* Configuration Label with Fullscreen Toggle */}
-      <div className={cn(
-        "mt-6 flex items-center justify-between",
-        isEditorFullscreen && "mt-0 mb-2"
-      )}>
-        <div className="flex items-center gap-2">
-          {!isEditorFullscreen && (
-            <>
-              <FileCode className="h-4 w-4 text-foreground" />
-              <span className="text-sm font-medium">Configuration</span>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {isEditorFullscreen && (
-            <ShadcnDropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
-                  aria-label="More options"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleTestScore}>
-                  <TestTube className="mr-2 h-4 w-4" />
-                  Test
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateAccuracy}>
-                  <FlaskConical className="mr-2 h-4 w-4" />
-                  Evaluate Accuracy
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateConsistency}>
-                  <FlaskRound className="mr-2 h-4 w-4" />
-                  Evaluate Consistency
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateAlignment}>
-                  <TestTubes className="mr-2 h-4 w-4" />
-                  Evaluate Alignment
-                </DropdownMenuItem>
-                {onFeedbackAnalysis && (
-                  <DropdownMenuItem onClick={onFeedbackAnalysis}>
-                    <MessageCircleMore className="mr-2 h-4 w-4" />
-                    Analyze Feedback
-                  </DropdownMenuItem>
-                )}
-                {onCostAnalysis && (
-                  <DropdownMenuItem onClick={onCostAnalysis}>
-                    <Coins className="mr-2 h-4 w-4" />
-                    Analyze Cost
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </ShadcnDropdownMenu>
-          )}
-          <CardButton
-            icon={isEditorFullscreen ? Shrink : Expand}
-            onClick={() => setIsEditorFullscreen(!isEditorFullscreen)}
-            aria-label={isEditorFullscreen ? 'Exit fullscreen' : 'Fullscreen editor'}
-          />
-        </div>
-      </div>
 
-      {/* YAML Editor - Fixed height so content below is visible */}
-      <div className={cn(
-        "flex flex-col",
-        isEditorFullscreen ? "mt-2 flex-1 min-h-0" : "mt-2"
-      )} style={{ transition: 'none' }}>
-                  {!isEditorFullscreen ? (
-          // Normal mode: fixed height container
-          <div className="h-[400px] bg-background rounded-lg overflow-hidden relative">
-            <Editor
-              height="100%"
-              defaultLanguage="yaml"
-              value={currentConfig}
-              key={`editor-${selectedVersionId || championVersionId}`}
-              onMount={(editor, monaco) => {
-                // Store the editor instance
-                editorInstanceRef.current = editor;
-                
-                // Store the Monaco instance
-                monacoRef.current = monaco;
-                
-                // Configure YAML language support with enhanced syntax highlighting
-                console.log('Configuring YAML language support...');
-                configureYamlLanguage(monaco);
-                
-                // Apply our custom theme when the editor mounts
-                console.log('Applying Monaco themes...');
-                defineCustomMonacoThemes(monaco);
-                applyMonacoTheme(monaco);
-                
-                // Set up YAML linting integration
-                setupMonacoIntegration(editor, monaco);
-                
-                // Debug: Check if YAML language is registered
-                const registeredLanguages = monaco.languages.getLanguages();
-                const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
-                console.log('YAML language registered:', yamlLang ? 'YES' : 'NO');
-                if (yamlLang) {
-                  console.log('YAML language details:', yamlLang);
-                }
-                
-                // Force immediate layout to ensure correct sizing
-                editor.layout();
-                
-                // Add error handling for iPad-specific issues
-                window.addEventListener('error', (event) => {
-                  if (event.message === 'Canceled: Canceled' || 
-                      event.error?.message === 'Canceled: Canceled') {
-                    event.preventDefault();
-                    return true; // Prevent the error from propagating
-                  }
-                  return false;
-                });
-              }}
-              onChange={(value) => {
-                if (!value) return;
-                
-                // Run YAML validation and show indentation errors
-                if (monacoRef.current && editorInstanceRef.current) {
-                  const model = editorInstanceRef.current.getModel();
-                  if (model) {
-                    const markers = validateYamlIndentation(monacoRef.current, model);
-                    monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
-                  }
-                }
-                
-                try {
-                  // Set editing flag to prevent useEffect from overriding our changes
-                  setIsEditing(true);
-                  
-                  // Parse YAML to validate it and get values for form
-                  const parsed = parseYaml(value)
-                  
-                  // Extract external ID from all possible formats
-                  const externalIdValue = parsed.externalId !== undefined ? 
-                    parsed.externalId : 
-                    (parsed.external_id !== undefined ? parsed.external_id : 
-                     (parsed.id !== undefined ? parsed.id : undefined));
 
-                  
-                  // Update our local state
-                  setCurrentConfig(value);
-                  
-                  // Pass the updated configuration to the parent
-                  onEditChange?.({
-                    name: parsed.name,
-                    externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
-                    key: parsed.key,
-                    description: parsed.description,
-                    configuration: value, // Store the original YAML string
-                    isDisabled: parsed.isDisabled
-                  });
-                } catch (error) {
-                  // Handle cancellation errors gracefully
-                  if (error instanceof Error && 
-                      (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
-                    return; // Just ignore the error
-                  }
-                  
-                  // Ignore other parse errors while typing
-                }
-              }}
-              options={getCommonMonacoOptions(isMobileDevice)}
-            />
-          </div>
-        ) : (
-          // Fullscreen mode: 2-column layout with editor on left and linter on right
-          <div className="flex gap-4 h-full">
-            {/* Monaco Editor - 2/3 width */}
-            <div className="flex-[2] bg-background rounded-lg overflow-hidden relative">
-              <Editor
-                height="100%"
-                defaultLanguage="yaml"
-                value={currentConfig}
-                key={`editor-${selectedVersionId || championVersionId}`}
-                onMount={(editor, monaco) => {
-                  // Store the editor instance
-                  editorInstanceRef.current = editor;
-                  
-                  // Store the Monaco instance
-                  monacoRef.current = monaco;
-                  
-                  // Configure YAML language support with enhanced syntax highlighting
-                  console.log('Configuring YAML language support (fullscreen)...');
-                  configureYamlLanguage(monaco);
-                  
-                  // Apply our custom theme when the editor mounts
-                  console.log('Applying Monaco themes (fullscreen)...');
-                  defineCustomMonacoThemes(monaco);
-                  applyMonacoTheme(monaco);
-                  
-                  // Set up YAML linting integration
-                  setupMonacoIntegration(editor, monaco);
-                  
-                  // Debug: Check if YAML language is registered
-                  const registeredLanguages = monaco.languages.getLanguages();
-                  const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
-                  console.log('YAML language registered (fullscreen):', yamlLang ? 'YES' : 'NO');
-                  
-                  // Force immediate layout to ensure correct sizing
-                  editor.layout();
-                  
-                  // Add error handling for iPad-specific issues
-                  window.addEventListener('error', (event) => {
-                    if (event.message === 'Canceled: Canceled' || 
-                        event.error?.message === 'Canceled: Canceled') {
-                      event.preventDefault();
-                      return true; // Prevent the error from propagating
-                    }
-                    return false;
-                  });
-                }}
-                onChange={(value) => {
-                  if (!value) return;
-                  
-                  // Run YAML validation and show indentation errors
-                  if (monacoRef.current && editorInstanceRef.current) {
-                    const model = editorInstanceRef.current.getModel();
-                    if (model) {
-                      const markers = validateYamlIndentation(monacoRef.current, model);
-                      monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
-                    }
-                  }
-                  
-                  try {
-                    // Set editing flag to prevent useEffect from overriding our changes
-                    setIsEditing(true);
-                    
-                    // Parse YAML to validate it and get values for form
-                    const parsed = parseYaml(value)
-                    
-                    // Extract external ID from all possible formats
-                    const externalIdValue = parsed.externalId !== undefined ? 
-                      parsed.externalId : 
-                      (parsed.external_id !== undefined ? parsed.external_id : 
-                       (parsed.id !== undefined ? parsed.id : undefined));
 
-                    
-                    // Update our local state
-                    setCurrentConfig(value);
-                    
-                    // Pass the updated configuration to the parent
-                    onEditChange?.({
-                      name: parsed.name,
-                      externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
-                      key: parsed.key,
-                      description: parsed.description,
-                      configuration: value // Store the original YAML string
-                    });
-                  } catch (error) {
-                    // Handle cancellation errors gracefully
-                    if (error instanceof Error && 
-                        (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
-                      return; // Just ignore the error
-                    }
-                    
-                    // Ignore other parse errors while typing
-                  }
-                }}
-                options={getCommonMonacoOptions(isMobileDevice)}
-              />
-            </div>
 
-            {/* YAML Linter Panel - 1/3 width on the right */}
-            {lintResult && (
-              <div className="flex-[1] bg-background rounded-lg p-4 overflow-y-auto">
-                <YamlLinterPanel
-                  result={lintResult}
-                  onMessageClick={handleLintMessageClick}
-                  className="text-sm"
-                />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
-      {/* YAML Linter Panel - only show below editor in normal mode (not fullscreen) */}
-      {!isEditorFullscreen && lintResult && (
-        <div className="mt-3">
-          <div className="bg-background rounded-lg p-4">
-            <YamlLinterPanel
-              result={lintResult}
-              onMessageClick={handleLintMessageClick}
-              className="text-sm"
-            />
-          </div>
-        </div>
-      )}
 
-      {/* Action buttons - only show in fullscreen mode (unified bar handles normal mode) */}
-      {hasChanges && isEditorFullscreen && (
-        <div className={cn(
-          "mt-3 space-y-4",
-          isEditorFullscreen && "mt-4"
-        )}>
-          <div className={cn(
-            "flex gap-2",
-            isEditorFullscreen ? "flex-row items-end" : "justify-end"
-          )}>
-            {isEditorFullscreen && (
-              <textarea
-                value={versionNote}
-                onChange={(e) => onNoteChange(e.target.value)}
-                placeholder="Add a note about this version..."
-                className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-sm resize-none h-10
-                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                         placeholder:text-muted-foreground"
-                rows={1}
-              />
-            )}
-            <div className="flex gap-2">
-              <Button className="bg-card hover:bg-card/80 text-card-foreground shadow-none border-0" onClick={() => {
-                setIsEditing(false); // Reset editing flag
-                onCancel?.();
-              }}>Cancel</Button>
-              <Button onClick={() => {
-                setIsEditing(false); // Reset editing flag
-                if (isEditorFullscreen) {
-                  setIsEditorFullscreen(false); // Exit fullscreen after save
-                }
-                onSave?.();
-              }}>Save Changes</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Version history - hide in fullscreen mode */}
-      {!isEditorFullscreen && versions && (
-        <div className="mt-3 overflow-hidden flex-shrink-0">
-          <ScoreVersionHistory
-            versions={versions}
-            championVersionId={championVersionId}
-            selectedVersionId={selectedVersionId}
-            onVersionSelect={onVersionSelect}
-            onToggleFeature={onToggleFeature}
-            onPromoteToChampion={onPromoteToChampion}
-            forceExpanded={forceExpandHistory}
-          />
-        </div>
-      )}
 
       {/* Test Score Dialog */}
       <TestScoreDialog
@@ -1250,6 +1143,56 @@ export function ScoreComponent({
   const [hasGuidelinesChanges, setHasGuidelinesChanges] = React.useState(false)
   const [isSavingGuidelines, setIsSavingGuidelines] = React.useState(false)
 
+  // Version selection handler
+  const handleVersionSelect = (version: ScoreVersion) => {
+    console.log('🔍 Loading version:', version.id, 'Guidelines:', version.guidelines)
+    setSelectedVersionId(version.id)
+    setVersionNote(version.note || '')
+    
+    // Signal to DetailContent to reset editing state
+    setResetEditingCounter(prev => prev + 1)
+    
+    try {
+      // Parse the YAML configuration to extract all fields
+      const config = parseYaml(version.configuration)
+      
+      // Extract external ID from either format
+      const externalIdValue = config.externalId !== undefined ? 
+        config.externalId : 
+        (config.external_id !== undefined ? config.external_id : 
+         (config.id !== undefined ? config.id : undefined));
+
+      
+      // Update the editedScore with values from the YAML configuration and version record
+      // YAML is source of truth for most fields, but guidelines come from ScoreVersion.guidelines
+      setEditedScore(prev => {
+        const updated = {
+          ...prev,
+          // Use values from YAML, falling back to previous values if not present
+          name: config.name !== undefined ? config.name : prev.name,
+          // Support all three formats for external ID
+          externalId: externalIdValue !== undefined ? String(externalIdValue) : prev.externalId,
+          key: config.key !== undefined ? config.key : prev.key,
+          description: config.description !== undefined ? config.description : prev.description,
+          // Guidelines come from ScoreVersion.guidelines, not from YAML
+          guidelines: version.guidelines !== undefined ? version.guidelines : prev.guidelines,
+          // Store the complete configuration for the editor
+          configuration: version.configuration
+        };
+        console.log('🔧 Setting editedScore guidelines to:', updated.guidelines)
+        return updated;
+      })
+      
+      // Reset hasChanges since we just loaded a version
+      setHasChanges(false);
+      
+      // Remove toast notification for simply viewing a version
+      // We only want notifications for actions that change state
+    } catch (error) {
+      console.error('Error parsing version YAML:', error)
+      toast.error('Error loading version configuration')
+    }
+  }
   
   // Ensure editedScore is updated when score prop changes
   React.useEffect(() => {
@@ -1395,24 +1338,23 @@ export function ScoreComponent({
 
 
 
-  // Guidelines handlers for main component
-  const handleStartInlineEdit = () => {
-    setGuidelinesEditValue(editedScore.guidelines || '')
-    setHasGuidelinesChanges(false)
-    setIsGuidelinesEditing(true)
-  }
 
-  const handleOpenGuidelinesEditor = () => {
-    setGuidelinesEditValue(editedScore.guidelines || '')
-    setHasGuidelinesChanges(false)
-    setIsGuidelinesFullscreen(true)
-  }
 
   const handleSaveGuidelines = async () => {
     if (isSavingGuidelines) return
     
     try {
       setIsSavingGuidelines(true)
+      
+      // Debug: Check what we actually have
+      console.log('🔍 handleSaveGuidelines - guidelinesEditValue type:', typeof guidelinesEditValue)
+      console.log('🔍 handleSaveGuidelines - guidelinesEditValue value:', guidelinesEditValue)
+      
+      // This should always be a string - if it's not, we have a bug to fix
+      if (typeof guidelinesEditValue !== 'string') {
+        console.error('❌ BUG: guidelinesEditValue is not a string!', guidelinesEditValue)
+        throw new Error(`guidelinesEditValue should be a string, got ${typeof guidelinesEditValue}`)
+      }
       
       // Update the score guidelines
       handleEditChange({ guidelines: guidelinesEditValue })
@@ -1439,6 +1381,15 @@ export function ScoreComponent({
   }
 
   const handleGuidelinesChange = (value: string) => {
+    console.log('🔍 handleGuidelinesChange called with type:', typeof value)
+    console.log('🔍 handleGuidelinesChange called with value:', value)
+    
+    if (typeof value !== 'string') {
+      console.error('❌ BUG: handleGuidelinesChange received non-string!', value)
+      console.trace('Stack trace for non-string value')
+      return // Don't set invalid value
+    }
+    
     setGuidelinesEditValue(value)
     setHasGuidelinesChanges(value !== (editedScore.guidelines || ''))
   }
@@ -1561,55 +1512,7 @@ export function ScoreComponent({
     setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
   }
 
-  const handleVersionSelect = (version: ScoreVersion) => {
-    console.log('🔍 Loading version:', version.id, 'Guidelines:', version.guidelines)
-    setSelectedVersionId(version.id)
-    setVersionNote(version.note || '')
-    
-    // Signal to DetailContent to reset editing state
-    setResetEditingCounter(prev => prev + 1)
-    
-    try {
-      // Parse the YAML configuration to extract all fields
-      const config = parseYaml(version.configuration)
-      
-      // Extract external ID from either format
-      const externalIdValue = config.externalId !== undefined ? 
-        config.externalId : 
-        (config.external_id !== undefined ? config.external_id : 
-         (config.id !== undefined ? config.id : undefined));
 
-      
-      // Update the editedScore with values from the YAML configuration and version record
-      // YAML is source of truth for most fields, but guidelines come from ScoreVersion.guidelines
-      setEditedScore(prev => {
-        const updated = {
-          ...prev,
-          // Use values from YAML, falling back to previous values if not present
-          name: config.name !== undefined ? config.name : prev.name,
-          // Support all three formats for external ID
-          externalId: externalIdValue !== undefined ? String(externalIdValue) : prev.externalId,
-          key: config.key !== undefined ? config.key : prev.key,
-          description: config.description !== undefined ? config.description : prev.description,
-          // Guidelines come from ScoreVersion.guidelines, not from YAML
-          guidelines: version.guidelines !== undefined ? version.guidelines : prev.guidelines,
-          // Store the complete configuration for the editor
-          configuration: version.configuration
-        };
-        console.log('🔧 Setting editedScore guidelines to:', updated.guidelines)
-        return updated;
-      })
-      
-      // Reset hasChanges since we just loaded a version
-      setHasChanges(false);
-      
-      // Remove toast notification for simply viewing a version
-      // We only want notifications for actions that change state
-    } catch (error) {
-      console.error('Error parsing version YAML:', error)
-      toast.error('Error loading version configuration')
-    }
-  }
 
   const handleToggleFeature = async (versionId: string) => {
     try {
@@ -1996,8 +1899,14 @@ export function ScoreComponent({
               guidelinesEditValue={guidelinesEditValue}
               hasGuidelinesChanges={hasGuidelinesChanges}
               isSavingGuidelines={isSavingGuidelines}
-              onStartInlineEdit={handleStartInlineEdit}
-              onOpenGuidelinesEditor={handleOpenGuidelinesEditor}
+              onStartInlineEdit={() => {
+                setIsGuidelinesEditing(true)
+                setGuidelinesEditValue(editedScore.guidelines || '')
+              }}
+              onOpenGuidelinesEditor={() => {
+                setIsGuidelinesFullscreen(true)
+                setGuidelinesEditValue(editedScore.guidelines || '')
+              }}
               onGuidelinesChange={handleGuidelinesChange}
               onSaveGuidelines={handleSaveGuidelines}
               onCancelGuidelinesEdit={handleCancelGuidelinesEdit}
