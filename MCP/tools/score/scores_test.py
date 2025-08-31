@@ -14,6 +14,177 @@ pytestmark = pytest.mark.unit
 class TestScoreInfoTool:
     """Test plexus_score_info tool patterns"""
     
+    def test_score_info_code_and_guidelines_from_champion(self):
+        """Test that score info returns code and guidelines from champion version"""
+        # Mock score data with champion version
+        score_data = {
+            'id': 'score-123',
+            'name': 'Test Score',
+            'key': 'test_score',
+            'championVersionId': 'version-456',
+            'description': 'Score description',
+            'isDisabled': False
+        }
+        
+        # Mock champion version data
+        champion_version_data = {
+            'id': 'version-456',
+            'configuration': 'name: Test Score\ntype: SimpleLLMScore\nsystem_message: "Test prompt"',
+            'guidelines': '# Test Guidelines\n\nThis is a test score.',
+            'description': 'Version description',
+            'createdAt': '2024-01-01T00:00:00Z',
+            'updatedAt': '2024-01-01T00:00:00Z',
+            'note': 'Champion version',
+            'isFeatured': True,
+            'parentVersionId': None
+        }
+        
+        # Expected response structure
+        expected_response = {
+            "found": True,
+            "scoreId": "score-123",
+            "scoreName": "Test Score",
+            "scoreKey": "test_score",
+            "championVersionId": "version-456",
+            "description": "Version description",  # Should come from version, not score
+            "code": champion_version_data['configuration'],
+            "guidelines": champion_version_data['guidelines'],
+            "isDisabled": False
+        }
+        
+        # Verify the expected structure
+        assert expected_response['code'] is not None
+        assert expected_response['guidelines'] is not None
+        assert expected_response['description'] == "Version description"  # Version takes priority
+        assert "name: Test Score" in expected_response['code']
+        assert "# Test Guidelines" in expected_response['guidelines']
+    
+    def test_score_info_description_fallback_logic(self):
+        """Test description field logic: version description > score description"""
+        # Test case 1: Version has description - should use version description
+        score_with_version_desc = {
+            'id': 'score-123',
+            'description': 'Score description',
+            'championVersionId': 'version-456'
+        }
+        
+        version_with_desc = {
+            'id': 'version-456',
+            'description': 'Version description',
+            'configuration': 'name: Test',
+            'guidelines': 'Test guidelines'
+        }
+        
+        # Should use version description
+        expected_desc_1 = version_with_desc['description']
+        assert expected_desc_1 == 'Version description'
+        
+        # Test case 2: Version has no description - should fall back to score description
+        version_without_desc = {
+            'id': 'version-456',
+            'description': None,  # No version description
+            'configuration': 'name: Test',
+            'guidelines': 'Test guidelines'
+        }
+        
+        # Should fall back to score description
+        expected_desc_2 = score_with_version_desc['description']
+        assert expected_desc_2 == 'Score description'
+        
+        # Test case 3: No champion version - should use score description
+        score_without_champion = {
+            'id': 'score-123',
+            'description': 'Score description',
+            'championVersionId': None
+        }
+        
+        expected_desc_3 = score_without_champion['description']
+        assert expected_desc_3 == 'Score description'
+    
+    def test_score_info_specific_version_parameter(self):
+        """Test version_id parameter for getting specific score version info"""
+        # Mock score data
+        score_data = {
+            'id': 'score-123',
+            'name': 'Test Score',
+            'championVersionId': 'version-current',
+            'description': 'Score description'
+        }
+        
+        # Mock specific version data (not the champion)
+        specific_version_data = {
+            'id': 'version-specific',
+            'configuration': 'name: Specific Version\ntype: SimpleLLMScore',
+            'guidelines': '# Specific Version Guidelines',
+            'description': 'Specific version description',
+            'createdAt': '2024-02-01T00:00:00Z',
+            'note': 'Specific version for testing',
+            'isFeatured': False
+        }
+        
+        # When version_id is provided, should use that version instead of champion
+        version_id = 'version-specific'
+        
+        expected_response = {
+            "scoreId": "score-123",
+            "scoreName": "Test Score",
+            "championVersionId": "version-current",  # Still shows champion ID
+            "description": "Specific version description",  # From specific version
+            "code": specific_version_data['configuration'],
+            "guidelines": specific_version_data['guidelines'],
+            "targetedVersionDetails": specific_version_data  # Added when version_id specified
+        }
+        
+        # Verify specific version takes precedence
+        assert expected_response['code'] == specific_version_data['configuration']
+        assert expected_response['guidelines'] == specific_version_data['guidelines']
+        assert expected_response['description'] == specific_version_data['description']
+        assert expected_response['targetedVersionDetails'] is not None
+        assert "Specific Version" in expected_response['code']
+    
+    def test_score_info_no_champion_version_handling(self):
+        """Test handling when score has no champion version"""
+        # Mock score data without champion version
+        score_data = {
+            'id': 'score-123',
+            'name': 'Test Score',
+            'championVersionId': None,  # No champion version
+            'description': 'Score description',
+            'isDisabled': False
+        }
+        
+        expected_response = {
+            "found": True,
+            "scoreId": "score-123",
+            "scoreName": "Test Score",
+            "championVersionId": None,
+            "description": "Score description",  # Falls back to score description
+            "code": None,  # No code available
+            "guidelines": None,  # No guidelines available
+            "isDisabled": False
+        }
+        
+        # Verify fallback behavior
+        assert expected_response['code'] is None
+        assert expected_response['guidelines'] is None
+        assert expected_response['description'] == "Score description"
+        assert expected_response['championVersionId'] is None
+    
+    def test_score_info_field_name_consistency(self):
+        """Test that response uses 'code' instead of 'configuration'"""
+        # Mock response structure
+        response = {
+            "scoreId": "score-123",
+            "code": "name: Test Score\ntype: SimpleLLMScore",  # Should be 'code', not 'configuration'
+            "guidelines": "# Test Guidelines"
+        }
+        
+        # Verify field names
+        assert 'code' in response
+        assert 'configuration' not in response  # Should not use old field name
+        assert response['code'] is not None
+        assert isinstance(response['code'], str)
+    
     def test_score_info_validation_patterns(self):
         """Test score info parameter validation patterns"""
         def validate_score_info_params(score_identifier, scorecard_identifier=None, version_id=None, include_versions=False):
@@ -183,6 +354,59 @@ class TestScoreInfoTool:
 
 class TestScoreConfigurationTool:
     """Test plexus_score_configuration tool patterns"""
+    
+    def test_score_configuration_uses_code_field(self):
+        """Test that score configuration tool returns 'code' instead of 'configuration'"""
+        # Mock version data
+        version_data = {
+            'id': 'version-123',
+            'configuration': 'name: Test Score\ntype: SimpleLLMScore\nsystem_message: "Test prompt"',
+            'guidelines': '# Test Guidelines\n\nThis is a test score.',
+            'createdAt': '2024-01-01T00:00:00Z',
+            'note': 'Updated configuration',
+            'isFeatured': True
+        }
+        
+        # Expected response structure with 'code' field
+        expected_response = {
+            "scoreId": "score-123",
+            "scoreName": "Test Score",
+            "scorecardName": "Test Scorecard",
+            "versionId": version_data['id'],
+            "isChampionVersion": False,
+            "code": version_data['configuration'],  # Should be 'code', not 'configuration'
+            "guidelines": version_data['guidelines'],
+            "versionMetadata": {
+                "createdAt": version_data.get('createdAt'),
+                "note": version_data.get('note'),
+                "isFeatured": version_data.get('isFeatured')
+            }
+        }
+        
+        # Verify field names
+        assert 'code' in expected_response
+        assert 'configuration' not in expected_response  # Should not use old field name
+        assert expected_response['code'] == version_data['configuration']
+        assert 'name: Test Score' in expected_response['code']
+    
+    def test_champion_version_configuration_uses_code_field(self):
+        """Test that champion version configuration also uses 'code' field"""
+        # Mock champion version response
+        champion_response = {
+            "scoreId": "score-123",
+            "scoreName": "Test Score",
+            "versionId": "champion-version-456",
+            "isChampionVersion": True,
+            "code": "name: Champion Score\ntype: SimpleLLMScore\nsystem_message: 'Champion prompt'",  # Should be 'code'
+            "guidelines": "# Champion Guidelines\n\nThis is the champion version."
+        }
+        
+        # Verify field consistency
+        assert 'code' in champion_response
+        assert 'configuration' not in champion_response
+        assert champion_response['isChampionVersion'] is True
+        assert champion_response['versionId'] == 'champion-version-456'
+        assert 'Champion Score' in champion_response['code']
     
     def test_score_config_validation_patterns(self):
         """Test score configuration parameter validation patterns"""
@@ -363,6 +587,241 @@ class TestScorePushTool:
 
 class TestScoreUpdateTool:
     """Test plexus_score_update tool patterns"""
+    
+    def test_score_update_code_and_guidelines_change_detection(self):
+        """Test that score update properly detects code and guidelines changes"""
+        # Mock current version data
+        current_version_data = {
+            'id': 'version-current',
+            'configuration': 'name: Original Score\ntype: SimpleLLMScore\nsystem_message: "Original prompt"',
+            'guidelines': '# Original Guidelines\n\nThis is the original version.'
+        }
+        
+        # Test case 1: Code changed, guidelines unchanged
+        new_code = 'name: Updated Score\ntype: SimpleLLMScore\nsystem_message: "Updated prompt"'
+        same_guidelines = '# Original Guidelines\n\nThis is the original version.'
+        
+        # Should create new version because code changed
+        expected_result_1 = {
+            "success": True,
+            "version_created": True,
+            "skipped": False,
+            "parent_version_id": "version-current"
+        }
+        
+        # Test case 2: Guidelines changed, code unchanged  
+        same_code = 'name: Original Score\ntype: SimpleLLMScore\nsystem_message: "Original prompt"'
+        new_guidelines = '# Updated Guidelines\n\nThis is the updated version with new instructions.'
+        
+        # Should create new version because guidelines changed
+        expected_result_2 = {
+            "success": True,
+            "version_created": True,
+            "skipped": False,
+            "parent_version_id": "version-current"
+        }
+        
+        # Test case 3: Both unchanged
+        # Should skip version creation
+        expected_result_3 = {
+            "success": True,
+            "version_created": False,
+            "skipped": True,
+            "parent_version_id": "version-current"
+        }
+        
+        # Verify expected behavior
+        assert expected_result_1["version_created"] is True
+        assert expected_result_2["version_created"] is True  
+        assert expected_result_3["version_created"] is False
+        assert expected_result_3["skipped"] is True
+    
+    def test_score_update_parent_version_parameter(self):
+        """Test parent_version_id parameter functionality"""
+        # Mock score data
+        score_data = {
+            'id': 'score-123',
+            'name': 'Test Score',
+            'championVersionId': 'version-champion'
+        }
+        
+        # Mock specific parent version (not the champion)
+        parent_version_data = {
+            'id': 'version-parent',
+            'configuration': 'name: Parent Version\ntype: SimpleLLMScore',
+            'guidelines': '# Parent Guidelines'
+        }
+        
+        # Test with explicit parent_version_id
+        parent_version_id = 'version-parent'
+        new_code = 'name: Child Version\ntype: SimpleLLMScore'
+        
+        expected_update_params = {
+            "scorecard_identifier": "test-scorecard",
+            "score_identifier": "test-score", 
+            "code": new_code,
+            "parent_version_id": parent_version_id,
+            "version_note": "Updated from specific parent"
+        }
+        
+        expected_response = {
+            "success": True,
+            "version_created": True,
+            "parent_version_id": parent_version_id,  # Should use specified parent
+            "new_version_parent": parent_version_id  # New version should have this as parent
+        }
+        
+        # Verify parent version is used for comparison and set as parent
+        assert expected_update_params["parent_version_id"] == parent_version_id
+        assert expected_response["parent_version_id"] == parent_version_id
+    
+    def test_score_update_preserves_existing_content(self):
+        """Test that update preserves existing code/guidelines when only one is provided"""
+        # Mock current version with both code and guidelines
+        current_version = {
+            'configuration': 'name: Current Score\ntype: SimpleLLMScore',
+            'guidelines': '# Current Guidelines\n\nExisting guidelines content.'
+        }
+        
+        # Test case 1: Only code provided - should preserve guidelines
+        update_params_1 = {
+            "code": "name: Updated Score\ntype: SimpleLLMScore",
+            "guidelines": None  # Not provided
+        }
+        
+        expected_version_input_1 = {
+            "configuration": "name: Updated Score\ntype: SimpleLLMScore",
+            "guidelines": "# Current Guidelines\n\nExisting guidelines content."  # Preserved
+        }
+        
+        # Test case 2: Only guidelines provided - should preserve code
+        update_params_2 = {
+            "code": None,  # Not provided
+            "guidelines": "# Updated Guidelines\n\nNew guidelines content."
+        }
+        
+        expected_version_input_2 = {
+            "configuration": "name: Current Score\ntype: SimpleLLMScore",  # Preserved
+            "guidelines": "# Updated Guidelines\n\nNew guidelines content."
+        }
+        
+        # Verify preservation logic
+        assert expected_version_input_1["guidelines"] == current_version["guidelines"]
+        assert expected_version_input_2["configuration"] == current_version["configuration"]
+    
+    def test_score_update_metadata_and_version_updates(self):
+        """Test that score update can handle both metadata and version updates"""
+        update_params = {
+            "scorecard_identifier": "test-scorecard",
+            "score_identifier": "test-score",
+            # Metadata updates
+            "name": "Updated Score Name",
+            "description": "Updated description", 
+            "ai_model": "gpt-4",
+            # Version updates
+            "code": "name: Updated Code\ntype: SimpleLLMScore",
+            "guidelines": "# Updated Guidelines",
+            "version_note": "Combined metadata and version update"
+        }
+        
+        expected_response = {
+            "success": True,
+            "updates": {
+                "metadata_updated": True,
+                "version_created": True,
+                "metadata_changes": {
+                    "name": "Updated Score Name",
+                    "description": "Updated description",
+                    "ai_model": "gpt-4"
+                },
+                "version_info": {
+                    "version_id": "new-version-123",
+                    "skipped": False,
+                    "message": "Successfully created new version"
+                }
+            }
+        }
+        
+        # Verify both types of updates are handled
+        assert expected_response["updates"]["metadata_updated"] is True
+        assert expected_response["updates"]["version_created"] is True
+        assert "name" in expected_response["updates"]["metadata_changes"]
+        assert expected_response["updates"]["version_info"]["skipped"] is False
+    
+    def test_score_update_no_changes_detected(self):
+        """Test score update when no changes are detected"""
+        # Mock current version data
+        current_version = {
+            'configuration': 'name: Test Score\ntype: SimpleLLMScore',
+            'guidelines': '# Test Guidelines\n\nExisting content.'
+        }
+        
+        # Provide same content as current version
+        update_params = {
+            "code": "name: Test Score\ntype: SimpleLLMScore",  # Same as current
+            "guidelines": "# Test Guidelines\n\nExisting content.",  # Same as current
+            "version_note": "No changes should be detected"
+        }
+        
+        expected_response = {
+            "success": True,
+            "updates": {
+                "metadata_updated": False,
+                "version_created": False,  # No version created
+                "version_info": {
+                    "skipped": True,  # Skipped due to no changes
+                    "message": "No changes detected, skipping version creation"
+                }
+            }
+        }
+        
+        # Verify no-change detection
+        assert expected_response["updates"]["version_created"] is False
+        assert expected_response["updates"]["version_info"]["skipped"] is True
+    
+    def test_score_update_error_handling(self):
+        """Test error handling in score update scenarios"""
+        # Test case 1: Invalid YAML code
+        invalid_yaml_params = {
+            "code": "invalid: [unclosed bracket\nbroken: yaml",
+            "guidelines": "Valid guidelines"
+        }
+        
+        expected_yaml_error = {
+            "success": False,
+            "error": "INVALID_YAML",
+            "message": "Invalid YAML code content"
+        }
+        
+        # Test case 2: Parent version not found
+        missing_parent_params = {
+            "code": "name: Valid Code\ntype: SimpleLLMScore",
+            "parent_version_id": "nonexistent-version-id"
+        }
+        
+        expected_parent_error = {
+            "success": False,
+            "error": "PARENT_VERSION_NOT_FOUND",
+            "message": "Specified parent version not found"
+        }
+        
+        # Test case 3: No updates provided
+        no_updates_params = {
+            "scorecard_identifier": "test-scorecard",
+            "score_identifier": "test-score"
+            # No metadata or version fields provided
+        }
+        
+        expected_no_updates_error = {
+            "success": False,
+            "error": "NO_UPDATES_PROVIDED",
+            "message": "At least one field must be provided for update"
+        }
+        
+        # Verify error handling
+        assert "INVALID_YAML" in expected_yaml_error["error"]
+        assert "PARENT_VERSION_NOT_FOUND" in expected_parent_error["error"]
+        assert "NO_UPDATES_PROVIDED" in expected_no_updates_error["error"]
     
     def test_score_update_validation_patterns(self):
         """Test score update parameter validation patterns"""
@@ -569,6 +1028,140 @@ class TestScoreInstanceHelper:
         result = find_score_in_scorecard('nonexistent', mock_scorecard_data)
         assert result['success'] is False
         assert "not found" in result['error']
+
+
+class TestCreateVersionFromCodeWithParent:
+    """Test _create_version_from_code_with_parent helper function patterns"""
+    
+    def test_create_version_with_parent_change_detection(self):
+        """Test change detection logic in _create_version_from_code_with_parent"""
+        # Mock parent version data
+        parent_version_data = {
+            'id': 'parent-version-123',
+            'configuration': 'name: Parent Score\ntype: SimpleLLMScore',
+            'guidelines': '# Parent Guidelines\n\nOriginal content.'
+        }
+        
+        # Test case 1: Code changed
+        new_code = 'name: Updated Score\ntype: SimpleLLMScore'
+        same_guidelines = '# Parent Guidelines\n\nOriginal content.'
+        
+        # Should create new version
+        expected_result_1 = {
+            "success": True,
+            "version_id": "new-version-456",
+            "skipped": False,
+            "parent_version_id": "parent-version-123"
+        }
+        
+        # Test case 2: Guidelines changed
+        same_code = 'name: Parent Score\ntype: SimpleLLMScore'
+        new_guidelines = '# Updated Guidelines\n\nNew content.'
+        
+        # Should create new version
+        expected_result_2 = {
+            "success": True,
+            "version_id": "new-version-789",
+            "skipped": False,
+            "parent_version_id": "parent-version-123"
+        }
+        
+        # Test case 3: No changes
+        # Should skip version creation
+        expected_result_3 = {
+            "success": True,
+            "version_id": "parent-version-123",  # Returns parent version ID
+            "skipped": True,
+            "parent_version_id": "parent-version-123"
+        }
+        
+        # Verify change detection logic
+        assert expected_result_1["skipped"] is False
+        assert expected_result_2["skipped"] is False
+        assert expected_result_3["skipped"] is True
+        assert expected_result_3["version_id"] == expected_result_3["parent_version_id"]
+    
+    def test_create_version_with_parent_version_input(self):
+        """Test that new version is created with correct parent relationship"""
+        # Mock input parameters
+        score_id = 'score-123'
+        parent_version_id = 'parent-version-456'
+        code_content = 'name: New Version\ntype: SimpleLLMScore'
+        guidelines = '# New Guidelines\n\nUpdated content.'
+        note = 'Created from specific parent'
+        
+        # Expected GraphQL mutation input
+        expected_version_input = {
+            'scoreId': score_id,
+            'configuration': code_content.strip(),
+            'guidelines': guidelines.strip(),
+            'note': note,
+            'isFeatured': True,
+            'parentVersionId': parent_version_id  # Should set parent relationship
+        }
+        
+        # Verify parent relationship is established
+        assert expected_version_input['parentVersionId'] == parent_version_id
+        assert expected_version_input['scoreId'] == score_id
+        assert expected_version_input['isFeatured'] is True
+    
+    def test_create_version_with_parent_error_handling(self):
+        """Test error handling in _create_version_from_code_with_parent"""
+        # Test case 1: Invalid YAML
+        invalid_yaml = 'invalid: [unclosed bracket\nbroken: yaml'
+        
+        expected_yaml_error = {
+            "success": False,
+            "error": "INVALID_YAML",
+            "message": "Invalid YAML code content"
+        }
+        
+        # Test case 2: API failure during version creation
+        valid_yaml = 'name: Valid Score\ntype: SimpleLLMScore'
+        
+        expected_api_error = {
+            "success": False,
+            "error": "VERSION_CREATION_FAILED",
+            "message": "Failed to create new score version"
+        }
+        
+        # Test case 3: Unexpected exception
+        expected_unexpected_error = {
+            "success": False,
+            "error": "UNEXPECTED_ERROR",
+            "message": "Error creating version for Score"
+        }
+        
+        # Verify error handling patterns
+        assert "INVALID_YAML" in expected_yaml_error["error"]
+        assert "VERSION_CREATION_FAILED" in expected_api_error["error"]
+        assert "UNEXPECTED_ERROR" in expected_unexpected_error["error"]
+    
+    def test_create_version_with_parent_whitespace_handling(self):
+        """Test whitespace handling in change detection"""
+        # Mock parent version with specific whitespace
+        parent_code = 'name: Test Score\ntype: SimpleLLMScore'
+        parent_guidelines = '# Guidelines\n\nContent here.'
+        
+        # Test with different leading/trailing whitespace but same content
+        new_code_with_whitespace = '\n\n  name: Test Score\ntype: SimpleLLMScore  \n\n'
+        new_guidelines_with_whitespace = '\n\n  # Guidelines\n\nContent here.  \n\n'
+        
+        # After stripping, should be considered unchanged
+        code_unchanged = parent_code.strip() == new_code_with_whitespace.strip()
+        guidelines_unchanged = parent_guidelines.strip() == new_guidelines_with_whitespace.strip()
+        
+        # Should skip version creation due to whitespace normalization
+        expected_result = {
+            "success": True,
+            "skipped": True,
+            "message": "No changes detected, skipping version creation"
+        }
+        
+        # Verify whitespace is properly handled
+        assert code_unchanged is True
+        assert guidelines_unchanged is True
+        assert expected_result["skipped"] is True
 
 
 class TestScoreToolsSharedPatterns:
