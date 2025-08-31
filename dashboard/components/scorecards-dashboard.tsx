@@ -54,10 +54,12 @@ const ACCOUNT_KEY = 'call-criteria'
 
 export default function ScorecardsComponent({
   initialSelectedScorecardId = null,
-  initialSelectedScoreId = null
+  initialSelectedScoreId = null,
+  initialSelectedVersionId = null
 }: {
   initialSelectedScorecardId?: string | null,
-  initialSelectedScoreId?: string | null
+  initialSelectedScoreId?: string | null,
+  initialSelectedVersionId?: string | null
 } = {}) {
   // Get the Amplify client for Tasks model
   const client = getClient();
@@ -75,6 +77,7 @@ export default function ScorecardsComponent({
     sectionId: string
     externalId?: string
   } | null>(null)
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(initialSelectedVersionId)
   const [selectedScorecardSections, setSelectedScorecardSections] = useState<{
     items: Array<{
       id: string
@@ -177,12 +180,12 @@ export default function ScorecardsComponent({
       for (const section of selectedScorecardSections.items) {
         const score = section.scores.items.find(s => s.id === initialSelectedScoreId);
         if (score) {
-          handleScoreSelect({...score, sectionId: section.id}, section.id);
+          handleScoreSelect({...score, sectionId: section.id}, section.id, initialSelectedVersionId || undefined);
           break;
         }
       }
     }
-  }, [initialSelectedScoreId, selectedScorecardSections]);
+  }, [initialSelectedScoreId, selectedScorecardSections, initialSelectedVersionId]);
 
   // Handle browser back/forward navigation with popstate event
   useEffect(() => {
@@ -192,8 +195,9 @@ export default function ScorecardsComponent({
       const scorecardIdFromUrl = scorecardMatch ? scorecardMatch[1] : null;
       
       // Extract score ID from URL if present
-      const scoreMatch = window.location.pathname.match(/\/lab\/scorecards\/[^\/]+\/scores\/([^\/]+)$/);
+      const scoreMatch = window.location.pathname.match(/\/lab\/scorecards\/[^\/]+\/scores\/([^\/]+)(?:\/versions\/([^\/]+))?$/);
       const scoreIdFromUrl = scoreMatch ? scoreMatch[1] : null;
+      const versionIdFromUrl = scoreMatch ? scoreMatch[2] : null;
       
       if (scorecardIdFromUrl) {
         // Find the scorecard in the list
@@ -210,16 +214,20 @@ export default function ScorecardsComponent({
               const score = section.scores.items.find(s => s.id === scoreIdFromUrl);
               if (score) {
                 setSelectedScore({...score, sectionId: section.id});
+                // Also set the version ID if present in URL
+                setSelectedVersionId(versionIdFromUrl);
                 break;
               }
             }
           } else {
             setSelectedScore(null);
+            setSelectedVersionId(null);
           }
         }
       } else {
         setSelectedScorecard(null);
         setSelectedScore(null);
+        setSelectedVersionId(null);
         if (isNarrowViewport) {
           setIsFullWidth(false);
         }
@@ -401,6 +409,7 @@ export default function ScorecardsComponent({
       
       // Clear old data immediately to avoid showing wrong scores
       setSelectedScore(null);
+      setSelectedVersionId(null); // Clear version when changing scorecards
       setSelectedScorecardSections(null); // Clear old sections immediately
       setScorecardExamples([]); // Clear old examples
       setShouldExpandExamples(false);
@@ -566,7 +575,7 @@ export default function ScorecardsComponent({
   };
 
   // Custom setter for selectedScore that handles both state and URL
-  const handleScoreSelect = (score: any, sectionId: string) => {
+  const handleScoreSelect = (score: any, sectionId: string, versionId?: string) => {
     // Only update state if the selected score has changed
     if (score?.id !== selectedScore?.id) {
       setSelectedScore({...score, sectionId});
@@ -583,11 +592,33 @@ export default function ScorecardsComponent({
         setFeedbackAnalysisPanel(null);
       }
       
+      // Set version ID if provided
+      if (versionId) {
+        setSelectedVersionId(versionId);
+      } else {
+        // Clear version when selecting a new score without specifying version
+        setSelectedVersionId(null);
+      }
+      
       // Update URL without triggering a navigation/re-render
       if (selectedScorecard) {
-        const newPathname = `/lab/scorecards/${selectedScorecard.id}/scores/${score.id}`;
+        let newPathname = `/lab/scorecards/${selectedScorecard.id}/scores/${score.id}`;
+        if (versionId) {
+          newPathname += `/versions/${versionId}`;
+        }
         window.history.pushState(null, '', newPathname);
       }
+    }
+  };
+
+  // Handle version selection
+  const handleVersionSelect = (versionId: string) => {
+    setSelectedVersionId(versionId);
+    
+    // Update URL to include version
+    if (selectedScorecard && selectedScore) {
+      const newPathname = `/lab/scorecards/${selectedScorecard.id}/scores/${selectedScore.id}/versions/${versionId}`;
+      window.history.pushState(null, '', newPathname);
     }
   };
 
@@ -1453,6 +1484,7 @@ export default function ScorecardsComponent({
           onToggleFullWidth={() => setMaximizedScoreId(maximizedScoreId ? null : selectedScore.id)}
           onClose={() => {
             setSelectedScore(null);
+            setSelectedVersionId(null);
             setMaximizedScoreId(null);
             // If there's a task open when closing score, also close the task
             if (selectedTask) {
@@ -1465,6 +1497,8 @@ export default function ScorecardsComponent({
             }
           }}
           onDelete={() => handleDeleteScore(selectedScore.id)}
+          initialSelectedVersionId={selectedVersionId}
+          onVersionSelect={handleVersionSelect}
           onSave={async () => {
             // Refresh the scorecard data to get updated score information
             await fetchScorecards();

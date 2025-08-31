@@ -129,6 +129,8 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   }>
   scorecardName?: string
   onTaskCreated?: (task: any) => void
+  initialSelectedVersionId?: string | null
+  onVersionSelect?: (versionId: string) => void
 }
 
 interface DetailContentProps {
@@ -873,8 +875,8 @@ const DetailContent = React.memo(({
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-border">
                   <TabsList className="h-auto p-0 bg-transparent justify-start">
-                    <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
-                    <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                    <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
+                    <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
                   </TabsList>
                   <div className="flex gap-1 pr-3">
                     <CardButton
@@ -1266,6 +1268,8 @@ export function ScoreComponent({
   exampleItems = [],
   scorecardName,
   onTaskCreated,
+  initialSelectedVersionId,
+  onVersionSelect,
   className,
   ...props
 }: ScoreComponentProps) {
@@ -1274,7 +1278,7 @@ export function ScoreComponent({
   const [hasChanges, setHasChanges] = React.useState(false)
   const [versions, setVersions] = React.useState<ScoreVersion[]>([])
   const [championVersionId, setChampionVersionId] = React.useState<string>()
-  const [selectedVersionId, setSelectedVersionId] = React.useState<string>()
+  const [selectedVersionId, setSelectedVersionId] = React.useState<string | undefined>(initialSelectedVersionId || undefined)
   const [versionNote, setVersionNote] = React.useState('')
   const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
   const [forceExpandHistory, setForceExpandHistory] = React.useState(false)
@@ -1290,6 +1294,9 @@ export function ScoreComponent({
     console.log('🔍 Loading version:', version.id, 'Guidelines:', version.guidelines)
     setSelectedVersionId(version.id)
     setVersionNote(version.note || '')
+    
+    // Call parent's version select handler to update URL
+    onVersionSelect?.(version.id)
     
     // Signal to DetailContent to reset editing state
     setResetEditingCounter(prev => prev + 1)
@@ -1443,12 +1450,33 @@ export function ScoreComponent({
             ? versionItems.find(v => v.id === championId) 
             : null;
             
-          if (champion) {
-            // Automatically select the champion version
+          // Priority order for version selection:
+          // 1. initialSelectedVersionId (from deep link)
+          // 2. champion version
+          // 3. most recent version
+          
+          if (initialSelectedVersionId) {
+            // Try to select the version specified in the URL
+            const initialVersion = versionItems.find(v => v.id === initialSelectedVersionId);
+            if (initialVersion) {
+              console.log('🔗 Deep link: Selecting initial version:', initialVersion.id);
+              handleVersionSelect(initialVersion);
+            } else {
+              console.warn('⚠️ Deep link: Initial version not found, falling back to champion');
+              // Fallback to champion if initial version not found
+              if (champion) {
+                handleVersionSelect(champion);
+              } else if (sortedVersions.length > 0) {
+                handleVersionSelect(sortedVersions[0]);
+              }
+            }
+          } else if (champion) {
+            // No deep link, select champion version
+            console.log('👑 Selecting champion version:', champion.id);
             handleVersionSelect(champion);
           } else if (sortedVersions.length > 0) {
-            // If no champion exists but we have versions, select the most recent one
-            // but don't automatically set it as champion
+            // No champion, select most recent version
+            console.log('📅 Selecting most recent version:', sortedVersions[0].id);
             handleVersionSelect(sortedVersions[0]);
             
             // Only set the most recent version as champion if there are no champions at all
@@ -1486,7 +1514,7 @@ export function ScoreComponent({
       }
     };
     fetchVersions();
-  }, [score, variant])
+  }, [score, variant, initialSelectedVersionId])
 
 
 
