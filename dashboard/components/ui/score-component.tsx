@@ -1022,7 +1022,7 @@ const DetailContent = React.memo(({
                 <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                 <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
               </TabsList>
-              <div className="flex gap-2 pr-4">
+              <div className="flex gap-2">
                 <CardButton
                   icon={X}
                   onClick={() => setIsEditorFullscreen(false)}
@@ -1062,13 +1062,27 @@ const DetailContent = React.memo(({
                 </div>
                 {/* Right: Preview */}
                 <div className="w-1/2 p-4 overflow-y-auto bg-background">
-                  <div className="prose prose-sm max-w-none">
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
                     {(guidelinesEditValue || selectedVersion?.guidelines || score.guidelines) ? (
-                      <div 
-                        dangerouslySetInnerHTML={{ 
-                          __html: (guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || '').replace(/\n/g, '<br/>') 
-                        }} 
-                      />
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        components={{
+                          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+                          ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                          pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+                          h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                          blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+                        }}
+                      >
+                        {guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
+                      </ReactMarkdown>
                     ) : (
                       <div className="text-muted-foreground italic">
                         No guidelines yet. Start typing in the editor to add guidelines.
