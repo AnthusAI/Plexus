@@ -1176,7 +1176,7 @@ const DetailContent = React.memo(({
       {/* Unified Save/Cancel Bar - appears when there are changes */}
       {(hasChanges || hasGuidelinesChanges) && !isEditorFullscreen && (
         <div className="mt-3">
-          <div className="flex items-center gap-3 bg-muted/50 rounded-lg border">
+          <div className="flex items-center gap-3 bg-muted/50 rounded-lg">
             <Button
               variant="outline"
               size="sm"
