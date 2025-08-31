@@ -699,7 +699,7 @@ const DetailContent = React.memo(({
     )}>
       {/* Description Section - Above sidebar, not versioned */}
       {!isEditorFullscreen && (
-        <div className="border-b border-border">
+        <div className="border-border">
           <div className="space-y-3 mb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
