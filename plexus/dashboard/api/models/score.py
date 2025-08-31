@@ -391,6 +391,127 @@ class Score(BaseModel):
 
         return code_yaml
 
+    def get_champion_configuration_yaml(self) -> Optional[str]:
+        """
+        Get the raw YAML configuration string from the champion version.
+        
+        Returns:
+            Optional[str]: The raw YAML configuration string, or None if not found
+        """
+        if not self._client:
+            raise ValueError("No API client available")
+
+        # First get the champion version ID
+        query = """
+        query GetScore($id: ID!) {
+            getScore(id: $id) {
+                championVersionId
+            }
+        }
+        """
+        
+        result = self._client.execute(query, {'id': self.id})
+        if not result or 'getScore' not in result:
+            return None
+            
+        champion_version_id = result['getScore'].get('championVersionId')
+        if not champion_version_id:
+            return None
+
+        # Then get the version content
+        version_query = """
+        query GetScoreVersion($id: ID!) {
+            getScoreVersion(id: $id) {
+                configuration
+            }
+        }
+        """
+        
+        version_result = self._client.execute(version_query, {'id': champion_version_id})
+        if not version_result or 'getScoreVersion' not in version_result:
+            return None
+            
+        return version_result['getScoreVersion'].get('configuration')
+
+    def get_local_configuration_path(self, scorecard_name: Optional[str] = None) -> Path:
+        """
+        Get the local YAML file path for this score's configuration.
+        
+        Args:
+            scorecard_name: Optional scorecard name. If not provided, will lookup via API.
+            
+        Returns:
+            Path: Path to the local YAML configuration file
+        """
+        return self.get_local_code_path(scorecard_name)
+
+    def pull_configuration(self, scorecard_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Pull the champion version configuration to local file.
+        
+        Args:
+            scorecard_name: Optional scorecard name. If not provided, will lookup via API.
+            
+        Returns:
+            Dict containing:
+                - success: bool
+                - file_path: str (path where configuration was saved)
+                - version_id: str (the champion version ID that was pulled)
+                - error: str (error message if failed)
+        """
+        result = self.pull_code_and_guidelines(scorecard_name)
+        if result["success"]:
+            return {
+                "success": True,
+                "file_path": result["code_file_path"],
+                "version_id": result["version_id"]
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "Unknown error")
+            }
+
+    def push_configuration(self, scorecard_name: Optional[str] = None, note: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Push local configuration file as a new score version.
+        
+        Args:
+            scorecard_name: Optional scorecard name. If not provided, will lookup via API.
+            note: Optional version note.
+            
+        Returns:
+            Dict containing:
+                - success: bool
+                - version_id: str (new version ID if created, existing if no changes)
+                - champion_updated: bool (whether champion version was updated)
+                - skipped: bool (true if no changes detected)
+                - error: str (error message if failed)
+        """
+        result = self.push_code_and_guidelines(scorecard_name, note)
+        return result
+
+    def create_version_from_yaml(self, yaml_content: str, note: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Create a new score version from YAML content string.
+        
+        Args:
+            yaml_content: The YAML configuration content as a string
+            note: Optional version note.
+            
+        Returns:
+            Dict containing:
+                - success: bool
+                - version_id: str (new version ID if created, existing if no changes)
+                - champion_updated: bool (whether champion version was updated)
+                - skipped: bool (true if no changes detected)
+                - error: str (error message if failed)
+        """
+        return self.create_version_from_code(
+            yaml_content, 
+            note or 'Updated via Score.create_version_from_yaml()'
+        )
+
     def get_local_code_path(self, scorecard_name: Optional[str] = None) -> Path:
         """
         Get the local YAML file path for this score's code.
