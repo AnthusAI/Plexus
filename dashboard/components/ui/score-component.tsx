@@ -37,6 +37,7 @@ import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { Timestamp } from "@/components/ui/timestamp"
+import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 
 const client = generateClient();
 
@@ -777,26 +778,24 @@ const DetailContent = React.memo(({
                 )}
               </div>
             </div>
-            <div className="space-y-px">
-              <Input
-                value={parsedConfig.name || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                  handleFormChange('name', e.target.value)
-                }
-                onFocus={() => setIsEditing(true)}
-                className="text-base font-semibold bg-background border-0 px-3 py-2 h-auto w-full
-                         placeholder:text-muted-foreground rounded-t-md rounded-b-none focus-visible:ring-2 focus-visible:z-10 relative"
-                placeholder="Score name"
-              />
-              <textarea
-                value={parsedConfig.description || ''}
-                onChange={(e) => handleFormChange('description', e.target.value)}
-                placeholder="No description"
-                className="w-full px-3 py-2 rounded-b-md rounded-t-none bg-background text-xs resize-none border-0 
-                         placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:z-10 relative"
-                rows={1}
-              />
-            </div>
+            <ScoreHeaderInfo
+              data={{
+                name: parsedConfig.name || '',
+                description: parsedConfig.description || '',
+                key: parsedConfig.key || '',
+                externalId: parsedConfig.externalId || ''
+              }}
+              onChange={(changes: Partial<ScoreHeaderData>) => {
+                setIsEditing(true);
+                Object.entries(changes).forEach(([field, value]) => {
+                  handleFormChange(field, value);
+                });
+              }}
+              namePlaceholder="Score name"
+              descriptionPlaceholder="No description"
+              keyPlaceholder="score-key"
+              externalIdPlaceholder="External ID"
+            />
           </div>
         </div>
       )}
@@ -830,7 +829,7 @@ const DetailContent = React.memo(({
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground mb-2">
-                      <Timestamp time={selectedVersion.createdAt} variant="relative" />
+                      <Timestamp time={selectedVersion.createdAt} variant="relative" className="text-xs" />
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {selectedVersion.note || 'No note'}

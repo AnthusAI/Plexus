@@ -120,7 +120,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
                     {championVersion.note || `Version ${championVersion.id.slice(0, 8)}`}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    <Timestamp time={championVersion.createdAt} variant="relative" showIcon={false} />
+                    <Timestamp time={championVersion.createdAt} variant="relative" showIcon={false} className="text-xs" />
                   </div>
                 </div>
               </div>
@@ -143,7 +143,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
                     {version.note || `Version ${version.id.slice(0, 8)}`}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    <Timestamp time={version.createdAt} variant="relative" showIcon={false} />
+                    <Timestamp time={version.createdAt} variant="relative" showIcon={false} className="text-xs" />
                   </div>
                 </div>
               </div>
