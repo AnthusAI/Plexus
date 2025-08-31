@@ -235,6 +235,7 @@ def register_scorecard_tools(mcp: FastMCP):
                     name
                     key
                     description
+                    guidelines
                     externalId
                     createdAt
                     updatedAt
@@ -277,6 +278,7 @@ def register_scorecard_tools(mcp: FastMCP):
                 "key": scorecard_data.get("key"),
                 "externalId": scorecard_data.get("externalId"),
                 "description": scorecard_data.get("description"),
+                "guidelines": scorecard_data.get("guidelines"),
                 "additionalDetails": {
                     "id": scorecard_data.get("id"),
                     "createdAt": scorecard_data.get("createdAt"),
@@ -598,7 +600,8 @@ def register_scorecard_tools(mcp: FastMCP):
         name: Optional[str] = None,
         key: Optional[str] = None,
         external_id: Optional[str] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        guidelines: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
         Updates metadata properties of an existing scorecard.
@@ -609,6 +612,7 @@ def register_scorecard_tools(mcp: FastMCP):
         - key: New unique key for the scorecard
         - external_id: New external ID for the scorecard
         - description: New description for the scorecard
+        - guidelines: New guidelines content for the scorecard (Markdown format)
         
         Returns:
         - Information about the updated scorecard and what fields were changed
@@ -630,7 +634,8 @@ def register_scorecard_tools(mcp: FastMCP):
                 'name': name,
                 'key': key,
                 'externalId': external_id,
-                'description': description
+                'description': description,
+                'guidelines': guidelines
             }
             provided_updates = {k: v for k, v in update_fields.items() if v is not None}
             
@@ -688,6 +693,10 @@ def register_scorecard_tools(mcp: FastMCP):
             if description is not None:
                 update_input["description"] = description
                 changed_fields.append("description")
+                
+            if guidelines is not None:
+                update_input["guidelines"] = guidelines
+                changed_fields.append("guidelines")
             
             # Build and execute the GraphQL mutation
             # Create the input fields string for the mutation
@@ -709,6 +718,7 @@ def register_scorecard_tools(mcp: FastMCP):
                     key
                     externalId
                     description
+                    guidelines
                     updatedAt
                 }}
             }}
