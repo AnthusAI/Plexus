@@ -24,17 +24,21 @@ def register_score_tools(mcp: FastMCP):
         include_versions: bool = False
     ) -> Union[str, Dict[str, Any]]:
         """
-        Get detailed information about a specific score, including its location, code, and optionally all versions.
+        Get detailed information about a specific score, including its location, code, and version history.
         Supports intelligent search across scorecards when scorecard_identifier is omitted.
+        
+        Default Response Includes:
+        1. Champion version information (name, description, key, external ID, guidelines, and code)
+        2. List of score versions in reverse chronological order (max 20 most recent)
         
         Parameters:
         - score_identifier: Identifier for the score (ID, name, key, or external ID)
         - scorecard_identifier: Optional identifier for the parent scorecard to narrow search. If omitted, searches across all scorecards.
-        - version_id: Optional specific version ID to show code for. If omitted, uses champion version.
-        - include_versions: If True, include detailed version information and all versions list
+        - version_id: Optional specific version ID to get info for. If provided, returns info for that specific version instead of champion.
+        - include_versions: Deprecated - version list is now included by default (kept for backward compatibility)
         
         Returns:
-        - Information about the found score including its location, code, and optionally version details
+        - Information about the found score including its location, code, and version details
         """
         # Temporarily redirect stdout to capture any unexpected output
         old_stdout = sys.stdout
@@ -226,8 +230,57 @@ def register_score_tools(mcp: FastMCP):
                     "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score_id}")
                 }
                 
-                # Always try to get code and guidelines from champion or specified version
+                # Get target version (specific version if requested, otherwise champion)
                 target_version_id = version_id or score.get('championVersionId')
+                
+                # Always fetch version list (max 20 most recent)
+                try:
+                    score_versions_query = f"""
+                    query GetScoreVersions {{
+                        getScore(id: "{score_id}") {{
+                            id
+                            name
+                            key
+                            externalId
+                            championVersionId
+                            versions(sortDirection: DESC, limit: 20) {{
+                                items {{
+                                    id
+                                    createdAt
+                                    note
+                                }}
+                            }}
+                        }}
+                    }}
+                    """
+                    
+                    versions_response = client.execute(score_versions_query)
+                    if 'errors' in versions_response:
+                        logger.error(f"Error fetching versions: {versions_response['errors']}")
+                        response["versionsError"] = f"Error fetching versions: {versions_response['errors']}"
+                        response["versions"] = []
+                    else:
+                        score_data_with_versions = versions_response.get('getScore')
+                        if score_data_with_versions:
+                            all_versions = score_data_with_versions.get('versions', {}).get('items', [])
+                            # Format version list with just ID, timestamp, and note
+                            response["versions"] = [
+                                {
+                                    "id": v.get('id'),
+                                    "createdAt": v.get('createdAt'),
+                                    "note": v.get('note')
+                                }
+                                for v in all_versions
+                            ]
+                        else:
+                            response["versions"] = []
+                            
+                except Exception as e:
+                    logger.error(f"Error fetching version list: {str(e)}", exc_info=True)
+                    response["versionsError"] = f"Error fetching version list: {str(e)}"
+                    response["versions"] = []
+
+                # Get detailed information for target version
                 if target_version_id:
                     try:
                         version_query = f"""
@@ -249,7 +302,7 @@ def register_score_tools(mcp: FastMCP):
                         version_data = version_result.get('getScoreVersion')
                         
                         if version_data:
-                            # Always include code and guidelines from the version
+                            # Include code and guidelines from the version
                             response["code"] = version_data.get('configuration')
                             response["guidelines"] = version_data.get('guidelines')
                             
@@ -260,67 +313,59 @@ def register_score_tools(mcp: FastMCP):
                             else:
                                 response["description"] = score.get('description')
                                 
-                            # If specific version was requested, add version metadata
-                            if version_id:
-                                response["targetedVersionDetails"] = version_data
+                            # Explicitly show which version ID is being returned
+                            response["targetVersionId"] = target_version_id
+                            response["isChampionVersion"] = target_version_id == score.get('championVersionId')
+                            
+                            # Add version details for the returned version
+                            response["versionDetails"] = {
+                                "id": target_version_id,
+                                "createdAt": version_data.get('createdAt'),
+                                "updatedAt": version_data.get('updatedAt'),
+                                "note": version_data.get('note'),
+                                "isFeatured": version_data.get('isFeatured'),
+                                "parentVersionId": version_data.get('parentVersionId'),
+                                "isChampion": target_version_id == score.get('championVersionId')
+                            }
+                            
+                            # If specific version was requested (not champion), add additional metadata
+                            if version_id and version_id != score.get('championVersionId'):
+                                response["requestedVersionId"] = version_id
+                                response["isSpecificVersion"] = True
+                            else:
+                                response["isSpecificVersion"] = False
                         else:
-                            # Version not found, use Score description as fallback
+                            # Version not found
+                            if version_id:
+                                return f"Error: Version '{version_id}' not found."
+                            else:
+                                # No champion version, use Score description and null code/guidelines
+                                response["description"] = score.get('description')
+                                response["code"] = None
+                                response["guidelines"] = None
+                                response["targetVersionId"] = None
+                                response["isChampionVersion"] = False
+                                response["versionDetails"] = None
+                    except Exception as e:
+                        logger.error(f"Error fetching version details for info: {str(e)}", exc_info=True)
+                        if version_id:
+                            return f"Error fetching version '{version_id}': {str(e)}"
+                        else:
+                            # Fallback to Score description
                             response["description"] = score.get('description')
                             response["code"] = None
                             response["guidelines"] = None
-                    except Exception as e:
-                        logger.error(f"Error fetching version details for info: {str(e)}", exc_info=True)
-                        # Fallback to Score description
-                        response["description"] = score.get('description')
-                        response["code"] = None
-                        response["guidelines"] = None
+                            response["targetVersionId"] = None
+                            response["isChampionVersion"] = False
+                            response["versionDetails"] = None
                 else:
                     # No champion version, use Score description and null code/guidelines
                     response["description"] = score.get('description')
                     response["code"] = None
                     response["guidelines"] = None
-                
-                # Handle include_versions flag for additional version information
-                if include_versions:
-                    try:
-                        score_versions_query = f"""
-                        query GetScoreVersions {{
-                            getScore(id: "{score_id}") {{
-                                id
-                                name
-                                key
-                                externalId
-                                championVersionId
-                                versions(sortDirection: DESC, limit: 50) {{
-                                    items {{
-                                        id
-                                        configuration
-                                        guidelines
-                                        description
-                                        createdAt
-                                        updatedAt
-                                        isFeatured
-                                        parentVersionId
-                                        note
-                                    }}
-                                }}
-                            }}
-                        }}
-                        """
-                        
-                        versions_response = client.execute(score_versions_query)
-                        if 'errors' in versions_response:
-                            logger.error(f"Error fetching versions: {versions_response['errors']}")
-                            response["versionsError"] = f"Error fetching versions: {versions_response['errors']}"
-                        else:
-                            score_data_with_versions = versions_response.get('getScore')
-                            if score_data_with_versions:
-                                all_versions = score_data_with_versions.get('versions', {}).get('items', [])
-                                response["allVersions"] = all_versions
-                                    
-                    except Exception as e:
-                        logger.error(f"Error fetching version details: {str(e)}", exc_info=True)
-                        response["versionsError"] = f"Error fetching version details: {str(e)}"
+                    response["targetVersionId"] = None
+                    response["isChampionVersion"] = False
+                    response["versionDetails"] = None
                 
                 return response
             else:
@@ -467,199 +512,7 @@ def register_score_tools(mcp: FastMCP):
                 "error": f"Error finding score: {str(e)}"
             }
 
-    @mcp.tool()
-    async def plexus_score_configuration(
-        scorecard_identifier: str,
-        score_identifier: str,
-        version_id: Optional[str] = None
-    ) -> Union[str, Dict[str, Any]]:
-        """
-        Gets the YAML code for a specific score version, with syntax highlighting and formatting.
-        
-        Parameters:
-        - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
-        - score_identifier: Identifier for the score (ID, name, key, or external ID)
-        - version_id: Optional specific version ID of the score. If omitted, uses champion version.
-        
-        Returns:
-        - The YAML code content along with metadata about the version
-        """
-        # Temporarily redirect stdout to capture any unexpected output
-        old_stdout = sys.stdout
-        temp_stdout = StringIO()
-        sys.stdout = temp_stdout
-        
-        try:
-            # Try to import required modules directly
-            try:
-                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
-            except ImportError as e:
-                return f"Error: Could not import required modules: {e}. Core modules may not be available."
-            
-            # Check if we have the necessary credentials
-            api_url = os.environ.get('PLEXUS_API_URL', '')
-            api_key = os.environ.get('PLEXUS_API_KEY', '')
-            
-            if not api_url or not api_key:
-                logger.warning("Missing API credentials. Ensure .env file is loaded.")
-                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
-            
-            # Create the client
-            try:
-                client_stdout = StringIO()
-                saved_stdout = sys.stdout
-                sys.stdout = client_stdout
-                
-                try:
-                    client = create_dashboard_client()
-                finally:
-                    client_output = client_stdout.getvalue()
-                    if client_output:
-                        logger.warning(f"Captured unexpected stdout during client creation in get_plexus_score_configuration: {client_output}")
-                    sys.stdout = saved_stdout
-            except Exception as client_err:
-                logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
-                return f"Error creating dashboard client: {str(client_err)}"
-                
-            if not client:
-                return "Error: Could not create dashboard client."
 
-            # Find the score instance
-            find_result = await _find_score_instance(scorecard_identifier, score_identifier, client)
-            if not find_result["success"]:
-                return find_result["error"]
-            
-            score = find_result["score"]
-            scorecard_name = find_result["scorecard_name"]
-            scorecard_id = find_result["scorecard_id"]
-
-            # Get configuration using the Score model method
-            if version_id:
-                # If specific version requested, get that version directly
-                version_query = f"""
-                query GetScoreVersion {{
-                    getScoreVersion(id: "{version_id}") {{
-                        id
-                        configuration
-                        guidelines
-                        createdAt
-                        updatedAt
-                        note
-                        isFeatured
-                        parentVersionId
-                    }}
-                }}
-                """
-                
-                version_result = client.execute(version_query)
-                version_data = version_result.get('getScoreVersion')
-                
-                if not version_data:
-                    return f"Error: Version '{version_id}' not found."
-
-                configuration = version_data.get('configuration')
-                if not configuration:
-                    return f"Error: No code found for version '{version_id}'."
-                    
-                # Check if this is the champion version
-                champion_query = f"""
-                query GetScoreChampion {{
-                    getScore(id: "{score.id}") {{
-                        championVersionId
-                    }}
-                }}
-                """
-                champion_result = client.execute(champion_query)
-                champion_version_id = champion_result.get('getScore', {}).get('championVersionId')
-                is_champion = version_id == champion_version_id
-
-                return {
-                    "scoreId": score.id,
-                    "scoreName": score.name,
-                    "scorecardName": scorecard_name,
-                    "versionId": version_data['id'],
-                    "isChampionVersion": is_champion,
-                    "code": configuration,
-                    "guidelines": version_data.get('guidelines'),
-                    "versionMetadata": {
-                        "createdAt": version_data.get('createdAt'),
-                        "updatedAt": version_data.get('updatedAt'),
-                        "note": version_data.get('note'),
-                        "isFeatured": version_data.get('isFeatured'),
-                        "parentVersionId": version_data.get('parentVersionId')
-                    },
-                    "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
-                }
-            else:
-                # Use Score.get_code() for champion version
-                config_dict = score.get_code()
-                if not config_dict:
-                    return f"Error: No champion version code found for score '{score.name}'."
-                
-                # Convert dict back to YAML string for consistency with API
-                import yaml
-                configuration = yaml.dump(config_dict, default_flow_style=False, sort_keys=False)
-                
-                # Get champion version metadata
-                champion_query = f"""
-                query GetScoreWithChampionVersion {{
-                    getScore(id: "{score.id}") {{
-                        championVersionId
-                    }}
-                }}
-                """
-                champion_result = client.execute(champion_query)
-                champion_version_id = champion_result.get('getScore', {}).get('championVersionId')
-                
-                if champion_version_id:
-                    version_query = f"""
-                    query GetScoreVersion {{
-                        getScoreVersion(id: "{champion_version_id}") {{
-                            id
-                            configuration
-                            guidelines
-                            createdAt
-                            updatedAt
-                            note
-                            isFeatured
-                            parentVersionId
-                        }}
-                    }}
-                    """
-                    
-                    version_result = client.execute(version_query)
-                    version_data = version_result.get('getScoreVersion', {})
-                else:
-                    version_data = {}
-
-                return {
-                    "scoreId": score.id,
-                    "scoreName": score.name,
-                    "scorecardName": scorecard_name,
-                    "versionId": champion_version_id,
-                    "isChampionVersion": True,
-                    "code": configuration,
-                    "guidelines": version_data.get('guidelines'),
-                    "versionMetadata": {
-                        "createdAt": version_data.get('createdAt'),
-                        "updatedAt": version_data.get('updatedAt'),
-                        "note": version_data.get('note'),
-                        "isFeatured": version_data.get('isFeatured'),
-                        "parentVersionId": version_data.get('parentVersionId')
-                    },
-                    "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
-                }
-            
-        except Exception as e:
-            logger.error(f"Error getting score code: {str(e)}", exc_info=True)
-            return f"Error getting score code: {str(e)}"
-        finally:
-            # Check if anything was written to stdout
-            captured_output = temp_stdout.getvalue()
-            if captured_output:
-                logger.warning(f"Captured unexpected stdout during get_plexus_score_configuration: {captured_output}")
-            # Restore original stdout
-            sys.stdout = old_stdout
 
     @mcp.tool()
     async def plexus_score_pull(
@@ -913,7 +766,17 @@ def register_score_tools(mcp: FastMCP):
         version_note: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
-        Intelligently updates a score's metadata and/or creates a new version with updated code/guidelines.
+        **RECOMMENDED TOOL** for most score updates. Intelligently updates a score's metadata and/or creates a new version with updated code/guidelines.
+        
+        **When to use this tool:**
+        - Most score updates (creating/updating YAML configurations)
+        - Quick score modifications without local file management
+        - When you want to specify a parent version for lineage control
+        
+        **When to use pull/push instead:**
+        - Complex multi-file workflows requiring local editing
+        - Integration with external editors or version control
+        - When you need to work with local files for extended periods
         
         This tool can update:
         1. Score metadata (name, key, external_id, description, etc.) - updates the Score record directly
@@ -987,13 +850,78 @@ def register_score_tools(mcp: FastMCP):
             if not has_metadata_updates and not has_version_updates:
                 return "Error: At least one field must be provided for update (metadata or version content)"
             
-            # Validate YAML code if provided
+            # Initialize validation warnings
+            validation_warnings = None
+            
+            # Validate YAML code if provided using Plexus score linter
             if code:
                 try:
-                    import yaml
-                    yaml.safe_load(code)
-                except yaml.YAMLError as e:
-                    return f"Error: Invalid YAML code: {str(e)}"
+                    # Import the Plexus YAML linter
+                    from plexus.linting.schemas import create_score_linter
+                    
+                    # Create the score-specific linter
+                    linter = create_score_linter()
+                    
+                    # Lint the YAML code
+                    lint_result = linter.lint(code)
+                    
+                    # Check if validation failed
+                    if not lint_result.is_valid:
+                        # Format error messages for user
+                        error_messages = []
+                        for message in lint_result.messages:
+                            if message.level == 'error':
+                                location = ""
+                                if message.line is not None:
+                                    location = f" (line {message.line + 1}"
+                                    if message.column is not None:
+                                        location += f", column {message.column + 1}"
+                                    location += ")"
+                                
+                                error_msg = f"{message.title}: {message.message}{location}"
+                                if message.suggestion:
+                                    error_msg += f"\nSuggestion: {message.suggestion}"
+                                error_messages.append(error_msg)
+                        
+                        if error_messages:
+                            return {
+                                "success": False,
+                                "error": "YAML validation failed",
+                                "validation_errors": error_messages,
+                                "error_count": lint_result.error_count,
+                                "warning_count": lint_result.warning_count
+                            }
+                    
+                    # Check for warnings (don't block, but inform user)
+                    warnings = []
+                    for message in lint_result.messages:
+                        if message.level == 'warning':
+                            warning_msg = f"{message.title}: {message.message}"
+                            if message.suggestion:
+                                warning_msg += f" Suggestion: {message.suggestion}"
+                            warnings.append(warning_msg)
+                    
+                    # Store warnings to include in success response
+                    validation_warnings = warnings if warnings else None
+                    
+                except ImportError as e:
+                    # Fallback to basic YAML validation if linter not available
+                    logger.warning(f"Plexus YAML linter not available, falling back to basic validation: {e}")
+                    try:
+                        import yaml
+                        yaml.safe_load(code)
+                    except yaml.YAMLError as e:
+                        return f"Error: Invalid YAML syntax: {str(e)}"
+                    validation_warnings = None
+                except Exception as e:
+                    # If linter fails unexpectedly, fall back to basic validation
+                    logger.error(f"Error during YAML linting: {e}", exc_info=True)
+                    try:
+                        import yaml
+                        yaml.safe_load(code)
+                    except yaml.YAMLError as e:
+                        return f"Error: Invalid YAML syntax: {str(e)}"
+                    validation_warnings = None
             
             # Create the client
             try:
@@ -1166,6 +1094,10 @@ def register_score_tools(mcp: FastMCP):
                 "updates": updates_performed,
                 "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
             }
+            
+            # Add validation warnings if any were found during YAML validation
+            if validation_warnings:
+                response["validationWarnings"] = validation_warnings
             
             # Add version-specific info if version was updated
             if updates_performed["version_created"]:
