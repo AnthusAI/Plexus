@@ -1016,136 +1016,139 @@ const DetailContent = React.memo(({
       {isEditorFullscreen && (
         <div className="flex flex-col h-full w-full">
           {/* Fullscreen Tabs */}
-          <Tabs value={fullscreenActiveTab} onValueChange={(value) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
-            <div className="flex items-center justify-between border-b border-border">
-              <TabsList className="h-auto p-0 bg-transparent justify-start">
-                <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
-                <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
-              </TabsList>
-              <div className="flex gap-2">
-                <CardButton
-                  icon={X}
-                  onClick={() => setIsEditorFullscreen(false)}
-                  aria-label="Close fullscreen"
-                />
-              </div>
-            </div>
-            
-            {/* Guidelines Tab - 50/50 split */}
-            <TabsContent value="guidelines" className="flex-1 mt-0 data-[state=inactive]:hidden">
-              <div className="flex h-full">
-                {/* Left: Markdown Editor */}
-                <div className="w-1/2 border-r border-border">
-                  <Editor
-                    height="100%"
-                    defaultLanguage="markdown"
-                    value={guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
-                    onChange={(value) => {
-                      onGuidelinesChange?.(value || '')
-                    }}
-                    onMount={(editor, monaco) => {
-                      defineCustomMonacoThemes(monaco)
-                      applyMonacoTheme(monaco)
-                      setupMonacoThemeWatcher(monaco)
-                    }}
-                    options={{
-                      ...getCommonMonacoOptions(),
-                      wordWrap: 'on',
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      fontSize: 14,
-                      tabSize: 2,
-                      insertSpaces: true,
-                      automaticLayout: true,
-                    }}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <Tabs value={fullscreenActiveTab} onValueChange={(value) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between border-b border-border">
+                <TabsList className="h-auto p-0 bg-transparent justify-start">
+                  <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
+                  <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                </TabsList>
+                <div className="flex gap-2">
+                  <CardButton
+                    icon={X}
+                    onClick={() => setIsEditorFullscreen(false)}
+                    aria-label="Close fullscreen"
                   />
                 </div>
-                {/* Right: Preview */}
-                <div className="w-1/2 p-4 overflow-y-auto bg-background">
-                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
-                    {(guidelinesEditValue || selectedVersion?.guidelines || score.guidelines) ? (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkBreaks]}
-                        components={{
-                          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                          ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
-                          ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
-                          li: ({ children }) => <li className="mb-1">{children}</li>,
-                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                          em: ({ children }) => <em className="italic">{children}</em>,
-                          code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
-                          pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
-                          h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
-                          blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
-                        }}
-                      >
-                        {guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
-                      </ReactMarkdown>
-                    ) : (
-                      <div className="text-muted-foreground italic">
-                        No guidelines yet. Start typing in the editor to add guidelines.
-                      </div>
-                    )}
+              </div>
+              
+              {/* Guidelines Tab - 50/50 split */}
+              <TabsContent value="guidelines" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0">
+                <div className="flex h-full">
+                  {/* Left: Markdown Editor */}
+                  <div className="w-1/2 border-r border-border">
+                    <Editor
+                      height="100%"
+                      defaultLanguage="markdown"
+                      value={guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
+                      onChange={(value) => {
+                        onGuidelinesChange?.(value || '')
+                      }}
+                      onMount={(editor, monaco) => {
+                        defineCustomMonacoThemes(monaco)
+                        applyMonacoTheme(monaco)
+                        setupMonacoThemeWatcher(monaco)
+                      }}
+                      options={{
+                        ...getCommonMonacoOptions(),
+                        wordWrap: 'on',
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        fontSize: 14,
+                        tabSize: 2,
+                        insertSpaces: true,
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
+                  {/* Right: Preview */}
+                  <div className="w-1/2 p-4 overflow-y-auto bg-background">
+                    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                      {(guidelinesEditValue || selectedVersion?.guidelines || score.guidelines) ? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkBreaks]}
+                          components={{
+                            p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                            ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+                            ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+                            li: ({ children }) => <li className="mb-1">{children}</li>,
+                            strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                            em: ({ children }) => <em className="italic">{children}</em>,
+                            code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                            pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+                            h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                            blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+                          }}
+                        >
+                          {guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
+                        </ReactMarkdown>
+                      ) : (
+                        <div className="text-muted-foreground italic">
+                          No guidelines yet. Start typing in the editor to add guidelines.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </TabsContent>
-            
-            {/* Code Tab - 2/3 + 1/3 split */}
-            <TabsContent value="code" className="flex-1 mt-0 data-[state=inactive]:hidden">
-              <div className="flex h-full">
-                {/* Left: YAML Editor (2/3) */}
-                <div className="w-2/3 border-r border-border">
-                  <Editor
-                    height="100%"
-                    defaultLanguage="yaml"
-                    value={score.configuration || ''}
-                    onChange={(value) => {
-                      handleFormChange('configuration', value || '')
-                      setIsEditing(true)
-                    }}
-                    onMount={(editor, monaco) => {
-                      defineCustomMonacoThemes(monaco)
-                      applyMonacoTheme(monaco)
-                      setupMonacoThemeWatcher(monaco)
-                      configureYamlLanguage(monaco)
-                      setupMonacoIntegration(editor, monaco)
-                    }}
-                    options={{
-                      ...getCommonMonacoOptions(),
-                      wordWrap: 'on',
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      fontSize: 14,
-                      tabSize: 2,
-                      insertSpaces: true,
-                      automaticLayout: true,
-                    }}
-                  />
+              </TabsContent>
+              
+              {/* Code Tab - 2/3 + 1/3 split */}
+              <TabsContent value="code" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0">
+                <div className="flex h-full">
+                  {/* Left: YAML Editor (2/3) */}
+                  <div className="w-2/3 border-r border-border">
+                    <Editor
+                      height="100%"
+                      defaultLanguage="yaml"
+                      value={score.configuration || ''}
+                      onChange={(value) => {
+                        handleFormChange('configuration', value || '')
+                        setIsEditing(true)
+                      }}
+                      onMount={(editor, monaco) => {
+                        defineCustomMonacoThemes(monaco)
+                        applyMonacoTheme(monaco)
+                        setupMonacoThemeWatcher(monaco)
+                        configureYamlLanguage(monaco)
+                        setupMonacoIntegration(editor, monaco)
+                      }}
+                      options={{
+                        ...getCommonMonacoOptions(),
+                        wordWrap: 'on',
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        fontSize: 14,
+                        tabSize: 2,
+                        insertSpaces: true,
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
+                  {/* Right: Validation Panel (1/3) */}
+                  <div className="w-1/3 bg-background p-3 overflow-y-auto">
+                    <YamlLinterPanel 
+                      result={lintResult || undefined}
+                      onMessageClick={handleLintMessageClick}
+                    />
+                  </div>
                 </div>
-                {/* Right: Validation Panel (1/3) */}
-                <div className="w-1/3 bg-background p-3">
-                  <YamlLinterPanel 
-                    result={lintResult || undefined}
-                    onMessageClick={handleLintMessageClick}
-                  />
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
+              </TabsContent>
+            </Tabs>
+          </div>
           
           {/* Save/Cancel buttons - only show when there are changes */}
           {(hasChanges || hasGuidelinesChanges) && (
-            <div className="flex items-center gap-3 p-4 border-t border-border">
+            <div className="flex items-center gap-3 p-4 bg-background">
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={() => {
                   setNewVersionNote('')
                   setIsEditorFullscreen(false)
                 }}
                 disabled={isSavingGuidelines}
+                className="h-10"
               >
                 Cancel
               </Button>
@@ -1156,13 +1159,15 @@ const DetailContent = React.memo(({
                   onNoteChange?.(e.target.value)
                 }}
                 placeholder="Please say what you changed and why..."
-                className="flex-1 px-3 py-2 rounded-md bg-background border text-sm resize-none
+                className="flex-1 px-3 py-2 rounded-md bg-background text-sm resize-none h-10
                          placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 rows={1}
               />
               <Button
+                variant="ghost"
                 onClick={hasGuidelinesChanges ? onSaveGuidelines : onSave}
                 disabled={isSavingGuidelines}
+                className="h-10"
               >
                 {isSavingGuidelines ? 'Saving...' : 'Save'}
               </Button>
@@ -1176,15 +1181,14 @@ const DetailContent = React.memo(({
       {/* Unified Save/Cancel Bar - appears when there are changes */}
       {(hasChanges || hasGuidelinesChanges) && !isEditorFullscreen && (
         <div className="mt-3">
-          <div className="flex items-center gap-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
               onClick={() => {
                 setNewVersionNote('')
                 onCancel?.()
               }}
-              className="shrink-0"
+              className="shrink-0 h-10"
             >
               Cancel
             </Button>
@@ -1196,13 +1200,13 @@ const DetailContent = React.memo(({
                 onNoteChange(e.target.value)
               }}
               placeholder="Please say what you changed and why..."
-              className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-sm
+              className="flex-1 px-3 py-2 rounded-md bg-background text-sm h-10
                        placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <Button
-              size="sm"
+              variant="ghost"
               onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
-              className="shrink-0"
+              className="shrink-0 h-10"
             >
               Save Changes
             </Button>
