@@ -75,7 +75,7 @@ export function ScoreHeaderInfo({
             placeholder={descriptionPlaceholder}
             className="w-full px-3 py-2 rounded-b-md rounded-t-none bg-background text-xs resize-none border-0 
                      placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:z-10 relative"
-            rows={1}
+            rows={2}
           />
         </div>
 
@@ -134,7 +134,7 @@ export function ScoreHeaderInfo({
         placeholder={descriptionPlaceholder}
         className="w-full px-3 py-2 rounded-tl-none rounded-tr-none rounded-bl-md rounded-br-none bg-background text-xs resize-none border-0 
                  placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:z-10 relative"
-        rows={1}
+        rows={2}
       />
       <Input
         value={data.externalId || ''}
