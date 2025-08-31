@@ -191,7 +191,7 @@ output_schema:
                 <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                 <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
               </TabsList>
-              <div className="flex gap-2 pr-4">
+              <div className="flex gap-2">
                 <button 
                   className="p-1 rounded hover:bg-accent" 
                   aria-label="Close fullscreen"
