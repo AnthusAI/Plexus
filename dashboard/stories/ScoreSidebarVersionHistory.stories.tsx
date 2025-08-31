@@ -140,7 +140,7 @@ const InteractiveStoryWrapper = ({
                   <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                   <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
                 </TabsList>
-                <div className="flex gap-1 pr-4">
+                <div className="flex gap-1 pr-3">
                   <button 
                     className="p-1 rounded hover:bg-accent" 
                     aria-label="Open fullscreen editor"
