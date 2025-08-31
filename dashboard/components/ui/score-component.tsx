@@ -2,6 +2,9 @@ import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Clock, PanelLeftOpen, PanelLeftClose, Edit } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -816,24 +819,45 @@ const DetailContent = React.memo(({
             {/* Version Header */}
             {selectedVersion && (
               <div className="p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {selectedVersion.id !== championVersionId && (
-                      <Clock className="h-5 w-5 text-muted-foreground" />
-                    )}
-                    <div>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-medium text-sm">
                         {selectedVersion.id === championVersionId ? 'Champion Version' : 'Version'}
                       </h3>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                        <span>{selectedVersion.note || 'No note'}</span>
-                        <Timestamp time={selectedVersion.createdAt} variant="relative" />
-                      </div>
+                      {selectedVersion.id === championVersionId && (
+                        <Crown className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-2">
+                      <Timestamp time={selectedVersion.createdAt} variant="relative" />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {selectedVersion.note || 'No note'}
                     </div>
                   </div>
-                  {selectedVersion.id === championVersionId && (
-                    <Crown className="h-6 w-6 text-muted-foreground" />
-                  )}
+                  <div className="flex items-center gap-2 ml-3">
+                    {selectedVersion.id !== championVersionId && onPromoteToChampion && (
+                      <ShadcnDropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                            aria-label="Version actions"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => onPromoteToChampion(selectedVersion.id)}>
+                            <Crown className="mr-2 h-4 w-4" />
+                            Promote
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </ShadcnDropdownMenu>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -846,7 +870,7 @@ const DetailContent = React.memo(({
                     <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                     <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
                   </TabsList>
-                  <div className="flex gap-1 pr-4">
+                  <div className="flex gap-1 pr-3">
                     <CardButton
                       icon={Expand}
                       onClick={() => {
@@ -858,7 +882,7 @@ const DetailContent = React.memo(({
                   </div>
                 </div>
                 
-                <TabsContent value="guidelines" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden">
+                <TabsContent value="guidelines" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
                   {isGuidelinesInlineEdit ? (
                     <Editor
                       height="100%"
@@ -911,13 +935,27 @@ const DetailContent = React.memo(({
                         handleStartInlineEdit?.()
                       }}
                     >
-                      <div className="prose prose-sm max-w-none">
+                      <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
                         {(selectedVersion?.guidelines || score.guidelines) ? (
-                          <div 
-                            dangerouslySetInnerHTML={{ 
-                              __html: (selectedVersion?.guidelines || score.guidelines || '').replace(/\n/g, '<br/>') 
-                            }} 
-                          />
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkBreaks]}
+                            components={{
+                              p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                              ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+                              ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+                              li: ({ children }) => <li className="mb-1">{children}</li>,
+                              strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                              em: ({ children }) => <em className="italic">{children}</em>,
+                              code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                              pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+                              h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                              blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+                            }}
+                          >
+                            {selectedVersion?.guidelines || score.guidelines || ''}
+                          </ReactMarkdown>
                         ) : (
                           <div className="text-muted-foreground italic">
                             Click to add guidelines...
@@ -1130,7 +1168,7 @@ const DetailContent = React.memo(({
               size="sm"
               onClick={() => {
                 setNewVersionNote('')
-                onCancel()
+                onCancel?.()
               }}
               className="shrink-0"
             >
