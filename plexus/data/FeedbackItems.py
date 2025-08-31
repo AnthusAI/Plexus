@@ -732,6 +732,14 @@ class FeedbackItems(DataCache):
             # Edit comment: Direct edit comment from feedback item
             edit_comment = getattr(feedback_item, 'editCommentValue', None) or ""
             
+            # Extract call_date from metadata for separate column
+            call_date = None
+            try:
+                metadata_dict = json.loads(metadata) if isinstance(metadata, str) else metadata
+                call_date = metadata_dict.get('call_date')
+            except:
+                pass
+            
             # Build the row with ONLY the specified columns (IDs first, then metadata, then text)
             row = {
                 'content_id': content_id,
@@ -739,6 +747,7 @@ class FeedbackItems(DataCache):
                 'IDs': ids_hash,
                 'metadata': metadata,
                 'text': text,
+                'call_date': call_date,
                 score_name: score_value,
                 f"{score_name} comment": score_comment,
                 f"{score_name} edit comment": edit_comment
@@ -752,7 +761,7 @@ class FeedbackItems(DataCache):
         # Create DataFrame with proper column structure even when empty
         if not rows:
             # Create empty DataFrame with expected columns (IDs first, then metadata, then text)
-            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', score_name, f"{score_name} comment", f"{score_name} edit comment"]
+            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', 'call_date', score_name, f"{score_name} comment", f"{score_name} edit comment"]
             df = pd.DataFrame(columns=columns)
         else:
             df = pd.DataFrame(rows)
