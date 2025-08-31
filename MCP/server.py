@@ -32,11 +32,10 @@ mcp = FastMCP(
     - plexus_scorecard_info: Get detailed information about a specific scorecard, including sections and scores
     
     ## Score Management
-    - plexus_score_info: Get detailed information about a specific score, including location, configuration, and optionally all versions. Supports intelligent search across scorecards.
-    - plexus_score_configuration: Get the YAML configuration for a specific score version
-    - plexus_score_pull: Pull a score's champion version YAML configuration to a local file
-    - plexus_score_push: Push a score's local YAML configuration file to create a new version
-    - plexus_score_update: Update a score's configuration by creating a new version with provided YAML content
+    - plexus_score_info: Get detailed information about a specific score, including location, configuration, champion version details, and version history. Supports intelligent search across scorecards.
+    - plexus_score_update: **RECOMMENDED** - Update a score's configuration by creating a new version with provided YAML content. Supports parent_version_id for version lineage. Use this for most score updates.
+    - plexus_score_pull: Pull a score's champion version YAML configuration to a local file (for local development workflows)
+    - plexus_score_push: Push a score's local YAML configuration file to create a new version (for local development workflows)
     - plexus_score_delete: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
     
     ## Evaluation Tools

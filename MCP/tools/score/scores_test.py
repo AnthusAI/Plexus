@@ -12,10 +12,10 @@ pytestmark = pytest.mark.unit
 
 
 class TestScoreInfoTool:
-    """Test plexus_score_info tool patterns"""
+    """Test enhanced plexus_score_info tool patterns"""
     
-    def test_score_info_code_and_guidelines_from_champion(self):
-        """Test that score info returns code and guidelines from champion version"""
+    def test_score_info_default_response_structure(self):
+        """Test that score info returns champion version details and version list by default"""
         # Mock score data with champion version
         score_data = {
             'id': 'score-123',
@@ -39,7 +39,21 @@ class TestScoreInfoTool:
             'parentVersionId': None
         }
         
-        # Expected response structure
+        # Mock version list (max 20 most recent)
+        version_list = [
+            {
+                'id': 'version-456',
+                'createdAt': '2024-01-01T00:00:00Z',
+                'note': 'Champion version'
+            },
+            {
+                'id': 'version-455',
+                'createdAt': '2023-12-31T00:00:00Z',
+                'note': 'Previous version'
+            }
+        ]
+        
+        # Expected response structure (new format)
         expected_response = {
             "found": True,
             "scoreId": "score-123",
@@ -49,15 +63,41 @@ class TestScoreInfoTool:
             "description": "Version description",  # Should come from version, not score
             "code": champion_version_data['configuration'],
             "guidelines": champion_version_data['guidelines'],
-            "isDisabled": False
+            "isDisabled": False,
+            # Explicit version identification
+            "targetVersionId": "version-456",  # Explicitly shows which version is returned
+            "isChampionVersion": True,  # Clearly indicates this is the champion
+            # Version details for the returned version
+            "versionDetails": {
+                "id": "version-456",
+                "createdAt": "2024-01-01T00:00:00Z",
+                "updatedAt": "2024-01-01T00:00:00Z",
+                "note": "Champion version",
+                "isFeatured": True,
+                "parentVersionId": None,
+                "isChampion": True
+            },
+            "versions": version_list,
+            "isSpecificVersion": False
         }
         
-        # Verify the expected structure
+        # Verify the enhanced structure
         assert expected_response['code'] is not None
         assert expected_response['guidelines'] is not None
         assert expected_response['description'] == "Version description"  # Version takes priority
         assert "name: Test Score" in expected_response['code']
         assert "# Test Guidelines" in expected_response['guidelines']
+        
+        # Verify explicit version identification
+        assert expected_response['targetVersionId'] == 'version-456'
+        assert expected_response['isChampionVersion'] is True
+        assert expected_response['versionDetails']['isChampion'] is True
+        assert expected_response['versionDetails']['id'] == 'version-456'
+        
+        # Verify version list is included by default
+        assert 'versions' in expected_response
+        assert len(expected_response['versions']) == 2
+        assert expected_response['versions'][0]['id'] == 'version-456'
     
     def test_score_info_description_fallback_logic(self):
         """Test description field logic: version description > score description"""
@@ -118,29 +158,72 @@ class TestScoreInfoTool:
             'guidelines': '# Specific Version Guidelines',
             'description': 'Specific version description',
             'createdAt': '2024-02-01T00:00:00Z',
+            'updatedAt': '2024-02-01T00:00:00Z',
             'note': 'Specific version for testing',
-            'isFeatured': False
+            'isFeatured': False,
+            'parentVersionId': 'version-parent'
         }
+        
+        # Mock version list (still included even when specific version requested)
+        version_list = [
+            {
+                'id': 'version-current',
+                'createdAt': '2024-02-02T00:00:00Z',
+                'note': 'Champion version'
+            },
+            {
+                'id': 'version-specific',
+                'createdAt': '2024-02-01T00:00:00Z',
+                'note': 'Specific version for testing'
+            }
+        ]
         
         # When version_id is provided, should use that version instead of champion
         version_id = 'version-specific'
         
         expected_response = {
+            "found": True,
             "scoreId": "score-123",
             "scoreName": "Test Score",
             "championVersionId": "version-current",  # Still shows champion ID
             "description": "Specific version description",  # From specific version
             "code": specific_version_data['configuration'],
             "guidelines": specific_version_data['guidelines'],
-            "targetedVersionDetails": specific_version_data  # Added when version_id specified
+            # Explicit version identification
+            "targetVersionId": "version-specific",  # Explicitly shows which version is returned
+            "isChampionVersion": False,  # Clearly indicates this is NOT the champion
+            "requestedVersionId": "version-specific",  # Shows the requested version ID
+            # Version details for the returned version
+            "versionDetails": {
+                "id": "version-specific",
+                "createdAt": "2024-02-01T00:00:00Z",
+                "updatedAt": "2024-02-01T00:00:00Z",
+                "note": "Specific version for testing",
+                "isFeatured": False,
+                "parentVersionId": "version-parent",
+                "isChampion": False  # Not the champion
+            },
+            "isSpecificVersion": True,  # Flag indicating specific version was requested
+            "versions": version_list  # Version list still included
         }
         
         # Verify specific version takes precedence
         assert expected_response['code'] == specific_version_data['configuration']
         assert expected_response['guidelines'] == specific_version_data['guidelines']
         assert expected_response['description'] == specific_version_data['description']
-        assert expected_response['targetedVersionDetails'] is not None
+        
+        # Verify explicit version identification
+        assert expected_response['targetVersionId'] == 'version-specific'
+        assert expected_response['isChampionVersion'] is False
+        assert expected_response['requestedVersionId'] == 'version-specific'
+        assert expected_response['isSpecificVersion'] is True
+        assert expected_response['versionDetails']['isChampion'] is False
+        assert expected_response['versionDetails']['id'] == 'version-specific'
         assert "Specific Version" in expected_response['code']
+        
+        # Verify version list is still included
+        assert 'versions' in expected_response
+        assert len(expected_response['versions']) == 2
     
     def test_score_info_no_champion_version_handling(self):
         """Test handling when score has no champion version"""
@@ -153,6 +236,9 @@ class TestScoreInfoTool:
             'isDisabled': False
         }
         
+        # Mock empty version list
+        version_list = []
+        
         expected_response = {
             "found": True,
             "scoreId": "score-123",
@@ -161,7 +247,13 @@ class TestScoreInfoTool:
             "description": "Score description",  # Falls back to score description
             "code": None,  # No code available
             "guidelines": None,  # No guidelines available
-            "isDisabled": False
+            "isDisabled": False,
+            # Explicit version identification
+            "targetVersionId": None,  # No version available
+            "isChampionVersion": False,  # No champion version
+            "versionDetails": None,  # No version details
+            "versions": version_list,  # Empty version list
+            "isSpecificVersion": False
         }
         
         # Verify fallback behavior
@@ -169,6 +261,150 @@ class TestScoreInfoTool:
         assert expected_response['guidelines'] is None
         assert expected_response['description'] == "Score description"
         assert expected_response['championVersionId'] is None
+        
+        # Verify explicit version identification shows no version
+        assert expected_response['targetVersionId'] is None
+        assert expected_response['isChampionVersion'] is False
+        assert expected_response['versionDetails'] is None
+        assert expected_response['versions'] == []
+    
+    def test_score_info_version_list_limit(self):
+        """Test that version list is limited to 20 most recent versions"""
+        # Mock score with many versions
+        score_data = {
+            'id': 'score-123',
+            'name': 'Test Score',
+            'championVersionId': 'version-25'
+        }
+        
+        # Mock 25 versions (should be limited to 20)
+        all_versions = [
+            {
+                'id': f'version-{i}',
+                'createdAt': f'2024-01-{i:02d}T00:00:00Z',
+                'note': f'Version {i}'
+            }
+            for i in range(25, 0, -1)  # Reverse chronological order
+        ]
+        
+        # Should only return first 20 (most recent)
+        expected_version_list = all_versions[:20]
+        
+        expected_response = {
+            "found": True,
+            "scoreId": "score-123",
+            "versions": expected_version_list
+        }
+        
+        # Verify version list limit
+        assert len(expected_response['versions']) == 20
+        assert expected_response['versions'][0]['id'] == 'version-25'  # Most recent first
+        assert expected_response['versions'][19]['id'] == 'version-6'  # 20th most recent
+    
+    def test_score_info_version_not_found_error(self):
+        """Test error handling when specific version_id is not found"""
+        # Mock score data
+        score_data = {
+            'id': 'score-123',
+            'name': 'Test Score',
+            'championVersionId': 'version-current'
+        }
+        
+        # Request non-existent version
+        version_id = 'version-nonexistent'
+        
+        # Should return error message
+        expected_error = "Error: Version 'version-nonexistent' not found."
+        
+        # Verify error handling
+        assert "not found" in expected_error
+        assert version_id in expected_error
+    
+    def test_score_info_version_list_error_handling(self):
+        """Test handling when version list query fails"""
+        # Mock score data
+        score_data = {
+            'id': 'score-123',
+            'name': 'Test Score',
+            'championVersionId': 'version-456'
+        }
+        
+        # Mock GraphQL error response
+        versions_error = "Error fetching version list: GraphQL error"
+        
+        expected_response = {
+            "found": True,
+            "scoreId": "score-123",
+            "versionsError": versions_error,
+            "versions": []  # Empty list on error
+        }
+        
+        # Verify error handling
+        assert expected_response['versionsError'] is not None
+        assert "Error fetching version list" in expected_response['versionsError']
+        assert expected_response['versions'] == []
+    
+    def test_score_info_explicit_version_id_identification(self):
+        """Test that the response explicitly identifies which version ID is being returned"""
+        # Test case 1: Champion version (default behavior)
+        champion_response = {
+            "found": True,
+            "scoreId": "score-123",
+            "championVersionId": "version-champion",
+            "targetVersionId": "version-champion",  # Should match champion
+            "isChampionVersion": True,  # Should be True
+            "versionDetails": {
+                "id": "version-champion",
+                "isChampion": True
+            },
+            "isSpecificVersion": False  # No specific version requested
+        }
+        
+        # Verify champion version identification
+        assert champion_response['targetVersionId'] == champion_response['championVersionId']
+        assert champion_response['isChampionVersion'] is True
+        assert champion_response['versionDetails']['isChampion'] is True
+        assert champion_response['isSpecificVersion'] is False
+        assert 'requestedVersionId' not in champion_response  # Should not be present for champion
+        
+        # Test case 2: Specific version (non-champion)
+        specific_response = {
+            "found": True,
+            "scoreId": "score-123",
+            "championVersionId": "version-champion",
+            "targetVersionId": "version-specific",  # Different from champion
+            "isChampionVersion": False,  # Should be False
+            "requestedVersionId": "version-specific",  # Should match requested
+            "versionDetails": {
+                "id": "version-specific",
+                "isChampion": False
+            },
+            "isSpecificVersion": True  # Specific version was requested
+        }
+        
+        # Verify specific version identification
+        assert specific_response['targetVersionId'] != specific_response['championVersionId']
+        assert specific_response['targetVersionId'] == specific_response['requestedVersionId']
+        assert specific_response['isChampionVersion'] is False
+        assert specific_response['versionDetails']['isChampion'] is False
+        assert specific_response['isSpecificVersion'] is True
+        
+        # Test case 3: No version available
+        no_version_response = {
+            "found": True,
+            "scoreId": "score-123",
+            "championVersionId": None,
+            "targetVersionId": None,  # No version available
+            "isChampionVersion": False,  # No champion
+            "versionDetails": None,  # No version details
+            "isSpecificVersion": False
+        }
+        
+        # Verify no version identification
+        assert no_version_response['targetVersionId'] is None
+        assert no_version_response['isChampionVersion'] is False
+        assert no_version_response['versionDetails'] is None
+        assert 'requestedVersionId' not in no_version_response
     
     def test_score_info_field_name_consistency(self):
         """Test that response uses 'code' instead of 'configuration'"""
@@ -352,132 +588,7 @@ class TestScoreInfoTool:
         assert len(multiple_response['matches']) == 2
 
 
-class TestScoreConfigurationTool:
-    """Test plexus_score_configuration tool patterns"""
-    
-    def test_score_configuration_uses_code_field(self):
-        """Test that score configuration tool returns 'code' instead of 'configuration'"""
-        # Mock version data
-        version_data = {
-            'id': 'version-123',
-            'configuration': 'name: Test Score\ntype: SimpleLLMScore\nsystem_message: "Test prompt"',
-            'guidelines': '# Test Guidelines\n\nThis is a test score.',
-            'createdAt': '2024-01-01T00:00:00Z',
-            'note': 'Updated configuration',
-            'isFeatured': True
-        }
-        
-        # Expected response structure with 'code' field
-        expected_response = {
-            "scoreId": "score-123",
-            "scoreName": "Test Score",
-            "scorecardName": "Test Scorecard",
-            "versionId": version_data['id'],
-            "isChampionVersion": False,
-            "code": version_data['configuration'],  # Should be 'code', not 'configuration'
-            "guidelines": version_data['guidelines'],
-            "versionMetadata": {
-                "createdAt": version_data.get('createdAt'),
-                "note": version_data.get('note'),
-                "isFeatured": version_data.get('isFeatured')
-            }
-        }
-        
-        # Verify field names
-        assert 'code' in expected_response
-        assert 'configuration' not in expected_response  # Should not use old field name
-        assert expected_response['code'] == version_data['configuration']
-        assert 'name: Test Score' in expected_response['code']
-    
-    def test_champion_version_configuration_uses_code_field(self):
-        """Test that champion version configuration also uses 'code' field"""
-        # Mock champion version response
-        champion_response = {
-            "scoreId": "score-123",
-            "scoreName": "Test Score",
-            "versionId": "champion-version-456",
-            "isChampionVersion": True,
-            "code": "name: Champion Score\ntype: SimpleLLMScore\nsystem_message: 'Champion prompt'",  # Should be 'code'
-            "guidelines": "# Champion Guidelines\n\nThis is the champion version."
-        }
-        
-        # Verify field consistency
-        assert 'code' in champion_response
-        assert 'configuration' not in champion_response
-        assert champion_response['isChampionVersion'] is True
-        assert champion_response['versionId'] == 'champion-version-456'
-        assert 'Champion Score' in champion_response['code']
-    
-    def test_score_config_validation_patterns(self):
-        """Test score configuration parameter validation patterns"""
-        def validate_score_config_params(scorecard_identifier, score_identifier, version_id=None):
-            if not scorecard_identifier or not scorecard_identifier.strip():
-                return False, "scorecard_identifier is required"
-            if not score_identifier or not score_identifier.strip():
-                return False, "score_identifier is required"
-            return True, None
-        
-        # Test valid parameters
-        valid, error = validate_score_config_params("scorecard-123", "score-456")
-        assert valid is True
-        assert error is None
-        
-        # Test with version ID
-        valid, error = validate_score_config_params("scorecard-123", "score-456", "version-789")
-        assert valid is True
-        assert error is None
-        
-        # Test missing scorecard identifier
-        valid, error = validate_score_config_params("", "score-456")
-        assert valid is False
-        assert "scorecard_identifier is required" in error
-        
-        # Test missing score identifier
-        valid, error = validate_score_config_params("scorecard-123", "")
-        assert valid is False
-        assert "score_identifier is required" in error
-    
-    def test_configuration_response_patterns(self):
-        """Test configuration response formatting patterns"""
-        # Test response with specific version
-        version_data = {
-            'id': 'version-123',
-            'configuration': 'name: Test Score\ntype: SimpleLLMScore\n',
-            'createdAt': '2024-01-01T00:00:00Z',
-            'note': 'Updated configuration',
-            'isFeatured': True
-        }
-        
-        response = {
-            "scoreId": "score-123",
-            "scoreName": "Test Score",
-            "scorecardName": "Test Scorecard",
-            "versionId": version_data['id'],
-            "isChampionVersion": False,
-            "configuration": version_data['configuration'],
-            "versionMetadata": {
-                "createdAt": version_data.get('createdAt'),
-                "note": version_data.get('note'),
-                "isFeatured": version_data.get('isFeatured')
-            }
-        }
-        
-        assert response['versionId'] == 'version-123'
-        assert 'name: Test Score' in response['configuration']
-        assert response['versionMetadata']['note'] == 'Updated configuration'
-        assert response['versionMetadata']['isFeatured'] is True
-        
-        # Test champion version response
-        champion_response = {
-            "scoreId": "score-123",
-            "scoreName": "Test Score",
-            "versionId": "champion-version-456",
-            "isChampionVersion": True,
-            "configuration": "name: Champion Score\ntype: SimpleLLMScore\n"
-        }
-        
-        assert champion_response['isChampionVersion'] is True
-        assert champion_response['versionId'] == 'champion-version-456'
+
 
 
 class TestScorePullTool:
@@ -906,6 +1017,188 @@ class TestScoreUpdateTool:
         assert response['success'] is True
         assert response['newVersionId'] == "new-version-789"
         assert response['configurationLength'] == len(yaml_config)
+
+    def test_yaml_validation_integration(self):
+        """Test YAML validation integration in score update"""
+        # Test valid YAML that should pass validation
+        valid_yaml = """
+name: Test Score
+key: test_score  # Valid key format (lowercase, underscores)
+class: LangGraphScore
+model_provider: ChatOpenAI
+model_name: gpt-4o-mini-2024-07-18
+
+graph:
+  - name: classifier_node
+    class: Classifier
+    valid_classes: ["YES", "NO"]
+    system_message: "You are a classifier."
+    user_message: "{{text}}"
+"""
+        
+        # Test invalid YAML that should fail validation (missing required fields)
+        invalid_yaml_missing_fields = """
+# Missing required 'name' and 'key' fields
+id: 12345
+class: LangGraphScore
+graph:
+  - name: classifier_node
+    class: Classifier
+"""
+        
+        # Test invalid YAML with bad key format (should be ERROR, not warning)
+        invalid_yaml_bad_key = """
+name: Test Score
+key: Test-Score-With-Invalid-Key-Format  # Invalid key format - should be ERROR
+class: LangGraphScore
+model_provider: ChatOpenAI
+model_name: gpt-4o-mini-2024-07-18
+
+graph:
+  - name: classifier_node
+    class: Classifier
+    valid_classes: ["YES", "NO"]
+    system_message: "You are a classifier."
+    user_message: "{{text}}"
+"""
+        
+        # Test YAML with warnings only (should allow update)
+        yaml_with_warnings = """
+name: Test Score
+key: test_score
+externalId: testScore123
+external_id: test_score_123  # Both formats present - should warn but not block
+class: LangGraphScore
+model_provider: ChatOpenAI
+model_name: gpt-4o-mini-2024-07-18
+
+graph:
+  - name: classifier_node
+    class: Classifier
+    valid_classes: ["YES", "NO"]
+    system_message: "You are a classifier."
+    user_message: "{{text}}"
+"""
+
+        def simulate_yaml_validation(yaml_code):
+            """Simulate the YAML validation logic from the MCP tool"""
+            try:
+                # Import the Plexus YAML linter (this would be the actual import in the tool)
+                from plexus.linting.schemas import create_score_linter
+                
+                # Create the score-specific linter
+                linter = create_score_linter()
+                
+                # Lint the YAML code
+                lint_result = linter.lint(yaml_code)
+                
+                # Check if validation failed
+                if not lint_result.is_valid:
+                    # Format error messages
+                    error_messages = []
+                    for message in lint_result.messages:
+                        if message.level == 'error':
+                            error_msg = f"{message.title}: {message.message}"
+                            if message.suggestion:
+                                error_msg += f"\nSuggestion: {message.suggestion}"
+                            error_messages.append(error_msg)
+                    
+                    return {
+                        "success": False,
+                        "error": "YAML validation failed",
+                        "validation_errors": error_messages,
+                        "error_count": lint_result.error_count,
+                        "warning_count": lint_result.warning_count
+                    }
+                
+                # Check for warnings
+                warnings = []
+                for message in lint_result.messages:
+                    if message.level == 'warning':
+                        warning_msg = f"{message.title}: {message.message}"
+                        if message.suggestion:
+                            warning_msg += f" Suggestion: {message.suggestion}"
+                        warnings.append(warning_msg)
+                
+                return {
+                    "success": True,
+                    "warnings": warnings if warnings else None
+                }
+                
+            except ImportError:
+                # Fallback to basic YAML validation if linter not available
+                import yaml
+                try:
+                    yaml.safe_load(yaml_code)
+                    return {"success": True, "warnings": None}
+                except yaml.YAMLError as e:
+                    return {"success": False, "error": f"Invalid YAML syntax: {str(e)}"}
+        
+        # Test 1: Valid YAML should pass
+        result = simulate_yaml_validation(valid_yaml)
+        assert result["success"] is True, f"Valid YAML should pass validation, got: {result}"
+        
+        # Test 2: Invalid YAML with missing fields should fail (ERRORS block update)
+        result = simulate_yaml_validation(invalid_yaml_missing_fields)
+        assert result["success"] is False, "YAML missing required fields should fail validation"
+        if "validation_errors" in result:
+            assert result["error_count"] > 0
+            # Should have errors about missing required fields
+            error_text = " ".join(result["validation_errors"]).lower()
+            assert "name" in error_text or "key" in error_text, "Should report missing required fields"
+        
+        # Test 3: Invalid YAML with bad key format should fail (ERRORS block update)
+        result = simulate_yaml_validation(invalid_yaml_bad_key)
+        assert result["success"] is False, "YAML with invalid key format should fail validation"
+        if "validation_errors" in result:
+            assert result["error_count"] > 0
+            # Should have error about invalid key format
+            error_text = " ".join(result["validation_errors"]).lower()
+            assert "key" in error_text and "invalid" in error_text, "Should report invalid key format"
+        
+        # Test 4: YAML with warnings only should pass (WARNINGS don't block update)
+        result = simulate_yaml_validation(yaml_with_warnings)
+        assert result["success"] is True, f"YAML with warnings only should pass validation, got: {result}"
+        if result.get("warnings"):
+            # Should have warnings about external ID format
+            warning_text = " ".join(result["warnings"]).lower()
+            assert "external" in warning_text and ("format" in warning_text or "consistent" in warning_text), "Should warn about external ID format"
+
+    def test_yaml_validation_fallback_behavior(self):
+        """Test fallback behavior when Plexus linter is not available"""
+        # Test valid YAML syntax (should pass with basic validation)
+        valid_yaml_syntax = """
+name: Test Score
+key: test_score
+class: LangGraphScore
+"""
+        
+        # Test invalid YAML syntax (should fail with basic validation)
+        invalid_yaml_syntax = """
+name: Test Score
+key: test_score
+class: LangGraphScore
+invalid_yaml: [unclosed list
+"""
+        
+        def simulate_fallback_validation(yaml_code):
+            """Simulate fallback validation when linter import fails"""
+            # Simulate ImportError for linter
+            import yaml
+            try:
+                yaml.safe_load(yaml_code)
+                return {"success": True, "warnings": None}
+            except yaml.YAMLError as e:
+                return {"success": False, "error": f"Invalid YAML syntax: {str(e)}"}
+        
+        # Test valid YAML syntax with fallback
+        result = simulate_fallback_validation(valid_yaml_syntax)
+        assert result["success"] is True, "Valid YAML syntax should pass fallback validation"
+        
+        # Test invalid YAML syntax with fallback
+        result = simulate_fallback_validation(invalid_yaml_syntax)
+        assert result["success"] is False, "Invalid YAML syntax should fail fallback validation"
+        assert "syntax" in result["error"].lower(), "Should report YAML syntax error"
 
 
 class TestScoreDeleteTool:

@@ -29,11 +29,23 @@ def register_think_tool(mcp: FastMCP):
         - Open the documentation: get_plexus_documentation(filename="feedback-alignment").
         - Follow the baseline-first workflow below. Do NOT edit YAML until a baseline is captured.
 
-        CRITICAL WORKFLOW POLICY (Score YAML work):
-        - Always work from a LOCAL YAML file. Pull with the score pull tool and edit the file in `scorecards/<Scorecard>/<Score>.yaml`.
-        - During iteration, DO NOT push new versions. Keep all changes local.
+        SCORE WORKFLOW RECOMMENDATIONS:
+        
+        FOR MOST SCORE UPDATES (Recommended):
+        - Use plexus_score_update with the 'code' parameter to directly update score YAML
+        - This is the simplest and most efficient approach for most score modifications
+        - Supports specifying parent_version_id for version lineage control
+        
+        FOR LOCAL DEVELOPMENT WORKFLOWS:
+        - Use pull/push when you need to work with local files for complex editing
+        - Pull with plexus_score_pull to get YAML locally in `scorecards/<Scorecard>/<Score>.yaml`
+        - Edit the local file, then push with plexus_score_push
+        - Useful for: complex multi-file workflows, external editor usage, version control integration
+        
+        FEEDBACK ALIGNMENT SPECIFIC POLICY:
+        - During feedback alignment iteration, DO NOT push new versions. Keep all changes local.
         - DO NOT PROMOTE CHAMPION. Champion promotion is disabled for agents and must not be attempted.
-        - Forbidden during iteration: plexus_score_push, plexus_score_update, any champion/promotion action.
+        - For feedback alignment: use local YAML files and evaluations with yaml=true, remote=false.
 
         REQUIRED BASELINE STEPS (no edits yet):
         1) Pull champion YAML locally (score pull). Confirm the local path.
