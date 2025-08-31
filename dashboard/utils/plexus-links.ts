@@ -4,17 +4,22 @@ interface PlexusUrlOptions {
   recordType: PlexusRecordType;
   id: string;
   parentId?: string; // For nested resources like scores within scorecards
+  versionId?: string; // For score versions
 }
 
 export function getDashboardUrl(options: PlexusUrlOptions): string {
-  const { recordType, id, parentId } = options;
+  const { recordType, id, parentId, versionId } = options;
 
   switch (recordType) {
     case 'scorecard':
       return `/lab/scorecards/${id}`;
     case 'score':
       if (parentId) {
-        return `/lab/scorecards/${parentId}/scores/${id}`;
+        let url = `/lab/scorecards/${parentId}/scores/${id}`;
+        if (versionId) {
+          url += `/versions/${versionId}`;
+        }
+        return url;
       }
       // Fallback or alternative link if parentId is not available,
       // though for scores, parentId (scorecardId) is usually essential.
@@ -39,4 +44,5 @@ export function getDashboardUrl(options: PlexusUrlOptions): string {
 // Example Usage:
 // getDashboardUrl({ recordType: 'scorecard', id: 'sc-123' }); // -> '/lab/scorecards/sc-123'
 // getDashboardUrl({ recordType: 'score', id: 's-456', parentId: 'sc-123' }); // -> '/lab/scorecards/sc-123/scores/s-456'
+// getDashboardUrl({ recordType: 'score', id: 's-456', parentId: 'sc-123', versionId: 'v-789' }); // -> '/lab/scorecards/sc-123/scores/s-456/versions/v-789'
 // getDashboardUrl({ recordType: 'item', id: 'item-789' }); // -> '/lab/items/item-789' 

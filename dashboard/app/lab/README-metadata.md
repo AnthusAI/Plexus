@@ -76,6 +76,7 @@ The following lab routes have customized metadata:
 - `/lab/scorecards/[id]` - "Scorecard" - "Configuration and past version information for one scorecard and its scores."
 - `/lab/scorecards/[id]/scores` - "Scorecard Scores" - "All scores for this scorecard with their configurations and versions."
 - `/lab/scorecards/[id]/scores/[scoreId]` - "Score Configuration" - "Current champion and version history for the configuration for one scorecard score."
+- `/lab/scorecards/[id]/scores/[scoreId]/versions/[versionId]` - "Score Version" - "Specific version of a score configuration with its YAML and guidelines."
 
 ## Adding More Routes
 
