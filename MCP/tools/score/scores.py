@@ -285,7 +285,8 @@ def register_score_tools(mcp: FastMCP):
                                 
                                 if target_version_data:
                                     response["targetedVersionDetails"] = target_version_data
-                                    response["configuration"] = target_version_data.get('configuration')
+                                    response["code"] = target_version_data.get('configuration')
+                                    response["guidelines"] = target_version_data.get('guidelines')
                                     
                                 if include_versions:
                                     response["allVersions"] = all_versions
@@ -311,10 +312,13 @@ def register_score_tools(mcp: FastMCP):
                             version_data = version_result.get('getScoreVersion')
                             if version_data and version_data.get('configuration'):
                                 configuration = version_data['configuration']
+                                # Also include guidelines if available
+                                if version_data.get('guidelines'):
+                                    response["guidelines"] = version_data['guidelines']
                         except Exception as e:
                             configuration = f"Error loading configuration: {str(e)}"
                     
-                    response["configuration"] = configuration
+                    response["code"] = configuration
                 
                 return response
             else:
@@ -661,15 +665,15 @@ def register_score_tools(mcp: FastMCP):
         score_identifier: str
     ) -> Union[str, Dict[str, Any]]:
         """
-        Pulls a score's champion version YAML configuration to a local file.
-        Uses the reusable Score.pull_configuration() method for implementation.
+        Pulls a score's champion version code and guidelines to local files.
+        Uses the reusable Score.pull_code_and_guidelines() method for implementation.
         
         Parameters:
         - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
         - score_identifier: Identifier for the score (ID, name, key, or external ID)
         
         Returns:
-        - Information about the pulled configuration, including local file path
+        - Information about the pulled code and guidelines, including local file paths
         """
         # Temporarily redirect stdout to capture any unexpected output
         old_stdout = sys.stdout
@@ -720,31 +724,32 @@ def register_score_tools(mcp: FastMCP):
             scorecard_name = find_result["scorecard_name"]
             scorecard_id = find_result["scorecard_id"]
 
-            # Use the Score model's pull_configuration method
-            pull_result = score.pull_configuration(scorecard_name=scorecard_name)
+            # Use the Score model's pull_code_and_guidelines method
+            pull_result = score.pull_code_and_guidelines(scorecard_name=scorecard_name)
             
             if not pull_result["success"]:
-                return f"Error: {pull_result.get('message', 'Failed to pull configuration')}"
+                return f"Error: {pull_result.get('message', 'Failed to pull code and guidelines')}"
             
             return {
                 "success": True,
                 "scoreId": score.id,
                 "scoreName": score.name,
                 "scorecardName": scorecard_name,
-                "filePath": pull_result["file_path"],
+                "codeFilePath": pull_result["code_file_path"],
+                "guidelinesFilePath": pull_result["guidelines_file_path"],
                 "versionId": pull_result["version_id"],
                 "message": pull_result["message"],
                 "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
             }
             
         except Exception as e:
-            logger.error(f"Error pulling score configuration: {str(e)}", exc_info=True)
-            return f"Error pulling score configuration: {str(e)}"
+            logger.error(f"Error pulling score code and guidelines: {str(e)}", exc_info=True)
+            return f"Error pulling score code and guidelines: {str(e)}"
         finally:
             # Check if anything was written to stdout
             captured_output = temp_stdout.getvalue()
             if captured_output:
-                logger.warning(f"Captured unexpected stdout during pull_plexus_score_configuration: {captured_output}")
+                logger.warning(f"Captured unexpected stdout during plexus_score_pull: {captured_output}")
             # Restore original stdout
             sys.stdout = old_stdout
 
@@ -755,8 +760,9 @@ def register_score_tools(mcp: FastMCP):
         version_note: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
-        Pushes a score's local YAML configuration file to create a new version.
-        Uses the reusable Score.push_configuration() method for implementation.
+        Pushes a score's local code and guidelines files to create a new version.
+        Automatically detects which files have changed and pushes accordingly.
+        Uses the reusable Score.push_code_and_guidelines() method for implementation.
         
         Parameters:
         - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
@@ -764,7 +770,7 @@ def register_score_tools(mcp: FastMCP):
         - version_note: Optional note describing the changes made in this version
         
         Returns:
-        - Information about the pushed configuration and new version
+        - Information about the pushed code/guidelines and new version
         """
         # Temporarily redirect stdout to capture any unexpected output
         old_stdout = sys.stdout
@@ -815,14 +821,14 @@ def register_score_tools(mcp: FastMCP):
             scorecard_name = find_result["scorecard_name"]
             scorecard_id = find_result["scorecard_id"]
 
-            # Use the Score model's push_configuration method
-            push_result = score.push_configuration(
+            # Use the Score model's push_code_and_guidelines method
+            push_result = score.push_code_and_guidelines(
                 scorecard_name=scorecard_name,
                 note=version_note or "Updated via MCP pull/push workflow"
             )
             
             if not push_result["success"]:
-                return f"Error: {push_result.get('message', 'Failed to push configuration')}"
+                return f"Error: {push_result.get('message', 'Failed to push code and guidelines')}"
             
             # Get additional metadata for comprehensive response
             new_version_id = push_result["version_id"]
@@ -864,23 +870,24 @@ def register_score_tools(mcp: FastMCP):
                 "newVersionId": new_version_id,
                 "previousChampionVersionId": current_champion_id if current_champion_id != new_version_id else None,
                 "versionNote": version_note or "Updated via MCP pull/push workflow",
-                "configurationLength": config_length,
+                "codeLength": config_length,
                 "createdAt": created_at,
                 # Enforce never promoting champion from MCP push
                 "championUpdated": False,
                 "skipped": push_result.get("skipped", False),
+                "changesDetected": push_result.get("changes_detected", {}),
                 "message": push_result["message"],
                 "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
             }
             
         except Exception as e:
-            logger.error(f"Error pushing score configuration: {str(e)}", exc_info=True)
-            return f"Error pushing score configuration: {str(e)}"
+            logger.error(f"Error pushing score code and guidelines: {str(e)}", exc_info=True)
+            return f"Error pushing score code and guidelines: {str(e)}"
         finally:
             # Check if anything was written to stdout
             captured_output = temp_stdout.getvalue()
             if captured_output:
-                logger.warning(f"Captured unexpected stdout during push_plexus_score_configuration: {captured_output}")
+                logger.warning(f"Captured unexpected stdout during plexus_score_push: {captured_output}")
             # Restore original stdout
             sys.stdout = old_stdout
 
@@ -888,21 +895,48 @@ def register_score_tools(mcp: FastMCP):
     async def plexus_score_update(
         scorecard_identifier: str,
         score_identifier: str,
-        yaml_configuration: str,
+        # Score metadata fields (updates Score record)
+        name: Optional[str] = None,
+        key: Optional[str] = None,
+        external_id: Optional[str] = None,
+        description: Optional[str] = None,
+        is_disabled: Optional[bool] = None,
+        ai_provider: Optional[str] = None,
+        ai_model: Optional[str] = None,
+        order: Optional[int] = None,
+        # ScoreVersion fields (creates new version if changed)
+        code: Optional[str] = None,
+        guidelines: Optional[str] = None,
         version_note: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
-        Updates a score's configuration by creating a new version with the provided YAML content.
-        Uses the reusable Score.push_configuration() method for implementation.
+        Intelligently updates a score's metadata and/or creates a new version with updated code/guidelines.
+        
+        This tool can update:
+        1. Score metadata (name, key, external_id, description, etc.) - updates the Score record directly
+        2. Score version content (code YAML, guidelines) - creates a new ScoreVersion if content changed
         
         Parameters:
         - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
         - score_identifier: Identifier for the score (ID, name, key, or external ID)
-        - yaml_configuration: The new YAML configuration content for the score
+        
+        Score Metadata Updates (updates Score record):
+        - name: New display name for the score
+        - key: New unique key for the score  
+        - external_id: New external ID for the score
+        - description: New description for the score
+        - is_disabled: Whether the score should be disabled
+        - ai_provider: New AI provider
+        - ai_model: New AI model
+        - order: New display order
+        
+        ScoreVersion Updates (creates new version if content changed):
+        - code: The new YAML code content for the score
+        - guidelines: The new guidelines content for the score
         - version_note: Optional note describing the changes made in this version
         
         Returns:
-        - Information about the created version and updated score, including dashboard URL
+        - Information about what was updated (metadata and/or version), including dashboard URL
         """
         # Temporarily redirect stdout to capture any unexpected output
         old_stdout = sys.stdout
@@ -924,6 +958,36 @@ def register_score_tools(mcp: FastMCP):
                 logger.warning("Missing API credentials. Ensure .env file is loaded.")
                 return "Error: Missing API credentials. Use --env-file to specify your .env file path."
             
+            # Validate that at least one field is provided for update
+            metadata_fields = {
+                'name': name,
+                'key': key,
+                'external_id': external_id,
+                'description': description,
+                'is_disabled': is_disabled,
+                'ai_provider': ai_provider,
+                'ai_model': ai_model,
+                'order': order
+            }
+            version_fields = {
+                'code': code,
+                'guidelines': guidelines
+            }
+            
+            has_metadata_updates = any(v is not None for v in metadata_fields.values())
+            has_version_updates = any(v is not None for v in version_fields.values())
+            
+            if not has_metadata_updates and not has_version_updates:
+                return "Error: At least one field must be provided for update (metadata or version content)"
+            
+            # Validate YAML code if provided
+            if code:
+                try:
+                    import yaml
+                    yaml.safe_load(code)
+                except yaml.YAMLError as e:
+                    return f"Error: Invalid YAML code: {str(e)}"
+            
             # Create the client
             try:
                 client_stdout = StringIO()
@@ -935,7 +999,7 @@ def register_score_tools(mcp: FastMCP):
                 finally:
                     client_output = client_stdout.getvalue()
                     if client_output:
-                        logger.warning(f"Captured unexpected stdout during client creation in update_plexus_score_configuration: {client_output}")
+                        logger.warning(f"Captured unexpected stdout during client creation in plexus_score_update: {client_output}")
                     sys.stdout = saved_stdout
             except Exception as client_err:
                 logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
@@ -943,13 +1007,6 @@ def register_score_tools(mcp: FastMCP):
                 
             if not client:
                 return "Error: Could not create dashboard client."
-
-            # Validate YAML configuration
-            try:
-                import yaml
-                yaml.safe_load(yaml_configuration)
-            except yaml.YAMLError as e:
-                return f"Error: Invalid YAML configuration: {str(e)}"
 
             # Find the score instance
             find_result = await _find_score_instance(scorecard_identifier, score_identifier, client)
@@ -960,18 +1017,136 @@ def register_score_tools(mcp: FastMCP):
             scorecard_name = find_result["scorecard_name"]
             scorecard_id = find_result["scorecard_id"]
 
-            # Use the foundational create_version_from_yaml method directly
-            result = score.create_version_from_yaml(
-                yaml_configuration,
-                note=version_note or "Updated via MCP server"
-            )
+            # Track what was updated
+            updates_performed = {
+                "metadata_updated": False,
+                "version_created": False,
+                "metadata_changes": {},
+                "version_info": {}
+            }
+
+            # 1. Handle Score metadata updates first
+            if has_metadata_updates:
+                # Build update input for Score metadata
+                update_input = {'id': score.id}
+                
+                # Only include fields that are actually being updated
+                if name is not None:
+                    update_input['name'] = name
+                    updates_performed["metadata_changes"]["name"] = name
+                if key is not None:
+                    update_input['key'] = key
+                    updates_performed["metadata_changes"]["key"] = key
+                if external_id is not None:
+                    update_input['externalId'] = external_id
+                    updates_performed["metadata_changes"]["external_id"] = external_id
+                if description is not None:
+                    update_input['description'] = description
+                    updates_performed["metadata_changes"]["description"] = description
+                if is_disabled is not None:
+                    update_input['isDisabled'] = is_disabled
+                    updates_performed["metadata_changes"]["is_disabled"] = is_disabled
+                if ai_provider is not None:
+                    update_input['aiProvider'] = ai_provider
+                    updates_performed["metadata_changes"]["ai_provider"] = ai_provider
+                if ai_model is not None:
+                    update_input['aiModel'] = ai_model
+                    updates_performed["metadata_changes"]["ai_model"] = ai_model
+                if order is not None:
+                    update_input['order'] = order
+                    updates_performed["metadata_changes"]["order"] = order
+
+                # Execute Score metadata update
+                update_mutation = """
+                mutation UpdateScore($input: UpdateScoreInput!) {
+                    updateScore(input: $input) {
+                        id
+                        name
+                        key
+                        externalId
+                        description
+                        isDisabled
+                        aiProvider
+                        aiModel
+                        order
+                    }
+                }
+                """
+                
+                try:
+                    update_result = client.execute(update_mutation, {'input': update_input})
+                    if update_result and 'updateScore' in update_result:
+                        updates_performed["metadata_updated"] = True
+                        logger.info(f"Successfully updated Score metadata for {score.name}")
+                    else:
+                        return f"Error: Failed to update Score metadata: {update_result}"
+                except Exception as e:
+                    return f"Error updating Score metadata: {str(e)}"
+
+            # 2. Handle ScoreVersion updates (configuration/guidelines)
+            if has_version_updates:
+                # If only guidelines provided, get current code to preserve it
+                if guidelines is not None and code is None:
+                    # Get current champion version code to preserve it
+                    champion_query = f"""
+                    query GetScore {{
+                        getScore(id: "{score.id}") {{
+                            championVersionId
+                        }}
+                    }}
+                    """
+                    champion_result = client.execute(champion_query)
+                    current_champion_id = champion_result.get('getScore', {}).get('championVersionId')
+                    
+                    if current_champion_id:
+                        config_query = f"""
+                        query GetScoreVersion {{
+                            getScoreVersion(id: "{current_champion_id}") {{
+                                configuration
+                            }}
+                        }}
+                        """
+                        config_result = client.execute(config_query)
+                        code = config_result.get('getScoreVersion', {}).get('configuration', '')
+                
+                # Create new version with updated content
+                if code:  # Only proceed if we have code
+                    result = score.create_version_from_code(
+                        code,
+                        note=version_note or "Updated via MCP server",
+                        guidelines=guidelines
+                    )
+                    
+                    if result["success"]:
+                        updates_performed["version_created"] = not result.get("skipped", False)
+                        updates_performed["version_info"] = {
+                            "version_id": result["version_id"],
+                            "skipped": result.get("skipped", False),
+                            "message": result["message"]
+                        }
+                        
+                        if not result.get("skipped", False):
+                            logger.info(f"Successfully created new version for Score {score.name}")
+                    else:
+                        return f"Error creating new version: {result.get('message', 'Unknown error')}"
+
+            # Build comprehensive response
+            response = {
+                "success": True,
+                "scoreId": score.id,
+                "scoreName": score.name,
+                "scorecardName": scorecard_name,
+                "updates": updates_performed,
+                "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
+            }
             
-            if not result["success"]:
-                return f"Error: {result.get('message', 'Failed to create version')}"
-            
-            # Get version creation timestamp if a new version was created
-            new_version_id = result["version_id"]
-            if not result.get("skipped", False):
+            # Add version-specific info if version was updated
+            if updates_performed["version_created"]:
+                response["newVersionId"] = updates_performed["version_info"]["version_id"]
+                response["versionNote"] = version_note or "Updated via MCP server"
+                
+                # Get creation timestamp
+                new_version_id = updates_performed["version_info"]["version_id"]
                 version_query = f"""
                 query GetScoreVersion {{
                     getScoreVersion(id: "{new_version_id}") {{
@@ -980,36 +1155,21 @@ def register_score_tools(mcp: FastMCP):
                 }}
                 """
                 version_result = client.execute(version_query)
-                created_at = version_result.get('getScoreVersion', {}).get('createdAt')
-            else:
-                created_at = None
+                response["createdAt"] = version_result.get('getScoreVersion', {}).get('createdAt')
 
-            return {
-                "success": True,
-                "scoreId": score.id,
-                "scoreName": score.name,
-                "scorecardName": scorecard_name,
-                "newVersionId": new_version_id,
-                "previousChampionVersionId": None,  # The Score method handles version tracking internally
-                "versionNote": version_note or "Updated via MCP server",
-                "configurationLength": len(yaml_configuration),
-                "createdAt": created_at,
-                # Enforce never promoting champion from MCP update
-                "championUpdated": False,
-                "skipped": result.get("skipped", False),
-                "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
-            }
+            return response
             
         except Exception as e:
-            logger.error(f"Error updating score configuration: {str(e)}", exc_info=True)
-            return f"Error updating score configuration: {str(e)}"
+            logger.error(f"Error updating score: {str(e)}", exc_info=True)
+            return f"Error updating score: {str(e)}"
         finally:
             # Check if anything was written to stdout
             captured_output = temp_stdout.getvalue()
             if captured_output:
-                logger.warning(f"Captured unexpected stdout during update_plexus_score_configuration: {captured_output}")
+                logger.warning(f"Captured unexpected stdout during plexus_score_update: {captured_output}")
             # Restore original stdout
             sys.stdout = old_stdout
+
 
     @mcp.tool()
     async def plexus_score_create(
@@ -1257,193 +1417,7 @@ def register_score_tools(mcp: FastMCP):
             # Restore original stdout
             sys.stdout = old_stdout
 
-    @mcp.tool()
-    async def plexus_score_metadata_update(
-        score_id: str,
-        name: Optional[str] = None,
-        key: Optional[str] = None,
-        external_id: Optional[str] = None,
-        description: Optional[str] = None,
-        is_disabled: bool = False,
-        ai_provider: Optional[str] = None,
-        ai_model: Optional[str] = None,
-        order: Optional[int] = None
-    ) -> Union[str, Dict[str, Any]]:
-        """
-        Updates metadata properties of an existing score.
-        
-        Parameters:
-        - score_id: The ID of the score to update (required)
-        - name: New display name for the score
-        - key: New unique key for the score
-        - external_id: New external ID for the score
-        - description: New description for the score
-        - is_disabled: Whether the score should be disabled
-        - ai_provider: New AI provider
-        - ai_model: New AI model
-        - order: New display order
-        
-        Returns:
-        - Information about the updated score and what fields were changed
-        """
-        import re
-        
-        # Temporarily redirect stdout to capture any unexpected output
-        old_stdout = sys.stdout
-        temp_stdout = StringIO()
-        sys.stdout = temp_stdout
-        
-        try:
-            # Handle boolean parameter conversion (MCP may send strings)
-            if isinstance(is_disabled, str):
-                is_disabled = is_disabled.lower() in ['true', '1', 'yes']
-            elif not isinstance(is_disabled, bool):
-                return f"Error: is_disabled must be a boolean value, got {type(is_disabled)}"
-            
-            # Validate required parameters
-            if not score_id or not score_id.strip():
-                return "Error: score_id is required and cannot be empty"
-            
-            # Validate that at least one update field is provided
-            update_fields = {
-                'name': name,
-                'key': key, 
-                'externalId': external_id,
-                'description': description,
-                'isDisabled': is_disabled,
-                'aiProvider': ai_provider,
-                'aiModel': ai_model,
-                'order': order
-            }
-            # For optional fields, only include if not None; is_disabled always has a value
-            provided_updates = {k: v for k, v in update_fields.items() 
-                              if (k == 'isDisabled') or (v is not None)}
-            
-            if len(provided_updates) == 1 and 'isDisabled' in provided_updates and is_disabled == False:
-                return "Error: At least one field to update must be provided (is_disabled=False is default)"
-            
-            # Validate field values
-            if name is not None and not name.strip():
-                return "Error: name cannot be empty when provided"
-            
-            if key is not None and not re.match(r'^[a-z0-9_]+$', key):
-                return "Error: key must contain only lowercase letters, numbers, and underscores"
-            
-            if order is not None and (not isinstance(order, int) or order < 0):
-                return "Error: order must be a non-negative integer"
-            
-            # Try to import required modules directly
-            try:
-                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
-            except ImportError as e:
-                return f"Error: Could not import required modules: {e}. Core modules may not be available."
-            
-            # Check if we have the necessary credentials
-            api_url = os.environ.get('PLEXUS_API_URL', '')
-            api_key = os.environ.get('PLEXUS_API_KEY', '')
-            
-            if not api_url or not api_key:
-                logger.warning("Missing API credentials. Ensure .env file is loaded.")
-                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
-            
-            # Create the client
-            try:
-                client_stdout = StringIO()
-                saved_stdout = sys.stdout
-                sys.stdout = client_stdout
-                
-                try:
-                    client = create_dashboard_client()
-                finally:
-                    client_output = client_stdout.getvalue()
-                    if client_output:
-                        logger.warning(f"Captured unexpected stdout during client creation in plexus_score_metadata_update: {client_output}")
-                    sys.stdout = saved_stdout
-            except Exception as client_err:
-                logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
-                return f"Error creating dashboard client: {str(client_err)}"
-                
-            if not client:
-                return "Error: Could not create dashboard client."
 
-            # Build update mutation with only provided fields
-            update_input_parts = []
-            for field, value in provided_updates.items():
-                if field == 'isDisabled':
-                    update_input_parts.append(f'{field}: {str(value).lower()}')
-                elif isinstance(value, str):
-                    # Escape quotes in string values
-                    escaped_value = value.replace('"', '\\"')
-                    update_input_parts.append(f'{field}: "{escaped_value}"')
-                else:
-                    update_input_parts.append(f'{field}: {value}')
-            
-            # Build the GraphQL mutation
-            update_mutation = f"""
-            mutation UpdateScore {{
-                updateScore(input: {{
-                    id: "{score_id}"
-                    {', '.join(update_input_parts)}
-                }}) {{
-                    id
-                    name
-                    key
-                    externalId
-                    description
-                    isDisabled
-                    aiProvider
-                    aiModel
-                    order
-                    updatedAt
-                }}
-            }}
-            """
-            
-            # Execute the update
-            result = client.execute(update_mutation)
-            updated_score = result.get('updateScore')
-            
-            if not updated_score:
-                error_msg = "Failed to update score"
-                if 'errors' in result:
-                    error_details = '; '.join([error.get('message', str(error)) for error in result['errors']])
-                    error_msg += f": {error_details}"
-                return f"Error: {error_msg}"
-            
-            # Build response with updated fields
-            response_updated_fields = {}
-            for original_field, graphql_field in [
-                ('name', 'name'),
-                ('key', 'key'),
-                ('external_id', 'externalId'),
-                ('description', 'description'),
-                ('is_disabled', 'isDisabled'),
-                ('ai_provider', 'aiProvider'),
-                ('ai_model', 'aiModel'),
-                ('order', 'order')
-            ]:
-                if locals()[original_field] is not None:
-                    response_updated_fields[graphql_field] = updated_score.get(graphql_field)
-            
-            return {
-                "success": True,
-                "scoreId": updated_score['id'],
-                "scoreName": updated_score['name'],
-                "updatedFields": response_updated_fields,
-                "updatedAt": updated_score.get('updatedAt'),
-                "dashboardUrl": _get_plexus_url(f"lab/scores/{score_id}")
-            }
-            
-        except Exception as e:
-            logger.error(f"Error updating score metadata: {str(e)}", exc_info=True)
-            return f"Error updating score metadata: {str(e)}"
-        finally:
-            # Check if anything was written to stdout
-            captured_output = temp_stdout.getvalue()
-            if captured_output:
-                logger.warning(f"Captured unexpected stdout during plexus_score_metadata_update: {captured_output}")
-            # Restore original stdout
-            sys.stdout = old_stdout
 
     @mcp.tool()
     async def plexus_score_delete(
