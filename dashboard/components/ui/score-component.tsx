@@ -988,8 +988,10 @@ const DetailContent = React.memo(({
                         defaultLanguage="yaml"
                         value={score.configuration || ''}
                         onChange={(value) => {
-                          handleFormChange('configuration', value || '')
-                          setIsEditing(true)
+                          // For direct YAML editing, bypass the complex form field logic
+                          // and just update the configuration directly
+                          setIsEditing(true);
+                          onEditChange?.({ configuration: value || '' });
                         }}
                         onMount={(editor, monaco) => {
                           defineCustomMonacoThemes(monaco)
@@ -1117,8 +1119,10 @@ const DetailContent = React.memo(({
                       defaultLanguage="yaml"
                       value={score.configuration || ''}
                       onChange={(value) => {
-                        handleFormChange('configuration', value || '')
-                        setIsEditing(true)
+                        // For direct YAML editing, bypass the complex form field logic
+                        // and just update the configuration directly
+                        setIsEditing(true);
+                        onEditChange?.({ configuration: value || '' });
                       }}
                       onMount={(editor, monaco) => {
                         defineCustomMonacoThemes(monaco)
@@ -1155,7 +1159,7 @@ const DetailContent = React.memo(({
           {(hasChanges || hasGuidelinesChanges) && (
             <div className="flex items-center gap-3 p-4 bg-background">
               <Button
-                variant="ghost"
+                variant="secondary"
                 onClick={() => {
                   setNewVersionNote('')
                   setIsEditorFullscreen(false)
@@ -1172,13 +1176,13 @@ const DetailContent = React.memo(({
                   onNoteChange?.(e.target.value)
                 }}
                 placeholder="Please say what you changed and why..."
-                className="flex-1 px-3 py-2 rounded-md bg-background text-sm resize-none h-10
+                className="flex-1 px-3 py-2 rounded-md bg-background text-sm resize-none h-10 border border-muted
                          placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 rows={1}
               />
               <Button
-                variant="ghost"
-                onClick={hasGuidelinesChanges ? onSaveGuidelines : onSave}
+                variant="default"
+                onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
                 disabled={isSavingGuidelines}
                 className="h-10"
               >
@@ -1196,7 +1200,7 @@ const DetailContent = React.memo(({
         <div className="mt-3">
           <div className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
             <Button
-              variant="ghost"
+              variant="secondary"
               onClick={() => {
                 setNewVersionNote('')
                 onCancel?.()
@@ -1217,7 +1221,7 @@ const DetailContent = React.memo(({
                        placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <Button
-              variant="ghost"
+              variant="default"
               onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
               className="shrink-0 h-10"
             >
