@@ -295,6 +295,7 @@ def test_create_dataset_rows_structure():
             'IDs',
             'metadata',
             'text',
+            'call_date',
             'Test Score',
             'Test Score comment',
             'Test Score edit comment'
@@ -363,6 +364,7 @@ def test_create_dataset_rows_with_data():
             'IDs',
             'metadata', 
             'text',
+            'call_date',
             'Test Score',
             'Test Score comment',
             'Test Score edit comment'

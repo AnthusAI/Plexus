@@ -95,35 +95,36 @@ class TestScoreConfiguration(unittest.TestCase):
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
     @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
-    def test_pull_configuration_success(self, mock_get_scorecard, mock_get_path):
+    def test_pull_configuration_success(self, mock_get_scorecard):
         """Test successful configuration pull."""
         # Setup mocks
         mock_scorecard = Mock()
         mock_scorecard.name = 'Test Scorecard'
         mock_get_scorecard.return_value = mock_scorecard
         
+        # Mock the get_local_code_path method to return our test path
         yaml_path = Path(self.temp_dir) / 'test_score.yaml'
-        mock_get_path.return_value = yaml_path
-        
-        # Execute pull
-        result = self.score.pull_configuration()
-        
-        # Verify success
-        self.assertTrue(result['success'])
-        self.assertEqual(result['version_id'], 'version-123')
-        self.assertIn('test_score.yaml', result['file_path'])
-        
-        # Verify file was created with correct content
-        self.assertTrue(yaml_path.exists())
-        with open(yaml_path, 'r') as f:
-            content = f.read()
-        
-        self.assertIn('# Pulled from Plexus API', content)
-        self.assertIn('# Score: Test Score', content)
-        self.assertIn('# Champion Version ID: version-123', content)
-        self.assertIn('test: yaml content', content)
+        with patch.object(self.score, 'get_local_code_path', return_value=yaml_path):
+            with patch.object(self.score, 'get_local_guidelines_path', return_value=yaml_path.with_suffix('.md')):
+                # Execute pull
+                result = self.score.pull_configuration()
+                
+                # Verify success
+                self.assertTrue(result['success'])
+                self.assertEqual(result['version_id'], 'version-123')
+                # The file path should be the one returned by the mocked function
+                self.assertEqual(result['file_path'], str(yaml_path))
+                
+                # Verify file was created with correct content
+                self.assertTrue(yaml_path.exists())
+                with open(yaml_path, 'r') as f:
+                    content = f.read()
+                
+                self.assertIn('# Pulled from Plexus API', content)
+                self.assertIn('# Score: Test Score', content)
+                self.assertIn('# Champion Version ID: version-123', content)
+                self.assertIn('test: yaml content', content)
 
     def test_pull_configuration_no_client(self):
         """Test pull configuration fails without API client."""
@@ -187,7 +188,7 @@ class TestScoreConfiguration(unittest.TestCase):
         # Verify success
         self.assertTrue(result['success'])
         self.assertEqual(result['version_id'], 'new-version-789')
-        self.assertTrue(result['champion_updated'])
+        self.assertFalse(result['champion_updated'])  # MCP tools should not promote to champion
         self.assertFalse(result['skipped'])
 
     @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
@@ -226,17 +227,18 @@ class TestScoreConfiguration(unittest.TestCase):
         self.assertFalse(result['champion_updated'])
         self.assertTrue(result['skipped'])
 
-    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
-    def test_push_configuration_file_not_found(self, mock_get_path):
+    def test_push_configuration_file_not_found(self):
         """Test push configuration fails when local file doesn't exist."""
         yaml_path = Path(self.temp_dir) / 'nonexistent.yaml'
-        mock_get_path.return_value = yaml_path
+        guidelines_path = yaml_path.with_suffix('.md')
         
-        # Provide scorecard name to avoid API lookup
-        result = self.score.push_configuration(scorecard_name='Test Scorecard')
-        
-        self.assertFalse(result['success'])
-        self.assertEqual(result['error'], 'FILE_NOT_FOUND')
+        with patch.object(self.score, 'get_local_code_path', return_value=yaml_path):
+            with patch.object(self.score, 'get_local_guidelines_path', return_value=guidelines_path):
+                # Provide scorecard name to avoid API lookup
+                result = self.score.push_configuration(scorecard_name='Test Scorecard')
+                
+                self.assertFalse(result['success'])
+                self.assertEqual(result['error'], 'NO_FILES_FOUND')
 
     def test_push_configuration_no_client(self):
         """Test push configuration fails without API client."""
@@ -256,40 +258,41 @@ class TestScoreConfiguration(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertEqual(result['error'], 'NO_CLIENT')
 
-    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
     @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
-    def test_get_local_configuration_path_with_scorecard_name(self, mock_get_scorecard, mock_get_path):
+    def test_get_local_configuration_path_with_scorecard_name(self, mock_get_scorecard):
         """Test getting local path when scorecard name is provided."""
-        mock_get_path.return_value = Path('./scorecards/Test_Scorecard/test_score.yaml')
-        
-        result = self.score.get_local_configuration_path('Test Scorecard')
-        
-        mock_get_path.assert_called_once_with('Test Scorecard', 'Test Score')
-        # Should not call API when scorecard name is provided
-        mock_get_scorecard.assert_not_called()
+        with patch('plexus.cli.shared.get_score_yaml_path') as mock_get_path:
+            mock_get_path.return_value = Path('./scorecards/Test_Scorecard/test_score.yaml')
+            
+            result = self.score.get_local_configuration_path('Test Scorecard')
+            
+            mock_get_path.assert_called_once_with('Test Scorecard', 'Test Score')
+            # Should not call API when scorecard name is provided
+            mock_get_scorecard.assert_not_called()
 
-    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
     @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
-    def test_get_local_configuration_path_lookup_scorecard(self, mock_get_scorecard, mock_get_path):
+    def test_get_local_configuration_path_lookup_scorecard(self, mock_get_scorecard):
         """Test getting local path when scorecard name needs to be looked up."""
         # Setup mocks
         mock_scorecard = Mock()
         mock_scorecard.name = 'Looked Up Scorecard'
         mock_get_scorecard.return_value = mock_scorecard
-        mock_get_path.return_value = Path('./scorecards/Looked_Up_Scorecard/test_score.yaml')
         
-        result = self.score.get_local_configuration_path()
-        
-        # Verify section lookup occurred
-        section_call = self.mock_client.call_history[0]
-        self.assertIn('GetSection', section_call['query'])
-        self.assertEqual(section_call['variables']['id'], 'section-789')
-        
-        # Verify scorecard lookup with correct ID
-        mock_get_scorecard.assert_called_once_with('scorecard-456', self.mock_client)
-        
-        # Verify final path call
-        mock_get_path.assert_called_once_with('Looked Up Scorecard', 'Test Score')
+        with patch('plexus.cli.shared.get_score_yaml_path') as mock_get_path:
+            mock_get_path.return_value = Path('./scorecards/Looked_Up_Scorecard/test_score.yaml')
+            
+            result = self.score.get_local_configuration_path()
+            
+            # Verify section lookup occurred
+            section_call = self.mock_client.call_history[0]
+            self.assertIn('GetSection', section_call['query'])
+            self.assertEqual(section_call['variables']['id'], 'section-789')
+            
+            # Verify scorecard lookup with correct ID
+            mock_get_scorecard.assert_called_once_with('scorecard-456', self.mock_client)
+            
+            # Verify final path call
+            mock_get_path.assert_called_once_with('Looked Up Scorecard', 'Test Score')
 
     def test_get_local_configuration_path_no_client(self):
         """Test getting local path fails without API client when lookup needed."""
@@ -324,14 +327,14 @@ class TestScoreConfiguration(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertEqual(result['error'], 'API_ERROR')
 
-    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
-    def test_yaml_content_cleaning(self, mock_get_path):
+    def test_yaml_content_cleaning(self):
         """Test that metadata comments are properly stripped during push."""
         yaml_path = Path(self.temp_dir) / 'test_score.yaml'
-        mock_get_path.return_value = yaml_path
         
-        # Create YAML file with metadata comments and content
-        test_content = """# Pulled from Plexus API
+        with patch.object(self.score, 'get_local_code_path', return_value=yaml_path):
+            with patch.object(self.score, 'get_local_guidelines_path', return_value=yaml_path.with_suffix('.md')):
+                # Create YAML file with metadata comments and content
+                test_content = """# Pulled from Plexus API
 # Score: Test Score
 # Champion Version ID: version-123
 # Created: 2024-01-01T00:00:00Z
@@ -343,41 +346,41 @@ nested:
   key: value
 # This comment should remain
 """
-        
-        with open(yaml_path, 'w') as f:
-            f.write(test_content)
-        
-        # Setup API to return different content to trigger push
-        self.mock_client.execute_responses['get_version'] = {
-            'getScoreVersion': {
-                'configuration': 'different: content'
-            }
-        }
-        
-        # Execute push
-        self.score.push_configuration(scorecard_name='Test Scorecard')
-        
-        # Verify the API call used cleaned content (no metadata comments)
-        create_call = None
-        for call in self.mock_client.call_history:
-            if 'CreateScoreVersion' in call['query']:
-                create_call = call
-                break
-        
-        self.assertIsNotNone(create_call)
-        pushed_content = create_call['variables']['input']['configuration']
-        
-        # Should not contain metadata comments
-        self.assertNotIn('# Pulled from Plexus API', pushed_content)
-        self.assertNotIn('# Score:', pushed_content)
-        self.assertNotIn('# Champion Version ID:', pushed_content)
-        
-        # Should contain the actual YAML content
-        self.assertIn('test: yaml content', pushed_content)
-        self.assertIn('nested:', pushed_content)
-        self.assertIn('key: value', pushed_content)
-        # Regular comments should remain
-        self.assertIn('# This comment should remain', pushed_content)
+                
+                with open(yaml_path, 'w') as f:
+                    f.write(test_content)
+                
+                # Setup API to return different content to trigger push
+                self.mock_client.execute_responses['get_version'] = {
+                    'getScoreVersion': {
+                        'configuration': 'different: content'
+                    }
+                }
+                
+                # Execute push
+                self.score.push_configuration(scorecard_name='Test Scorecard')
+                
+                # Verify the API call used cleaned content (no metadata comments)
+                create_call = None
+                for call in self.mock_client.call_history:
+                    if 'CreateScoreVersion' in call['query']:
+                        create_call = call
+                        break
+                
+                self.assertIsNotNone(create_call)
+                pushed_content = create_call['variables']['input']['configuration']
+                
+                # Should not contain metadata comments
+                self.assertNotIn('# Pulled from Plexus API', pushed_content)
+                self.assertNotIn('# Score:', pushed_content)
+                self.assertNotIn('# Champion Version ID:', pushed_content)
+                
+                # Should contain the actual YAML content
+                self.assertIn('test: yaml content', pushed_content)
+                self.assertIn('nested:', pushed_content)
+                self.assertIn('key: value', pushed_content)
+                # Regular comments should remain
+                self.assertIn('# This comment should remain', pushed_content)
 
     def test_get_champion_configuration_yaml_success(self):
         """Test get_champion_configuration_yaml with successful retrieval."""
@@ -485,20 +488,18 @@ nodes:
         # Verify success
         self.assertTrue(result['success'])
         self.assertEqual(result['version_id'], 'new-version-789')
-        self.assertTrue(result['champion_updated'])
+        self.assertFalse(result['champion_updated'])  # MCP tools should not promote to champion
         self.assertFalse(result['skipped'])
         
         # Verify GraphQL calls
         create_call = None
-        update_call = None
         for call in self.mock_client.call_history:
             if 'CreateScoreVersion' in call['query']:
                 create_call = call
-            elif 'UpdateScore' in call['query']:
-                update_call = call
+                break
         
         self.assertIsNotNone(create_call)
-        self.assertIsNotNone(update_call)
+        # Note: No UpdateScore call expected since MCP tools don't promote to champion
         
         # Verify version input
         version_input = create_call['variables']['input']
@@ -542,7 +543,7 @@ invalid: yaml: structure: with: colons
         
         self.assertFalse(result['success'])
         self.assertEqual(result['error'], 'INVALID_YAML')
-        self.assertIn('Invalid YAML content', result['message'])
+        self.assertIn('Invalid YAML code content', result['message'])
 
     def test_create_version_from_yaml_no_client(self):
         """Test version creation fails without API client."""

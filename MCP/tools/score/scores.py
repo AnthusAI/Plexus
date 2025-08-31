@@ -1420,6 +1420,165 @@ def register_score_tools(mcp: FastMCP):
 
 
     @mcp.tool()
+    async def plexus_score_metadata_update(
+        score_id: str,
+        name: Optional[str] = None,
+        key: Optional[str] = None,
+        external_id: Optional[str] = None,
+        description: Optional[str] = None,
+        is_disabled: Optional[bool] = None,
+        ai_provider: Optional[str] = None,
+        ai_model: Optional[str] = None,
+        order: Optional[int] = None
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Updates a score's metadata fields.
+        
+        Parameters:
+        - score_id: The ID of the score to update
+        - name: New display name for the score
+        - key: New unique key for the score
+        - external_id: New external ID for the score
+        - description: New description for the score
+        - is_disabled: Whether the score should be disabled
+        - ai_provider: New AI provider
+        - ai_model: New AI model
+        - order: New display order
+        
+        Returns:
+        - Information about the updated score
+        """
+        # Temporarily redirect stdout to capture any unexpected output
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        
+        try:
+            # Validate that at least one field is provided for update
+            update_fields = {
+                'name': name,
+                'key': key,
+                'external_id': external_id,
+                'description': description,
+                'is_disabled': is_disabled,
+                'ai_provider': ai_provider,
+                'ai_model': ai_model,
+                'order': order
+            }
+            
+            provided_updates = {k: v for k, v in update_fields.items() if v is not None}
+            if not provided_updates:
+                return "Error: At least one field to update must be provided"
+            
+            # Try to import required modules directly
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+            except ImportError as e:
+                return f"Error: Could not import required modules: {e}. Core modules may not be available."
+            
+            # Check if we have the necessary credentials
+            api_url = os.environ.get('PLEXUS_API_URL', '')
+            api_key = os.environ.get('PLEXUS_API_KEY', '')
+            
+            if not api_url or not api_key:
+                logger.warning("Missing API credentials. Ensure .env file is loaded.")
+                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+            
+            # Create the client
+            try:
+                client_stdout = StringIO()
+                saved_stdout = sys.stdout
+                sys.stdout = client_stdout
+                
+                try:
+                    client = create_dashboard_client()
+                finally:
+                    client_output = client_stdout.getvalue()
+                    if client_output:
+                        logger.warning(f"Captured unexpected stdout during client creation in plexus_score_metadata_update: {client_output}")
+                    sys.stdout = saved_stdout
+            except Exception as client_err:
+                logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+                return f"Error creating dashboard client: {str(client_err)}"
+                
+            if not client:
+                return "Error: Could not create dashboard client."
+
+            # Build update input
+            update_input = {'id': score_id}
+            updated_fields = {}
+            
+            # Only include fields that are actually being updated
+            if name is not None:
+                update_input['name'] = name
+                updated_fields['name'] = name
+            if key is not None:
+                update_input['key'] = key
+                updated_fields['key'] = key
+            if external_id is not None:
+                update_input['externalId'] = external_id
+                updated_fields['externalId'] = external_id
+            if description is not None:
+                update_input['description'] = description
+                updated_fields['description'] = description
+            if is_disabled is not None:
+                update_input['isDisabled'] = is_disabled
+                updated_fields['isDisabled'] = is_disabled
+            if ai_provider is not None:
+                update_input['aiProvider'] = ai_provider
+                updated_fields['aiProvider'] = ai_provider
+            if ai_model is not None:
+                update_input['aiModel'] = ai_model
+                updated_fields['aiModel'] = ai_model
+            if order is not None:
+                update_input['order'] = order
+                updated_fields['order'] = order
+
+            # Execute Score metadata update
+            update_mutation = """
+            mutation UpdateScore($input: UpdateScoreInput!) {
+                updateScore(input: $input) {
+                    id
+                    name
+                    key
+                    externalId
+                    description
+                    isDisabled
+                    aiProvider
+                    aiModel
+                    order
+                    updatedAt
+                }
+            }
+            """
+            
+            try:
+                update_result = client.execute(update_mutation, {'input': update_input})
+                if update_result and 'updateScore' in update_result:
+                    updated_score = update_result['updateScore']
+                    return {
+                        "success": True,
+                        "scoreId": updated_score['id'],
+                        "updatedFields": updated_fields,
+                        "updatedAt": updated_score.get('updatedAt')
+                    }
+                else:
+                    return f"Error: Failed to update Score metadata: {update_result}"
+            except Exception as e:
+                return f"Error updating score: {str(e)}"
+            
+        except Exception as e:
+            logger.error(f"Error updating score metadata: {str(e)}", exc_info=True)
+            return f"Error updating score metadata: {str(e)}"
+        finally:
+            # Check if anything was written to stdout
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(f"Captured unexpected stdout during plexus_score_metadata_update: {captured_output}")
+            # Restore original stdout
+            sys.stdout = old_stdout
+
+    @mcp.tool()
     async def plexus_score_delete(
         score_id: str,
         confirm: bool = False
