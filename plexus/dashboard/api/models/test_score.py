@@ -155,77 +155,71 @@ class TestScoreConfiguration(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertEqual(result['error'], 'NO_CHAMPION_VERSION')
 
-    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
-    @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
-    def test_push_configuration_success(self, mock_get_scorecard, mock_get_path):
+    def test_push_configuration_success(self):
         """Test successful configuration push with content changes."""
-        # Setup mocks
-        mock_scorecard = Mock()
-        mock_scorecard.name = 'Test Scorecard'
-        mock_get_scorecard.return_value = mock_scorecard
-        
         yaml_path = Path(self.temp_dir) / 'test_score.yaml'
-        mock_get_path.return_value = yaml_path
+        guidelines_path = yaml_path.with_suffix('.md')
         
-        # Create test YAML file with changed content
-        with open(yaml_path, 'w') as f:
-            f.write("# Pulled from Plexus API\n")
-            f.write("# Score: Test Score\n") 
-            f.write("# Champion Version ID: version-123\n")
-            f.write("#\n")
-            f.write("test: modified yaml content")
-        
-        # Setup different current version content to trigger push
-        self.mock_client.execute_responses['get_version'] = {
-            'getScoreVersion': {
-                'configuration': 'test: original yaml content'
-            }
-        }
-        
-        # Execute push
-        result = self.score.push_configuration(note='Test update')
-        
-        # Verify success
-        self.assertTrue(result['success'])
-        self.assertEqual(result['version_id'], 'new-version-789')
-        self.assertFalse(result['champion_updated'])  # MCP tools should not promote to champion
-        self.assertFalse(result['skipped'])
+        # Mock the get_local_*_path methods directly
+        with patch.object(self.score, 'get_local_code_path', return_value=yaml_path):
+            with patch.object(self.score, 'get_local_guidelines_path', return_value=guidelines_path):
+                
+                # Create test YAML file with changed content
+                with open(yaml_path, 'w') as f:
+                    f.write("# Pulled from Plexus API\n")
+                    f.write("# Score: Test Score\n") 
+                    f.write("# Champion Version ID: version-123\n")
+                    f.write("#\n")
+                    f.write("test: modified yaml content")
+                
+                # Setup different current version content to trigger push
+                self.mock_client.execute_responses['get_version'] = {
+                    'getScoreVersion': {
+                        'configuration': 'test: original yaml content'
+                    }
+                }
+                
+                # Execute push
+                result = self.score.push_configuration(note='Test update')
+                
+                # Verify success
+                self.assertTrue(result['success'])
+                self.assertEqual(result['version_id'], 'new-version-789')
+                self.assertFalse(result['champion_updated'])  # MCP tools should not promote to champion
+                self.assertFalse(result['skipped'])
 
-    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
-    @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
-    def test_push_configuration_no_changes(self, mock_get_scorecard, mock_get_path):
+    def test_push_configuration_no_changes(self):
         """Test push configuration skips when no changes detected."""
-        # Setup mocks
-        mock_scorecard = Mock()
-        mock_scorecard.name = 'Test Scorecard'
-        mock_get_scorecard.return_value = mock_scorecard
-        
         yaml_path = Path(self.temp_dir) / 'test_score.yaml'
-        mock_get_path.return_value = yaml_path
+        guidelines_path = yaml_path.with_suffix('.md')
         
-        # Create test YAML file with same content as current version
-        with open(yaml_path, 'w') as f:
-            f.write("# Pulled from Plexus API\n")
-            f.write("# Score: Test Score\n")
-            f.write("# Champion Version ID: version-123\n") 
-            f.write("#\n")
-            f.write("test: yaml content")
-        
-        # Setup same content in current version (exactly what will be extracted after comment stripping)
-        self.mock_client.execute_responses['get_version'] = {
-            'getScoreVersion': {
-                'configuration': 'test: yaml content'
-            }
-        }
-        
-        # Execute push
-        result = self.score.push_configuration(scorecard_name='Test Scorecard')
-        
-        # Verify skipped
-        self.assertTrue(result['success'])
-        self.assertEqual(result['version_id'], 'version-123')
-        self.assertFalse(result['champion_updated'])
-        self.assertTrue(result['skipped'])
+        # Mock the get_local_*_path methods directly
+        with patch.object(self.score, 'get_local_code_path', return_value=yaml_path):
+            with patch.object(self.score, 'get_local_guidelines_path', return_value=guidelines_path):
+                
+                # Create test YAML file with same content as current version
+                with open(yaml_path, 'w') as f:
+                    f.write("# Pulled from Plexus API\n")
+                    f.write("# Score: Test Score\n")
+                    f.write("# Champion Version ID: version-123\n") 
+                    f.write("#\n")
+                    f.write("test: yaml content")
+                
+                # Setup same content in current version (exactly what will be extracted after comment stripping)
+                self.mock_client.execute_responses['get_version'] = {
+                    'getScoreVersion': {
+                        'configuration': 'test: yaml content'
+                    }
+                }
+                
+                # Execute push
+                result = self.score.push_configuration(scorecard_name='Test Scorecard')
+                
+                # Verify skipped
+                self.assertTrue(result['success'])
+                self.assertEqual(result['version_id'], 'version-123')
+                self.assertFalse(result['champion_updated'])
+                self.assertTrue(result['skipped'])
 
     def test_push_configuration_file_not_found(self):
         """Test push configuration fails when local file doesn't exist."""
