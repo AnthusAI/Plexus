@@ -329,6 +329,9 @@ const DetailContent = React.memo(({
   if (score.key && score.key !== '') {
     defaultYamlObj.key = score.key;
   }
+  if (score.description && score.description !== '') {
+    defaultYamlObj.description = score.description;
+  }
   
   const defaultYaml = stringifyYaml(defaultYamlObj)
   
@@ -382,14 +385,17 @@ const DetailContent = React.memo(({
       return {
         ...parsed,
         // Ensure we always have externalId in our parsed config regardless of format in YAML
-        externalId: externalIdValue
+        externalId: externalIdValue,
+        // Fall back to score's description if not present in version configuration
+        description: parsed.description !== undefined ? parsed.description : score.description
       };
     } catch (error) {
       console.error('Error parsing YAML:', error)
       return { 
         name: score.name, 
         externalId: score.externalId,
-        key: score.key
+        key: score.key,
+        description: score.description
       }
     }
   }, [currentConfig, score])
