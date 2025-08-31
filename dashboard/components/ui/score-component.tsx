@@ -182,7 +182,8 @@ const GridContent = React.memo(({
   isSelected?: boolean
 }) => {
   // Pre-compute all displayed values in a single operation before rendering
-  // This ensures React renders them in the same cycle
+  // This ensures React renders them in the same cycle and prevents flickering
+  // Use only the Score record data, never fetch additional data for grid view
   const displayData = React.useMemo(() => ({
     name: score.name,
     description: score.description || '',
@@ -1327,8 +1328,13 @@ export function ScoreComponent({
     setForceExpandHistory(false) // Reset expansion when score changes
   }, [score])
   
-  // Fetch versions when score changes
+  // Fetch versions when score changes - ONLY for detail view
   React.useEffect(() => {
+    // Skip version fetching for grid view to prevent flickering
+    if (variant === 'grid') {
+      return;
+    }
+    
     const fetchVersions = async () => {
       try {
         
@@ -1458,7 +1464,7 @@ export function ScoreComponent({
       }
     };
     fetchVersions();
-  }, [score])
+  }, [score, variant])
 
 
 
