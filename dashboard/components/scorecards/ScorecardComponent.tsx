@@ -32,6 +32,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
+import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 
 export interface ScorecardData {
   id: string
@@ -544,37 +545,13 @@ export const DetailContent = React.memo(function DetailContent({
 
   return (
     <div className="w-full flex flex-col min-h-0">
-      <div className="flex justify-between items-start w-full">
-        <div className="space-y-2 flex-1 px-2">
-          <div className="flex items-center gap-2 mb-3">
-            <ListChecks className="h-5 w-5 text-foreground" />
-            <span className="text-lg font-semibold">Scorecard</span>
-          </div>
-          <Input
-            value={score.name}
-            onChange={(e) => onEditChange?.({ name: e.target.value })}
-            className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                     placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
-            placeholder="Scorecard Name"
-          />
-          <div className="flex gap-4 w-full">
-            <Input
-              value={score.key}
-              onChange={(e) => onEditChange?.({ key: e.target.value })}
-              className="font-mono bg-background border-0 px-2 h-auto flex-1
-                       placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
-              placeholder="scorecard-key"
-            />
-            <Input
-              value={score.externalId ?? ''}
-              onChange={(e) => onEditChange?.({ externalId: e.target.value })}
-              className="font-mono bg-background border-0 px-2 h-auto flex-1
-                       placeholder:text-muted-foreground rounded-md focus-visible:ring-2"
-              placeholder="External ID"
-            />
-          </div>
+      {/* Header with title and actions */}
+      <div className="flex justify-between items-center w-full mb-3">
+        <div className="flex items-center gap-2">
+          <ListChecks className="h-5 w-5 text-foreground" />
+          <span className="text-lg font-semibold">Scorecard</span>
         </div>
-        <div className="flex gap-2 ml-4">
+        <div className="flex gap-2">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <div onClick={(e) => e.stopPropagation()}>
@@ -644,6 +621,25 @@ export const DetailContent = React.memo(function DetailContent({
         </div>
       </div>
 
+      {/* Full-width header info */}
+      <div className="w-full">
+        <ScoreHeaderInfo
+          data={{
+            name: score.name || '',
+            description: score.description || '',
+            key: score.key || '',
+            externalId: score.externalId || ''
+          }}
+          onChange={(changes: Partial<ScoreHeaderData>) => {
+            onEditChange?.(changes);
+          }}
+          namePlaceholder="Scorecard Name"
+          descriptionPlaceholder="No description"
+          keyPlaceholder="scorecard-key"
+          externalIdPlaceholder="External ID"
+        />
+      </div>
+
       {hasChanges && (
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
@@ -652,18 +648,8 @@ export const DetailContent = React.memo(function DetailContent({
       )}
 
       <div className="flex-1 overflow-y-auto mt-6 w-full">
-        <div className="space-y-6 w-full px-2">
-          {/* Description Section */}
-          <div>
-            <textarea
-              value={score.description || ''}
-              onChange={(e) => onEditChange?.({ description: e.target.value })}
-              placeholder="No description"
-              className="w-full px-3 py-2 rounded-lg bg-background text-xs resize-none border-0 
-                       placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              rows={1}
-            />
-          </div>
+        <div className="space-y-6 w-full">
+
 
           {/* Guidelines Section */}
           <GuidelinesEditor
