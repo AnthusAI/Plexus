@@ -435,29 +435,7 @@ except Exception as e:
 
 
 
-# Setup dotenv support for loading environment variables
-def load_env_file(env_dir=None):
-    """Load environment variables from .env file."""
-    try:
-        from dotenv import load_dotenv
-        if env_dir:
-            dotenv_path = os.path.join(env_dir, '.env')
-            logger.info(f"Attempting to load .env file from specified directory: {dotenv_path}")
-            if os.path.isfile(dotenv_path):
-                loaded = load_dotenv(dotenv_path=dotenv_path, override=True)
-                if loaded:
-                    logger.info(f".env file loaded successfully from {dotenv_path}")
-                    logger.info(f"Environment contains PLEXUS_API_URL: {'Yes' if os.environ.get('PLEXUS_API_URL') else 'No'}")
-                    logger.info(f"Environment contains PLEXUS_API_KEY: {'Yes' if os.environ.get('PLEXUS_API_KEY') else 'No'}")
-                    return True
-                else:
-                    logger.warning(f"Failed to load .env file from {dotenv_path}")
-            else:
-                logger.warning(f"No .env file found at {dotenv_path}")
-        return False
-    except ImportError:
-        logger.warning("python-dotenv not installed, can't load .env file")
-        return False
+# Note: .env file loading is no longer needed - Plexus uses config files and environment variables
 
 def initialize_default_account():
     """Initialize the default account ID from the environment variable PLEXUS_ACCOUNT_KEY."""
@@ -567,7 +545,7 @@ def get_item_url(item_id: str) -> str:
 # Main function to run the server
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the Plexus MCP Server with FastMCP")
-    parser.add_argument("--env-dir", help="Directory containing .env file with Plexus credentials")
+
     parser.add_argument("--host", default="127.0.0.1", help="Host to run server on")
     parser.add_argument("--port", type=int, default=8002, help="Port to run server on")
     parser.add_argument("--transport", choices=["stdio", "sse"], default="sse", 
@@ -582,9 +560,7 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"Failed to load Plexus configuration: {e}")
     
-    # Load environment variables from .env file if specified (for backwards compatibility)
-    if args.env_dir:
-        load_env_file(args.env_dir)
+    # Credentials are now handled by Plexus config files and environment variables
     
     # Require core and initialize default account
     if not CORE_IMPORTED:
