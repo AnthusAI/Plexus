@@ -18,6 +18,80 @@ from typing_extensions import Annotated
 from fastmcp import FastMCP, Context
 from urllib.parse import urljoin
 
+# Completely disable Rich logging for stdio transport to prevent BrokenPipeError
+using_stdio = os.environ.get('MCP_STDIO_TRANSPORT') == '1' or '--transport' in sys.argv and 'stdio' in sys.argv
+if using_stdio:
+    # Set environment variables to disable Rich
+    os.environ['RICH_NO_COLOR'] = '1'
+    os.environ['RICH_CONSOLE_NO_COLOR'] = '1'
+    os.environ['RICH_TRACEBACKS_NO_COLOR'] = '1'
+    os.environ['RICH_FORCE_TERMINAL'] = '0'
+    os.environ['RICH_DISABLE'] = '1'
+    os.environ['TERM'] = 'dumb'
+    
+    # Completely disable Rich by monkey patching before any imports
+    import types
+    
+    # Create a dummy module that replaces rich
+    class DummyRichModule(types.ModuleType):
+        def __getattr__(self, name):
+            # Return a dummy object for any attribute access
+            return DummyRichObject()
+    
+    class DummyRichObject:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __call__(self, *args, **kwargs):
+            return self
+        def __getattr__(self, name):
+            return self
+        def __setattr__(self, name, value):
+            pass
+        def __lt__(self, other):
+            return True
+        def __le__(self, other):
+            return True
+        def __eq__(self, other):
+            return True
+        def __ne__(self, other):
+            return False
+        def __gt__(self, other):
+            return False
+        def __ge__(self, other):
+            return True
+    
+    # Replace the rich module in sys.modules BEFORE importing FastMCP
+    sys.modules['rich'] = DummyRichModule('rich')
+    sys.modules['rich.console'] = DummyRichModule('rich.console')
+    sys.modules['rich.logging'] = DummyRichModule('rich.logging')
+    sys.modules['rich.table'] = DummyRichModule('rich.table')
+    sys.modules['rich.traceback'] = DummyRichModule('rich.traceback')
+    
+    # Configure FastMCP to not use Rich
+    import fastmcp
+    fastmcp.settings.enable_rich_tracebacks = False
+    
+    # Force basic logging configuration and replace Rich handlers
+    import logging
+    
+    # Remove any existing Rich handlers
+    for handler in logging.root.handlers[:]:
+        if 'rich' in str(type(handler)).lower():
+            logging.root.removeHandler(handler)
+    
+    # Force basic logging configuration
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s  [%(levelname)s] %(message)s',
+        handlers=[logging.StreamHandler(sys.stderr)],
+        force=True
+    )
+    
+    # Disable Rich loggers
+    logging.getLogger("rich").disabled = True
+    logging.getLogger("rich.logging").disabled = True
+    logging.getLogger("rich.console").disabled = True
+
 # Save original stdout file descriptor
 original_stdout_fd = None
 try:
