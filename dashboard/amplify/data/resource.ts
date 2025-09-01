@@ -913,8 +913,6 @@ const schema = a.schema({
             name: a.string().required(),
             description: a.string(),
             template: a.string().required(), // The YAML template content
-            version: a.string().required(), // Template version (e.g., "1.0", "2.1")
-            isDefault: a.boolean(), // Whether this is the default template
             category: a.string(), // e.g., "hypothesis_generation", "beam_search"
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
