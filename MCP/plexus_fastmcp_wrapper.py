@@ -106,6 +106,15 @@ def main():
         # Set environment variables
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        env["MCP_STDIO_TRANSPORT"] = "1"  # Signal stdio transport to disable Rich
+        
+        # Disable Rich for stdio transport
+        env["RICH_NO_COLOR"] = "1"
+        env["RICH_CONSOLE_NO_COLOR"] = "1"
+        env["RICH_TRACEBACKS_NO_COLOR"] = "1"
+        env["RICH_FORCE_TERMINAL"] = "0"
+        env["RICH_DISABLE"] = "1"
+        env["TERM"] = "dumb"
         
         # Try to properly load environment variables from the specified .env file
         if env_file_path:
