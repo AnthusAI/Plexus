@@ -318,7 +318,7 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
                     {node.status || 'Unknown'}
                   </Badge>
                 </div>
-                <div className="mt-1 ml-6">
+                <div className="mt-1">
                   <Timestamp time={node.updatedAt} variant="relative" className="text-xs text-muted-foreground" />
                 </div>
               </div>

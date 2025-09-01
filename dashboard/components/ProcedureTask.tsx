@@ -333,7 +333,7 @@ export default function ProcedureTask({
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
                   <BookOpenCheck className="h-5 w-5" />
-                  Procedures ({sessionCount})
+                  Tasks ({sessionCount})
                 </h3>
                 <Button
                   variant="ghost"
