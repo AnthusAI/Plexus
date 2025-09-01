@@ -101,7 +101,7 @@ export const menuItems = [
   { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
-  { name: "Experiments", icon: Waypoints, path: "/lab/experiments" },
+  { name: "Procedures", icon: Waypoints, path: "/lab/procedures" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
   { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
@@ -249,7 +249,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
                 (item.name === "Items" && pathname.startsWith(item.path)) ||
                 (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
-                (item.name === "Experiments" && pathname.startsWith(item.path)) ||
+                (item.name === "Procedures" && pathname.startsWith(item.path)) ||
                 (item.name === "Templates" && pathname.startsWith(item.path)) ||
                 (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                 (item.name === "Reports" && pathname.startsWith(item.path)) ||

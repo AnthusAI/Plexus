@@ -6,42 +6,42 @@ import type { Schema } from "@/amplify/data/resource"
 import { Button } from "@/components/ui/button"
 import { Plus, Waypoints, FileText, Shrink, BookOpenCheck } from "lucide-react"
 import { toast } from "sonner"
-import ExperimentTask, { ExperimentTaskData } from "@/components/ExperimentTask"
-import ExperimentDetail from "@/components/experiment-detail"
-import ExperimentConversationViewer from "@/components/experiment-conversation-viewer"
+import ProcedureTask, { ProcedureTaskData } from "@/components/ProcedureTask"
+import ProcedureDetail from "@/components/procedure-detail"
+import ProcedureConversationViewer from "@/components/procedure-conversation-viewer"
 import ScorecardContext from "@/components/ScorecardContext"
 import TemplateSelector from "@/components/template-selector"
 import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
-import { observeTaskUpdates, observeTaskStageUpdates, observeExperimentNodeUpdates } from "@/utils/subscriptions"
+import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
 
-type Experiment = Schema['Experiment']['type']
+type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
-type ExperimentWithTask = Experiment & {
+type ProcedureWithTask = Procedure & {
   task?: Task | null
 }
 
 const client = generateClient<Schema>()
 
-interface ExperimentsDashboardProps {
-  initialSelectedExperimentId?: string | null
+interface ProceduresDashboardProps {
+  initialSelectedProcedureId?: string | null
 }
 
-function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashboardProps = {}) {
+function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboardProps = {}) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams()
   const { selectedAccount } = useAccount()
   
-  // Extract experiment ID from URL params if present, or use the prop
-  const experimentIdFromParams = (params && 'id' in params) ? params.id as string : null
-  const finalInitialExperimentId = initialSelectedExperimentId || experimentIdFromParams
+  // Extract procedure ID from URL params if present, or use the prop
+  const procedureIdFromParams = (params && 'id' in params) ? params.id as string : null
+  const finalInitialProcedureId = initialSelectedProcedureId || procedureIdFromParams
   
-  const [experiments, setExperiments] = useState<ExperimentWithTask[]>([])
+  const [procedures, setProcedures] = useState<ProcedureWithTask[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(finalInitialExperimentId)
+  const [selectedProcedureId, setSelectedProcedureId] = useState<string | null>(finalInitialProcedureId)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
@@ -53,10 +53,10 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
   const lastLoadTimeRef = useRef(0)
 
   // All hooks must be at the top before any conditional returns
-  const handleSelectExperiment = useCallback((id: string | null) => {
-    setSelectedExperimentId(id)
+  const handleSelectProcedure = useCallback((id: string | null) => {
+    setSelectedProcedureId(id)
     // Update URL without causing full rerender
-    const newPathname = id ? `/lab/experiments/${id}` : '/lab/experiments'
+    const newPathname = id ? `/lab/procedures/${id}` : '/lab/procedures'
     window.history.pushState(null, '', newPathname)
     
     if (isNarrowViewport && id) {
@@ -64,30 +64,30 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
     }
   }, [isNarrowViewport])
 
-  const handleCloseExperiment = useCallback(() => {
-    setSelectedExperimentId(null)
+  const handleCloseProcedure = useCallback(() => {
+    setSelectedProcedureId(null)
     setIsFullWidth(false)
     setIsEditMode(false)
     
     // Update URL without triggering a navigation/re-render
-    window.history.pushState(null, '', '/lab/experiments')
+    window.history.pushState(null, '', '/lab/procedures')
   }, [])
 
   // Memoize click handler - moved to top with other hooks
-  const getExperimentClickHandler = useCallback((experimentId: string) => {
+  const getProcedureClickHandler = useCallback((procedureId: string) => {
     return (e?: React.MouseEvent | React.SyntheticEvent | any) => {
       if (e && typeof e.preventDefault === 'function') {
         e.preventDefault()
       }
       setIsFullWidth(false)
       try { (document.activeElement as HTMLElement | null)?.blur?.() } catch {}
-      handleSelectExperiment(experimentId)
+      handleSelectProcedure(procedureId)
     }
-  }, [handleSelectExperiment])
+  }, [handleSelectProcedure])
 
-  const loadExperiments = useCallback(async (force = false) => {
+  const loadProcedures = useCallback(async (force = false) => {
     if (!selectedAccount?.id) {
-      setExperiments([])
+      setProcedures([])
       setIsLoading(false)
       return
     }
@@ -95,16 +95,16 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
     try {
       setIsLoading(true)
       lastLoadTimeRef.current = Date.now()
-      console.log('Loading experiments for account:', selectedAccount.id)
-      // First get experiments
-      const experimentsResult = await client.graphql({
+      console.log('Loading procedures for account:', selectedAccount.id)
+      // First get procedures
+      const proceduresResult = await client.graphql({
         query: `
-          query ListExperimentByAccountIdAndUpdatedAt(
+          query ListProcedureByAccountIdAndUpdatedAt(
             $accountId: String!
             $sortDirection: ModelSortDirection
             $limit: Int
           ) {
-            listExperimentByAccountIdAndUpdatedAt(
+            listProcedureByAccountIdAndUpdatedAt(
               accountId: $accountId
               sortDirection: $sortDirection
               limit: $limit
@@ -140,10 +140,10 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
           limit: 1000
         }
       })
-      console.log('Raw experiment query result:', experimentsResult)
-      const experimentsData = (experimentsResult as any).data?.listExperimentByAccountIdAndUpdatedAt?.items || []
+      console.log('Raw procedure query result:', proceduresResult)
+      const proceduresData = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || []
       
-      // Then get tasks related to experiments (via metadata)
+      // Then get tasks related to procedures (via metadata)
       const tasksResult = await client.graphql({
         query: `
           query ListTaskByAccountIdAndUpdatedAt(
@@ -200,112 +200,112 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
       console.log('Raw tasks query result:', tasksResult)
       const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
       
-      // Filter tasks that have experiment_id in metadata
-      const experimentTasks = allTasks.filter((task: Task) => {
+      // Filter tasks that have procedure_id in metadata
+      const procedureTasks = allTasks.filter((task: Task) => {
         try {
           const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
-          return metadata && metadata.experiment_id
+          return metadata && metadata.procedure_id
         } catch {
           return false
         }
       })
       
-      // Create a map of experiment_id -> task for quick lookup
-      const experimentTaskMap = new Map()
-      experimentTasks.forEach((task: Task) => {
+      // Create a map of procedure_id -> task for quick lookup
+      const procedureTaskMap = new Map()
+      procedureTasks.forEach((task: Task) => {
         try {
           const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
-          if (metadata && metadata.experiment_id) {
-            experimentTaskMap.set(metadata.experiment_id, task)
+          if (metadata && metadata.procedure_id) {
+            procedureTaskMap.set(metadata.procedure_id, task)
           }
         } catch {
           // Ignore parsing errors
         }
       })
       
-      // Combine experiments with their tasks
-      const data = experimentsData.map((experiment: Experiment): ExperimentWithTask => ({
-        ...experiment,
-        task: experimentTaskMap.get(experiment.id) || null
+      // Combine procedures with their tasks
+      const data = proceduresData.map((procedure: Procedure): ProcedureWithTask => ({
+        ...procedure,
+        task: procedureTaskMap.get(procedure.id) || null
       }))
-      console.log('Experiments data from query:', data)
+      console.log('Procedures data from query:', data)
       
-      // Check if we're looking for a specific experiment (for debugging)
+      // Check if we're looking for a specific procedure (for debugging)
       if (force) {
-        console.log('Forced reload - checking if we can find recently created experiments...')
-        const recentExperiments = data?.slice(0, 5)?.map((exp: Experiment) => ({
-          id: exp.id,
-          createdAt: exp.createdAt
+        console.log('Forced reload - checking if we can find recently created procedures...')
+        const recentProcedures = data?.slice(0, 5)?.map((proc: Procedure) => ({
+          id: proc.id,
+          createdAt: proc.createdAt
         }))
-        console.log('Most recent 5 experiments by API order:', recentExperiments)
+        console.log('Most recent 5 procedures by API order:', recentProcedures)
       }
       
-      // Sort experiments in reverse chronological order (newest first)
-      const sortedData = data?.sort((a: Experiment, b: Experiment) => {
+      // Sort procedures in reverse chronological order (newest first)
+      const sortedData = data?.sort((a: Procedure, b: Procedure) => {
         const dateA = new Date(a.updatedAt || a.createdAt)
         const dateB = new Date(b.updatedAt || b.createdAt)
         return dateB.getTime() - dateA.getTime()
       }) || []
-      console.log('Sorted experiments data:', sortedData)
+      console.log('Sorted procedures data:', sortedData)
       
       // Only update state if data has actually changed
-      setExperiments(prevExperiments => {
-        console.log('Previous experiments:', prevExperiments.length, 'items')
-        console.log('New experiments:', sortedData.length, 'items')
+      setProcedures(prevProcedures => {
+        console.log('Previous procedures:', prevProcedures.length, 'items')
+        console.log('New procedures:', sortedData.length, 'items')
         
         // Quick comparison: check length first
-        if (prevExperiments.length !== sortedData.length) {
-          console.log('Length changed, updating experiments list')
+        if (prevProcedures.length !== sortedData.length) {
+          console.log('Length changed, updating procedures list')
           return sortedData
         }
         
         // If same length, check if all IDs match in same order
-        const hasChanges = prevExperiments.some((prev, index) => {
+        const hasChanges = prevProcedures.some((prev, index) => {
           const current = sortedData[index]
           return !current || prev.id !== current.id || prev.updatedAt !== current.updatedAt
         })
         
         if (hasChanges) {
-          console.log('Experiments data changed, updating list')
+          console.log('Procedures data changed, updating list')
           return sortedData
         } else {
           console.log('No changes detected, keeping previous data')
-          return prevExperiments
+          return prevProcedures
         }
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load experiments')
+      setError(err instanceof Error ? err.message : 'Failed to load procedures')
     } finally {
       setIsLoading(false)
     }
   }, [selectedAccount?.id])
 
   useEffect(() => {
-    loadExperiments()
-  }, [loadExperiments])
+    loadProcedures()
+  }, [loadProcedures])
 
-  // Task monitoring with real-time subscriptions for experiment tasks
+  // Task monitoring with real-time subscriptions for procedure tasks
   useEffect(() => {
-    console.log('Setting up task subscriptions for experiments')
+    console.log('Setting up task subscriptions for procedures')
 
     const taskSubscription = observeTaskUpdates().subscribe({
       next: (value: any) => {
         const { type, data } = value;
-        console.log(`Task ${type} update for experiments:`, data);
+        console.log(`Task ${type} update for procedures:`, data);
         
-        // Check if this is an experiment task by looking for experiment_id in metadata
+        // Check if this is a procedure task by looking for procedure_id in metadata
         if (data?.metadata) {
           try {
             const metadata = typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata;
-            if (metadata?.experiment_id) {
-              console.log(`Updating experiment ${metadata.experiment_id} with task data:`, data);
+            if (metadata?.procedure_id) {
+              console.log(`Updating procedure ${metadata.procedure_id} with task data:`, data);
               
-              // Update the experiments list with new task data
-              setExperiments(prevExperiments => 
-                prevExperiments.map(experiment => 
-                  experiment.id === metadata.experiment_id 
-                    ? { ...experiment, task: data }
-                    : experiment
+              // Update the procedures list with new task data
+              setProcedures(prevProcedures => 
+                prevProcedures.map(procedure => 
+                  procedure.id === metadata.procedure_id 
+                    ? { ...procedure, task: data }
+                    : procedure
                 )
               );
             }
@@ -322,17 +322,17 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
     const stageSubscription = observeTaskStageUpdates().subscribe({
       next: (value: any) => {
         const { type, data } = value;
-        console.log(`TaskStage ${type} update for experiments:`, data);
+        console.log(`TaskStage ${type} update for procedures:`, data);
         
         if (data?.taskId) {
-          // Update the experiments list with new stage data
-          setExperiments(prevExperiments => 
-            prevExperiments.map((experiment: ExperimentWithTask) => {
-              if (experiment.task?.id === data.taskId) {
-                console.log(`Updating experiment ${experiment.id} stages with:`, data);
+          // Update the procedures list with new stage data
+          setProcedures(prevProcedures => 
+            prevProcedures.map((procedure: ProcedureWithTask) => {
+              if (procedure.task?.id === data.taskId) {
+                console.log(`Updating procedure ${procedure.id} stages with:`, data);
                 
                 // Handle LazyLoader for stages - access synchronously if available
-                const currentStages = experiment.task?.stages as any;
+                const currentStages = procedure.task?.stages as any;
                 const updatedStages = currentStages?.items ? [...currentStages.items] : [];
                 const existingStageIndex = updatedStages.findIndex((stage: any) => stage.id === data.id);
                 
@@ -343,24 +343,24 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
                 }
                 
                 const updatedTask = {
-                  ...experiment.task!,
+                  ...procedure.task!,
                   stages: currentStages ? {
                     ...currentStages,
                     items: updatedStages.sort((a: any, b: any) => a.order - b.order)
                   } : { items: updatedStages.sort((a: any, b: any) => a.order - b.order) },
-                  currentStageId: data.status === 'RUNNING' ? data.name : experiment.task?.currentStageId
+                  currentStageId: data.status === 'RUNNING' ? data.name : procedure.task?.currentStageId
                 };
 
-                console.log('Updated experiment task with stages:', {
-                  experimentId: experiment.id,
+                console.log('Updated procedure task with stages:', {
+                  procedureId: procedure.id,
                   taskId: updatedTask.id,
                   stagesCount: updatedTask.stages?.items?.length,
                   currentStageId: updatedTask.currentStageId
                 });
 
-                return { ...experiment, task: updatedTask };
+                return { ...procedure, task: updatedTask };
               }
-              return experiment;
+              return procedure;
             })
           );
         }
@@ -371,28 +371,28 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
     });
 
     return () => {
-      console.log('Cleaning up task subscriptions for experiments');
+      console.log('Cleaning up task subscriptions for procedures');
       taskSubscription.unsubscribe();
       stageSubscription.unsubscribe();
     };
   }, []); // Empty dependency array since we want this to run once
 
-  const handleEditExperiment = useCallback((experimentId: string) => {
-    console.log('Edit experiment:', experimentId)
+  const handleEditProcedure = useCallback((procedureId: string) => {
+    console.log('Edit procedure:', procedureId)
     setIsEditMode(true)
   }, [])
 
-  const handleDuplicateExperiment = useCallback(async (experimentId: string) => {
-    console.log('handleDuplicateExperiment called with:', experimentId)
+  const handleDuplicateProcedure = useCallback(async (procedureId: string) => {
+    console.log('handleDuplicateProcedure called with:', procedureId)
     try {
-      const experiment = experiments.find(exp => exp.id === experimentId)
-      console.log('Found experiment:', experiment)
-      if (!experiment) {
-        toast.error('Experiment not found')
+      const procedure = procedures.find(proc => proc.id === procedureId)
+      console.log('Found procedure:', procedure)
+      if (!procedure) {
+        toast.error('Procedure not found')
         return
       }
 
-      console.log('Creating duplicate experiment...')
+      console.log('Creating duplicate procedure...')
       console.log('Selected account:', selectedAccount?.id)
       
       if (!selectedAccount?.id) {
@@ -400,40 +400,40 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
         return
       }
       
-      // Since experiments don't have names, we'll need to create a description
+      // Since procedures don't have names, we'll need to create a description
       // that indicates it's a duplicate. For now, let's just duplicate it as-is
-      const { data: newExperiment } = await (client.models.Experiment.create as any)({
-        featured: experiment.featured || false,
-        templateId: experiment.templateId || null,
-        code: experiment.code || null, // Copy the code if it exists
+      const { data: newProcedure } = await (client.models.Procedure.create as any)({
+        featured: procedure.featured || false,
+        templateId: procedure.templateId || null,
+        code: procedure.code || null, // Copy the code if it exists
         rootNodeId: null, // Will be set after creating nodes
-        scorecardId: experiment.scorecardId,
-        scoreId: experiment.scoreId,
+        scorecardId: procedure.scorecardId,
+        scoreId: procedure.scoreId,
         accountId: selectedAccount.id,
       })
 
-      console.log('New experiment created:', newExperiment)
-      if (newExperiment) {
-        // TODO: Copy the experiment nodes and versions from the original
-        // For now, just refresh the experiments list
-        await loadExperiments(true) // Force reload to ensure duplicate appears
-        // Select the newly created duplicate experiment
-        handleSelectExperiment(newExperiment.id)
-        toast.success('Experiment duplicated successfully')
+      console.log('New procedure created:', newProcedure)
+      if (newProcedure) {
+        // TODO: Copy the procedure nodes and versions from the original
+        // For now, just refresh the procedures list
+        await loadProcedures(true) // Force reload to ensure duplicate appears
+        // Select the newly created duplicate procedure
+        handleSelectProcedure(newProcedure.id)
+        toast.success('Procedure duplicated successfully')
       }
     } catch (error) {
-      console.error('Error duplicating experiment:', error)
-      toast.error('Failed to duplicate experiment')
+      console.error('Error duplicating procedure:', error)
+      toast.error('Failed to duplicate procedure')
     }
-  }, [experiments, loadExperiments, handleSelectExperiment, selectedAccount])
+  }, [procedures, loadProcedures, handleSelectProcedure, selectedAccount])
 
   // Handle URL synchronization for browser back/forward navigation
   useEffect(() => {
     const syncFromUrl = () => {
-      const experimentMatch = window.location.pathname.match(/\/lab\/experiments\/([^\/]+)/)
-      const idFromUrl = experimentMatch ? (experimentMatch[1] as string) : null
+      const procedureMatch = window.location.pathname.match(/\/lab\/procedures\/([^\/]+)/)
+      const idFromUrl = procedureMatch ? (procedureMatch[1] as string) : null
       // Only sync on back/forward, not on programmatic changes immediately after click
-      setSelectedExperimentId(prev => prev === idFromUrl ? prev : idFromUrl)
+      setSelectedProcedureId(prev => prev === idFromUrl ? prev : idFromUrl)
     }
     
     // Listen for browser back/forward navigation
@@ -444,28 +444,28 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
   // Focus handler disabled to prevent unwanted reloads when returning to browser
   // Data will refresh naturally through other user interactions or manual refresh
 
-  const handleCreateExperiment = () => {
+  const handleCreateProcedure = () => {
     setShowTemplateSelector(true)
   }
 
-  const handleCreateExperimentFromTemplate = async (template: Schema['ExperimentTemplate']['type']) => {
+  const handleCreateProcedureFromTemplate = async (template: Schema['ProcedureTemplate']['type']) => {
     if (!selectedAccount?.id) {
       toast.error('No account selected')
       return
     }
 
     try {
-      console.log('Creating experiment from template:', { 
+      console.log('Creating procedure from template:', { 
         templateId: template.id, 
         templateName: template.name,
         templateCode: template.template?.substring(0, 100) + '...'
       })
       
-      // Create experiment with template reference and copy template code
+      // Create procedure with template reference and copy template code
       const createInput = {
         featured: false,
         templateId: template.id,
-        code: template.template, // Copy template YAML code to experiment
+        code: template.template, // Copy template YAML code to procedure
         rootNodeId: null, // Will be set when nodes are created
         scorecardId: selectedScorecard || null,
         scoreId: selectedScore || null,
@@ -474,32 +474,32 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
       
       console.log('Create input:', createInput)
       
-      const result = await (client.models.Experiment.create as any)(createInput as any)
-      const { data: newExperiment, errors } = result
+      const result = await (client.models.Procedure.create as any)(createInput as any)
+      const { data: newProcedure, errors } = result
 
       if (errors && errors.length > 0) {
-        console.error('GraphQL errors creating experiment:', errors)
-        toast.error('Failed to create experiment: ' + errors.map((e: any) => e.message).join(', '))
+        console.error('GraphQL errors creating procedure:', errors)
+        toast.error('Failed to create procedure: ' + errors.map((e: any) => e.message).join(', '))
         return
       }
 
-      if (newExperiment) {
-        console.log('Experiment created successfully:', newExperiment)
-        // Refresh experiments list and select the new experiment
-        console.log('About to reload experiments for newly created experiment:', newExperiment.id)
-        await loadExperiments(true) // Force reload to ensure new experiment appears
-        console.log('Finished reloading experiments')
-        handleSelectExperiment(newExperiment.id)
+      if (newProcedure) {
+        console.log('Procedure created successfully:', newProcedure)
+        // Refresh procedures list and select the new procedure
+        console.log('About to reload procedures for newly created procedure:', newProcedure.id)
+        await loadProcedures(true) // Force reload to ensure new procedure appears
+        console.log('Finished reloading procedures')
+        handleSelectProcedure(newProcedure.id)
         // Close template selector
         setShowTemplateSelector(false)
-        toast.success(`Experiment created from template "${template.name}"`)
+        toast.success(`Procedure created from template "${template.name}"`)
       } else {
-        console.error('No experiment data returned')
-        toast.error('Failed to create experiment: No data returned')
+        console.error('No procedure data returned')
+        toast.error('Failed to create procedure: No data returned')
       }
     } catch (error) {
-      console.error('Error creating experiment from template:', error)
-      toast.error('Failed to create experiment from template')
+      console.error('Error creating procedure from template:', error)
+      toast.error('Failed to create procedure from template')
     }
   }
 
@@ -523,51 +523,51 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
     document.addEventListener('mouseup', handleDragEnd)
   }
 
-  const handleDelete = async (experimentId: string) => {
+  const handleDelete = async (procedureId: string) => {
     try {
-      await (client.models.Experiment.delete as any)({ id: experimentId })
-      setExperiments(prev => prev.filter(exp => exp.id !== experimentId))
-      if (selectedExperimentId === experimentId) {
-        setSelectedExperimentId(null)
+      await (client.models.Procedure.delete as any)({ id: procedureId })
+      setProcedures(prev => prev.filter(proc => proc.id !== procedureId))
+      if (selectedProcedureId === procedureId) {
+        setSelectedProcedureId(null)
         setIsEditMode(false)
-        // Update URL when deleting the currently selected experiment
-        window.history.pushState(null, '', '/lab/experiments')
+        // Update URL when deleting the currently selected procedure
+        window.history.pushState(null, '', '/lab/procedures')
       }
-      toast.success('Experiment deleted successfully')
+      toast.success('Procedure deleted successfully')
     } catch (error) {
-      console.error('Error deleting experiment:', error)
-      toast.error('Failed to delete experiment')
+      console.error('Error deleting procedure:', error)
+      toast.error('Failed to delete procedure')
     }
   }
 
-  // Transform experiments to ExperimentTaskData - memoized to prevent unnecessary re-renders
-  const transformExperiment = useCallback((experiment: ExperimentWithTask): ExperimentTaskData => ({
-    id: experiment.id,
-    title: `${experiment.scorecard?.name || 'Experiment'} - ${experiment.score?.name || 'Score'}`,
-    featured: experiment.featured || false,
-    rootNodeId: experiment.rootNodeId || undefined,
-    createdAt: experiment.createdAt,
-    updatedAt: experiment.updatedAt,
-    scorecard: experiment.scorecard ? { name: experiment.scorecard.name } : null,
-    score: experiment.score ? { name: experiment.score.name } : null,
-    task: experiment.task ? {
-      id: experiment.task.id,
-      type: experiment.task.type || 'Experiment',
-      status: experiment.task.status || 'PENDING',
-      target: experiment.task.target || '',
-      command: experiment.task.command || '',
-      description: experiment.task.description || undefined,
-      dispatchStatus: experiment.task.dispatchStatus || undefined,
-      metadata: experiment.task.metadata,
-      createdAt: experiment.task.createdAt || undefined,
-      startedAt: experiment.task.startedAt || undefined,
-      completedAt: experiment.task.completedAt || undefined,
-      estimatedCompletionAt: experiment.task.estimatedCompletionAt || undefined,
-      errorMessage: experiment.task.errorMessage || undefined,
-      errorDetails: experiment.task.errorDetails || undefined,
-      currentStageId: experiment.task.currentStageId || undefined,
-      stages: experiment.task.stages ? {
-        items: (experiment.task.stages as any)?.items || []
+  // Transform procedures to ProcedureTaskData - memoized to prevent unnecessary re-renders
+  const transformProcedure = useCallback((procedure: ProcedureWithTask): ProcedureTaskData => ({
+    id: procedure.id,
+    title: `${procedure.scorecard?.name || 'Procedure'} - ${procedure.score?.name || 'Score'}`,
+    featured: procedure.featured || false,
+    rootNodeId: procedure.rootNodeId || undefined,
+    createdAt: procedure.createdAt,
+    updatedAt: procedure.updatedAt,
+    scorecard: procedure.scorecard ? { name: procedure.scorecard.name } : null,
+    score: procedure.score ? { name: procedure.score.name } : null,
+    task: procedure.task ? {
+      id: procedure.task.id,
+      type: procedure.task.type || 'Procedure',
+      status: procedure.task.status || 'PENDING',
+      target: procedure.task.target || '',
+      command: procedure.task.command || '',
+      description: procedure.task.description || undefined,
+      dispatchStatus: procedure.task.dispatchStatus || undefined,
+      metadata: typeof procedure.task.metadata === 'string' ? procedure.task.metadata : JSON.stringify(procedure.task.metadata),
+      createdAt: procedure.task.createdAt || undefined,
+      startedAt: procedure.task.startedAt || undefined,
+      completedAt: procedure.task.completedAt || undefined,
+      estimatedCompletionAt: procedure.task.estimatedCompletionAt || undefined,
+      errorMessage: procedure.task.errorMessage || undefined,
+      errorDetails: typeof procedure.task.errorDetails === 'string' ? procedure.task.errorDetails : JSON.stringify(procedure.task.errorDetails) || undefined,
+      currentStageId: procedure.task.currentStageId || undefined,
+      stages: procedure.task.stages ? {
+        items: (procedure.task.stages as any)?.items || []
       } : undefined
     } : undefined
   }), [])
@@ -588,16 +588,16 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
             />
           </div>
           <div className="flex-shrink-0">
-            <Button onClick={handleCreateExperiment} disabled={isLoading}>
+            <Button onClick={handleCreateProcedure} disabled={isLoading}>
               <Plus className="h-4 w-4 mr-2" />
-              New Experiment
+              New Procedure
             </Button>
           </div>
         </div>
         
         {error ? (
           <div className="text-center text-destructive p-8">
-            <p>Error loading experiments: {error}</p>
+            <p>Error loading procedures: {error}</p>
           </div>
         ) : (
           <div className="animate-pulse space-y-4">
@@ -611,23 +611,23 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
   }
 
 
-  // Render selected experiment detail or edit form
-  const renderSelectedExperiment = () => {
-    if (!selectedExperimentId) return null
-    const experiment = experiments.find(exp => exp.id === selectedExperimentId)
-    if (!experiment) return null
+  // Render selected procedure detail or edit form
+  const renderSelectedProcedure = () => {
+    if (!selectedProcedureId) return null
+    const procedure = procedures.find(proc => proc.id === selectedProcedureId)
+    if (!procedure) return null
 
     // If in edit mode, render the edit form instead of the detail view
     if (isEditMode) {
       return (
-        <ExperimentDetail 
-          experimentId={selectedExperimentId}
+        <ProcedureDetail 
+          procedureId={selectedProcedureId}
           initialEditMode={true}
           onSave={() => {
-            // Exit edit mode and refresh experiments list after save
+            // Exit edit mode and refresh procedures list after save
             setIsEditMode(false)
-            // Reload experiments to get updated data
-            loadExperiments(true)
+            // Reload procedures to get updated data
+            loadProcedures(true)
           }}
           onCancel={() => {
             // Exit edit mode without saving
@@ -638,15 +638,15 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
     }
 
     return (
-      <ExperimentTask
+      <ProcedureTask
         variant="detail"
-        experiment={transformExperiment(experiment)}
+        procedure={transformProcedure(procedure)}
         isFullWidth={isFullWidth}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-        onClose={handleCloseExperiment}
+        onClose={handleCloseProcedure}
         onDelete={handleDelete}
-        onEdit={handleEditExperiment}
-        onDuplicate={handleDuplicateExperiment}
+        onEdit={handleEditProcedure}
+        onDuplicate={handleDuplicateProcedure}
         onConversationFullscreenChange={setIsConversationFullscreen}
       />
     )
@@ -665,18 +665,18 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
           />
         </div>
         <div className="flex-shrink-0">
-          <Button onClick={handleCreateExperiment}>
+          <Button onClick={handleCreateProcedure}>
             <Plus className="h-4 w-4 mr-2" />
             Create
           </Button>
         </div>
       </div>
 
-      {/* Experiments Content */}
+      {/* Procedures Content */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         <AnimatePresence mode="popLayout">
           <motion.div 
-            key="experiments-layout"
+            key="procedures-layout"
             className="flex flex-1 min-h-0"
             layout
             initial={{ opacity: 0 }}
@@ -691,8 +691,8 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
           >
             {/* Left panel - grid content */}
             <motion.div 
-              className={`${selectedExperimentId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
-              style={selectedExperimentId && !isNarrowViewport && !isFullWidth ? {
+              className={`${selectedProcedureId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+              style={selectedProcedureId && !isNarrowViewport && !isFullWidth ? {
                 width: `${leftPanelWidth}%`
               } : undefined}
               layout
@@ -703,7 +703,7 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
               }}
             >
               <div className="@container space-y-3 overflow-visible">
-                {experiments.length === 0 && isLoading ? (
+                {procedures.length === 0 && isLoading ? (
                   <div className="animate-pulse space-y-4">
                     <div className="h-32 bg-gray-200 rounded"></div>
                     <div className="h-32 bg-gray-200 rounded"></div>
@@ -712,14 +712,14 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
                 ) : (
                   <div className={`
                     grid gap-3
-                    ${selectedExperimentId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+                    ${selectedProcedureId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
                   `}>
-                    {experiments.map((experiment) => {
-                      const clickHandler = getExperimentClickHandler(experiment.id)
+                    {procedures.map((procedure) => {
+                      const clickHandler = getProcedureClickHandler(procedure.id)
                       
                       return (
                         <div 
-                          key={experiment.id}
+                          key={procedure.id}
                           role="button"
                           tabIndex={0}
                           onClick={clickHandler}
@@ -729,17 +729,17 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
                               clickHandler()
                             }
                           }}
-                          aria-pressed={experiment.id === selectedExperimentId}
-                          data-selected={experiment.id === selectedExperimentId ? 'true' : 'false'}
+                          aria-pressed={procedure.id === selectedProcedureId}
+                          data-selected={procedure.id === selectedProcedureId ? 'true' : 'false'}
                         >
-                          <ExperimentTask
+                          <ProcedureTask
                             variant="grid"
-                            experiment={transformExperiment(experiment)}
+                            procedure={transformProcedure(procedure)}
                             onClick={clickHandler}
-                            isSelected={experiment.id === selectedExperimentId}
+                            isSelected={procedure.id === selectedProcedureId}
                             onDelete={handleDelete}
-                            onEdit={handleEditExperiment}
-                            onDuplicate={handleDuplicateExperiment}
+                            onEdit={handleEditProcedure}
+                            onDuplicate={handleDuplicateProcedure}
                           />
                         </div>
                       )
@@ -750,7 +750,7 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
             </motion.div>
 
             {/* Divider for split view */}
-            {selectedExperimentId && !isNarrowViewport && !isFullWidth && (
+            {selectedProcedureId && !isNarrowViewport && !isFullWidth && (
               <div
                 className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
                 onMouseDown={handleDragStart}
@@ -760,11 +760,11 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
               </div>
             )}
 
-            {/* Right panel - experiment detail view */}
+            {/* Right panel - procedure detail view */}
             <AnimatePresence>
-              {selectedExperimentId && !isNarrowViewport && !isFullWidth && !isConversationFullscreen && (
+              {selectedProcedureId && !isNarrowViewport && !isFullWidth && !isConversationFullscreen && (
                 <motion.div 
-                  key={`experiment-detail-${selectedExperimentId}`}
+                  key={`procedure-detail-${selectedProcedureId}`}
                   className="h-full overflow-hidden flex-shrink-0"
                   style={{ width: `${100 - leftPanelWidth}%` }}
                   initial={{ width: 0, opacity: 0 }}
@@ -782,7 +782,7 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
                     damping: 30 
                   }}
                 >
-                  {renderSelectedExperiment()}
+                  {renderSelectedProcedure()}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -791,14 +791,14 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
         </AnimatePresence>
         
         {/* Full-screen view for mobile or full-width mode */}
-        {selectedExperimentId && (isNarrowViewport || isFullWidth) && !isConversationFullscreen && (
+        {selectedProcedureId && (isNarrowViewport || isFullWidth) && !isConversationFullscreen && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
-            {renderSelectedExperiment()}
+            {renderSelectedProcedure()}
           </div>
         )}
         
         {/* Conversation full-screen view - renders when conversation is fullscreen */}
-        {selectedExperimentId && isConversationFullscreen && (
+        {selectedProcedureId && isConversationFullscreen && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-background">
             <div className="w-full h-screen bg-background py-6 px-3 overflow-y-auto flex flex-col">
               <div className="flex items-center justify-between mb-4 flex-shrink-0 px-3">
@@ -817,8 +817,8 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
                 </Button>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto">
-                <ExperimentConversationViewer 
-                  experimentId={selectedExperimentId} 
+                <ProcedureConversationViewer 
+                  procedureId={selectedProcedureId} 
                   onSessionCountChange={() => {}} // We don't need to track session count here
                   isFullscreen={true}
                 />
@@ -834,7 +834,7 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
           accountId={selectedAccount.id}
           open={showTemplateSelector}
           onOpenChange={setShowTemplateSelector}
-          onTemplateSelect={handleCreateExperimentFromTemplate}
+          onTemplateSelect={handleCreateProcedureFromTemplate}
         />
       )}
     </div>
@@ -842,4 +842,4 @@ function ExperimentsDashboard({ initialSelectedExperimentId }: ExperimentsDashbo
 }
 
 // Memoize the component to prevent unnecessary re-renders from parent
-export default React.memo(ExperimentsDashboard)
+export default React.memo(ProceduresDashboard)

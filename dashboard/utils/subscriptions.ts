@@ -1123,17 +1123,14 @@ export function observeScoreResultChanges() {
   };
 }
 
-// ExperimentNode subscription queries
-const onCreateExperimentNodeSubscriptionQuery = /* GraphQL */ `
-  subscription OnCreateExperimentNode {
-    onCreateExperimentNode {
+// GraphNode subscription queries
+const onCreateGraphNodeSubscriptionQuery = /* GraphQL */ `
+  subscription OnCreateGraphNode {
+    onCreateGraphNode {
       id
-      experimentId
+      procedureId
       name
-      hypothesis
-      insight
-      code
-      value
+      metadata
       status
       parentNodeId
       createdAt
@@ -1142,16 +1139,13 @@ const onCreateExperimentNodeSubscriptionQuery = /* GraphQL */ `
   }
 `;
 
-const onUpdateExperimentNodeSubscriptionQuery = /* GraphQL */ `
-  subscription OnUpdateExperimentNode {
-    onUpdateExperimentNode {
+const onUpdateGraphNodeSubscriptionQuery = /* GraphQL */ `
+  subscription OnUpdateGraphNode {
+    onUpdateGraphNode {
       id
-      experimentId
+      procedureId
       name
-      hypothesis
-      insight
-      code
-      value
+      metadata
       status
       parentNodeId
       createdAt
@@ -1160,23 +1154,23 @@ const onUpdateExperimentNodeSubscriptionQuery = /* GraphQL */ `
   }
 `;
 
-export function observeExperimentNodeUpdates() {
+export function observeGraphNodeUpdates() {
   return new Observable(observer => {
     const client = getClient();
     const subscriptions: { unsubscribe: () => void }[] = [];
 
     // Subscribe to create events
-    const createSub = (client.graphql({ query: onCreateExperimentNodeSubscriptionQuery }) as any)
+    const createSub = (client.graphql({ query: onCreateGraphNodeSubscriptionQuery }) as any)
       .subscribe({
         next: ({ data }: { data: any }) => {
-          console.log('ExperimentNode create subscription event:', {
-            nodeId: data?.onCreateExperimentNode?.id,
-            experimentId: data?.onCreateExperimentNode?.experimentId,
-            name: data?.onCreateExperimentNode?.name,
-            status: data?.onCreateExperimentNode?.status,
-            data: data?.onCreateExperimentNode
+          console.log('GraphNode create subscription event:', {
+            nodeId: data?.onCreateGraphNode?.id,
+            procedureId: data?.onCreateGraphNode?.procedureId,
+            name: data?.onCreateGraphNode?.name,
+            status: data?.onCreateGraphNode?.status,
+            data: data?.onCreateGraphNode
           });
-          observer.next({ type: 'create', data: data?.onCreateExperimentNode });
+          observer.next({ type: 'create', data: data?.onCreateGraphNode });
         },
         error: (error: any) => {
           console.error('ExperimentNode create subscription error:', error);
@@ -1186,17 +1180,17 @@ export function observeExperimentNodeUpdates() {
     subscriptions.push(createSub);
 
     // Subscribe to update events
-    const updateSub = (client.graphql({ query: onUpdateExperimentNodeSubscriptionQuery }) as any)
+    const updateSub = (client.graphql({ query: onUpdateGraphNodeSubscriptionQuery }) as any)
       .subscribe({
         next: ({ data }: { data: any }) => {
-          console.log('ExperimentNode update subscription event:', {
-            nodeId: data?.onUpdateExperimentNode?.id,
-            experimentId: data?.onUpdateExperimentNode?.experimentId,
-            name: data?.onUpdateExperimentNode?.name,
-            status: data?.onUpdateExperimentNode?.status,
-            data: data?.onUpdateExperimentNode
+          console.log('GraphNode update subscription event:', {
+            nodeId: data?.onUpdateGraphNode?.id,
+            procedureId: data?.onUpdateGraphNode?.procedureId,
+            name: data?.onUpdateGraphNode?.name,
+            status: data?.onUpdateGraphNode?.status,
+            data: data?.onUpdateGraphNode
           });
-          observer.next({ type: 'update', data: data?.onUpdateExperimentNode });
+          observer.next({ type: 'update', data: data?.onUpdateGraphNode });
         },
         error: (error: any) => {
           console.error('ExperimentNode update subscription error:', error);
