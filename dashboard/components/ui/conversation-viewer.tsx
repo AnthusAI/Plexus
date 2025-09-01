@@ -286,9 +286,9 @@ function ConversationViewer({
       try {
         setIsLoading(true)
         
-        // Load chat sessions for the experiment
-        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByExperimentIdAndCreatedAt as any)({
-          experimentId: experimentId,
+        // Load chat sessions for the procedure
+        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
+          procedureId: experimentId,
           limit: 100
         })
 
@@ -321,8 +321,8 @@ function ConversationViewer({
         let nextToken: string | null = null
         
         do {
-          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByExperimentIdAndCreatedAt as any)({
-            experimentId,
+          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
+            procedureId: experimentId,
             limit: 1000,
             nextToken,
           }, {
@@ -430,9 +430,9 @@ function ConversationViewer({
       try {
         console.log('Checking for new chat sessions in experiment:', experimentId)
         
-        // Query for sessions in the current experiment
-        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByExperimentIdAndCreatedAt as any)({
-          experimentId: experimentId,
+        // Query for sessions in the current procedure
+        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
+          procedureId: experimentId,
           limit: 100
         })
 
@@ -522,8 +522,8 @@ function ConversationViewer({
         let nextToken: string | null = null
         
         do {
-          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByExperimentIdAndCreatedAt as any)({
-            experimentId,
+          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
+            procedureId: experimentId,
             limit: 1000,
             nextToken,
           }, {

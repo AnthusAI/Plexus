@@ -13,19 +13,19 @@ import { toast } from 'sonner'
 const client = generateClient<Schema>()
 
 // Types
-type ExperimentTemplate = Schema['ExperimentTemplate']['type']
+type ProcedureTemplate = Schema['ProcedureTemplate']['type']
 
 interface TemplateSelectorProps {
   accountId: string
   open: boolean
   onOpenChange: (open: boolean) => void
-  onTemplateSelect: (template: ExperimentTemplate) => void
+  onTemplateSelect: (template: ProcedureTemplate) => void
 }
 
 export default function TemplateSelector({ accountId, open, onOpenChange, onTemplateSelect }: TemplateSelectorProps) {
-  const [templates, setTemplates] = useState<ExperimentTemplate[]>([])
+  const [templates, setTemplates] = useState<ProcedureTemplate[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [creatingExperimentFromTemplate, setCreatingExperimentFromTemplate] = useState<string | null>(null)
+  const [creatingProcedureFromTemplate, setCreatingProcedureFromTemplate] = useState<string | null>(null)
 
   // Load templates when dialog opens
   useEffect(() => {
@@ -37,7 +37,7 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
   const loadTemplates = async () => {
     setIsLoading(true)
     try {
-      const result = await (client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt as any)({
+      const result = await (client.models.ProcedureTemplate.listProcedureTemplateByAccountIdAndUpdatedAt as any)({
         accountId: accountId
       })
       
@@ -52,12 +52,12 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
     }
   }
 
-  const handleCreateExperimentFromTemplate = async (template: ExperimentTemplate) => {
-    setCreatingExperimentFromTemplate(template.id)
+  const handleCreateProcedureFromTemplate = async (template: ProcedureTemplate) => {
+    setCreatingProcedureFromTemplate(template.id)
     try {
       await onTemplateSelect(template)
     } finally {
-      setCreatingExperimentFromTemplate(null)
+      setCreatingProcedureFromTemplate(null)
     }
   }
 
@@ -97,7 +97,7 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
                 <Card 
                   key={template.id} 
                   className="relative group cursor-pointer border border-border bg-card hover:shadow-md transition-all duration-200 hover:border-primary/30"
-                  onClick={() => handleCreateExperimentFromTemplate(template)}
+                  onClick={() => handleCreateProcedureFromTemplate(template)}
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
@@ -136,11 +136,11 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
                       className="w-full"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleCreateExperimentFromTemplate(template)
+                        handleCreateProcedureFromTemplate(template)
                       }}
-                      disabled={creatingExperimentFromTemplate === template.id}
+                      disabled={creatingProcedureFromTemplate === template.id}
                     >
-                      {creatingExperimentFromTemplate === template.id ? (
+                      {creatingProcedureFromTemplate === template.id ? (
                         <>
                           <div className="animate-spin h-3 w-3 border border-current border-t-transparent rounded-full mr-2" />
                           Creating...

@@ -11,8 +11,8 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
 
-type ExperimentTemplate = Schema['ExperimentTemplate']['type']
-type CreateExperimentTemplateInput = Schema['ExperimentTemplate']['createType']
+type ProcedureTemplate = Schema['ProcedureTemplate']['type']
+type CreateProcedureTemplateInput = Schema['ProcedureTemplate']['createType']
 
 const client = generateClient<Schema>()
 
@@ -55,7 +55,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
   const templateIdFromParams = (params && 'id' in params) ? params.id as string : null
   const finalInitialTemplateId = initialSelectedTemplateId || templateIdFromParams
   
-  const [templates, setTemplates] = useState<ExperimentTemplate[]>([])
+  const [templates, setTemplates] = useState<ProcedureTemplate[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(finalInitialTemplateId)
@@ -101,7 +101,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
 
     try {
       setIsLoading(true)
-      const { data } = await (client.models.ExperimentTemplate.listExperimentTemplateByAccountIdAndUpdatedAt as any)({
+      const { data } = await (client.models.ProcedureTemplate.listProcedureTemplateByAccountIdAndUpdatedAt as any)({
         accountId: selectedAccount.id,
 
       })
@@ -149,7 +149,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await (client.models.ExperimentTemplate.create as any)(input as any)
+      const { data: newTemplate } = await (client.models.ProcedureTemplate.create as any)(input as any)
 
       if (newTemplate) {
         loadTemplates()
@@ -179,7 +179,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await (client.models.ExperimentTemplate.create as any)(input as any)
+      const { data: newTemplate } = await (client.models.ProcedureTemplate.create as any)(input as any)
 
       if (newTemplate) {
         await loadTemplates()
@@ -215,7 +215,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
 
   const handleDeleteTemplate = async (templateId: string) => {
     try {
-      await (client.models.ExperimentTemplate.delete as any)({ id: templateId })
+      await (client.models.ProcedureTemplate.delete as any)({ id: templateId })
       setTemplates(prev => prev.filter(t => t.id !== templateId))
       if (selectedTemplateId === templateId) {
         setSelectedTemplateId(null)
@@ -236,7 +236,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         ...updates
       }
 
-      await (client.models.ExperimentTemplate.update as any)(updateData)
+      await (client.models.ProcedureTemplate.update as any)(updateData)
       
       // Update local state
       setTemplates(prev => prev.map(t => 
@@ -252,7 +252,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
   }
 
   // Transform template to TemplateTaskData
-  const transformTemplate = (template: ExperimentTemplate): TemplateTaskData => ({
+  const transformTemplate = (template: ProcedureTemplate): TemplateTaskData => ({
     id: template.id,
     title: template.name,
     name: template.name,
