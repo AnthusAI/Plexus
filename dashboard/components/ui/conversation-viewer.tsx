@@ -69,6 +69,7 @@ export interface ConversationViewerProps {
   
   // OR automatic data loading (recommended)
   experimentId?: string
+  procedureId?: string
 }
 
 // Helper function to format JSON with proper newlines
@@ -222,7 +223,8 @@ function ConversationViewer({
   onSessionDelete,
   onSessionCountChange,
   className = "",
-  experimentId
+  experimentId,
+  procedureId
 }: ConversationViewerProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
   
@@ -263,6 +265,9 @@ function ConversationViewer({
   const messages = propMessages || internalMessages  
   const selectedSessionId = propSelectedSessionId || internalSelectedSessionId
   
+  // Use either experimentId or procedureId (they're synonymous in this context)
+  const effectiveId = experimentId || procedureId
+  
   // Notify parent of session count changes
   useEffect(() => {
     if (onSessionCountChange) {
@@ -278,9 +283,9 @@ function ConversationViewer({
     }
   }
 
-  // Data loading effect for experimentId mode
+  // Data loading effect for effectiveId mode
   useEffect(() => {
-    if (!experimentId) return
+    if (!effectiveId) return
 
     const loadConversationData = async () => {
       try {
@@ -288,7 +293,7 @@ function ConversationViewer({
         
         // Load chat sessions for the procedure
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
-          procedureId: experimentId,
+          procedureId: effectiveId,
           limit: 100
         })
 
@@ -322,7 +327,7 @@ function ConversationViewer({
         
         do {
           const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
-            procedureId: experimentId,
+            procedureId: effectiveId,
             limit: 1000,
             nextToken,
           }, {
@@ -418,21 +423,21 @@ function ConversationViewer({
     }
 
     loadConversationData()
-  }, [experimentId])
+  }, [effectiveId])
 
   // Real-time subscription for new chat sessions - notification-based pattern
   useEffect(() => {
-    if (!experimentId) return
+    if (!effectiveId) return
 
-    console.log('Setting up chat session notification subscription for experiment:', experimentId)
+    console.log('Setting up chat session notification subscription for experiment:', effectiveId)
 
     const checkForNewSessions = async () => {
       try {
-        console.log('Checking for new chat sessions in experiment:', experimentId)
+        console.log('Checking for new chat sessions in experiment:', effectiveId)
         
         // Query for sessions in the current procedure
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
-          procedureId: experimentId,
+          procedureId: effectiveId,
           limit: 100
         })
 
@@ -505,13 +510,13 @@ function ConversationViewer({
     } catch (error) {
       console.error('Error setting up chat session notification:', error)
     }
-  }, [experimentId, onSessionSelect])
+  }, [effectiveId, onSessionSelect])
 
   // Real-time subscription for new chat messages - notification-based pattern
   useEffect(() => {
-    if (!experimentId) return
+    if (!effectiveId) return
 
-    console.log('Setting up chat message notification subscription for experiment:', experimentId)
+    console.log('Setting up chat message notification subscription for experiment:', effectiveId)
 
     const checkForNewMessages = async () => {
       try {
@@ -523,7 +528,7 @@ function ConversationViewer({
         
         do {
           const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
-            procedureId: experimentId,
+            procedureId: effectiveId,
             limit: 1000,
             nextToken,
           }, {
@@ -652,7 +657,7 @@ function ConversationViewer({
     } catch (error) {
       console.error('Error setting up chat message notification:', error)
     }
-  }, [experimentId, scrollToLatestMessage])
+  }, [effectiveId, scrollToLatestMessage])
   
   // Sort sessions by last update date in reverse chronological order (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
@@ -677,8 +682,8 @@ function ConversationViewer({
   // Get the current selected session
   const selectedSession = selectedSessionId ? sessions.find(s => s.id === selectedSessionId) : null
 
-  // Show loading state when loading data in experimentId mode
-  if (isLoading && experimentId) {
+  // Show loading state when loading data in effectiveId mode
+  if (isLoading && effectiveId) {
     return (
       <div className={`flex h-full bg-background ${className} items-center justify-center`}>
         <div className="text-muted-foreground">Loading conversation...</div>
