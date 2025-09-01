@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { Button } from "./ui/button"
 import { amplifyClient, getClient } from "@/utils/amplify-client"
 import type { Schema } from "@/amplify/data/resource"
@@ -174,13 +174,17 @@ export default function ScorecardsComponent({
   }, [initialSelectedScorecardId, scorecards]);
 
   // Handle deep linking for score selection - runs after scorecard sections are loaded
+  // Use a ref to track if deep linking has already been processed
+  const deepLinkProcessedRef = useRef(false);
+  
   useEffect(() => {
-    if (initialSelectedScoreId && selectedScorecardSections) {
+    if (initialSelectedScoreId && selectedScorecardSections && !deepLinkProcessedRef.current) {
       // Find the score in the sections
       for (const section of selectedScorecardSections.items) {
         const score = section.scores.items.find(s => s.id === initialSelectedScoreId);
         if (score) {
           handleScoreSelect({...score, sectionId: section.id}, section.id, initialSelectedVersionId || undefined);
+          deepLinkProcessedRef.current = true; // Mark as processed
           break;
         }
       }
