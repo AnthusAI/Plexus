@@ -3,24 +3,17 @@ import React, { useState, useEffect } from "react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { Button } from "@/components/ui/button"
-import { Trash2, MoreHorizontal } from "lucide-react"
+import { Trash2, MoreHorizontal, Loader2, Network } from "lucide-react"
+import { CardButton } from "@/components/CardButton"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { 
-  ChevronDown, 
-  ChevronRight, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  Loader2,
-  Network
-} from "lucide-react"
 import { Timestamp } from "./ui/timestamp"
 import { toast } from "sonner"
 import { observeGraphNodeUpdates } from "@/utils/subscriptions"
@@ -77,11 +70,11 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
       
       const result = await client.graphql({
         query: `
-          query ListGraphNodesByProcedureCreatedAt(
+          query ListGraphNodeByProcedureIdAndCreatedAt(
             $procedureId: ID!
             $sortDirection: ModelSortDirection
           ) {
-            listGraphNodesByProcedureCreatedAt(
+            listGraphNodeByProcedureIdAndCreatedAt(
               procedureId: $procedureId
               sortDirection: $sortDirection
             ) {
@@ -104,7 +97,7 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
         }
       })
 
-      const fetchedNodes = (result as any).data?.listGraphNodesByProcedureCreatedAt?.items || []
+      const fetchedNodes = (result as any).data?.listGraphNodeByProcedureIdAndCreatedAt?.items || []
       setNodes(fetchedNodes)
     } catch (err) {
       console.error('Error loading nodes:', err)
@@ -115,6 +108,12 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
   }
 
   const handleDeleteNode = async (nodeId: string) => {
+    const confirmed = window.confirm('Are you sure you want to delete this node? This action cannot be undone.')
+    
+    if (!confirmed) {
+      return
+    }
+
     try {
       await client.graphql({
         query: `
@@ -149,34 +148,110 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
     })
   }
 
-  const getStatusIcon = (status?: string | null) => {
-    switch (status?.toLowerCase()) {
-      case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'running':
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-      case 'failed':
-        return <XCircle className="h-4 w-4 text-red-500" />
-      case 'pending':
-        return <Clock className="h-4 w-4 text-yellow-500" />
-      default:
-        return <Network className="h-4 w-4 text-muted-foreground" />
+  // Helper function to parse and render node metadata
+  const renderNodeMetadata = (node: GraphNode) => {
+    let parsedMetadata: any = {}
+    
+    try {
+      if (typeof node.metadata === 'string') {
+        parsedMetadata = JSON.parse(node.metadata)
+      } else if (node.metadata) {
+        parsedMetadata = node.metadata
+      }
+    } catch (error) {
+      // If parsing fails, show raw metadata
+      return (
+        <div className="text-xs text-muted-foreground">
+          <pre className="whitespace-pre-wrap font-mono bg-muted p-2 rounded text-xs overflow-x-auto">
+            {typeof node.metadata === 'string' ? node.metadata : JSON.stringify(node.metadata, null, 2)}
+          </pre>
+        </div>
+      )
     }
+
+    if (Object.keys(parsedMetadata).length === 0) {
+      return (
+        <div className="text-xs text-muted-foreground italic">
+          No metadata available
+        </div>
+      )
+    }
+
+    // Extract code for the top metadata section
+    const { code, ...otherFields } = parsedMetadata
+
+    // Helper function to format field names
+    const formatFieldName = (key: string) => {
+      return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    }
+
+    // Helper function to render field value
+    const renderFieldValue = (value: any) => {
+      if (value === null || value === undefined) {
+        return <span className="text-muted-foreground italic">Not set</span>
+      }
+      
+      if (typeof value === 'string') {
+        return <span className="text-sm">{value}</span>
+      }
+      
+      if (typeof value === 'number') {
+        return <span className="text-sm font-medium">{value}</span>
+      }
+      
+      if (typeof value === 'boolean') {
+        return <span className="text-sm">{value ? 'Yes' : 'No'}</span>
+      }
+      
+      // For objects/arrays, show as JSON
+      return (
+        <pre className="text-xs font-mono bg-muted p-2 rounded overflow-x-auto">
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      )
+    }
+
+    // Helper function to check if field has content
+    const hasContent = (value: any) => {
+      return value !== null && value !== undefined && value !== ''
+    }
+
+    return (
+      <div className="space-y-2">
+        {/* Metadata section (code) - collapsed by default */}
+        <details>
+          <summary className={`cursor-pointer p-2 text-sm font-medium hover:bg-muted rounded ${hasContent(code) ? 'text-foreground' : 'text-muted-foreground'}`}>
+            Metadata {!hasContent(code) && <span className="text-xs font-normal">(empty)</span>}
+          </summary>
+          <div className="px-2 pb-2">
+            {hasContent(code) ? (
+              <pre className="text-xs font-mono bg-muted p-3 rounded max-h-64 overflow-y-auto whitespace-pre-wrap">
+                {code}
+              </pre>
+            ) : (
+              <span className="text-xs text-muted-foreground italic">No code available</span>
+            )}
+          </div>
+        </details>
+
+        {/* Other metadata fields - expanded by default */}
+        {Object.entries(otherFields).map(([key, value]) => (
+          <details key={key} open>
+            <summary className={`cursor-pointer p-2 text-sm font-medium hover:bg-muted rounded ${hasContent(value) ? 'text-foreground' : 'text-muted-foreground'}`}>
+              {formatFieldName(key)} {!hasContent(value) && <span className="text-xs font-normal">(empty)</span>}
+            </summary>
+            <div className="px-2 pb-2">
+              {renderFieldValue(value)}
+            </div>
+          </details>
+        ))}
+      </div>
+    )
   }
 
   const getStatusColor = (status?: string | null) => {
-    switch (status?.toLowerCase()) {
-      case 'completed':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      case 'running':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-      case 'failed':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-    }
+    // Use neutral background color since status names are not standardized
+    return 'bg-background text-foreground border'
   }
 
   if (isLoading) {
@@ -223,72 +298,63 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
 
     return (
       <div key={node.id} className={`${level > 0 ? 'ml-6 border-l border-border pl-4' : ''}`}>
-        <Card className="mb-2">
+        <Card className="mb-2 border-0 shadow-none">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {hasChildren && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleNodeExpansion(node.id)}
-                    className="h-6 w-6 p-0"
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3" />
-                    )}
-                  </Button>
-                )}
-                {!hasChildren && <div className="w-6" />}
-                
-                {getStatusIcon(node.status)}
-                
-                <div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  {hasChildren && (
+                    <button
+                      onClick={() => toggleNodeExpansion(node.id)}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {isExpanded ? '▼' : '▶'}
+                    </button>
+                  )}
                   <h4 className="font-medium text-sm">
                     {node.name || `Node ${node.id.slice(-8)}`}
                   </h4>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="secondary" className={getStatusColor(node.status)}>
-                      {node.status || 'Unknown'}
-                    </Badge>
-                    <Timestamp time={node.updatedAt} variant="relative" className="text-xs text-muted-foreground" />
-                  </div>
+                  <Badge variant="secondary" className={getStatusColor(node.status)}>
+                    {node.status || 'Unknown'}
+                  </Badge>
+                </div>
+                <div className="mt-1 ml-6">
+                  <Timestamp time={node.updatedAt} variant="relative" className="text-xs text-muted-foreground" />
                 </div>
               </div>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                    <MoreHorizontal className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem 
-                    onClick={() => handleDeleteNode(node.id)}
-                    className="text-destructive"
+              <DropdownMenuPrimitive.Root>
+                <DropdownMenuPrimitive.Trigger asChild>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <CardButton
+                      icon={MoreHorizontal}
+                      onClick={() => {}}
+                      aria-label="Node options"
+                    />
+                  </div>
+                </DropdownMenuPrimitive.Trigger>
+                <DropdownMenuPrimitive.Portal>
+                  <DropdownMenuPrimitive.Content 
+                    align="end" 
+                    className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md z-50"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    <DropdownMenuPrimitive.Item 
+                      className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-destructive"
+                      onSelect={() => handleDeleteNode(node.id)}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuPrimitive.Item>
+                  </DropdownMenuPrimitive.Content>
+                </DropdownMenuPrimitive.Portal>
+              </DropdownMenuPrimitive.Root>
             </div>
           </CardHeader>
 
-          {node.metadata && (
-            <CardContent className="pt-0">
-              <div className="text-xs text-muted-foreground">
-                <pre className="whitespace-pre-wrap font-mono bg-muted p-2 rounded text-xs overflow-x-auto">
-                  {typeof node.metadata === 'string' 
-                    ? node.metadata 
-                    : JSON.stringify(node.metadata, null, 2)
-                  }
-                </pre>
-              </div>
-            </CardContent>
-          )}
+          <CardContent className="pt-0">
+            {renderNodeMetadata(node)}
+          </CardContent>
         </Card>
 
         {hasChildren && isExpanded && (

@@ -11,3 +11,7 @@ interface Props {
 export default function LabProcedureDetail({ params }: Props) {
   return <ProceduresDashboard initialSelectedProcedureId={params.id} />
 }
+
+
+
+

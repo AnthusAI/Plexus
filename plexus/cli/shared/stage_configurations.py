@@ -62,8 +62,8 @@ def get_prediction_stage_configs(total_items: int = 1) -> Dict[str, StageConfig]
     }
 
 
-def get_experiment_stage_configs(total_items: int = 0) -> Dict[str, StageConfig]:
-    """Get stage configuration for experiment operations.
+def get_procedure_stage_configs(total_items: int = 0) -> Dict[str, StageConfig]:
+    """Get stage configuration for procedure operations.
     
     Args:
         total_items: Total number of items to process (for Evaluation stage)
@@ -74,16 +74,16 @@ def get_experiment_stage_configs(total_items: int = 0) -> Dict[str, StageConfig]
     return {
         "Hypothesis": StageConfig(
             order=1,
-            status_message="Generating experiment hypothesis..."
+            status_message="Generating procedure hypothesis..."
         ),
         "Evaluation": StageConfig(
             order=2,
             total_items=total_items,
-            status_message="Running experiment evaluation..."
+            status_message="Running procedure evaluation..."
         ),
         "Analysis": StageConfig(
             order=3,
-            status_message="Analyzing experiment results..."
+            status_message="Analyzing procedure results..."
         )
     }
 
@@ -105,13 +105,16 @@ def get_stage_configs_for_operation_type(operation_type: str, total_items: int =
         return get_evaluation_stage_configs(total_items)
     elif operation_type.lower() in ['prediction', 'predict']:
         return get_prediction_stage_configs(total_items)
-    elif operation_type.lower() in ['experiment', 'experiments']:
-        return get_experiment_stage_configs(total_items)
+    elif operation_type.lower() in ['experiment', 'experiments', 'procedure', 'procedures']:
+        return get_procedure_stage_configs(total_items)
     else:
         raise ValueError(f"Unknown operation type: {operation_type}")
 
 
 # Legacy aliases for backward compatibility
+def get_experiment_stage_configs(total_items: int = 0) -> Dict[str, StageConfig]:
+    """Legacy alias for get_procedure_stage_configs."""
+    return get_procedure_stage_configs(total_items)
 def get_evaluation_stages(total_items: int = 0) -> Dict[str, StageConfig]:
     """Legacy alias for get_evaluation_stage_configs."""
     return get_evaluation_stage_configs(total_items)

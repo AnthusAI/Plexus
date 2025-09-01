@@ -27,7 +27,7 @@ from plexus.cli.data_lake.operations import lake_group
 from plexus.cli.feedback.commands import feedback
 from plexus.cli.scorecard.scorecards import scorecards, scorecard
 from plexus.cli.record_count.counting import count
-from plexus.cli.experiment.experiments import experiment
+from plexus.cli.procedure.procedures import procedure
 
 # Define OrderCommands class for command ordering
 class OrderCommands(click.Group):
@@ -84,7 +84,7 @@ cli.add_command(scorecard)
 cli.add_command(evaluations)
 cli.add_command(count)
 cli.add_command(dataset)
-cli.add_command(experiment)
+cli.add_command(procedure)
 
 def main():
     """
