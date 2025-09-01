@@ -47,9 +47,9 @@ type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "r
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ExperimentIndexFields = "accountId" | "scorecardId" | "scoreId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
-type ExperimentNodeIndexFields = "experimentId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
-type ExperimentTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
+type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
+type GraphNodeIndexFields = "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
+type ProcedureTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -80,8 +80,8 @@ const schema = a.schema({
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'accountId'),
             dataSources: a.hasMany('DataSource', 'accountId'),
             dataSets: a.hasMany('DataSet', 'accountId'),
-            experiments: a.hasMany('Experiment', 'accountId'),
-            experimentTemplates: a.hasMany('ExperimentTemplate', 'accountId'),
+            procedures: a.hasMany('Procedure', 'accountId'),
+            procedureTemplates: a.hasMany('ProcedureTemplate', 'accountId'),
             chatSessions: a.hasMany('ChatSession', 'accountId'),
         })
         .authorization((allow) => [
@@ -113,7 +113,7 @@ const schema = a.schema({
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scorecardId'),
             dataSources: a.hasMany('DataSource', 'scorecardId'),
             dataSets: a.hasMany('DataSet', 'scorecardId'),
-            experiments: a.hasMany('Experiment', 'scorecardId'),
+            procedures: a.hasMany('Procedure', 'scorecardId'),
             chatSessions: a.hasMany('ChatSession', 'scorecardId'),
         })
         .authorization((allow) => [
@@ -175,7 +175,7 @@ const schema = a.schema({
             externalId: a.string().required(),
             isDisabled: a.boolean(),
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scoreId'),
-            experiments: a.hasMany('Experiment', 'scoreId'),
+            procedures: a.hasMany('Procedure', 'scoreId'),
             chatSessions: a.hasMany('ChatSession', 'scoreId')
         })
         .authorization((allow) => [
@@ -854,11 +854,11 @@ const schema = a.schema({
             idx("dataSourceVersionId").sortKeys(["createdAt"])
         ]),
 
-    Experiment: a
+    Procedure: a
         .model({
             featured: a.boolean(),
             templateId: a.string(),
-            template: a.belongsTo('ExperimentTemplate', 'templateId'),
+            template: a.belongsTo('ProcedureTemplate', 'templateId'),
             code: a.string(), // YAML template code copied from template
             rootNodeId: a.id(),
             createdAt: a.datetime().required(),
@@ -869,15 +869,15 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
-            nodes: a.hasMany('ExperimentNode', 'experimentId'),
-            chatSessions: a.hasMany('ChatSession', 'experimentId'),
-            chatMessages: a.hasMany('ChatMessage', 'experimentId'),
+            nodes: a.hasMany('GraphNode', 'procedureId'),
+            chatSessions: a.hasMany('ChatSession', 'procedureId'),
+            chatMessages: a.hasMany('ChatMessage', 'procedureId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ExperimentIndexFields) => any) => [
+        .secondaryIndexes((idx: (field: ProcedureIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
@@ -885,20 +885,16 @@ const schema = a.schema({
             idx("rootNodeId")
         ]),
 
-    ExperimentNode: a
+    GraphNode: a
         .model({
-            experimentId: a.id().required(),
-            experiment: a.belongsTo('Experiment', 'experimentId'),
+            procedureId: a.id().required(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
             parentNodeId: a.id(),
-            parentNode: a.belongsTo('ExperimentNode', 'parentNodeId'),
-            childNodes: a.hasMany('ExperimentNode', 'parentNodeId'),
+            parentNode: a.belongsTo('GraphNode', 'parentNodeId'),
+            childNodes: a.hasMany('GraphNode', 'parentNodeId'),
             name: a.string(),
             status: a.string(),
-            // Moved from ExperimentNodeVersion - simplified to single version per node
-            code: a.string().required(),
-            hypothesis: a.string(),
-            insight: a.string(),
-            value: a.json(),
+            metadata: a.json(), // Consolidated field for code, hypothesis, insight, value, etc.
             chatSessions: a.hasMany('ChatSession', 'nodeId'),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -907,12 +903,12 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ExperimentNodeIndexFields) => any) => [
-            idx("experimentId").sortKeys(["createdAt"]).name("nodesByExperimentCreatedAt"),
+        .secondaryIndexes((idx: (field: GraphNodeIndexFields) => any) => [
+            idx("procedureId").sortKeys(["createdAt"]).name("nodesByProcedureCreatedAt"),
             idx("parentNodeId").name("nodesByParent")
         ]),
 
-    ExperimentTemplate: a
+    ProcedureTemplate: a
         .model({
             name: a.string().required(),
             description: a.string(),
@@ -922,7 +918,7 @@ const schema = a.schema({
             category: a.string(), // e.g., "hypothesis_generation", "beam_search"
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
-            experiments: a.hasMany('Experiment', 'templateId'),
+            procedures: a.hasMany('Procedure', 'templateId'),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
@@ -943,10 +939,10 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
-            experimentId: a.string(),
-            experiment: a.belongsTo('Experiment', 'experimentId'),
+            procedureId: a.string(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
             nodeId: a.string(),
-            node: a.belongsTo('ExperimentNode', 'nodeId'),
+            node: a.belongsTo('GraphNode', 'nodeId'),
             name: a.string(),
             category: a.string(),
             status: a.enum(['ACTIVE', 'COMPLETED', 'ERROR']),
@@ -961,7 +957,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
-            idx("experimentId").sortKeys(["createdAt"]),
+            idx("procedureId").sortKeys(["createdAt"]),
             idx("nodeId").sortKeys(["createdAt"]),
             idx("status").sortKeys(["updatedAt"])
         ]),
@@ -970,8 +966,8 @@ const schema = a.schema({
         .model({
             sessionId: a.string().required(),
             session: a.belongsTo('ChatSession', 'sessionId'),
-            experimentId: a.string(),
-            experiment: a.belongsTo('Experiment', 'experimentId'),
+            procedureId: a.string(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
             role: a.enum(['USER', 'ASSISTANT', 'SYSTEM', 'TOOL']),
             content: a.string().required(),
             metadata: a.json(),
@@ -992,7 +988,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("sessionId").sortKeys(["sequenceNumber"]),
             idx("sessionId").sortKeys(["createdAt"]),
-            idx("experimentId").sortKeys(["createdAt"]),
+            idx("procedureId").sortKeys(["createdAt"]),
             idx("parentMessageId"),
             idx("messageType").sortKeys(["createdAt"])
         ]),
