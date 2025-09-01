@@ -68,9 +68,9 @@ export interface TaskComponentProps<TData extends BaseTaskData = BaseTaskData> e
 }
 
 // Add helper function to get task icon
-const getTaskIcon = (type: string) => {
+const getTaskIcon = (type: string | undefined) => {
   // Convert to lowercase for case-insensitive comparison
-  const taskType = type.toLowerCase()
+  const taskType = type?.toLowerCase() || ''
   
   // Add check for Report type
   if (taskType.includes('report')) {
@@ -230,7 +230,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
         <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
           {variant === 'detail' && (
             <div className="flex items-center gap-2 mb-3">
-              {task.type.toLowerCase().includes('experiment') ? (
+              {(task.type || '').toLowerCase().includes('experiment') ? (
                 <>
                   <Waypoints className="h-5 w-5 text-muted-foreground" />
                   <span className="text-lg font-semibold text-muted-foreground">Experiment</span>
@@ -260,7 +260,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
               <div className="text-muted-foreground">{taskIcon}</div>
               <div className="text-xs text-muted-foreground text-center">
                 {(() => {
-                  const [firstWord, ...restWords] = task.type.split(/\s+/);
+                  const [firstWord, ...restWords] = (task.type || '').split(/\s+/);
                   return (
                     <>
                       {firstWord}<br />

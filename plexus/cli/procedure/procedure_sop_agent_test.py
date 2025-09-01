@@ -1,0 +1,492 @@
+"""
+Tests for experiment-specific SOP Agent implementation.
+
+These tests verify the ProcedureSOPAgent properly implements experiment
+procedures using the general-purpose StandardOperatingProcedureAgent.
+"""
+
+import pytest
+import asyncio
+from unittest.mock import Mock, AsyncMock, patch
+from types import SimpleNamespace
+
+from .procedure_sop_agent import (
+    ProcedureSOPAgent,
+    ProcedureProcedureDefinition,
+    ProcedureChatRecorderAdapter,
+    run_sop_guided_procedure
+)
+
+
+class MockMCPServer:
+    """Mock MCP server for procedure testing."""
+    
+    def connect(self, config):
+        return MockMCPConnection()
+
+
+class MockMCPConnection:
+    """Mock MCP connection for procedure testing."""
+    
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
+class TestProcedureProcedureDefinition:
+    """Test experiment-specific procedure definition."""
+    
+    def test_procedure_procedure_definition_initialization(self):
+        """Test ProcedureProcedureDefinition initializes correctly."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        # Test that the hardcoded available tools are returned
+        available_tools = procedure_def.get_allowed_tools()
+        assert "plexus_feedback_find" in available_tools
+        assert "create_procedure_node" in available_tools
+        assert "stop_procedure" in available_tools
+        # Should have exactly 3 tools (simplified from dynamic scoping)
+        assert len(available_tools) == 3
+    
+    def test_procedure_prompts_load_from_yaml_config(self):
+        """Test that procedure procedure definition loads prompts from YAML configuration."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        # Set up mock procedure config with all required prompts
+        mock_config = {
+            'prompts': {
+                'worker_system_prompt': 'Test worker system prompt with {procedure_id}',
+                'worker_user_prompt': 'Test worker user prompt for {scorecard_name} → {score_name}',
+                'manager_system_prompt': 'Test manager system prompt for coaching',
+                'manager_user_prompt': 'Welcome to procedure {procedure_id} for {scorecard_name} → {score_name}'
+            }
+        }
+        procedure_def.experiment_config = mock_config
+        
+        context = {
+            "procedure_id": "test-123",
+            "scorecard_name": "TestCard", 
+            "score_name": "TestScore"
+        }
+        state_data = {"round": 1, "tools_used": ["test_tool"]}
+        
+        # Test all prompt methods
+        system_prompt = procedure_def.get_system_prompt(context)
+        user_prompt = procedure_def.get_user_prompt(context)
+        manager_system_prompt = procedure_def.get_sop_guidance_prompt(context, state_data)
+        manager_user_prompt = procedure_def.get_manager_user_prompt(context, state_data)
+        
+        # Verify prompts load correctly
+        assert isinstance(system_prompt, str)
+        assert isinstance(user_prompt, str)
+        assert isinstance(manager_system_prompt, str)
+        assert isinstance(manager_user_prompt, str)
+        assert len(system_prompt) > 0
+        assert len(user_prompt) > 0
+        assert len(manager_system_prompt) > 0
+        assert len(manager_user_prompt) > 0
+        
+        # Verify template variable substitution
+        assert "test-123" in system_prompt
+        assert "TestCard" in user_prompt
+        assert "TestScore" in user_prompt
+        assert "test-123" in manager_user_prompt
+        assert "TestCard" in manager_user_prompt
+        assert "TestScore" in manager_user_prompt
+    
+    def test_get_manager_user_prompt_error_cases(self):
+        """Test error handling for get_manager_user_prompt method."""
+        procedure_def = ProcedureProcedureDefinition()
+        context = {"procedure_id": "test", "scorecard_name": "Test", "score_name": "Test"}
+        
+        # Test missing procedure config
+        with pytest.raises(ValueError, match="Procedure configuration must include 'prompts' section"):
+            procedure_def.get_manager_user_prompt(context)
+        
+        # Test missing prompts section
+        procedure_def.experiment_config = {}
+        with pytest.raises(ValueError, match="Procedure configuration must include 'prompts' section"):
+            procedure_def.get_manager_user_prompt(context)
+        
+        # Test missing manager_user_prompt in prompts section
+        procedure_def.experiment_config = {'prompts': {'worker_system_prompt': 'test'}}
+        with pytest.raises(ValueError, match="Procedure configuration missing 'manager_user_prompt'"):
+            procedure_def.get_manager_user_prompt(context)
+    
+    def test_template_variable_processing(self):
+        """Test template variable processing in prompts."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        # Set up config with template variables
+        procedure_def.experiment_config = {
+            'prompts': {
+                'manager_user_prompt': 'Procedure {procedure_id} for {scorecard_name} round {round} tools {tools_used}'
+            }
+        }
+        
+        context = {"procedure_id": "exp-456", "scorecard_name": "TestCard"}
+        state_data = {"round": 5, "tools_used": ["tool1", "tool2"]}
+        
+        result = procedure_def.get_manager_user_prompt(context, state_data)
+        
+        # Verify all template variables are substituted
+        assert "exp-456" in result
+        assert "TestCard" in result
+        assert "5" in result
+        assert "['tool1', 'tool2']" in result
+    
+    def test_missing_template_variables_handled_gracefully(self):
+        """Test that missing template variables are handled gracefully."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        procedure_def.experiment_config = {
+            'prompts': {
+                'manager_user_prompt': 'Procedure {procedure_id} has {missing_variable} round {round}'
+            }
+        }
+        
+        context = {"procedure_id": "exp-789"}
+        state_data = {"round": 3}
+        
+        # Should not raise error, should handle missing variables gracefully
+        result = procedure_def.get_manager_user_prompt(context, state_data)
+        # Current behavior: returns template as-is when any variable is missing
+        # This is a limitation of the current implementation using .format(**template_vars)
+        assert result == 'Procedure {procedure_id} has {missing_variable} round {round}'
+        assert "{missing_variable}" in result
+    
+    def test_procedure_continuation_criteria(self):
+        """Test experiment-specific continuation logic."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        # Should continue for normal rounds (worker agent controls stopping)
+        state_early = {"round": 5}
+        assert procedure_def.should_continue(state_early) == True
+        
+        # Should continue even with nodes created (worker decides when to stop)
+        state_with_nodes = {"round": 10}
+        assert procedure_def.should_continue(state_with_nodes) == True
+        
+        # Should continue until worker explicitly stops
+        state_normal = {"round": 25}
+        assert procedure_def.should_continue(state_normal) == True
+        
+        # Should continue until safety limit (round >= 500)
+        state_below_safety = {"round": 105}
+        assert procedure_def.should_continue(state_below_safety) == True
+        
+        # Should stop only at safety limit (round >= 500)
+        state_safety = {"round": 500}
+        assert procedure_def.should_continue(state_safety) == False
+    
+    def test_procedure_completion_summary(self):
+        """Test procedure completion summary generation."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        # No procedure nodes created
+        state_no_nodes = {"tools_used": ["plexus_feedback_find"], "round": 10}
+        summary = procedure_def.get_completion_summary(state_no_nodes)
+        assert "no hypothesis nodes were created" in summary
+        
+        # One procedure node created
+        state_one_node = {"tools_used": ["plexus_feedback_find", "create_procedure_node"], "round": 15}
+        summary = procedure_def.get_completion_summary(state_one_node)
+        assert "1 hypothesis node created" in summary
+        
+        # Multiple procedure nodes created (3 create_procedure_node calls)
+        state_multiple_nodes = {"tools_used": ["plexus_feedback_find", "create_procedure_node", "create_procedure_node", "create_procedure_node"], "round": 25}
+        summary = procedure_def.get_completion_summary(state_multiple_nodes)
+        assert "3 hypothesis nodes created" in summary
+
+
+class TestProcedureSOPAgent:
+    """Test the ProcedureSOPAgent wrapper."""
+    
+    def test_procedure_sop_agent_initialization(self):
+        """Test ProcedureSOPAgent initializes with experiment-specific components."""
+        mcp_server = MockMCPServer()
+        experiment_context = {"scorecard_name": "TestCard", "score_name": "TestScore"}
+        
+        experiment_agent = ProcedureSOPAgent(
+            procedure_id="test_exp",
+            mcp_server=mcp_server,
+            experiment_context=experiment_context
+        )
+        
+        assert experiment_agent.procedure_id == "test_exp"
+        assert experiment_agent.experiment_context == experiment_context
+        assert isinstance(experiment_agent.procedure_definition, ProcedureProcedureDefinition)
+    
+    @pytest.mark.asyncio
+    async def test_procedure_setup_creates_components(self):
+        """Test procedure setup creates chat recorder (simplified - no flow manager)."""
+        mcp_server = MockMCPServer()
+        mock_client = Mock()
+        experiment_context = {"scorecard_name": "TestCard"}
+        
+        experiment_agent = ProcedureSOPAgent(
+            procedure_id="test_exp",
+            mcp_server=mcp_server,
+            client=mock_client,
+            experiment_context=experiment_context
+        )
+        
+        experiment_yaml = """
+        class: "BeamSearch"
+        exploration: "Analyze feedback data"
+        max_total_rounds: 500
+        """
+        
+        # Mock the StandardOperatingProcedureAgent class itself
+        with patch('plexus.cli.procedure.procedure_sop_agent.StandardOperatingProcedureAgent') as mock_sop_agent_class:
+            mock_sop_agent = Mock()
+            mock_sop_agent.setup = AsyncMock(return_value=True)
+            mock_sop_agent_class.return_value = mock_sop_agent
+            
+            setup_result = await experiment_agent.setup(experiment_yaml)
+            
+            assert setup_result == True
+            # No flow manager in simplified version
+            assert isinstance(experiment_agent.chat_recorder, ProcedureChatRecorderAdapter)
+            mock_sop_agent.setup.assert_called_once_with(experiment_yaml)
+    
+    @pytest.mark.asyncio
+    async def test_procedure_execution_delegates_to_sop_agent(self):
+        """Test procedure execution delegates to underlying SOP Agent."""
+        mcp_server = MockMCPServer()
+        experiment_agent = ProcedureSOPAgent("test_exp", mcp_server)
+        
+        # Set up mock procedure config for the procedure definition
+        mock_config = {
+            'prompts': {
+                'worker_system_prompt': 'Test worker system prompt',
+                'worker_user_prompt': 'Test worker user prompt',
+                'manager_system_prompt': 'Test manager system prompt',
+                'manager_user_prompt': 'Test manager user prompt'
+            }
+        }
+        experiment_agent.procedure_definition.experiment_config = mock_config
+        
+        # Mock SOP Agent execution
+        mock_sop_agent = Mock()
+        mock_sop_agent.execute_procedure = AsyncMock(return_value={
+            "success": True,
+            "rounds_completed": 5,
+            "tools_used": ["plexus_feedback_analysis", "create_procedure_node", "create_procedure_node"],
+            "completion_summary": "Test completed"
+        })
+        experiment_agent.sop_agent = mock_sop_agent
+        
+        result = await experiment_agent.execute_sop_guided_procedure()
+        
+        assert result["success"] == True
+        assert result["procedure_id"] == "test_exp"
+        assert result["nodes_created"] == 2  # Two create_procedure_node calls
+        assert result["rounds_completed"] == 5
+        assert "plexus_feedback_analysis" in result["tool_names"]
+        
+        mock_sop_agent.execute_procedure.assert_called_once()
+    
+    def test_backward_compatibility_methods(self):
+        """Test that backward compatibility methods work."""
+        mcp_server = MockMCPServer()
+        experiment_context = {"scorecard_name": "TestCard"}
+        
+        experiment_agent = ProcedureSOPAgent(
+            procedure_id="test_exp",
+            mcp_server=mcp_server,
+            experiment_context=experiment_context
+        )
+        
+        # Set up mock procedure config for the procedure definition
+        mock_config = {
+            'prompts': {
+                'worker_system_prompt': 'Test worker system prompt',
+                'worker_user_prompt': 'Test worker user prompt',
+                'manager_system_prompt': 'Test manager system prompt',
+                'manager_user_prompt': 'Test manager user prompt'
+            }
+        }
+        experiment_agent.procedure_definition.experiment_config = mock_config
+        
+        # These methods should work for backward compatibility
+        exploration_prompt = experiment_agent.get_exploration_prompt()
+        system_prompt = experiment_agent.get_system_prompt()
+        user_prompt = experiment_agent.get_user_prompt()
+        
+        assert isinstance(exploration_prompt, str)
+        assert isinstance(system_prompt, str)
+        assert isinstance(user_prompt, str)
+
+
+class TestProcedureSOPIntegration:
+    """Integration tests for procedure SOP Agent workflow."""
+    
+    @pytest.mark.asyncio
+    async def test_run_sop_guided_procedure_function(self):
+        """Test the run_sop_guided_procedure convenience function."""
+        experiment_yaml = """
+        class: "BeamSearch"
+        exploration: "Test experiment"
+        """
+        mcp_server = MockMCPServer()
+        experiment_context = {"scorecard_name": "TestCard", "score_name": "TestScore"}
+        
+        # Mock the ProcedureSOPAgent to avoid complex setup
+        with patch('plexus.cli.procedure.procedure_sop_agent.ProcedureSOPAgent') as mock_agent_class:
+            mock_agent = Mock()
+            mock_agent.setup = AsyncMock(return_value=True)
+            mock_agent.execute_sop_guided_procedure = AsyncMock(return_value={
+                "success": True,
+                "procedure_id": "test_func_exp",
+                "nodes_created": 2
+            })
+            mock_agent_class.return_value = mock_agent
+            
+            result = await run_sop_guided_procedure(
+                procedure_id="test_func_exp",
+                experiment_yaml=experiment_yaml,
+                mcp_server=mcp_server,
+                experiment_context=experiment_context
+            )
+            
+            assert result["success"] == True
+            assert result["procedure_id"] == "test_func_exp"
+            assert result["nodes_created"] == 2
+            
+            # Verify ProcedureSOPAgent was created and used properly
+            mock_agent_class.assert_called_once()
+            mock_agent.setup.assert_called_once_with(experiment_yaml)
+            mock_agent.execute_sop_guided_procedure.assert_called_once()
+
+
+class TestProcedureAdapters:
+    """Test the adapter classes that bridge procedure components to SOP Agent."""
+    
+    # Removed test_procedure_flow_manager_adapter - using simplified multi-agent ReAct loop
+    
+    @pytest.mark.asyncio
+    async def test_procedure_chat_recorder_adapter(self):
+        """Test ProcedureChatRecorderAdapter wraps ProcedureChatRecorder."""
+        mock_client = Mock()
+        
+        adapter = ProcedureChatRecorderAdapter(mock_client, "test_exp", None)
+        
+        # Mock the underlying ProcedureChatRecorder
+        adapter.experiment_chat_recorder = Mock()
+        adapter.experiment_chat_recorder.start_session = AsyncMock(return_value="session_123")
+        adapter.experiment_chat_recorder.record_message = AsyncMock(return_value="msg_456")
+        adapter.experiment_chat_recorder.record_system_message = AsyncMock(return_value="sys_789")
+        adapter.experiment_chat_recorder.end_session = AsyncMock(return_value=True)
+        
+        # Test adapter methods
+        session_id = await adapter.start_session({"test": "context"})
+        assert session_id == "session_123"
+        
+        msg_id = await adapter.record_message("USER", "test message", "MESSAGE")
+        assert msg_id == "msg_456"
+        
+        sys_id = await adapter.record_system_message("system message")
+        assert sys_id == "sys_789"
+        
+        end_result = await adapter.end_session("COMPLETED", "Test Session")
+        assert end_result == True
+
+
+# Story test that demonstrates the procedure workflow
+@pytest.mark.asyncio
+async def test_procedure_sop_agent_story():
+    """
+    STORY: ProcedureSOPAgent executes complete procedure workflow
+    
+    This story demonstrates:
+    1. Procedure setup with YAML configuration
+    2. SOP-guided execution through procedure phases
+    3. Tool usage tracking and node creation
+    4. Proper completion with procedure results
+    """
+    print("\n🧪 Starting Procedure SOP Agent Story...")
+    
+    # Arrange: Set up procedure components
+    experiment_yaml = """
+    class: "BeamSearch"
+    exploration: |
+      Analyze feedback data to understand scoring errors and create hypotheses.
+    """
+    
+    experiment_context = {
+        "procedure_id": "story_exp",
+        "scorecard_name": "StoryCard", 
+        "score_name": "StoryScore"
+    }
+    
+    mcp_server = MockMCPServer()
+    
+    # Mock the underlying SOP Agent execution to tell our story
+    with patch('plexus.cli.procedure.procedure_sop_agent.StandardOperatingProcedureAgent') as mock_sop_agent_class:
+        mock_sop_agent = Mock()
+        mock_sop_agent.setup = AsyncMock(return_value=True)
+        mock_sop_agent.execute_procedure = AsyncMock(return_value={
+            "success": True,
+            "procedure_id": "story_exp",
+            "rounds_completed": 8,
+            "tools_used": [
+                "plexus_feedback_analysis",
+                "plexus_feedback_find", 
+                "plexus_item_info",
+                "create_procedure_node",
+                "create_procedure_node"
+            ],
+            "completion_summary": "Procedure completed with 2 hypothesis nodes",
+            "final_state": {"nodes_created": 2}
+        })
+        mock_sop_agent_class.return_value = mock_sop_agent
+        
+        # Act: Execute the procedure story
+        experiment_agent = ProcedureSOPAgent(
+            procedure_id="story_exp",
+            mcp_server=mcp_server,
+            experiment_context=experiment_context
+        )
+        
+        # Set up mock procedure config for the story
+        mock_config = {
+            'prompts': {
+                'worker_system_prompt': 'Story worker system prompt',
+                'worker_user_prompt': 'Story worker user prompt',
+                'manager_system_prompt': 'Story manager system prompt',
+                'manager_user_prompt': 'Story manager user prompt'
+            }
+        }
+        experiment_agent.procedure_definition.experiment_config = mock_config
+        
+        setup_success = await experiment_agent.setup(experiment_yaml)
+        assert setup_success == True
+        
+        # Since we mocked the SOP agent execution, we need to ensure the real
+        # prompt methods are still accessible during result processing
+        with patch.object(experiment_agent.procedure_definition, 'get_system_prompt', return_value='Mocked system prompt'), \
+             patch.object(experiment_agent.procedure_definition, 'get_user_prompt', return_value='Mocked user prompt'):
+            
+            result = await experiment_agent.execute_sop_guided_procedure()
+        
+        # Assert: Verify the story unfolded correctly
+        assert result["success"] == True
+        assert result["procedure_id"] == "story_exp"
+        assert result["nodes_created"] == 2
+        assert result["rounds_completed"] == 8
+        
+        # Verify procedure tools were used
+        expected_tools = ["plexus_feedback_analysis", "plexus_feedback_find", "plexus_item_info", "create_procedure_node"]
+        for tool in expected_tools:
+            assert tool in result["tool_names"]
+        
+        print(f"✅ Story completed: {result['nodes_created']} nodes created in {result['rounds_completed']} rounds")
+        print(f"🔧 Tools used: {result['tool_names']}")
+        print("🎯 Procedure SOP Agent successfully orchestrated hypothesis generation")
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

@@ -63,7 +63,7 @@ class GraphQLChatService(ScoreChatService):
                 session_data['scoreId'] = score_info['id']
         
         if self.experiment_id:
-            session_data['experimentId'] = self.experiment_id
+            session_data['procedureId'] = self.experiment_id
         
         # Use GraphQL mutation to create session
         result = await self.client.create_chat_session(session_data)
@@ -91,7 +91,7 @@ class GraphQLChatService(ScoreChatService):
         
         # Add experiment ID for efficient GSI queries
         if self.experiment_id:
-            message_data['experimentId'] = self.experiment_id
+            message_data['procedureId'] = self.experiment_id
         
         
         # Use GraphQL mutation to create message
@@ -199,7 +199,7 @@ async def resume_chat_session(session_id: str) -> GraphQLChatService:
     if session_data:
         service.scorecard = session_data.get('scorecardId')
         service.score = session_data.get('scoreId')
-        service.experiment_id = session_data.get('experimentId')
+        service.procedure_id = session_data.get('procedureId')
         
         # Load chat history
         messages = await service.client.list_chat_messages(session_id)

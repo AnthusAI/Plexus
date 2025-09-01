@@ -60,7 +60,7 @@ class TestGraphQLChatService:
         call_args = mock_client.create_chat_session.call_args[0][0]
         assert call_args['accountId'] == account_id
         assert call_args['status'] == 'ACTIVE'
-        assert 'experimentId' in call_args
+        assert 'procedureId' in call_args
     
     @pytest.mark.asyncio
     async def test_create_session_with_experiment(self, mock_client):
@@ -83,7 +83,7 @@ class TestGraphQLChatService:
         
         # Assert
         call_args = mock_client.create_chat_session.call_args[0][0]
-        assert call_args['experimentId'] == experiment_id
+        assert call_args['procedureId'] == experiment_id
     
     @pytest.mark.asyncio
     async def test_send_message_user(self, chat_service, mock_client):
@@ -125,7 +125,7 @@ class TestGraphQLChatService:
         
         # Assert
         call_args = mock_client.create_chat_message.call_args[0][0]
-        assert call_args['experimentId'] == experiment_id
+        assert call_args['procedureId'] == experiment_id
     
     @pytest.mark.asyncio
     async def test_send_message_no_session_error(self, chat_service):
@@ -228,7 +228,7 @@ class TestConvenienceFunctions:
         session_data = {
             'scorecardId': 'scorecard-123',
             'scoreId': 'score-456',
-            'experimentId': 'exp-789'
+            'procedureId': 'exp-789'
         }
         messages = [{'id': 'msg-1', 'content': 'Previous message'}]
         
@@ -248,7 +248,7 @@ class TestConvenienceFunctions:
             mock_service.client.list_chat_messages.assert_called_once_with(session_id)
             assert mock_service.scorecard == 'scorecard-123'
             assert mock_service.score == 'score-456'
-            assert mock_service.experiment_id == 'exp-789'
+            assert mock_service.procedure_id == 'exp-789'
             assert mock_service.chat_history == messages
 
 

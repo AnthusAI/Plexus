@@ -7,20 +7,20 @@ import logging
 import json
 
 from plexus.cli.shared.task_progress_tracker import TaskProgressTracker
-from plexus.cli.shared.stage_configurations import get_experiment_stage_configs
+from plexus.cli.shared.stage_configurations import get_procedure_stage_configs
 from plexus.dashboard.api.client import PlexusDashboardClient
-from plexus.dashboard.api.models.experiment import Experiment as DashboardExperiment
+from plexus.dashboard.api.models.procedure import Procedure as DashboardProcedure
 
 
 def create_tracker_and_experiment_task(
     *,
     client: PlexusDashboardClient,
     account_id: str,
-    experiment_id: str,
+    procedure_id: str,
     scorecard_name: Optional[str] = None,
     score_name: Optional[str] = None,
     total_items: int = 0,
-) -> Tuple[TaskProgressTracker, Optional[DashboardExperiment]]:
+) -> Tuple[TaskProgressTracker, Optional[DashboardProcedure]]:
     """Create a TaskProgressTracker for an experiment run.
 
     Mirrors the evaluation behavior for experiment operations.
@@ -29,21 +29,21 @@ def create_tracker_and_experiment_task(
     Args:
         client: Dashboard API client
         account_id: Account ID
-        experiment_id: Experiment ID to associate with the task
+        procedure_id: Procedure ID to associate with the task
         scorecard_name: Optional scorecard name for metadata
         score_name: Optional score name for metadata
         total_items: Total number of items to process (for Evaluation stage)
     
     Returns:
-        Tuple of (TaskProgressTracker, Experiment record or None)
+        Tuple of (TaskProgressTracker, Procedure record or None)
     """
     # Configure stages and create tracker (creates API Task)
-    stage_configs = get_experiment_stage_configs(total_items=total_items)
+    stage_configs = get_procedure_stage_configs(total_items=total_items)
     
     # Build metadata
     metadata = {
         "type": "Experiment Run",
-        "experiment_id": experiment_id,
+        "procedure_id": procedure_id,
         "task_type": "Experiment Run",
     }
     if scorecard_name:
@@ -55,9 +55,9 @@ def create_tracker_and_experiment_task(
     tracker = TaskProgressTracker(
         total_items=total_items,
         stage_configs=stage_configs,
-        target=f"experiment/run/{experiment_id}",
-        command=f"experiment run {experiment_id}",
-        description=f"Experiment run for {experiment_id}",
+        target=f"procedure/run/{procedure_id}",
+        command=f"procedure run {procedure_id}",
+        description=f"Procedure run for {procedure_id}",
         dispatch_status="DISPATCHED",
         prevent_new_task=False,
         metadata=metadata,
@@ -80,16 +80,16 @@ def create_tracker_and_experiment_task(
             updatedAt=datetime.now(timezone.utc).isoformat(),
         )
 
-    # Try to get the existing Experiment record and associate via metadata
-    experiment_record = None
+    # Try to get the existing Procedure record and associate via metadata
+    procedure_record = None
     try:
-        experiment_record = DashboardExperiment.get_by_id(client=client, id=experiment_id)
-        if experiment_record and task:
-            # Store experiment ID in task metadata for the association
+        procedure_record = DashboardProcedure.get_by_id(client=client, id=procedure_id)
+        if procedure_record and task:
+            # Store procedure ID in task metadata for the association
             # This avoids adding new schema relationships that would increase resource count
             task_metadata = task.metadata or {}
-            task_metadata["experiment_id"] = experiment_id
-            task_metadata["experiment_type"] = "run"
+            task_metadata["procedure_id"] = procedure_id
+            task_metadata["procedure_type"] = "run"
             
             # Update the task with the metadata
             task.update(
@@ -101,17 +101,17 @@ def create_tracker_and_experiment_task(
                 metadata=task_metadata,
                 updatedAt=datetime.now(timezone.utc).isoformat(),
             )
-            logging.info(f"Associated Task {task.id} with Experiment {experiment_id} via metadata")
+            logging.info(f"Associated Task {task.id} with Procedure {procedure_id} via metadata")
     except Exception as e:
-        logging.warning(f"Could not get Experiment record {experiment_id}: {str(e)}")
-        # Continue without the experiment record - the task tracking still works
+        logging.warning(f"Could not get Procedure record {procedure_id}: {str(e)}")
+        # Continue without the procedure record - the task tracking still works
 
-    return tracker, experiment_record
+    return tracker, procedure_record
 
 
 async def run_experiment_with_task_tracking(
     *,
-    experiment_id: str,
+    procedure_id: str,
     client: Optional[PlexusDashboardClient] = None,
     account_id: Optional[str] = None,
     scorecard_name: Optional[str] = None,
@@ -119,13 +119,13 @@ async def run_experiment_with_task_tracking(
     total_items: int = 0,
     **experiment_options
 ) -> Dict[str, Any]:
-    """Run an experiment with task tracking.
+    """Run a procedure with task tracking.
     
     This function creates Task and TaskStage records for progress tracking,
-    then runs the actual experiment using the ExperimentService.
+    then runs the actual procedure using the ProcedureService.
     
     Args:
-        experiment_id: ID of the experiment to run
+        procedure_id: ID of the procedure to run
         client: Dashboard API client
         account_id: Account ID
         scorecard_name: Optional scorecard name for metadata
@@ -150,14 +150,14 @@ async def run_experiment_with_task_tracking(
     tracker, experiment_record = create_tracker_and_experiment_task(
         client=client,
         account_id=account_id,
-        experiment_id=experiment_id,
+        procedure_id=procedure_id,
         scorecard_name=scorecard_name,
         score_name=score_name,
         total_items=total_items,
     )
     
     result = {
-        'experiment_id': experiment_id,
+        'procedure_id': procedure_id,
         'task_id': tracker.task.id if tracker.task else None,
         'status': 'initiated',
         'message': 'Task tracking initialized'
@@ -169,12 +169,12 @@ async def run_experiment_with_task_tracking(
             tracker.current_stage.status_message = "Starting experiment hypothesis generation"
             tracker.update(current_items=0)
         
-        # Import and run the actual experiment using ExperimentService
-        from plexus.cli.experiment.service import ExperimentService
-        service = ExperimentService(client)
+        # Import and run the actual procedure using ProcedureService
+        from plexus.cli.procedure.service import ProcedureService
+        service = ProcedureService(client)
         
-        # Run the experiment (this is the actual hypothesis generation work)
-        experiment_result = await service.run_experiment(experiment_id, **experiment_options)
+        # Run the procedure (this is the actual hypothesis generation work)
+        experiment_result = await service.run_experiment(procedure_id, **experiment_options)
         
         # Complete Hypothesis stage and advance to Evaluation
         if tracker:
