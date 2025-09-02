@@ -334,7 +334,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
       name: `${template.name} (Copy)`,
       description: template.description || '',
       template: template.template,
-      version: template.version,
+      version: template.version || '1.0',
       category: template.category || 'hypothesis_generation',
       isDefault: false
     })

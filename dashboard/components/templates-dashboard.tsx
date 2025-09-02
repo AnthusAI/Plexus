@@ -258,7 +258,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
     name: template.name,
     description: template.description || undefined,
     template: template.template,
-    version: template.version,
+    version: template.version || '1.0',
     category: template.category || undefined,
     isDefault: template.isDefault || false,
     createdAt: template.createdAt,
