@@ -82,7 +82,6 @@ try:
     from tools.documentation.docs import register_documentation_tools
     from tools.cost.analysis import register_cost_analysis_tools
     from tools.dataset.datasets import register_dataset_tools
-    from tools.experiment.experiments import register_experiment_tools
     
     register_think_tool(mcp)
     register_scorecard_tools(mcp)
@@ -96,7 +95,6 @@ try:
     register_documentation_tools(mcp)
     register_cost_analysis_tools(mcp)
     register_dataset_tools(mcp)
-    register_experiment_tools(mcp)
     
     print("Successfully registered all tools for authenticated MCP", file=sys.stderr)
 except Exception as e:
