@@ -45,10 +45,11 @@ class TestProcedureProcedureDefinition:
         # Test that the hardcoded available tools are returned
         available_tools = procedure_def.get_allowed_tools()
         assert "plexus_feedback_find" in available_tools
-        assert "create_procedure_node" in available_tools
+        assert "upsert_procedure_node" in available_tools
+        assert "get_procedure_info" in available_tools
         assert "stop_procedure" in available_tools
-        # Should have exactly 3 tools (simplified from dynamic scoping)
-        assert len(available_tools) == 3
+        # Should have exactly 4 tools (simplified from dynamic scoping)
+        assert len(available_tools) == 4
     
     def test_procedure_prompts_load_from_yaml_config(self):
         """Test that procedure procedure definition loads prompts from YAML configuration."""
@@ -157,6 +158,326 @@ class TestProcedureProcedureDefinition:
         assert result == 'Procedure {procedure_id} has {missing_variable} round {round}'
         assert "{missing_variable}" in result
     
+    def test_realistic_experiment_context_variables(self):
+        """Test template processing with realistic experiment context variables that match actual procedure execution."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        # Use realistic YAML prompt template that matches what's actually used
+        realistic_template = """Current Experiment Context:
+
+Experiment ID: {experiment_id}
+Scorecard: {scorecard_name}
+Score: {score_name}
+
+Current Score Configuration (Champion Version):
+{current_score_config}
+
+Performance Analysis Summary:
+{feedback_summary}"""
+        
+        procedure_def.experiment_config = {
+            'prompts': {
+                'worker_user_prompt': realistic_template
+            }
+        }
+        
+        # Use realistic context that matches what ProcedureService.run_procedure creates
+        realistic_context = {
+            'procedure_id': 'proc-abc123def456',
+            'account_id': 'acc-123',
+            'scorecard_id': 'scorecard-456',
+            'score_id': 'score-789',
+            'scorecard_name': 'Sales Performance Scorecard',
+            'score_name': 'DNC Requested Adherence',
+            'node_count': 5,
+            'version_count': 3,
+            'current_score_config': 'logic: "feedback.dnc_requested == true"\nweight: 1.0\nthreshold: 0.95',
+            'feedback_summary': 'Analysis of 847 feedback items shows 23% non-compliance with DNC protocols.',
+            'feedback_alignment_docs': [],
+            'score_yaml_format_docs': [],
+            'existing_nodes': []
+        }
+        
+        result = procedure_def.get_user_prompt(realistic_context)
+        
+        # Verify all critical variables are properly interpolated
+        assert 'proc-abc123def456' in result  # experiment_id should map to procedure_id
+        assert 'Sales Performance Scorecard' in result
+        assert 'DNC Requested Adherence' in result
+        assert 'logic: "feedback.dnc_requested == true"' in result
+        assert 'Analysis of 847 feedback items' in result
+        
+        # Ensure no template variables remain unsubstituted
+        assert '{experiment_id}' not in result
+        assert '{scorecard_name}' not in result
+        assert '{score_name}' not in result
+        assert '{current_score_config}' not in result
+        assert '{feedback_summary}' not in result
+    
+    def test_experiment_id_backward_compatibility_mapping(self):
+        """Test that {experiment_id} correctly maps to procedure_id for backward compatibility."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        # Template using both old and new variable names
+        template_mixed = "Procedure: {procedure_id}, Experiment: {experiment_id}, Scorecard: {scorecard_name}"
+        
+        procedure_def.experiment_config = {
+            'prompts': {
+                'manager_system_prompt': template_mixed
+            }
+        }
+        
+        context = {
+            'procedure_id': 'test-procedure-123',
+            'scorecard_name': 'Test Scorecard'
+        }
+        
+        result = procedure_def.get_sop_guidance_prompt(context, {})
+        
+        # Both variables should resolve to the same procedure_id value
+        assert 'Procedure: test-procedure-123' in result
+        assert 'Experiment: test-procedure-123' in result
+        assert 'Scorecard: Test Scorecard' in result
+        
+        # No unsubstituted template variables
+        assert '{procedure_id}' not in result
+        assert '{experiment_id}' not in result
+        assert '{scorecard_name}' not in result
+    
+    def test_template_with_only_experiment_id_variable(self):
+        """Test that templates using only {experiment_id} work correctly."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        template_legacy = "Working on experiment {experiment_id} for {scorecard_name}"
+        
+        procedure_def.experiment_config = {
+            'prompts': {
+                'worker_system_prompt': template_legacy
+            }
+        }
+        
+        context = {
+            'procedure_id': 'legacy-proc-456',
+            'scorecard_name': 'Legacy Scorecard'
+        }
+        
+        result = procedure_def.get_system_prompt(context)
+        
+        # experiment_id should be mapped from procedure_id
+        assert 'Working on experiment legacy-proc-456' in result
+        assert 'for Legacy Scorecard' in result
+        
+        # No unsubstituted variables
+        assert '{experiment_id}' not in result
+        assert '{scorecard_name}' not in result
+    
+    def test_end_to_end_template_processing_with_realistic_yaml(self):
+        """Integration test that verifies template processing works end-to-end with realistic YAML config."""
+        
+        # Realistic YAML config that includes template variables
+        realistic_yaml_config = """
+prompts:
+  worker_system_prompt: |
+    You are an AI agent analyzing classification scoring procedures.
+    
+    Working on: {scorecard_name} - {score_name}
+    Procedure ID: {experiment_id}
+    
+  worker_user_prompt: |
+    Current Experiment Context:
+    
+    Experiment ID: {experiment_id}
+    Scorecard: {scorecard_name}
+    Score: {score_name}
+    
+    Current Score Configuration (Champion Version):
+    {current_score_config}
+    
+    Performance Analysis Summary:
+    {feedback_summary}
+    
+    Please analyze this configuration and provide recommendations.
+    
+  manager_system_prompt: |
+    You are a procedure manager overseeing AI analysis of {scorecard_name}.
+    Current procedure: {experiment_id}
+    
+  manager_user_prompt: |
+    Review the analysis for {scorecard_name} - {score_name} procedure {experiment_id}.
+    
+max_total_rounds: 100
+"""
+        
+        # Realistic experiment context matching actual procedure execution
+        experiment_context = {
+            'procedure_id': 'proc-integration-test-789',
+            'account_id': 'acc-test-123',
+            'scorecard_id': 'scorecard-test-456', 
+            'score_id': 'score-test-789',
+            'scorecard_name': 'Customer Service Quality',
+            'score_name': 'Response Time Compliance',
+            'node_count': 3,
+            'version_count': 2,
+            'current_score_config': 'logic: "response_time_seconds <= 30"\nweight: 0.8\nthreshold: 0.9',
+            'feedback_summary': 'Analysis of 1,205 interactions shows 67% compliance with 30-second response time target.',
+            'feedback_alignment_docs': [],
+            'score_yaml_format_docs': [],
+            'existing_nodes': []
+        }
+        
+        # Create ProcedureSOPAgent and set it up
+        procedure_agent = ProcedureSOPAgent(
+            procedure_id=experiment_context['procedure_id'],
+            mcp_server=None,  # Not needed for this test
+            client=None,
+            openai_api_key=None,
+            experiment_context=experiment_context,
+            model_config=None
+        )
+        
+        # Set up with the realistic YAML
+        # Note: setup() is async but we're testing the sync parts here
+        import yaml
+        config = yaml.safe_load(realistic_yaml_config)
+        procedure_agent.procedure_definition.experiment_config = config
+        
+        # Test all prompt methods with template processing
+        system_prompt = procedure_agent.procedure_definition.get_system_prompt(experiment_context)
+        user_prompt = procedure_agent.procedure_definition.get_user_prompt(experiment_context)
+        manager_prompt = procedure_agent.procedure_definition.get_sop_guidance_prompt(experiment_context, {})
+        manager_user_prompt = procedure_agent.procedure_definition.get_manager_user_prompt(experiment_context, {})
+        
+        # Verify all prompts have proper template interpolation
+        # Check each prompt individually since they have different content
+        
+        # System prompt should have scorecard_name, score_name, and experiment_id
+        assert 'Customer Service Quality' in system_prompt
+        assert 'Response Time Compliance' in system_prompt
+        assert 'proc-integration-test-789' in system_prompt
+        assert '{experiment_id}' not in system_prompt
+        assert '{scorecard_name}' not in system_prompt
+        assert '{score_name}' not in system_prompt
+        
+        # User prompt should have all the context variables
+        assert 'Customer Service Quality' in user_prompt
+        assert 'Response Time Compliance' in user_prompt
+        assert 'proc-integration-test-789' in user_prompt
+        assert 'logic: "response_time_seconds <= 30"' in user_prompt
+        assert 'Analysis of 1,205 interactions' in user_prompt
+        assert '{experiment_id}' not in user_prompt
+        assert '{scorecard_name}' not in user_prompt
+        assert '{score_name}' not in user_prompt
+        assert '{current_score_config}' not in user_prompt
+        assert '{feedback_summary}' not in user_prompt
+        
+        # Manager system prompt only has scorecard_name and experiment_id (not score_name)
+        assert 'Customer Service Quality' in manager_prompt
+        assert 'proc-integration-test-789' in manager_prompt
+        assert '{experiment_id}' not in manager_prompt
+        assert '{scorecard_name}' not in manager_prompt
+        
+        # Manager user prompt has scorecard_name, score_name, and experiment_id
+        assert 'Customer Service Quality' in manager_user_prompt
+        assert 'Response Time Compliance' in manager_user_prompt
+        assert 'proc-integration-test-789' in manager_user_prompt
+        assert '{experiment_id}' not in manager_user_prompt
+        assert '{scorecard_name}' not in manager_user_prompt
+        assert '{score_name}' not in manager_user_prompt
+    
+    def test_template_mismatch_detection_regression_test(self):
+        """Regression test to catch the specific template variable mismatch issue that was reported."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        # Simulate the exact scenario that caused the bug:
+        # - YAML template contains {experiment_id}
+        # - Context provides procedure_id but no experiment_id mapping
+        buggy_template = """Current Experiment Context:
+
+
+
+Experiment ID: {experiment_id}
+
+Scorecard: {scorecard_name}
+
+Score: {score_name}
+
+
+Current Score Configuration (Champion Version):
+
+
+{current_score_config}
+
+Performance Analysis Summary:
+
+
+{feedback_summary}"""
+        
+        procedure_def.experiment_config = {
+            'prompts': {
+                'worker_user_prompt': buggy_template
+            }
+        }
+        
+        # Context as it was originally provided (without experiment_id mapping)
+        original_buggy_context = {
+            'procedure_id': 'proc-test-123',  # This was procedure_id, not experiment_id
+            'scorecard_name': 'Test Scorecard',
+            'score_name': 'Test Score',
+            'current_score_config': 'test config',
+            'feedback_summary': 'test feedback'
+        }
+        
+        # With the fix, this should work (experiment_id gets mapped from procedure_id)
+        result = procedure_def.get_user_prompt(original_buggy_context)
+        
+        # Verify the bug is fixed - experiment_id should be interpolated
+        assert 'Experiment ID: proc-test-123' in result
+        assert 'Scorecard: Test Scorecard' in result
+        assert 'Score: Test Score' in result
+        assert 'test config' in result
+        assert 'test feedback' in result
+        
+        # Most importantly, no template variables should remain unsubstituted
+        assert '{experiment_id}' not in result, "REGRESSION: experiment_id template variable not substituted!"
+        assert '{scorecard_name}' not in result
+        assert '{score_name}' not in result
+        assert '{current_score_config}' not in result
+        assert '{feedback_summary}' not in result
+    
+    def test_template_variable_logging_helps_debugging(self):
+        """Test that template processing works correctly with debug info available."""
+        procedure_def = ProcedureProcedureDefinition()
+        
+        # Test that the template processing method can be called successfully
+        # and that it provides useful error information when variables are missing
+        procedure_def.experiment_config = {
+            'prompts': {
+                'worker_system_prompt': 'Test {procedure_id} with {scorecard_name} missing {undefined_var}'
+            }
+        }
+        
+        context = {
+            'procedure_id': 'debug-test-456',
+            'scorecard_name': 'Debug Scorecard'
+        }
+        
+        # This should handle the missing variable gracefully and return the template as-is
+        result = procedure_def.get_system_prompt(context)
+        
+        # The result should be the original template since undefined_var is missing
+        expected = 'Test {procedure_id} with {scorecard_name} missing {undefined_var}'
+        assert result == expected, f"Expected graceful handling of missing variables, got: {result}"
+        
+        # Test with all variables present
+        procedure_def.experiment_config = {
+            'prompts': {
+                'worker_system_prompt': 'Test {procedure_id} with {scorecard_name}'
+            }
+        }
+        
+        result = procedure_def.get_system_prompt(context)
+        assert result == 'Test debug-test-456 with Debug Scorecard'
+    
     def test_procedure_continuation_criteria(self):
         """Test experiment-specific continuation logic."""
         procedure_def = ProcedureProcedureDefinition()
@@ -191,12 +512,12 @@ class TestProcedureProcedureDefinition:
         assert "no hypothesis nodes were created" in summary
         
         # One procedure node created
-        state_one_node = {"tools_used": ["plexus_feedback_find", "create_procedure_node"], "round": 15}
+        state_one_node = {"tools_used": ["plexus_feedback_find", "upsert_procedure_node"], "round": 15}
         summary = procedure_def.get_completion_summary(state_one_node)
         assert "1 hypothesis node created" in summary
         
-        # Multiple procedure nodes created (3 create_procedure_node calls)
-        state_multiple_nodes = {"tools_used": ["plexus_feedback_find", "create_procedure_node", "create_procedure_node", "create_procedure_node"], "round": 25}
+        # Multiple procedure nodes created (3 upsert_procedure_node calls)
+        state_multiple_nodes = {"tools_used": ["plexus_feedback_find", "upsert_procedure_node", "upsert_procedure_node", "upsert_procedure_node"], "round": 25}
         summary = procedure_def.get_completion_summary(state_multiple_nodes)
         assert "3 hypothesis nodes created" in summary
 
@@ -274,7 +595,7 @@ class TestProcedureSOPAgent:
         mock_sop_agent.execute_procedure = AsyncMock(return_value={
             "success": True,
             "rounds_completed": 5,
-            "tools_used": ["plexus_feedback_analysis", "create_procedure_node", "create_procedure_node"],
+            "tools_used": ["plexus_feedback_analysis", "upsert_procedure_node", "upsert_procedure_node"],
             "completion_summary": "Test completed"
         })
         experiment_agent.sop_agent = mock_sop_agent
@@ -283,7 +604,7 @@ class TestProcedureSOPAgent:
         
         assert result["success"] == True
         assert result["procedure_id"] == "test_exp"
-        assert result["nodes_created"] == 2  # Two create_procedure_node calls
+        assert result["nodes_created"] == 2  # Two upsert_procedure_node calls
         assert result["rounds_completed"] == 5
         assert "plexus_feedback_analysis" in result["tool_names"]
         
@@ -436,8 +757,8 @@ async def test_procedure_sop_agent_story():
                 "plexus_feedback_analysis",
                 "plexus_feedback_find", 
                 "plexus_item_info",
-                "create_procedure_node",
-                "create_procedure_node"
+                "upsert_procedure_node",
+                "upsert_procedure_node"
             ],
             "completion_summary": "Procedure completed with 2 hypothesis nodes",
             "final_state": {"nodes_created": 2}
@@ -479,7 +800,7 @@ async def test_procedure_sop_agent_story():
         assert result["rounds_completed"] == 8
         
         # Verify procedure tools were used
-        expected_tools = ["plexus_feedback_analysis", "plexus_feedback_find", "plexus_item_info", "create_procedure_node"]
+        expected_tools = ["plexus_feedback_analysis", "plexus_feedback_find", "plexus_item_info", "upsert_procedure_node"]
         for tool in expected_tools:
             assert tool in result["tool_names"]
         

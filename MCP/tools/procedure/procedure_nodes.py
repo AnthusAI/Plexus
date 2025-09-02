@@ -19,53 +19,37 @@ def register_procedure_node_tools(server, procedure_context: Optional[Dict[str, 
     """Register procedure node management tools."""
     
     @server.tool()
-    async def create_procedure_node(
+    async def upsert_procedure_node(
         procedure_id: str,
-        hypothesis_description: str,
+        node_id: Optional[str] = None,
         node_name: Optional[str] = None,
-        yaml_configuration: Optional[str] = None,
         parent_node_id: Optional[str] = None,
-        initial_value: Optional[Dict[str, Any]] = None
+        status: Optional[str] = None,
+        **metadata_fields
     ) -> str:
         """
-        Create a new procedure node with a specific hypothesis configuration.
+        Create or update a procedure node with arbitrary metadata.
         
-        This tool allows the AI agent to create new procedure nodes to test different
-        hypotheses or variations of the score configuration.
-        
-        IMPORTANT: You must provide both a distinctive node_name and a structured hypothesis_description.
+        This is a general-purpose tool that can create new nodes or update existing ones
+        by storing any key-value pairs in the node's metadata field.
         
         Args:
             procedure_id: ID of the procedure to add the node to
-            hypothesis_description: Structured description with TWO parts:
-                1) GOAL: What you're trying to improve (e.g., "Reduce false positives for medical queries")
-                2) METHOD: Specific implementation approach (e.g., "Add medical domain keywords to classification prompt")
-                Format as "GOAL: [description]\nMETHOD: [specific implementation]"
-            node_name: Optional short, distinctive name for this hypothesis. If not provided, will be 
-                auto-generated from the first few words of the hypothesis description.
-                Examples: "Medical Query Filtering", "Threshold Adjustment v2", "Context-Aware Prompting"
-            yaml_configuration: Optional modified score YAML configuration. If not provided, the node will be 
-                created without an initial configuration - this can be added later in a separate step.
-            parent_node_id: Optional parent node ID (if None, creates child of root node)
-            initial_value: Optional initial computed value (defaults to hypothesis info)
+            node_id: Optional ID of existing node to update (if None, creates new node)
+            node_name: Optional name for the node
+            parent_node_id: Optional parent node ID (if None and creating, uses root node)
+            status: Optional status for the node (e.g., 'ACTIVE', 'QUEUED')
+            **metadata_fields: Any additional key-value pairs to store in node metadata
+                Common fields might include:
+                - hypothesis: Description of what this node is testing
+                - description: General description
+                - config: YAML or other configuration data
+                - created_by: Who/what created this node
             
         Returns:
-            JSON string with creation result and new node details
+            JSON string with operation result and node details
         """
         try:
-            logger.info(f"Creating procedure node for procedure {procedure_id}")
-            
-            # Validate YAML configuration if provided
-            parsed_yaml = None
-            if yaml_configuration:
-                try:
-                    parsed_yaml = yaml.safe_load(yaml_configuration)
-                    logger.debug(f"YAML configuration validated successfully")
-                except yaml.YAMLError as e:
-                    return f"Error: Invalid YAML configuration: {str(e)}"
-            else:
-                logger.debug(f"No YAML configuration provided - node will be created without initial config")
-            
             # Get Plexus client from procedure context if available
             if procedure_context and 'client' in procedure_context:
                 client = procedure_context['client']
@@ -73,291 +57,194 @@ def register_procedure_node_tools(server, procedure_context: Optional[Dict[str, 
                 # Fallback to creating new client (may fail if no credentials)
                 client = PlexusDashboardClient()
             
-            # Get the procedure
-            procedure = Procedure.get_by_id(procedure_id, client)
-            if not procedure:
-                return f"Error: Procedure {procedure_id} not found"
-            
-            # Get the parent node (root node if none specified)
-            if parent_node_id:
-                parent_node = GraphNode.get_by_id(parent_node_id, client)
-                if not parent_node:
-                    return f"Error: Parent node {parent_node_id} not found"
-            else:
-                # Use root node as parent - AI agents CANNOT create root nodes
-                if not procedure.rootNodeId:
-                    return "Error: Procedure has no root node. Root nodes must be created programmatically."
-                parent_node_id = procedure.rootNodeId
-            
-            # CRITICAL: AI agents are FORBIDDEN from creating root-level nodes (parentNodeId=None)
-            # All AI-created nodes MUST have a parent to maintain proper tree structure
-            if parent_node_id is None:
-                return "Error: AI agents cannot create root-level nodes. All nodes must have a parent."
-            
-            # Auto-generate node_name if not provided or validate if provided
-            if not node_name or not node_name.strip():
-                # Auto-generate name from first few words of hypothesis
-                words = hypothesis_description.split()[:4]
-                node_name = " ".join(words)
-                if len(hypothesis_description.split()) > 4:
-                    node_name += "..."
-                # Fallback if name is too long
-                if len(node_name) > 50:
-                    node_name = "Hypothesis Node"
-                logger.info(f"Auto-generated node name: '{node_name}'")
-            else:
-                node_name = node_name.strip()
-                if len(node_name) > 80:
-                    # Truncate instead of failing
-                    node_name = node_name[:77] + "..."
-                    logger.warning(f"Truncated long node name to: '{node_name}'")
-            
-            # Set up initial value with hypothesis info
-            if initial_value is None:
-                initial_value = {
-                    "hypothesis": hypothesis_description,
-                    "created_by": "ai_agent",
-                    "initialized": True
+            # Update existing node
+            if node_id:
+                logger.info(f"Updating existing node {node_id}")
+                
+                # Get the existing node
+                node = GraphNode.get_by_id(node_id, client)
+                if not node:
+                    return f"Error: Node {node_id} not found"
+                
+                # Preserve existing metadata and add new fields
+                current_metadata = node.metadata or {}
+                updated_metadata = {**current_metadata, **metadata_fields}
+                
+                # Update the node
+                updated_node = node.update_content(
+                    status=status,
+                    metadata=updated_metadata
+                )
+                
+                logger.info(f"Successfully updated node {node_id}")
+                
+                result = {
+                    "success": True,
+                    "operation": "update",
+                    "node_id": node_id,
+                    "node_name": node.name,
+                    "procedure_id": procedure_id,
+                    "status": "Node updated successfully",
+                    "metadata": updated_metadata
                 }
+                
+            # Create new node
             else:
-                initial_value["hypothesis"] = hypothesis_description
-                initial_value["created_by"] = "ai_agent"
+                logger.info(f"Creating new node for procedure {procedure_id}")
+                
+                # Get the procedure
+                procedure = Procedure.get_by_id(procedure_id, client)
+                if not procedure:
+                    return f"Error: Procedure {procedure_id} not found"
+                
+                # Determine parent node
+                if not parent_node_id:
+                    # Use root node as parent - AI agents CANNOT create root nodes
+                    if not procedure.rootNodeId:
+                        return "Error: Procedure has no root node. Root nodes must be created programmatically."
+                    parent_node_id = procedure.rootNodeId
+                
+                # Verify parent node exists
+                try:
+                    parent_node_check = GraphNode.get_by_id(parent_node_id, client)
+                    if not parent_node_check:
+                        return f"Error: Parent node {parent_node_id} not accessible"
+                except Exception as e:
+                    return f"Error: Cannot verify parent node {parent_node_id}: {str(e)}"
+                
+                # Auto-generate node name if not provided
+                if not node_name or not node_name.strip():
+                    if 'hypothesis' in metadata_fields:
+                        # Auto-generate name from hypothesis
+                        words = str(metadata_fields['hypothesis']).split()[:4]
+                        node_name = " ".join(words)
+                        if len(str(metadata_fields['hypothesis']).split()) > 4:
+                            node_name += "..."
+                    else:
+                        node_name = "Procedure Node"
+                    
+                    if len(node_name) > 50:
+                        node_name = "Procedure Node"
+                    logger.info(f"Auto-generated node name: '{node_name}'")
+                else:
+                    node_name = node_name.strip()
+                    if len(node_name) > 80:
+                        node_name = node_name[:77] + "..."
+                        logger.warning(f"Truncated long node name to: '{node_name}'")
+                
+                # Create the new node
+                new_node = GraphNode.create(
+                    client=client,
+                    procedureId=procedure_id,
+                    parentNodeId=parent_node_id,
+                    name=node_name,
+                    status=status or 'ACTIVE',
+                    metadata=metadata_fields
+                )
+                
+                logger.info(f"Successfully created node {new_node.id}")
+                
+                result = {
+                    "success": True,
+                    "operation": "create",
+                    "node_id": new_node.id,
+                    "node_name": node_name,
+                    "procedure_id": procedure_id,
+                    "parent_node_id": parent_node_id,
+                    "status": "Node created successfully",
+                    "metadata": metadata_fields
+                }
             
-            # FINAL SAFETY CHECK: Ensure we're not accidentally creating a root node
-            if parent_node_id is None:
-                return "Error: Final safety check failed - cannot create node without parent"
-            
-            # Verify parent node actually exists and is accessible
-            try:
-                parent_node_check = GraphNode.get_by_id(parent_node_id, client)
-                if not parent_node_check:
-                    return f"Error: Parent node {parent_node_id} not accessible"
-            except Exception as e:
-                return f"Error: Cannot verify parent node {parent_node_id}: {str(e)}"
-
-            # Create the new node with code field (required by GraphQL schema)
-            # In simplified schema, code is stored directly on the node, not in separate versions
-            node_code = yaml_configuration or "# No configuration provided - concept-only node"
-            
-            new_node = GraphNode.create(
-                client=client,
-                procedureId=procedure_id,
-                parentNodeId=parent_node_id,
-                name=node_name,
-                status='ACTIVE',
-                code=node_code,  # Required field in GraphQL schema
-                hypothesis=hypothesis_description,  # Store hypothesis directly on node
-                value=initial_value  # Store additional metadata in value field
-            )
-            
-            # Note: hypothesis is now stored directly on the GraphNode, and initial_value in the value field
-            # This ensures the UI can display the hypothesis information properly
-            logger.info(f"Successfully created node {new_node.id} with hypothesis: {hypothesis_description[:100]}...")
-            
-            # NOTE: Chat recording is handled by the main procedure session
-            # Do not create separate chat sessions for individual nodes as this fragments
-            # the conversation. All tool calls and responses should be recorded in the 
-            # single root-level chat session managed by the ProcedureAIRunner.
-            logger.info(f"Node {new_node.id} created - chat recording handled by main session")
-            
-            logger.info(f"Successfully created procedure node {new_node.id}")
-            
-            result = {
-                "success": True,
-                "node_id": new_node.id,
-                "node_name": node_name,
-                "procedure_id": procedure_id,
-                "parent_node_id": parent_node_id,
-                "hypothesis": hypothesis_description,
-                "status": "Node created successfully and ready for testing",
-                "yaml_preview": (yaml_configuration[:200] + "..." if len(yaml_configuration) > 200 else yaml_configuration) if yaml_configuration else "No YAML configuration provided"
-            }
-            
-            return f"Successfully created procedure node: {result}"
+            return f"Successfully completed upsert operation: {result}"
             
         except Exception as e:
-            error_msg = f"Error creating procedure node: {str(e)}"
+            error_msg = f"Error in upsert operation: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return error_msg
     
     @server.tool()
-    async def get_procedure_tree(procedure_id: str) -> str:
+    async def get_procedure_info(procedure_id: str, node_id: Optional[str] = None) -> str:
         """
-        Get the complete procedure tree structure showing all nodes and their relationships.
+        Get information about a procedure and optionally a specific node.
         
-        This tool helps the AI agent understand the current procedure structure before
-        creating new nodes.
+        This tool provides both high-level procedure structure and detailed node information.
         
         Args:
             procedure_id: ID of the procedure to analyze
+            node_id: Optional ID of specific node to get details for
             
         Returns:
-            JSON string with complete procedure tree structure
+            JSON string with procedure and/or node information
         """
         try:
-            logger.info(f"Getting procedure tree for {procedure_id}")
-            
-            # Get Plexus client
-            client = PlexusDashboardClient()
+            # Get Plexus client from procedure context if available
+            if procedure_context and 'client' in procedure_context:
+                client = procedure_context['client']
+            else:
+                client = PlexusDashboardClient()
             
             # Get the procedure
             procedure = Procedure.get_by_id(procedure_id, client)
             if not procedure:
                 return f"Error: Procedure {procedure_id} not found"
             
-            # Get all nodes
-            all_nodes = GraphNode.list_by_procedure(procedure_id, client)
+            result = {
+                "procedure_id": procedure_id,
+                "procedure_name": getattr(procedure, 'name', None),
+                "root_node_id": procedure.rootNodeId
+            }
             
-            # Build tree structure
-            nodes_info = []
-            for node in all_nodes:
-                # In simplified schema, data is stored directly on node (no separate versions)
-                node_info = {
+            # Get specific node info if requested
+            if node_id:
+                logger.info(f"Getting info for node {node_id}")
+                
+                node = GraphNode.get_by_id(node_id, client)
+                if not node:
+                    return f"Error: Node {node_id} not found"
+                
+                result["node"] = {
                     "node_id": node.id,
                     "name": node.name,
                     "status": node.status,
                     "parent_node_id": node.parentNodeId,
-                    "content": {
-                        "code": node.code[:100] + "..." if node.code and len(node.code) > 100 else (node.code if node.code else "No configuration"),
-                        "created_at": node.createdAt,
-                        "updated_at": node.updatedAt
-                    }
-                }
-                nodes_info.append(node_info)
-            
-            # Get root node
-            root_node = procedure.get_root_node()
-            
-            result = {
-                "procedure_id": procedure_id,
-                "total_nodes": len(all_nodes),
-                "root_node_id": root_node.id if root_node else None,
-                "nodes": nodes_info
-            }
-            
-            return f"Procedure tree structure: {result}"
-            
-        except Exception as e:
-            error_msg = f"Error getting procedure tree: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return error_msg
-    
-    @server.tool()
-    async def update_node_content(
-        node_id: str,
-        yaml_configuration: str,
-        update_description: str,
-        computed_value: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """
-        Update the content of an existing procedure node with new configuration.
-        
-        This allows the AI agent to iteratively improve hypotheses by updating node content
-        directly (simplified schema stores data directly on nodes).
-        
-        Args:
-            node_id: ID of the node to update
-            yaml_configuration: Updated YAML configuration
-            update_description: Description of what changed in this update
-            computed_value: Optional computed results (defaults to update info)
-            
-        Returns:
-            JSON string with update result
-        """
-        try:
-            logger.info(f"Updating node {node_id} with new content")
-            
-            # Validate YAML configuration
-            try:
-                parsed_yaml = yaml.safe_load(yaml_configuration)
-                logger.debug(f"YAML configuration validated successfully")
-            except yaml.YAMLError as e:
-                return f"Error: Invalid YAML configuration: {str(e)}"
-            
-            # Get Plexus client from procedure context if available
-            if procedure_context and 'client' in procedure_context:
-                client = procedure_context['client']
-            else:
-                # Fallback to creating new client (may fail if no credentials)
-                client = PlexusDashboardClient()
-            
-            # Get the node
-            node = GraphNode.get_by_id(node_id, client)
-            if not node:
-                return f"Error: Node {node_id} not found"
-            
-            # Set up computed value for tracking
-            if computed_value is None:
-                computed_value = {
-                    "update_description": update_description,
-                    "updated_by": "ai_agent"
+                    "metadata": node.metadata or {},
+                    "created_at": node.createdAt,
+                    "updated_at": node.updatedAt
                 }
             else:
-                computed_value["update_description"] = update_description
-                computed_value["updated_by"] = "ai_agent"
-            
-            # Update node content directly (simplified schema)
-            updated_node = node.update_content(
-                code=yaml_configuration,
-                status='QUEUED',
-                hypothesis=update_description,
-                value=computed_value
-            )
-            
-            logger.info(f"Successfully updated content for node {node_id}")
-            
-            result = {
-                "success": True,
-                "node_id": node_id,
-                "update_description": update_description,
-                "status": "Node content updated successfully and ready for testing",
-                "yaml_preview": yaml_configuration[:200] + "..." if len(yaml_configuration) > 200 else yaml_configuration
-            }
-            
-            return f"Successfully updated node content: {result}"
-            
-        except Exception as e:
-            error_msg = f"Error updating node content: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return error_msg
-    
-    @server.tool()
-    async def delete_procedure_node(node_id: str) -> str:
-        """
-        Delete a procedure node and all its versions.
-        
-        WARNING: This permanently deletes the node and all its data.
-        This action cannot be undone.
-        
-        Args:
-            node_id: ID of the procedure node to delete
-            
-        Returns:
-            Success/error message
-        """
-        try:
-            logger.info(f"Deleting procedure node {node_id}")
-            
-            # Get Plexus client
-            client = PlexusDashboardClient()
-            
-            # Get the node first to verify it exists
-            node = GraphNode.get_by_id(node_id, client)
-            if not node:
-                return f"Error: Procedure node {node_id} not found"
-            
-            # In simplified schema, just delete the node directly (no separate versions)
-            success = node.delete()
-            
-            if success:
-                logger.info(f"Successfully deleted procedure node {node_id}")
-                return f"Successfully deleted procedure node {node_id}"
-            else:
-                return f"Failed to delete procedure node {node_id}"
+                # Get summary of all nodes
+                logger.info(f"Getting all nodes for procedure {procedure_id}")
                 
+                all_nodes = GraphNode.list_by_procedure(procedure_id, client)
+                
+                nodes_summary = []
+                for node in all_nodes:
+                    metadata = node.metadata or {}
+                    
+                    node_summary = {
+                        "node_id": node.id,
+                        "name": node.name,
+                        "status": node.status,
+                        "parent_node_id": node.parentNodeId,
+                        "metadata_keys": list(metadata.keys()),
+                        "created_at": node.createdAt
+                    }
+                    
+                    # Include hypothesis preview if available
+                    if 'hypothesis' in metadata:
+                        hypothesis = str(metadata['hypothesis'])
+                        node_summary["hypothesis_preview"] = hypothesis[:100] + "..." if len(hypothesis) > 100 else hypothesis
+                    
+                    nodes_summary.append(node_summary)
+                
+                result["total_nodes"] = len(all_nodes)
+                result["nodes"] = nodes_summary
+            
+            return f"Procedure information: {result}"
+            
         except Exception as e:
-            error_msg = f"Error deleting procedure node {node_id}: {str(e)}"
+            error_msg = f"Error getting procedure info: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return error_msg
     
-    logger.info("Registered procedure node management tools")
+    logger.info("Registered procedure node tools: upsert_procedure_node, get_procedure_info")
