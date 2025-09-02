@@ -27,6 +27,14 @@ class TestProcedureService(unittest.TestCase):
         self.mock_client = Mock()
         self.service = ProcedureService(self.mock_client)
         
+        # Valid YAML configuration for testing
+        self.valid_yaml_config = """class: BeamSearch
+prompts:
+  worker_system_prompt: "You are a test worker assistant."
+  worker_user_prompt: "Begin test analysis."
+  manager_system_prompt: "You are a test coaching manager."
+"""
+        
         # Mock procedure data
         self.mock_procedure = Mock()
         self.mock_procedure.id = 'exp-123'
@@ -58,7 +66,7 @@ class TestProcedureService(unittest.TestCase):
         # Mock template
         mock_template = Mock()
         mock_template.id = 'template-123'
-        mock_template.get_template_content.return_value = 'class: BeamSearch'
+        mock_template.get_template_content.return_value = self.valid_yaml_config
         mock_template_class.get_default_for_account.return_value = None  # Force creation
         mock_template_class.create.return_value = mock_template
         
@@ -71,7 +79,7 @@ class TestProcedureService(unittest.TestCase):
                 account_identifier='test-account',
                 scorecard_identifier='test-scorecard',
                 score_identifier='test-score',
-                yaml_config='class: BeamSearch',
+                yaml_config=self.valid_yaml_config,
                 featured=True
             )
         
@@ -91,7 +99,7 @@ class TestProcedureService(unittest.TestCase):
             templateId='template-123',
             featured=True
         )
-        self.mock_procedure.create_root_node.assert_called_once_with('class: BeamSearch', None)
+        self.mock_procedure.create_root_node.assert_called_once_with(self.valid_yaml_config, None)
     
     @patch('plexus.cli.procedure.service.resolve_account_identifier')
     def test_create_procedure_account_not_found(self, mock_resolve_account):
@@ -325,7 +333,7 @@ class TestProcedureService(unittest.TestCase):
         self.mock_procedure.get_root_node.return_value = self.mock_root_node
         
         # Mock root node update (no separate versions in simplified schema)
-        yaml_config = "class: ImprovedBeamSearch"
+        yaml_config = self.valid_yaml_config
         note = "Updated configuration"
         
         success, message = self.service.update_procedure_config('exp-123', yaml_config, note)
@@ -358,7 +366,7 @@ class TestProcedureService(unittest.TestCase):
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
         self.mock_procedure.get_root_node.return_value = None
         
-        success, message = self.service.update_procedure_config('exp-123', 'class: BeamSearch')
+        success, message = self.service.update_procedure_config('exp-123', self.valid_yaml_config)
         
         self.assertFalse(success)
         self.assertEqual(message, 'Procedure has no root node')
@@ -372,12 +380,12 @@ class TestProcedureService(unittest.TestCase):
         
         # Mock template
         mock_template = Mock()
-        mock_template.get_template_content.return_value = 'class: BeamSearch'
+        mock_template.get_template_content.return_value = self.valid_yaml_config
         mock_template_class.get_by_id.return_value = mock_template
         
         result = self.service.get_procedure_yaml('exp-123')
         
-        self.assertEqual(result, 'class: BeamSearch')
+        self.assertEqual(result, self.valid_yaml_config)
     
     @patch('plexus.cli.procedure.service.Procedure')
     def test_get_experiment_yaml_no_root_node(self, mock_procedure_class):

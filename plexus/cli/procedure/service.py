@@ -44,48 +44,90 @@ except Exception:
 # Default YAML template loaded from file
 # This ensures the default template always has the latest prompts
 def _load_default_experiment_yaml():
-    """Load the default procedure YAML template."""
-    try:
-        import os
-        # Look for the current-hardcoded-prompts.yaml in the project root
-        template_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'current-hardcoded-prompts.yaml')
-        if os.path.exists(template_path):
-            with open(template_path, 'r') as f:
-                return f.read()
-    except Exception:
-        pass
+    """Load the default procedure YAML template with robust error handling."""
+    import os
+    import yaml
     
-    # Fallback minimal template if file not found
-    return """class: "BeamSearch"
+    # Multiple possible locations for the template file
+    possible_paths = [
+        # Relative to this file
+        os.path.join(os.path.dirname(__file__), '..', '..', '..', 'current-hardcoded-prompts.yaml'),
+        # From current working directory
+        os.path.join(os.getcwd(), 'current-hardcoded-prompts.yaml'),
+        # Absolute path fallback
+        '/Users/ryan.porter/Projects/Plexus/current-hardcoded-prompts.yaml'
+    ]
+    
+    for template_path in possible_paths:
+        try:
+            template_path = os.path.abspath(template_path)
+            if os.path.exists(template_path):
+                logger.info(f"Loading procedure template from: {template_path}")
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template_content = f.read()
+                
+                # Validate that it's parseable YAML
+                try:
+                    template_data = yaml.safe_load(template_content)
+                    # Validate required sections exist
+                    if not _validate_yaml_template(template_data):
+                        logger.warning(f"Template at {template_path} is missing required sections")
+                        continue
+                    
+                    logger.info("Successfully loaded and validated procedure template")
+                    return template_content
+                except yaml.YAMLError as e:
+                    logger.error(f"Invalid YAML in template file {template_path}: {e}")
+                    continue
+        except (IOError, OSError) as e:
+            logger.debug(f"Could not read template from {template_path}: {e}")
+            continue
+    
+    # If we get here, no valid template was found
+    error_msg = f"CRITICAL: Could not load procedure template from any of: {possible_paths}"
+    logger.error(error_msg)
+    raise FileNotFoundError(error_msg)
 
-value: |
-  -- Extract accuracy score from procedure node's structured data
-  local score = experiment_node.value.accuracy or 0
-  -- Apply cost penalty to balance performance vs efficiency  
-  local penalty = (experiment_node.value.cost or 0) * 0.1
-  -- Return single scalar value (higher is better)
-  return score - penalty
 
-exploration: |
-  You are a hypothesis engine in an automated procedure running process for 
-  optimizing scorecard score configurations in a reinforcement learning feedback loop system.
-
-# REQUIRED: Procedures must include prompts section
-# Copy from current-hardcoded-prompts.yaml or create custom prompts
-max_total_rounds: 500
-
-prompts:
-  worker_system_prompt: |
-    ERROR: Default template must be loaded from current-hardcoded-prompts.yaml
-    Please specify a complete YAML configuration with prompts section.
-  worker_user_prompt: |
-    ERROR: Missing prompts configuration
-  manager_system_prompt: |
-    ERROR: Missing prompts configuration
-"""
+def _validate_yaml_template(template_data):
+    """Validate that a YAML template has required sections for procedures."""
+    if not isinstance(template_data, dict):
+        return False
+    
+    # Check for required top-level keys
+    required_keys = ['class', 'prompts']
+    for key in required_keys:
+        if key not in template_data:
+            logger.warning(f"Template missing required key: {key}")
+            return False
+    
+    # Check for required prompt sections
+    prompts = template_data.get('prompts', {})
+    required_prompts = ['worker_system_prompt', 'worker_user_prompt', 'manager_system_prompt']
+    for prompt_key in required_prompts:
+        if prompt_key not in prompts:
+            logger.warning(f"Template missing required prompt: {prompt_key}")
+            return False
+        if not prompts[prompt_key] or prompts[prompt_key].strip() == '':
+            logger.warning(f"Template has empty prompt: {prompt_key}")
+            return False
+    
+    return True
 
 # Load the default template
-DEFAULT_PROCEDURE_YAML = _load_default_experiment_yaml()
+try:
+    DEFAULT_PROCEDURE_YAML = _load_default_experiment_yaml()
+except FileNotFoundError as e:
+    logger.error(f"Failed to load default procedure template: {e}")
+    # Provide a minimal working template as absolute fallback
+    DEFAULT_PROCEDURE_YAML = """class: "BeamSearch"
+value: "return 1"
+max_total_rounds: 500
+prompts:
+  worker_system_prompt: "You are a procedure analysis assistant."
+  worker_user_prompt: "Begin analysis."
+  manager_system_prompt: "You are a coaching manager."
+"""
 
 @dataclass
 class ProcedureCreationResult:
@@ -236,7 +278,15 @@ class ProcedureService:
                 # Validate YAML
                 if yaml_config:
                     try:
-                        yaml.safe_load(yaml_config)
+                        yaml_data = yaml.safe_load(yaml_config)
+                        # Enhanced validation - check for required structure
+                        if not _validate_yaml_template(yaml_data):
+                            return ProcedureCreationResult(
+                                procedure=None,
+                                root_node=None,
+                                success=False,
+                                message="YAML configuration is missing required sections (class, prompts with worker_system_prompt, worker_user_prompt, manager_system_prompt)"
+                            )
                     except yaml.YAMLError as e:
                         return ProcedureCreationResult(
                             procedure=None,
@@ -435,7 +485,10 @@ class ProcedureService:
         try:
             # Validate YAML
             try:
-                yaml.safe_load(yaml_config)
+                yaml_data = yaml.safe_load(yaml_config)
+                # Enhanced validation - check for required structure
+                if not _validate_yaml_template(yaml_data):
+                    return False, "YAML configuration is missing required sections (class, prompts with worker_system_prompt, worker_user_prompt, manager_system_prompt)"
             except yaml.YAMLError as e:
                 return False, f"Invalid YAML configuration: {str(e)}"
             
