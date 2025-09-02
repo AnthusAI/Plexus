@@ -39,7 +39,8 @@ class ProcedureProcedureDefinition:
         # Worker agent gets access to a curated subset of tools
         self.available_tools = [
             "plexus_feedback_find", 
-            "create_procedure_node", 
+            "upsert_procedure_node", 
+            "get_procedure_info",
             "stop_procedure"
         ]
         # Will be set by ProcedureSOPAgent.setup() when YAML is parsed
@@ -102,7 +103,7 @@ class ProcedureProcedureDefinition:
         Process a prompt template with variable substitution.
         
         Supports template variables from context and state_data:
-        - {procedure_id}
+        - {procedure_id} or {experiment_id} (both map to procedure_id)
         - {scorecard_name}
         - {score_name}
         - {current_score_config}
@@ -124,17 +125,25 @@ class ProcedureProcedureDefinition:
             # Add context variables
             if context:
                 template_vars.update(context)
+                # Add backward compatibility mapping for experiment_id -> procedure_id
+                if 'procedure_id' in context:
+                    template_vars['experiment_id'] = context['procedure_id']
             
             # Add state data variables
             if state_data:
                 template_vars.update(state_data)
             
+            # Debug logging to see what variables are available
+            logger.debug(f"Template variables available: {list(template_vars.keys())}")
+            
             # Use simple string formatting for now (could upgrade to Jinja2 later)
-            return prompt_template.format(**template_vars)
+            result = prompt_template.format(**template_vars)
+            logger.debug(f"Template processed successfully")
+            return result
             
         except KeyError as e:
             # If template variable is missing, log warning and return template as-is
-            logger.warning(f"Template variable {e} not found in context, using template as-is")
+            logger.warning(f"Template variable {e} not found in context. Available variables: {list(template_vars.keys()) if 'template_vars' in locals() else 'unknown'}")
             return prompt_template
         except Exception as e:
             # If any other formatting error occurs, log and return template as-is
@@ -182,7 +191,7 @@ class ProcedureProcedureDefinition:
         round_num = state_data.get("round", 0)
         
         # Count procedure node creation tools used (more accurate than nodes_created)
-        create_node_calls = sum(1 for tool in tools_used if tool == "create_procedure_node")
+        create_node_calls = sum(1 for tool in tools_used if tool == "upsert_procedure_node")
         
         if create_node_calls == 0:
             return "Procedure analysis completed but no hypothesis nodes were created."
@@ -317,7 +326,7 @@ class ProcedureSOPAgent:
             # Transform result to match procedure expectations
             if result.get("success"):
                 # Count nodes created from tools used
-                nodes_created = len([tool for tool in result.get("tools_used", []) if tool == "create_procedure_node"])
+                nodes_created = len([tool for tool in result.get("tools_used", []) if tool == "upsert_procedure_node"])
                 
                 experiment_result = {
                     "success": True,
