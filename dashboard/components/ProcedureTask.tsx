@@ -162,10 +162,32 @@ export default function ProcedureTask({
   const taskData: BaseTaskData = {
     id: procedure.id,
     title: procedure.title,
-    time: procedure.createdAt,
+    description: procedure.description,
+    errorMessage: procedure.errorMessage,
+    command: procedure.command
+  }
+
+  // Create the task object that matches the Task component's expected interface
+  const taskObject = {
+    id: procedure.id,
+    type: 'Procedure',
+    name: procedure.title,
+    description: procedure.description,
     scorecard: procedure.scorecard?.name || '',
     score: procedure.score?.name || '',
-    task: procedure.task
+    time: procedure.createdAt,
+    command: procedure.command,
+    output: (procedure as any).output, // May not exist in type definition yet
+    data: taskData,
+    stages: (procedure as any).stages, // May not exist in type definition yet
+    currentStageName: (procedure as any).currentStageName, // May not exist in type definition yet
+    processedItems: (procedure as any).processedItems, // May not exist in type definition yet
+    totalItems: (procedure as any).totalItems, // May not exist in type definition yet
+    startedAt: (procedure as any).startedAt, // May not exist in type definition yet
+    estimatedCompletionAt: (procedure as any).estimatedCompletionAt, // May not exist in type definition yet
+    completedAt: (procedure as any).completedAt, // May not exist in type definition yet
+    status: (procedure as any).status, // May not exist in type definition yet
+    errorMessage: procedure.errorMessage
   }
 
   const headerContent = (
@@ -259,7 +281,7 @@ export default function ProcedureTask({
       return (
         <TaskHeader
           variant={variant}
-          task={taskData}
+          task={taskObject}
           controlButtons={controlButtons}
           isFullWidth={isFullWidth}
           onToggleFullWidth={onToggleFullWidth}
@@ -270,7 +292,7 @@ export default function ProcedureTask({
   }
 
   const renderContent = () => (
-    <TaskContent variant={variant} task={taskData}>
+    <TaskContent variant={variant} task={taskObject}>
       {variant === 'grid' ? (
         // Empty grid content since all info is now in header
         null
@@ -367,7 +389,7 @@ export default function ProcedureTask({
   return (
     <Task
       variant={variant}
-      task={taskData}
+      task={taskObject}
       onClick={onClick}
       controlButtons={headerContent}
       isFullWidth={isFullWidth}
