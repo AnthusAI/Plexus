@@ -91,12 +91,12 @@ auth = OAuthProxy(
     upstream_client_secret=COGNITO_CLIENT_SECRET,
     token_verifier=token_verifier,
     base_url=MCP_SERVER_BASE_URL,
-    redirect_path="/auth/callback"  # Configure this in your Cognito app callback URLs
+    redirect_path="/mcp/auth/callback"  # Maintain /mcp prefix for load balancer routing
 )
 
 print(f"OAuth configured with Cognito domain: {COGNITO_DOMAIN}", file=sys.stderr)
 print(f"Server base URL: {MCP_SERVER_BASE_URL}", file=sys.stderr)
-print(f"Callback URL: {MCP_SERVER_BASE_URL}/auth/callback", file=sys.stderr)
+print(f"Callback URL: {MCP_SERVER_BASE_URL}/mcp/auth/callback", file=sys.stderr)
 
 # Import the original MCP to get its configuration
 from plexus_fastmcp_server import mcp as original_mcp
