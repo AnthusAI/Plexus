@@ -334,7 +334,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
       name: `${template.name} (Copy)`,
       description: template.description || '',
       template: template.template,
-      version: template.version,
+      version: (template as any).version || '1.0',
       category: template.category || 'hypothesis_generation',
       isDefault: false
     })
@@ -367,7 +367,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
       name: template.name,
       description: template.description,
       template: template.template,
-      version: template.version,
+      version: (template as any).version || '1.0',
       category: template.category
     }, null, 2)
     
@@ -375,7 +375,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
     const url = URL.createObjectURL(dataBlob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `${template.name}-v${template.version}.json`
+    link.download = `${template.name}-v${(template as any).version || '1.0'}.json`
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -424,11 +424,11 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
                         </CardDescription>
                       </div>
                       <div className="flex items-center gap-1">
-                        {template.isDefault && (
+                        {(template as any).isDefault && (
                           <Badge variant="default" className="text-xs">Default</Badge>
                         )}
                         <Badge variant="outline" className="text-xs">
-                          v{template.version}
+                          v{(template as any).version || '1.0'}
                         </Badge>
                       </div>
                     </div>
@@ -471,7 +471,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
                           size="sm"
                           variant="destructive"
                           onClick={() => handleDeleteTemplate(template)}
-                          disabled={template.isDefault || false}
+                          disabled={(template as any).isDefault || false}
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>

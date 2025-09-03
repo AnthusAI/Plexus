@@ -361,12 +361,12 @@ mcp = FastMCP(
     - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback analysis and score testing guide)
     
     ## Experiment Tools
-    - plexus_experiment_create: Create a new experiment
-    - plexus_experiment_list: List experiments for an account
-    - plexus_experiment_info: Get detailed experiment information
-    - plexus_experiment_run: Run an experiment 
-    - plexus_experiment_chat_sessions: Get chat sessions for an experiment (optional - shows conversation activity)
-    - plexus_experiment_chat_messages: Get detailed chat messages for debugging conversation flow and tool calls/responses
+    - plexus_procedure_create: Create a new procedure
+    - plexus_procedure_list: List procedures for an account
+    - plexus_procedure_info: Get detailed procedure information
+    - plexus_procedure_run: Run a procedure 
+    - plexus_procedure_chat_sessions: Get chat sessions for a procedure (optional - shows conversation activity)
+    - plexus_procedure_chat_messages: Get detailed chat messages for debugging conversation flow and tool calls/responses
     
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
@@ -389,7 +389,7 @@ try:
     from tools.documentation.docs import register_documentation_tools
     from tools.cost.analysis import register_cost_analysis_tools
     from tools.dataset.datasets import register_dataset_tools
-    from tools.experiment.experiments import register_experiment_tools
+    from tools.procedure.procedures import register_procedure_tools
     
     register_think_tool(mcp)
     register_scorecard_tools(mcp)
@@ -403,7 +403,7 @@ try:
     register_documentation_tools(mcp)
     register_cost_analysis_tools(mcp)
     register_dataset_tools(mcp)
-    register_experiment_tools(mcp)
+    register_procedure_tools(mcp)
     
     logger.info("Successfully registered separated tools")
 except ImportError as e:

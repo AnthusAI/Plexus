@@ -97,12 +97,12 @@ class FakeO3Model:
 
 
 def test_sop_story_analyze_then_apply_two_nodes(monkeypatch):
-    from plexus.cli.experiment.experiment_sop_agent import ExperimentSOPAgent
+    from plexus.cli.procedure.procedure_sop_agent import ProcedureSOPAgent
 
     # Prepare deterministic tool list (names only needed for extraction)
     fake_tools = [
         SimpleNamespace(name='plexus_feedback_analysis', description='Analyze feedback', func=lambda _: "ok"),
-        SimpleNamespace(name='create_experiment_node', description='Create hypothesis node', func=lambda _: "ok"),
+        SimpleNamespace(name='create_procedure_node', description='Create hypothesis node', func=lambda _: "ok"),
     ]
 
     # Stub LangChainMCPAdapter to return our tools
@@ -134,16 +134,21 @@ def test_sop_story_analyze_then_apply_two_nodes(monkeypatch):
                     func=make_tool_func('plexus_feedback_analysis')
                 ),
                 SimpleNamespace(
-                    name='create_experiment_node', 
+                    name='create_procedure_node', 
                     description='Create hypothesis node', 
-                    func=make_tool_func('create_experiment_node')
+                    func=make_tool_func('create_procedure_node')
+                ),
+                SimpleNamespace(
+                    name='stop_procedure', 
+                    description='Stop the procedure', 
+                    func=make_tool_func('stop_procedure')
                 ),
             ]
             self._tools_loaded = True
             return self.tools
 
     monkeypatch.setattr(
-        'plexus.cli.experiment.experiment_sop_agent.LangChainMCPAdapter', FakeAdapter
+        'plexus.cli.procedure.mcp_adapter.LangChainMCPAdapter', FakeAdapter
     )
 
     # Note: Tool execution is handled through the MCPTool.func interface
@@ -156,13 +161,13 @@ def test_sop_story_analyze_then_apply_two_nodes(monkeypatch):
         # Round 2: after analysis, provide reasoning
         'Based on my analysis, I can see patterns in the feedback data. Let me create hypothesis nodes.',
         # Round 3: first node
-        '{"tool":"create_experiment_node","arguments":{"experiment_id":"story-exp","hypothesis_description":"GOAL: Reduce errors | METHOD: Adjust thresholds","node_name":"Hypothesis A"}}',
+        '{"tool":"create_procedure_node","arguments":{"procedure_id":"story-exp","hypothesis_description":"GOAL: Reduce errors | METHOD: Adjust thresholds","node_name":"Hypothesis A"}}',
         # Round 4: after first node, create second
         'Successfully created first hypothesis. Now creating a second approach.',
         # Round 5: second node
-        '{"tool":"create_experiment_node","arguments":{"experiment_id":"story-exp","hypothesis_description":"GOAL: Improve recall | METHOD: Expand patterns","node_name":"Hypothesis B"}}',
+        '{"tool":"create_procedure_node","arguments":{"procedure_id":"story-exp","hypothesis_description":"GOAL: Improve recall | METHOD: Expand patterns","node_name":"Hypothesis B"}}',
         # Round 6: completion
-        'Successfully created two hypothesis nodes for testing.',
+        '{"tool":"stop_procedure","arguments":{"reason":"Successfully created two hypothesis nodes as requested"}}',
         # Extra responses for any additional conversation rounds
         'Session summary: created two nodes after analysis.',
         'Analysis complete.',
@@ -178,9 +183,9 @@ def test_sop_story_analyze_then_apply_two_nodes(monkeypatch):
     async def fake_orchestrator(self, conversation_history, state_data):
         return "Continue to next step."
 
-    # Patch the StandardOperatingProcedureAgent that is used by ExperimentSOPAgent
+    # Patch the StandardOperatingProcedureAgent that is used by ProcedureSOPAgent
     monkeypatch.setattr(
-        'plexus.cli.experiment.sop_agent_base.StandardOperatingProcedureAgent._generate_sop_guidance', fake_orchestrator
+        'plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent._generate_sop_guidance', fake_orchestrator
     )
 
     # Provide a minimal client that allows chat recording to proceed without errors
@@ -231,8 +236,8 @@ prompts:
 
     async def run_story():
         # Run the flow end-to-end with stubs
-        experiment_agent = ExperimentSOPAgent(
-            experiment_id='story-exp',
+        experiment_agent = ProcedureSOPAgent(
+            procedure_id='story-exp',
             mcp_server=FakeMCPServer(),
             client=FakeClient(),
             openai_api_key='test-key',
@@ -240,14 +245,14 @@ prompts:
         )
 
         assert await experiment_agent.setup(experiment_yaml) is True
-        return await experiment_agent.execute_sop_guided_experiment()
+        return await experiment_agent.execute_sop_guided_procedure()
 
     # Execute the async story in a synchronous test
     result = asyncio.run(run_story())
 
     # High-level story assertions - adjust expectations for current test state
     assert result['success'] is True
-    assert result['experiment_id'] == 'story-exp'
+    assert result['procedure_id'] == 'story-exp'
     
     # For now, just verify the system ran without crashing
     # The fake model system is working (tool calls are detected)

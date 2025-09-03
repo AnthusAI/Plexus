@@ -865,7 +865,7 @@ class PlexusDashboardClient(_BaseAPIClient):
                 accountId
                 scorecardId
                 scoreId
-                experimentId
+                procedureId
                 name
                 category
                 status
@@ -887,7 +887,7 @@ class PlexusDashboardClient(_BaseAPIClient):
             createChatMessage(input: $input) {
                 id
                 sessionId
-                experimentId
+                procedureId
                 role
                 content
                 metadata
@@ -909,7 +909,7 @@ class PlexusDashboardClient(_BaseAPIClient):
                 accountId
                 scorecardId
                 scoreId
-                experimentId
+                procedureId
                 status
                 metadata
                 createdAt
@@ -931,7 +931,7 @@ class PlexusDashboardClient(_BaseAPIClient):
                 accountId
                 scorecardId
                 scoreId
-                experimentId
+                procedureId
                 status
                 metadata
                 createdAt
@@ -955,16 +955,16 @@ class PlexusDashboardClient(_BaseAPIClient):
         if experiment_id:
             # Query by experiment GSI for chronological order
             query = '''
-            query ListChatMessagesByExperiment($experimentId: String!, $limit: Int, $sortDirection: ModelSortDirection) {
+            query ListChatMessagesByExperiment($procedureId: String!, $limit: Int, $sortDirection: ModelSortDirection) {
                 listChatMessages(
-                    filter: { experimentId: { eq: $experimentId } }
+                    filter: { procedureId: { eq: $procedureId } }
                     limit: $limit
                     sortDirection: $sortDirection
                 ) {
                     items {
                         id
                         sessionId
-                        experimentId
+                        procedureId
                         role
                         content
                         metadata
@@ -974,7 +974,7 @@ class PlexusDashboardClient(_BaseAPIClient):
             }
             '''
             variables = {
-                "experimentId": experiment_id,
+                "procedureId": experiment_id,
                 "limit": limit,
                 "sortDirection": "ASC" if sort_by == 'createdAt' else "DESC"
             }
@@ -990,7 +990,7 @@ class PlexusDashboardClient(_BaseAPIClient):
                     items {
                         id
                         sessionId
-                        experimentId
+                        procedureId
                         role
                         content
                         metadata
@@ -1014,9 +1014,9 @@ class PlexusDashboardClient(_BaseAPIClient):
         if experiment_id:
             # Query by experiment GSI
             query = '''
-            query ListChatSessionsByExperiment($experimentId: String!, $limit: Int) {
+            query ListChatSessionsByExperiment($procedureId: String!, $limit: Int) {
                 listChatSessions(
-                    filter: { experimentId: { eq: $experimentId } }
+                    filter: { procedureId: { eq: $procedureId } }
                     limit: $limit
                     sortDirection: DESC
                 ) {
@@ -1025,7 +1025,7 @@ class PlexusDashboardClient(_BaseAPIClient):
                         accountId
                         scorecardId
                         scoreId
-                        experimentId
+                        procedureId
                         status
                         metadata
                         createdAt
@@ -1034,7 +1034,7 @@ class PlexusDashboardClient(_BaseAPIClient):
                 }
             }
             '''
-            variables = {"experimentId": experiment_id, "limit": limit}
+            variables = {"procedureId": experiment_id, "limit": limit}
         else:
             # Query by account
             query = '''
@@ -1049,7 +1049,7 @@ class PlexusDashboardClient(_BaseAPIClient):
                         accountId
                         scorecardId
                         scoreId
-                        experimentId
+                        procedureId
                         status
                         metadata
                         createdAt

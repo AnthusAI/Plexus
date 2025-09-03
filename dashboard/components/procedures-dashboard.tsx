@@ -820,7 +820,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                 <ProcedureConversationViewer 
                   procedureId={selectedProcedureId} 
                   onSessionCountChange={() => {}} // We don't need to track session count here
-                  isFullscreen={true}
                 />
               </div>
             </div>
