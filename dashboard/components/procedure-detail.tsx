@@ -421,7 +421,7 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
                       <span>Graph Nodes</span>
                     </div>
                   </AccordionTrigger>
-                  <AccordionContent>
+                  <AccordionContent className="bg-background rounded-lg p-4">
                     <GraphNodesList procedureId={procedureId} />
                   </AccordionContent>
                 </AccordionItem>

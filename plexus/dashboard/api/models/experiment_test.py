@@ -1,23 +1,23 @@
 """
-Tests for Experiment Model.
+Tests for Procedure Model.
 
-Tests the Experiment model's functionality including:
-- Creating experiments
-- Listing and filtering experiments
-- Updating experiment properties
+Tests the Procedure model's functionality including:
+- Creating procedures
+- Listing and filtering procedures
+- Updating procedure properties
 - Managing root nodes
-- Deleting experiments
+- Deleting procedures
 """
 
 import pytest
 import unittest
 from unittest.mock import Mock, patch
 from datetime import datetime
-from plexus.dashboard.api.models.experiment import Experiment
+from plexus.dashboard.api.models.procedure import Procedure
 
 
-class TestExperiment(unittest.TestCase):
-    """Test cases for the Experiment model."""
+class TestProcedure(unittest.TestCase):
+    """Test cases for the Procedure model."""
     
     def setUp(self):
         """Set up test fixtures."""
@@ -35,7 +35,7 @@ class TestExperiment(unittest.TestCase):
     
     def test_fields(self):
         """Test that fields() returns the correct GraphQL fields."""
-        fields = Experiment.fields()
+        fields = Procedure.fields()
         expected_fields = [
             'id', 'featured', 'rootNodeId', 'createdAt', 'updatedAt',
             'accountId', 'scorecardId', 'scoreId'
@@ -45,21 +45,21 @@ class TestExperiment(unittest.TestCase):
             self.assertIn(field, fields)
     
     def test_from_dict(self):
-        """Test creating an Experiment from dictionary data."""
-        experiment = Experiment.from_dict(self.sample_data, self.mock_client)
+        """Test creating a Procedure from dictionary data."""
+        procedure = Procedure.from_dict(self.sample_data, self.mock_client)
         
-        self.assertEqual(experiment.id, 'exp-123')
-        self.assertTrue(experiment.featured)
-        self.assertEqual(experiment.rootNodeId, 'node-456')
-        self.assertEqual(experiment.accountId, 'account-789')
-        self.assertEqual(experiment.scorecardId, 'scorecard-abc')
-        self.assertEqual(experiment.scoreId, 'score-def')
-        self.assertIsInstance(experiment.createdAt, datetime)
-        self.assertIsInstance(experiment.updatedAt, datetime)
-        self.assertEqual(experiment._client, self.mock_client)
+        self.assertEqual(procedure.id, 'exp-123')
+        self.assertTrue(procedure.featured)
+        self.assertEqual(procedure.rootNodeId, 'node-456')
+        self.assertEqual(procedure.accountId, 'account-789')
+        self.assertEqual(procedure.scorecardId, 'scorecard-abc')
+        self.assertEqual(procedure.scoreId, 'score-def')
+        self.assertIsInstance(procedure.createdAt, datetime)
+        self.assertIsInstance(procedure.updatedAt, datetime)
+        self.assertEqual(procedure._client, self.mock_client)
     
     def test_from_dict_optional_fields(self):
-        """Test creating an Experiment with optional fields missing."""
+        """Test creating a Procedure with optional fields missing."""
         minimal_data = {
             'id': 'exp-123',
             'createdAt': '2024-01-15T10:30:00Z',
@@ -67,21 +67,21 @@ class TestExperiment(unittest.TestCase):
             'accountId': 'account-789'
         }
         
-        experiment = Experiment.from_dict(minimal_data, self.mock_client)
+        procedure = Procedure.from_dict(minimal_data, self.mock_client)
         
-        self.assertEqual(experiment.id, 'exp-123')
-        self.assertFalse(experiment.featured)  # Should default to False
-        self.assertIsNone(experiment.rootNodeId)
-        self.assertIsNone(experiment.scorecardId)
-        self.assertIsNone(experiment.scoreId)
+        self.assertEqual(procedure.id, 'exp-123')
+        self.assertFalse(procedure.featured)  # Should default to False
+        self.assertIsNone(procedure.rootNodeId)
+        self.assertIsNone(procedure.scorecardId)
+        self.assertIsNone(procedure.scoreId)
     
     def test_create(self):
-        """Test creating a new experiment."""
+        """Test creating a new procedure."""
         self.mock_client.execute.return_value = {
-            'createExperiment': self.sample_data
+            'createProcedure': self.sample_data
         }
         
-        experiment = Experiment.create(
+        procedure = Procedure.create(
             client=self.mock_client,
             accountId='account-789',
             scorecardId='scorecard-abc',
@@ -92,7 +92,7 @@ class TestExperiment(unittest.TestCase):
         # Verify GraphQL call
         self.mock_client.execute.assert_called_once()
         call_args = self.mock_client.execute.call_args
-        self.assertIn('createExperiment', call_args[0][0])
+        self.assertIn('createProcedure', call_args[0][0])
         
         # Get variables from call args - call_args is (args, kwargs)
         mutation_string = call_args[0][0]
@@ -103,59 +103,59 @@ class TestExperiment(unittest.TestCase):
         self.assertEqual(input_data['scoreId'], 'score-def')
         self.assertTrue(input_data['featured'])
         
-        # Verify returned experiment
-        self.assertEqual(experiment.id, 'exp-123')
-        self.assertTrue(experiment.featured)
+        # Verify returned procedure
+        self.assertEqual(procedure.id, 'exp-123')
+        self.assertTrue(procedure.featured)
     
     def test_list_by_account(self):
-        """Test listing experiments by account."""
+        """Test listing procedures by account."""
         self.mock_client.execute.return_value = {
-            'listExperimentByAccountIdAndUpdatedAt': {
+            'listProcedureByAccountIdAndUpdatedAt': {
                 'items': [self.sample_data]
             }
         }
         
-        experiments = Experiment.list_by_account('account-789', self.mock_client, limit=50)
+        procedures = Procedure.list_by_account('account-789', self.mock_client, limit=50)
         
         # Verify GraphQL call
         self.mock_client.execute.assert_called_once()
         call_args = self.mock_client.execute.call_args
-        self.assertIn('listExperimentByAccountIdAndUpdatedAt', call_args[0][0])
+        self.assertIn('listProcedureByAccountIdAndUpdatedAt', call_args[0][0])
         self.assertIn('sortDirection: DESC', call_args[0][0])
         
         variables = call_args[0][1]  # Second positional argument
         self.assertEqual(variables['accountId'], 'account-789')
         self.assertEqual(variables['limit'], 50)
         
-        # Verify returned experiments
-        self.assertEqual(len(experiments), 1)
-        self.assertEqual(experiments[0].id, 'exp-123')
+        # Verify returned procedures
+        self.assertEqual(len(procedures), 1)
+        self.assertEqual(procedures[0].id, 'exp-123')
     
     def test_list_by_scorecard(self):
-        """Test listing experiments by scorecard."""
+        """Test listing procedures by scorecard."""
         self.mock_client.execute.return_value = {
-            'listExperimentByScorecardIdAndUpdatedAt': {
+            'listProcedureByScorecardIdAndUpdatedAt': {
                 'items': [self.sample_data]
             }
         }
         
-        experiments = Experiment.list_by_scorecard('scorecard-abc', self.mock_client)
+        procedures = Procedure.list_by_scorecard('scorecard-abc', self.mock_client)
         
         # Verify GraphQL call
         self.mock_client.execute.assert_called_once()
         call_args = self.mock_client.execute.call_args
-        self.assertIn('listExperimentByScorecardIdAndUpdatedAt', call_args[0][0])
+        self.assertIn('listProcedureByScorecardIdAndUpdatedAt', call_args[0][0])
         
         variables = call_args[0][1]  # Second positional argument
         self.assertEqual(variables['scorecardId'], 'scorecard-abc')
         
-        # Verify returned experiments
-        self.assertEqual(len(experiments), 1)
-        self.assertEqual(experiments[0].id, 'exp-123')
+        # Verify returned procedures
+        self.assertEqual(len(procedures), 1)
+        self.assertEqual(procedures[0].id, 'exp-123')
     
     def test_update(self):
-        """Test updating an experiment."""
-        experiment = Experiment.from_dict(self.sample_data, self.mock_client)
+        """Test updating a procedure."""
+        procedure = Procedure.from_dict(self.sample_data, self.mock_client)
         
         updated_data = self.sample_data.copy()
         updated_data['featured'] = False
@@ -163,15 +163,15 @@ class TestExperiment(unittest.TestCase):
         updated_data['updatedAt'] = '2024-01-15T12:00:00Z'
         
         self.mock_client.execute.return_value = {
-            'updateExperiment': updated_data
+            'updateProcedure': updated_data
         }
         
-        result = experiment.update(featured=False, scoreId='new-score-123')
+        result = procedure.update(featured=False, scoreId='new-score-123')
         
         # Verify GraphQL call
         self.mock_client.execute.assert_called_once()
         call_args = self.mock_client.execute.call_args
-        self.assertIn('updateExperiment', call_args[0][0])
+        self.assertIn('updateProcedure', call_args[0][0])
         
         variables = call_args[0][1]  # Second positional argument
         input_data = variables['input']
@@ -180,31 +180,31 @@ class TestExperiment(unittest.TestCase):
         self.assertEqual(input_data['scoreId'], 'new-score-123')
         
         # Verify instance was updated
-        self.assertFalse(experiment.featured)
-        self.assertEqual(experiment.scoreId, 'new-score-123')
-        self.assertEqual(result, experiment)
+        self.assertFalse(procedure.featured)
+        self.assertEqual(procedure.scoreId, 'new-score-123')
+        self.assertEqual(result, procedure)
     
     def test_update_without_client(self):
         """Test that update raises error without client."""
-        experiment = Experiment('exp-123', True, 'account-789', datetime.now(), datetime.now())
+        procedure = Procedure('exp-123', True, 'account-789', datetime.now(), datetime.now())
         
         with self.assertRaises(ValueError):
-            experiment.update(featured=False)
+            procedure.update(featured=False)
     
     def test_delete(self):
-        """Test deleting an experiment."""
-        experiment = Experiment.from_dict(self.sample_data, self.mock_client)
+        """Test deleting a procedure."""
+        procedure = Procedure.from_dict(self.sample_data, self.mock_client)
         
         self.mock_client.execute.return_value = {
-            'deleteExperiment': {'id': 'exp-123'}
+            'deleteProcedure': {'id': 'exp-123'}
         }
         
-        result = experiment.delete()
+        result = procedure.delete()
         
         # Verify GraphQL call
         self.mock_client.execute.assert_called_once()
         call_args = self.mock_client.execute.call_args
-        self.assertIn('deleteExperiment', call_args[0][0])
+        self.assertIn('deleteProcedure', call_args[0][0])
         
         variables = call_args[0][1]  # Second positional argument
         input_data = variables['input']
@@ -215,32 +215,32 @@ class TestExperiment(unittest.TestCase):
     
     def test_delete_failure(self):
         """Test delete when API returns failure."""
-        experiment = Experiment.from_dict(self.sample_data, self.mock_client)
+        procedure = Procedure.from_dict(self.sample_data, self.mock_client)
         
         self.mock_client.execute.return_value = {
-            'deleteExperiment': None
+            'deleteProcedure': None
         }
         
-        result = experiment.delete()
+        result = procedure.delete()
         self.assertFalse(result)
     
     def test_delete_without_client(self):
         """Test that delete raises error without client."""
-        experiment = Experiment('exp-123', True, 'account-789', datetime.now(), datetime.now())
+        procedure = Procedure('exp-123', True, 'account-789', datetime.now(), datetime.now())
         
         with self.assertRaises(ValueError):
-            experiment.delete()
+            procedure.delete()
     
     def test_get_root_node(self):
         """Test getting the root node."""
-        experiment = Experiment.from_dict(self.sample_data, self.mock_client)
+        procedure = Procedure.from_dict(self.sample_data, self.mock_client)
         
         mock_node = Mock()
         
-        with patch('plexus.dashboard.api.models.experiment_node.ExperimentNode') as mock_node_class:
+        with patch('plexus.dashboard.api.models.graph_node.GraphNode') as mock_node_class:
             mock_node_class.get_by_id.return_value = mock_node
             
-            result = experiment.get_root_node()
+            result = procedure.get_root_node()
             
             mock_node_class.get_by_id.assert_called_once_with('node-456', self.mock_client)
             self.assertEqual(result, mock_node)
@@ -249,66 +249,51 @@ class TestExperiment(unittest.TestCase):
         """Test getting root node when no root node ID."""
         data = self.sample_data.copy()
         data['rootNodeId'] = None
-        experiment = Experiment.from_dict(data, self.mock_client)
+        procedure = Procedure.from_dict(data, self.mock_client)
         
-        result = experiment.get_root_node()
+        result = procedure.get_root_node()
         self.assertIsNone(result)
     
     def test_get_root_node_without_client(self):
         """Test getting root node without client."""
-        experiment = Experiment('exp-123', True, 'account-789', datetime.now(), datetime.now())
-        experiment.rootNodeId = 'node-456'
+        procedure = Procedure('exp-123', True, 'account-789', datetime.now(), datetime.now())
+        procedure.rootNodeId = 'node-456'
         
-        result = experiment.get_root_node()
+        result = procedure.get_root_node()
         self.assertIsNone(result)
     
     def test_create_root_node(self):
-        """Test creating a root node with initial version."""
-        experiment = Experiment.from_dict(self.sample_data, self.mock_client)
+        """Test creating a root node with initial metadata."""
+        procedure = Procedure.from_dict(self.sample_data, self.mock_client)
         
         mock_node = Mock()
         mock_node.id = 'new-node-123'
-        
-        mock_version = Mock()
-        mock_version.id = 'version-456'
         
         # Mock the update call
         updated_data = self.sample_data.copy()
         updated_data['rootNodeId'] = 'new-node-123'
         self.mock_client.execute.return_value = {
-            'updateExperiment': updated_data
+            'updateProcedure': updated_data
         }
         
         yaml_config = "class: BeamSearch"
-        initial_value = {"test": True}
+        initial_metadata = {"test": True}
         
-        with patch('plexus.dashboard.api.models.experiment_node.ExperimentNode') as mock_node_class, \
-             patch('plexus.dashboard.api.models.experiment_node_version.ExperimentNodeVersion') as mock_version_class:
+        with patch('plexus.dashboard.api.models.graph_node.GraphNode') as mock_node_class:
             
             mock_node_class.create.return_value = mock_node
-            mock_version_class.create.return_value = mock_version
             
-            result = experiment.create_root_node(yaml_config, initial_value)
+            result = procedure.create_root_node(yaml_config, initial_metadata)
             
             # Verify node creation
             mock_node_class.create.assert_called_once_with(
                 client=self.mock_client,
-                experimentId='exp-123',
+                procedureId='exp-123',
                 parentNodeId=None,
                 status='ACTIVE'
             )
             
-            # Verify version creation
-            mock_version_class.create.assert_called_once_with(
-                client=self.mock_client,
-                experimentId='exp-123',
-                nodeId='new-node-123',
-                code=yaml_config,
-                status='QUEUED',
-                value=initial_value
-            )
-            
-            # Verify experiment update
+            # Verify procedure update
             call_args = self.mock_client.execute.call_args
             variables = call_args[0][1]  # Second positional argument
             input_data = variables['input']
@@ -318,17 +303,17 @@ class TestExperiment(unittest.TestCase):
     
     def test_update_root_node(self):
         """Test updating the root node ID."""
-        experiment = Experiment.from_dict(self.sample_data, self.mock_client)
+        procedure = Procedure.from_dict(self.sample_data, self.mock_client)
         
         updated_data = self.sample_data.copy()
         updated_data['rootNodeId'] = 'new-root-node'
         updated_data['updatedAt'] = '2024-01-15T12:00:00Z'
         
         self.mock_client.execute.return_value = {
-            'updateExperiment': updated_data
+            'updateProcedure': updated_data
         }
         
-        result = experiment.update_root_node('new-root-node')
+        result = procedure.update_root_node('new-root-node')
         
         # Verify GraphQL call
         call_args = self.mock_client.execute.call_args
@@ -338,8 +323,8 @@ class TestExperiment(unittest.TestCase):
         self.assertEqual(input_data['rootNodeId'], 'new-root-node')
         
         # Verify instance was updated
-        self.assertEqual(experiment.rootNodeId, 'new-root-node')
-        self.assertEqual(result, experiment)
+        self.assertEqual(procedure.rootNodeId, 'new-root-node')
+        self.assertEqual(result, procedure)
 
 
 if __name__ == '__main__':
