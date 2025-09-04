@@ -239,10 +239,10 @@ export default function ProcedureTask({
                 <span className="text-lg font-semibold text-muted-foreground">Procedure</span>
               </div>
               {props.task.scorecard && props.task.scorecard.trim() !== '' && (
-                <div className="font-semibold text-sm truncate">{props.task.scorecard}</div>
+                <div className="text-sm text-muted-foreground truncate">{props.task.scorecard}</div>
               )}
               {props.task.score && props.task.score.trim() !== '' && (
-                <div className="font-semibold text-sm truncate">{props.task.score}</div>
+                <div className="text-sm text-muted-foreground truncate">{props.task.score}</div>
               )}
               <Timestamp time={props.task.time} variant="relative" />
             </div>

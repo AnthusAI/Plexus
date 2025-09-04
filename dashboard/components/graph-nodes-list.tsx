@@ -46,12 +46,20 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
         if (data?.procedureId === procedureId) {
           if (type === 'create') {
             setNodes(prev => [...prev, data]);
+            // Expand new nodes by default
+            setExpandedNodes(prev => new Set([...prev, data.id]));
           } else if (type === 'update') {
             setNodes(prev => prev.map(node => 
               node.id === data.id ? { ...node, ...data } : node
             ));
           } else if (type === 'delete') {
             setNodes(prev => prev.filter(node => node.id !== data.id));
+            // Remove deleted node from expanded set
+            setExpandedNodes(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(data.id);
+              return newSet;
+            });
           }
         }
       },
@@ -99,6 +107,10 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
 
       const fetchedNodes = (result as any).data?.listGraphNodeByProcedureIdAndCreatedAt?.items || []
       setNodes(fetchedNodes)
+      
+      // Set all nodes as expanded by default
+      const allNodeIds = new Set(fetchedNodes.map((node: GraphNode) => node.id as string))
+      setExpandedNodes(allNodeIds)
     } catch (err) {
       console.error('Error loading nodes:', err)
       setError(err instanceof Error ? err.message : 'Failed to load nodes')
