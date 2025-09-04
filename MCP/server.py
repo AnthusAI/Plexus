@@ -15,7 +15,7 @@ from tools.util.docs import register_docs_tool
 from tools.util.think import register_think_tool
 from tools.scorecard.scorecards import register_scorecard_tools
 from tools.evaluation.evaluations import register_evaluation_tools
-from tools.score.management import register_score_tools
+from tools.score.scores import register_score_tools
 from tools.procedure.procedures import register_procedure_tools
 
 # Setup Plexus imports and core functionality
