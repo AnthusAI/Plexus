@@ -243,14 +243,11 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
               )}
             </div>
           )}
-          {task.name && (
-            <div className="font-semibold text-sm truncate">{task.name}</div>
-          )}
           {task.scorecard && task.scorecard.trim() !== '' && (
-            <div className="font-semibold text-sm truncate">{task.scorecard}</div>
+            <div className="text-sm text-muted-foreground truncate">{task.scorecard}</div>
           )}
           {task.score && task.score.trim() !== '' && (
-            <div className="font-semibold text-sm truncate">{task.score}</div>
+            <div className="text-sm text-muted-foreground truncate">{task.score}</div>
           )}
           <Timestamp time={task.time} variant="relative" />
         </div>
