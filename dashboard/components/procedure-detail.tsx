@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowLeft, Save, Trash2, Waypoints, FileText, ChevronRight, ChevronDown } from "lucide-react"
+import { Timestamp } from "./ui/timestamp"
 import { toast } from "sonner"
 import Editor from "@monaco-editor/react"
 import { useYamlLinter, useLintMessageHandler } from "@/hooks/use-yaml-linter"
@@ -63,6 +64,7 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
   const { lintResult, isLinting, lint, setupMonacoIntegration, jumpToLine } = useYamlLinter({ context: 'experiment' })
   const handleLintMessage = useLintMessageHandler(jumpToLine)
 
+
   // Setup Monaco theme watcher
   useEffect(() => {
     // Monaco theme watcher will be setup in editor onMount
@@ -93,6 +95,12 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
               id
               featured
               templateId
+              template {
+                id
+                name
+                category
+                description
+              }
               code
               rootNodeId
               createdAt
@@ -279,84 +287,26 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
   }
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b border-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.push('/lab/procedures')}
-              className="h-8 w-8"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <Waypoints className="h-5 w-5 text-primary" />
-            <div>
-              <h1 className="text-xl font-semibold">
-                {procedureId ? 'Edit Procedure' : 'New Procedure'}
-              </h1>
-              {procedure && (
-                <p className="text-sm text-muted-foreground">
-                  {procedure.scorecard?.name} - {procedure.score?.name}
-                </p>
-              )}
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {isEditMode ? (
-              <>
-                <Button onClick={handleCancel} variant="outline" disabled={isSaving}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? 'Saving...' : 'Save'}
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button onClick={() => setIsEditMode(true)} variant="outline">
-                  Edit
-                </Button>
-                {procedureId && (
-                  <Button onClick={handleDelete} variant="destructive">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {isEditMode ? (
-          <>
-            {/* Edit Form */}
-            <Card>
-              <CardContent className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="featured">Featured</Label>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="featured"
-                        checked={featured}
-                        onCheckedChange={setFeatured}
-                      />
-                      <Label htmlFor="featured" className="text-sm text-muted-foreground">
-                        Mark as featured procedure
-                      </Label>
-                    </div>
+    <div className="h-full flex flex-col bg-card rounded-lg w-full max-w-full">
+      {/* Header - similar to ProcedureTask detail header */}
+      <div className="flex-none p-3 w-full max-w-full overflow-hidden">
+        <div className="space-y-1.5 p-0 flex flex-col items-start w-full max-w-full px-1">
+          <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+            <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              <div className="flex items-center gap-2 mb-3">
+                <Waypoints className="h-5 w-5 text-muted-foreground" />
+                <span className="text-lg font-semibold text-muted-foreground">Procedure</span>
+                {procedure?.template?.category && (
+                  <div className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
+                    {procedure.template.category}
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Scorecard & Score</Label>
+                )}
+              </div>
+              
+              
+              {/* Scorecard selector */}
+              {isEditMode ? (
+                <div className="mb-2 w-full max-w-sm">
                   <ScorecardContext
                     selectedScorecard={selectedScorecard}
                     setSelectedScorecard={setSelectedScorecard}
@@ -364,70 +314,151 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
                     setSelectedScore={setSelectedScore}
                   />
                 </div>
+              ) : (
+                <>
+                  {procedure?.scorecard && (
+                    <div className="text-sm text-muted-foreground truncate">{procedure.scorecard.name}</div>
+                  )}
+                  {procedure?.score && (
+                    <div className="text-sm text-muted-foreground truncate">{procedure.score.name}</div>
+                  )}
+                </>
+              )}
+              
+              {procedure && (
+                <Timestamp time={procedure.updatedAt} variant="relative" />
+              )}
+            </div>
+            
+            <div className="flex flex-col items-end flex-shrink-0 gap-2">
+              <div className="flex gap-2">
+                {isEditMode ? (
+                  <>
+                    <Button 
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                      onClick={handleCancel} 
+                      disabled={isSaving}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                      onClick={handleSave} 
+                      disabled={isSaving}
+                    >
+                      <Save className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {onCancel && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                        onClick={onCancel}
+                        aria-label="Close"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="code">Configuration (YAML)</Label>
-                  <div className="border rounded-md overflow-hidden">
-                    <Editor
-                      height="400px"
-                      defaultLanguage="yaml"
-                      value={code}
-                      onChange={(value) => {
-                        setCode(value || '')
-                        lint(value || '')
-                      }}
-                      options={getCommonMonacoOptions()}
-                      onMount={(editorInstance, monaco) => {
-                        defineCustomMonacoThemes(monaco)
-                        applyMonacoTheme(monaco)
-                        configureYamlLanguage(monaco)
+      {/* Content - similar to ProcedureTask content structure */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="p-3">
+          {/* Configuration section */}
+          <Accordion type="multiple" defaultValue={isEditMode ? ["configuration"] : []} className="w-full">
+            <AccordionItem value="configuration" className="border-b-0">
+              <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-sm font-medium leading-none text-muted-foreground">Code</span>
+                  <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                  <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pt-0 pb-4">
+                <div className="overflow-hidden">
+                  <Editor
+                    height="400px"
+                    defaultLanguage="yaml"
+                    value={code}
+                    onChange={isEditMode ? (value) => {
+                      setCode(value || '')
+                      lint(value || '')
+                    } : undefined}
+                    onMount={(editorInstance, monaco) => {
+                      defineCustomMonacoThemes(monaco)
+                      applyMonacoTheme(monaco)
+                      setupMonacoThemeWatcher(monaco)
+                      configureYamlLanguage(monaco)
+                      if (isEditMode) {
                         setupMonacoIntegration(editorInstance, monaco)
-                      }}
-                    />
-                  </div>
-                  {lintResult?.messages && lintResult.messages.length > 0 && (
-                    <YamlLinterPanel result={lintResult} onMessageClick={handleLintMessage} />
+                      }
+                    }}
+                    options={{
+                      ...getCommonMonacoOptions(),
+                      readOnly: !isEditMode,
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      wordWrap: 'on',
+                      tabSize: 2,
+                      insertSpaces: true,
+                    }}
+                  />
+                  {isEditMode && lintResult?.messages && lintResult.messages.length > 0 && (
+                    <div className="mt-2">
+                      <YamlLinterPanel result={lintResult} onMessageClick={handleLintMessage} />
+                    </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          </>
-        ) : (
-          <>
-            {/* View Mode */}
-            {procedure && (
-              <ProcedureTask
-                variant="detail"
-                procedure={{
-                  id: procedure.id,
-                  title: `${procedure.scorecard?.name || 'Procedure'} - ${procedure.score?.name || 'Score'}`,
-                  featured: procedure.featured || false,
-                  rootNodeId: procedure.rootNodeId || undefined,
-                  createdAt: procedure.createdAt,
-                  updatedAt: procedure.updatedAt,
-                  scorecard: procedure.scorecard ? { name: procedure.scorecard.name } : null,
-                  score: procedure.score ? { name: procedure.score.name } : null,
-                }}
-              />
-            )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
 
-            {/* Graph Nodes */}
-            {procedureId && (
-              <Accordion type="single" collapsible>
-                <AccordionItem value="nodes">
-                  <AccordionTrigger>
-                    <div className="flex items-center gap-2">
-                      <Waypoints className="h-4 w-4" />
-                      <span>Graph Nodes</span>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="bg-background rounded-lg p-4">
-                    <GraphNodesList procedureId={procedureId} />
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            )}
-          </>
+
+          {/* Procedure Nodes section - only show when not in edit mode and procedureId exists */}
+          {!isEditMode && procedureId && (
+            <div className="mt-6 bg-background rounded-lg p-4">
+              <GraphNodesList procedureId={procedureId} />
+            </div>
+          )}
+        </div>
+        
+        {/* Save/Cancel Bar - appears when in edit mode */}
+        {isEditMode && (
+          <div className="mt-3">
+            <div className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
+              <Button
+                variant="secondary"
+                onClick={handleCancel}
+                disabled={isSaving}
+                className="shrink-0 h-10"
+              >
+                Cancel
+              </Button>
+              <div className="flex-1" /> {/* Spacer to push Save button to the right */}
+              <Button
+                variant="default"
+                onClick={handleSave}
+                disabled={isSaving}
+                className="shrink-0 h-10"
+              >
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </div>
         )}
       </div>
     </div>
