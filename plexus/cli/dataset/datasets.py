@@ -253,11 +253,9 @@ def load(source_identifier: str, fresh: bool, reload: bool):
                 logging.info(f"  Row {i}:")
                 for col in dataframe.columns:
                     value = dataframe.iloc[i][col]
-                    # Truncate long values for readability
-                    if isinstance(value, str) and len(value) > 100:
-                        display_value = value[:97] + "..."
-                    else:
-                        display_value = value
+                    # Use centralized display formatting from DataCache
+                    from plexus.data.DataCache import DataCache
+                    display_value = DataCache.format_value_for_display(value, col)
                     logging.info(f"    {col}: '{display_value}'")
         else:
             logging.info("UPLOAD_DATASET_FIRST_FEW_ROWS: Dataset is empty")
