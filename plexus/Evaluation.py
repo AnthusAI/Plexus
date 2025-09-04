@@ -1208,7 +1208,10 @@ class Evaluation:
             logging.info(f"Skipped {self.total_skipped} score results due to unmet dependency conditions")
         logging.info(f"cost: ${expenses['cost_per_text']:.6f} per call / ${expenses['total_cost']:.6f} total")
 
-        report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
+        # Build confusion matrix metrics for the summary
+        confusion_metrics = self._build_confusion_metrics_from_results()
+        
+        report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows), confusion_metrics)
         logging.info(report)
 
         await asyncio.to_thread(self.generate_and_log_confusion_matrix, self.all_results, report_folder_path)
@@ -1760,7 +1763,152 @@ class Evaluation:
 
         logging.info(f"Metrics JSON file generated at {metrics_file_path}")
 
-    def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
+    def _format_confusion_matrix_for_summary(self, final_metrics):
+        """Format confusion matrix for the concise evaluation summary."""
+        confusion_matrix = final_metrics.get('confusionMatrix')
+        predicted_dist = final_metrics.get('predictedClassDistribution', {})
+        dataset_dist = final_metrics.get('datasetClassDistribution', {})
+        
+        if not confusion_matrix:
+            return ""
+        
+        summary_lines = []
+        
+        # Handle different confusion matrix formats (similar to evaluations.py)
+        matrix_dict = {}
+        all_classes = set()
+        
+        if isinstance(confusion_matrix, dict):
+            if 'matrix' in confusion_matrix and 'labels' in confusion_matrix:
+                # Format: {'matrix': [[7, 0], [2, 10]], 'labels': ['no', 'yes']}
+                matrix_2d = confusion_matrix['matrix']
+                labels = confusion_matrix['labels']
+                
+                if isinstance(matrix_2d, list) and isinstance(labels, list):
+                    all_classes = set(labels)
+                    matrix_dict = {}
+                    for i, actual_class in enumerate(labels):
+                        matrix_dict[actual_class] = {}
+                        for j, pred_class in enumerate(labels):
+                            if i < len(matrix_2d) and j < len(matrix_2d[i]):
+                                matrix_dict[actual_class][pred_class] = matrix_2d[i][j]
+                            else:
+                                matrix_dict[actual_class][pred_class] = 0
+            else:
+                # Standard nested dict format
+                matrix_dict = confusion_matrix
+                for actual, predicted_dict in confusion_matrix.items():
+                    all_classes.add(actual)
+                    if isinstance(predicted_dict, dict):
+                        all_classes.update(predicted_dict.keys())
+        
+        if not matrix_dict or not all_classes:
+            return ""
+        
+        all_classes = sorted(list(all_classes))
+        
+        # Create concise confusion matrix
+        summary_lines.append("CONFUSION MATRIX:")
+        summary_lines.append("                    Predicted")
+        header = "              "
+        for pred_class in all_classes:
+            header += f"{pred_class}".rjust(8)
+        summary_lines.append(header)
+        summary_lines.append("Actual      " + "-" * (8 * len(all_classes)))
+        
+        for actual_class in all_classes:
+            row = f"{actual_class}".ljust(10) + " | "
+            for pred_class in all_classes:
+                count = matrix_dict.get(actual_class, {}).get(pred_class, 0)
+                row += f"{count}".rjust(8)
+            summary_lines.append(row)
+        
+        # Add key insights
+        summary_lines.append("")
+        summary_lines.append("Key Insights:")
+        
+        # Find most common errors
+        errors = []
+        for actual_class in all_classes:
+            for pred_class in all_classes:
+                if actual_class != pred_class:
+                    count = matrix_dict.get(actual_class, {}).get(pred_class, 0)
+                    if count > 0:
+                        errors.append((count, actual_class, pred_class))
+        
+        errors.sort(reverse=True)  # Sort by count, highest first
+        
+        if errors:
+            summary_lines.append(f"• Most common error: {errors[0][1]} → {errors[0][2]} ({errors[0][0]} cases)")
+            if len(errors) > 1:
+                summary_lines.append(f"• Second most common: {errors[1][1]} → {errors[1][2]} ({errors[1][0]} cases)")
+        
+        # Add per-class accuracy
+        for cls in all_classes:
+            tp = matrix_dict.get(cls, {}).get(cls, 0)
+            total_actual = sum(matrix_dict.get(cls, {}).get(pred_cls, 0) for pred_cls in all_classes)
+            if total_actual > 0:
+                class_accuracy = tp / total_actual
+                summary_lines.append(f"• '{cls}' accuracy: {class_accuracy:.1%} ({tp}/{total_actual})")
+        
+        return "\n".join(summary_lines)
+
+    def _build_confusion_metrics_from_results(self):
+        """Build confusion matrix metrics from the evaluation results."""
+        if not hasattr(self, 'all_results') or not self.all_results:
+            return {}
+        
+        # For now, focus on the first score (primary score)
+        score_names = self.score_names()
+        if not score_names:
+            return {}
+        
+        primary_score_name = score_names[0]
+        
+        # Collect actual and predicted labels
+        y_true = []
+        y_pred = []
+        
+        for result in self.all_results:
+            score_result = next((r for r in result['results'].values() if r.parameters.name == primary_score_name), None)
+            if score_result:
+                true_label = score_result.metadata['human_label']
+                pred_label = str(score_result.value).lower()
+                y_true.append(true_label)
+                y_pred.append(pred_label)
+        
+        if not y_true or not y_pred:
+            return {}
+        
+        # Get unique classes
+        all_classes = sorted(list(set(y_true + y_pred)))
+        
+        # Build confusion matrix in the format expected by the summary formatter
+        matrix_dict = {}
+        for actual_class in all_classes:
+            matrix_dict[actual_class] = {}
+            for pred_class in all_classes:
+                matrix_dict[actual_class][pred_class] = 0
+        
+        # Fill in the counts
+        for actual, pred in zip(y_true, y_pred):
+            matrix_dict[actual][pred] += 1
+        
+        # Build class distributions
+        from collections import Counter
+        dataset_dist = dict(Counter(y_true))
+        predicted_dist = dict(Counter(y_pred))
+        
+        return {
+            'confusionMatrix': {
+                'matrix': [[matrix_dict[actual].get(pred, 0) for pred in all_classes] for actual in all_classes],
+                'labels': all_classes
+            },
+            'datasetClassDistribution': dataset_dist,
+            'predictedClassDistribution': predicted_dist
+        }
+
+    def generate_report(self, score_instance, overall_accuracy, expenses, sample_size, final_metrics=None):
         score_config = score_instance.parameters
 
         report = f"""
@@ -1789,6 +1937,11 @@ Transcript:
 
 ---
 """
+        # Add confusion matrix summary if available
+        confusion_summary = ""
+        if final_metrics and final_metrics.get('confusionMatrix'):
+            confusion_summary = self._format_confusion_matrix_for_summary(final_metrics)
+        
         report += f"""
 
 Overall Accuracy: {overall_accuracy:.1f}% ({self.total_correct} / {self.total_questions})
@@ -1796,6 +1949,8 @@ Sample Size:      {sample_size}
 Skipped Results:  {self.total_skipped} (due to unmet dependency conditions)
 Cost per call:    ${expenses['cost_per_text']:.6f}
 Total cost:       ${expenses['total_cost']:.6f}
+
+{confusion_summary}
 """            
 
         return report
@@ -2845,7 +3000,10 @@ class AccuracyEvaluation(Evaluation):
                     # Calculate overall_accuracy from the counters we just updated
                     overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
                     
-                    report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample)
+                    # Build confusion matrix metrics for the summary
+                    confusion_metrics = self._build_confusion_metrics_from_results()
+                    
+                    report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample, confusion_metrics)
                     logging.info(f"\nEvaluation Report:\n{report}\n")
                 except ValueError as e:
                     if "not found" in str(e):

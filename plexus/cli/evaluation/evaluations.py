@@ -64,6 +64,310 @@ from plexus.cli.shared.stage_configurations import get_evaluation_stage_configs
 
 from plexus.utils import truncate_dict_strings_inner
 
+def log_scorecard_configurations(scorecard_instance, context=""):
+    """Log the actual configurations being used by the scorecard instance."""
+    if not scorecard_instance or not hasattr(scorecard_instance, 'scores'):
+        logging.warning(f"No scorecard instance or scores available to log {context}")
+        return
+    
+    logging.info(f"==== SCORECARD CONFIGURATIONS IN USE {context} ====")
+    for i, score_config in enumerate(scorecard_instance.scores):
+        score_name = score_config.get('name', f'Score_{i}')
+        score_id = score_config.get('id', 'Unknown')
+        version = score_config.get('version', 'Not specified')
+        champion_version = score_config.get('championVersionId', 'Not specified')
+        
+        logging.info(f"Score #{i+1}: {score_name}")
+        logging.info(f"  ID: {score_id}")
+        logging.info(f"  Version field: {version}")
+        logging.info(f"  Champion version: {champion_version}")
+        
+        # Show a snippet of the actual configuration
+        if isinstance(score_config, dict):
+            # Show key configuration fields
+            key_fields = ['name', 'class', 'id', 'version', 'championVersionId', 'data']
+            logging.info(f"  Key config fields:")
+            for field in key_fields:
+                if field in score_config:
+                    value = score_config[field]
+                    if isinstance(value, str) and len(value) > 100:
+                        value = value[:100] + "..."
+                    logging.info(f"    {field}: {value}")
+        logging.info(f"  " + "-" * 50)
+    
+    logging.info(f"==== END SCORECARD CONFIGURATIONS {context} ====")
+    logging.info("")
+
+def format_confusion_matrix_summary(final_metrics):
+    """Format confusion matrix and detailed metrics for the evaluation summary."""
+    summary_lines = []
+    
+    # Get confusion matrix data
+    confusion_matrix = final_metrics.get('confusionMatrix')
+    predicted_dist = final_metrics.get('predictedClassDistribution', {})
+    dataset_dist = final_metrics.get('datasetClassDistribution', {})
+    
+    # Debug logging for all data structures
+    logging.info(f"DEBUG: Predicted distribution type: {type(predicted_dist)}")
+    logging.info(f"DEBUG: Predicted distribution content: {predicted_dist}")
+    logging.info(f"DEBUG: Dataset distribution type: {type(dataset_dist)}")
+    logging.info(f"DEBUG: Dataset distribution content: {dataset_dist}")
+    
+    if confusion_matrix:
+        # Add debug logging to see the actual format
+        logging.info(f"DEBUG: Confusion matrix type: {type(confusion_matrix)}")
+        logging.info(f"DEBUG: Confusion matrix content: {confusion_matrix}")
+        
+        summary_lines.append("CONFUSION MATRIX:")
+        summary_lines.append("-" * 40)
+        
+        # Parse confusion matrix if it's a string
+        if isinstance(confusion_matrix, str):
+            try:
+                import json
+                confusion_matrix = json.loads(confusion_matrix)
+            except:
+                summary_lines.append("Error parsing confusion matrix from JSON string")
+                return "\n".join(summary_lines)
+        
+        # Handle different confusion matrix formats
+        matrix_dict = {}
+        all_classes = set()
+        
+        if isinstance(confusion_matrix, dict):
+            # Check if it's the format with 'matrix' and 'labels' keys
+            if 'matrix' in confusion_matrix and 'labels' in confusion_matrix:
+                # Format: {'matrix': [[7, 0], [2, 10]], 'labels': ['no', 'yes']}
+                matrix_2d = confusion_matrix['matrix']
+                labels = confusion_matrix['labels']
+                
+                if isinstance(matrix_2d, list) and isinstance(labels, list) and len(labels) >= 2:
+                    all_classes = set(labels)
+                    matrix_dict = {}
+                    for i, actual_class in enumerate(labels):
+                        matrix_dict[actual_class] = {}
+                        for j, pred_class in enumerate(labels):
+                            if i < len(matrix_2d) and j < len(matrix_2d[i]):
+                                matrix_dict[actual_class][pred_class] = matrix_2d[i][j]
+                            else:
+                                matrix_dict[actual_class][pred_class] = 0
+                else:
+                    summary_lines.append(f"Invalid matrix/labels format in confusion matrix")
+                    return "\n".join(summary_lines)
+            else:
+                # Standard nested dict format
+                matrix_dict = confusion_matrix
+                for actual, predicted_dict in confusion_matrix.items():
+                    all_classes.add(actual)
+                    if isinstance(predicted_dict, dict):
+                        all_classes.update(predicted_dict.keys())
+        elif isinstance(confusion_matrix, list):
+            # Handle list format - this might be a 2D array or list of dicts
+            try:
+                if len(confusion_matrix) > 0:
+                    if isinstance(confusion_matrix[0], list):
+                        # It's a 2D array format [[tp, fp], [fn, tn]] or similar
+                        # We need class labels to interpret this properly
+                        # For now, assume binary classification with classes ['no', 'yes']
+                        if len(confusion_matrix) == 2 and len(confusion_matrix[0]) == 2:
+                            classes = ['no', 'yes']  # Default assumption for binary
+                            all_classes = set(classes)
+                            matrix_dict = {}
+                            for i, actual_class in enumerate(classes):
+                                matrix_dict[actual_class] = {}
+                                for j, pred_class in enumerate(classes):
+                                    matrix_dict[actual_class][pred_class] = confusion_matrix[i][j]
+                        else:
+                            summary_lines.append(f"Unsupported 2D array confusion matrix format: {len(confusion_matrix)}x{len(confusion_matrix[0])}")
+                            return "\n".join(summary_lines)
+                    elif isinstance(confusion_matrix[0], dict):
+                        # List of dictionaries - convert to nested dict format
+                        for item in confusion_matrix:
+                            if 'actual' in item and 'predicted' in item and 'count' in item:
+                                actual = item['actual']
+                                predicted = item['predicted']
+                                count = item['count']
+                                
+                                if actual not in matrix_dict:
+                                    matrix_dict[actual] = {}
+                                matrix_dict[actual][predicted] = count
+                                
+                                all_classes.add(actual)
+                                all_classes.add(predicted)
+                    else:
+                        summary_lines.append(f"Unsupported list confusion matrix format: {type(confusion_matrix[0])}")
+                        return "\n".join(summary_lines)
+                else:
+                    summary_lines.append("Empty confusion matrix list")
+                    return "\n".join(summary_lines)
+            except Exception as e:
+                summary_lines.append(f"Error processing list format confusion matrix: {str(e)}")
+                return "\n".join(summary_lines)
+        else:
+            summary_lines.append(f"Unsupported confusion matrix format: {type(confusion_matrix)}")
+            return "\n".join(summary_lines)
+        
+        # Display confusion matrix in a readable format
+        if matrix_dict and all_classes:
+            all_classes = sorted(list(all_classes))
+            
+            if all_classes:
+                # Standard confusion matrix format with clear axis labels
+                summary_lines.append("")
+                summary_lines.append("                    Predicted")
+                header = "              "
+                for pred_class in all_classes:
+                    header += f"{pred_class}".rjust(10)
+                summary_lines.append(header)
+                
+                summary_lines.append("Actual      " + "-" * (10 * len(all_classes)))
+                
+                # Data rows
+                for actual_class in all_classes:
+                    row = f"{actual_class}".ljust(10) + " | "
+                    for pred_class in all_classes:
+                        count = matrix_dict.get(actual_class, {}).get(pred_class, 0)
+                        row += f"{count}".rjust(10)
+                    summary_lines.append(row)
+                
+                summary_lines.append("")
+                
+                # Add clear interpretation with examples
+                summary_lines.append("How to read this matrix:")
+                if len(all_classes) >= 2:
+                    class1, class2 = all_classes[0], all_classes[1]
+                    tp_example = matrix_dict.get(class1, {}).get(class1, 0)
+                    fp_example = matrix_dict.get(class2, {}).get(class1, 0)
+                    
+                    summary_lines.append(f"• Row '{class1}' shows all samples that were actually '{class1}'")
+                    summary_lines.append(f"• Column '{class1}' shows all samples that AI predicted as '{class1}'")
+                    summary_lines.append(f"• Cell ['{class1}','{class1}'] = {tp_example} (correctly predicted '{class1}')")
+                    if fp_example > 0:
+                        summary_lines.append(f"• Cell ['{class2}','{class1}'] = {fp_example} (incorrectly predicted '{class1}' when actually '{class2}')")
+                
+                summary_lines.append("• Diagonal cells = correct predictions")
+                summary_lines.append("• Off-diagonal cells = prediction errors")
+        
+        summary_lines.append("")
+    
+    # Add class distributions
+    if dataset_dist or predicted_dist:
+        summary_lines.append("CLASS DISTRIBUTION COMPARISON:")
+        summary_lines.append("(How many samples of each class: Ground Truth vs AI Predictions)")
+        summary_lines.append("-" * 65)
+        
+        # Parse and normalize distributions
+        dataset_dict = {}
+        predicted_dict = {}
+        
+        # Handle dataset distribution
+        if isinstance(dataset_dist, str):
+            try:
+                import json
+                dataset_dist = json.loads(dataset_dist)
+            except:
+                dataset_dist = {}
+        
+        if isinstance(dataset_dist, dict):
+            dataset_dict = dataset_dist
+        elif isinstance(dataset_dist, list):
+            # Handle list format - could be list of counts or list of dicts
+            if len(dataset_dist) > 0:
+                if isinstance(dataset_dist[0], dict) and 'class' in dataset_dist[0] and 'count' in dataset_dist[0]:
+                    # Format: [{'class': 'yes', 'count': 12}, {'class': 'no', 'count': 7}]
+                    for item in dataset_dist:
+                        dataset_dict[item['class']] = item['count']
+                elif all(isinstance(x, (int, float)) for x in dataset_dist):
+                    # Format: [7, 12] - need labels, use confusion matrix labels if available
+                    if matrix_dict and all_classes:
+                        labels = sorted(list(all_classes))
+                        for i, count in enumerate(dataset_dist):
+                            if i < len(labels):
+                                dataset_dict[labels[i]] = count
+        
+        # Handle predicted distribution
+        if isinstance(predicted_dist, str):
+            try:
+                import json
+                predicted_dist = json.loads(predicted_dist)
+            except:
+                predicted_dist = {}
+        
+        if isinstance(predicted_dist, dict):
+            predicted_dict = predicted_dist
+        elif isinstance(predicted_dist, list):
+            # Handle list format - could be list of counts or list of dicts
+            if len(predicted_dist) > 0:
+                if isinstance(predicted_dist[0], dict) and 'class' in predicted_dist[0] and 'count' in predicted_dist[0]:
+                    # Format: [{'class': 'yes', 'count': 10}, {'class': 'no', 'count': 9}]
+                    for item in predicted_dist:
+                        predicted_dict[item['class']] = item['count']
+                elif all(isinstance(x, (int, float)) for x in predicted_dist):
+                    # Format: [9, 10] - need labels, use confusion matrix labels if available
+                    if matrix_dict and all_classes:
+                        labels = sorted(list(all_classes))
+                        for i, count in enumerate(predicted_dist):
+                            if i < len(labels):
+                                predicted_dict[labels[i]] = count
+        
+        # Get all classes from both distributions
+        all_dist_classes = set()
+        if dataset_dict:
+            all_dist_classes.update(dataset_dict.keys())
+        if predicted_dict:
+            all_dist_classes.update(predicted_dict.keys())
+        
+        all_dist_classes = sorted(list(all_dist_classes))
+        
+        if all_dist_classes:
+            summary_lines.append("Class Label".ljust(15) + "Ground Truth".rjust(12) + "AI Predicted".rjust(12) + "Difference".rjust(12))
+            summary_lines.append("-" * 51)
+            
+            for cls in all_dist_classes:
+                actual_count = dataset_dict.get(cls, 0)
+                pred_count = predicted_dict.get(cls, 0)
+                difference = pred_count - actual_count
+                diff_str = f"+{difference}" if difference > 0 else str(difference)
+                
+                line = f"{cls}".ljust(15) + f"{actual_count}".rjust(12) + f"{pred_count}".rjust(12) + f"{diff_str}".rjust(12)
+                summary_lines.append(line)
+            
+            summary_lines.append("")
+            summary_lines.append("Note: Difference = AI Predicted - Ground Truth")
+            summary_lines.append("• Positive difference means AI over-predicted this class")
+            summary_lines.append("• Negative difference means AI under-predicted this class")
+        
+        summary_lines.append("")
+    
+    # Add per-class metrics if we can calculate them  
+    if matrix_dict and all_classes:
+        summary_lines.append("PER-CLASS METRICS:")
+        summary_lines.append("-" * 25)
+        summary_lines.append("Class".ljust(12) + "Precision".rjust(10) + "Recall".rjust(8) + "F1".rjust(8))
+        summary_lines.append("-" * 38)
+        
+        for cls in all_classes:
+            # Calculate precision, recall, F1 for this class
+            tp = matrix_dict.get(cls, {}).get(cls, 0)  # True positives
+            
+            # False positives: predicted as this class but actually something else
+            fp = sum(matrix_dict.get(other_cls, {}).get(cls, 0) 
+                    for other_cls in all_classes if other_cls != cls)
+            
+            # False negatives: actually this class but predicted as something else  
+            fn = sum(matrix_dict.get(cls, {}).get(other_cls, 0) 
+                    for other_cls in all_classes if other_cls != cls)
+            
+            # Calculate metrics
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+            f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+            
+            line = f"{cls}".ljust(12) + f"{precision:.3f}".rjust(10) + f"{recall:.3f}".rjust(8) + f"{f1:.3f}".rjust(8)
+            summary_lines.append(line)
+    
+    return "\n".join(summary_lines)
+
 def create_client() -> PlexusDashboardClient:
     """Create a client and log its configuration"""
     client = PlexusDashboardClient()
@@ -510,7 +814,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
         logging.error(f"Error loading configuration from {configuration_file_path}: {str(e)}")
         return None
 
-def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cache=False):
+def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cache=False, specific_version=None):
     """
     Load a scorecard from the Plexus Dashboard API.
     
@@ -520,6 +824,7 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
         use_cache: Whether to prefer local cache files over API (default: False)
                    When False, will always fetch from API but still write cache files
                    When True, will check local cache first and only fetch missing configs
+        specific_version: Optional specific score version ID to use instead of champion version
         
     Returns:
         Scorecard: An initialized Scorecard instance with required scores loaded
@@ -599,7 +904,8 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
                 client, 
                 scorecard_structure, 
                 target_scores,
-                use_cache=use_cache
+                use_cache=use_cache,
+                specific_version=specific_version
             )
             if not scores_config:
                 error_msg = f"Failed to fetch score configurations for scorecard: {scorecard_identifier}"
@@ -661,13 +967,14 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
             raise ValueError(f"{error_msg}\nThis might be due to API connectivity issues or invalid configurations.\nTry using the --yaml flag to load from local YAML files instead.") from e
         raise
 
-def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
+def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None, specific_version=None):
     """
     Load a scorecard from individual YAML configuration files saved by fetch_score_configurations.
     
     Args:
         scorecard_identifier: A string that identifies the scorecard (ID, name, key, or external ID)
         score_names: Optional list of specific score names to load
+        specific_version: Optional specific score version ID (Note: YAML files contain champion versions only)
         
     Returns:
         Scorecard: An initialized Scorecard instance with required scores loaded from YAML files
@@ -681,6 +988,9 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
     from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
     
     logging.info(f"Loading scorecard '{scorecard_identifier}' from individual YAML files")
+    
+    if specific_version:
+        logging.warning(f"Specific version '{specific_version}' requested, but YAML files only contain champion versions. Using champion version instead.")
     
     try:
         # First resolve the scorecard identifier to get the actual scorecard name
@@ -871,6 +1181,7 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
 @click.option('--random-seed', default=None, type=int, help='Random seed for sampling')
 @click.option('--content-ids-to-sample', default='', type=str, help='Comma-separated list of content IDs to sample')
 @click.option('--score', 'score', default='', type=str, help='Score identifier (ID, name, key, or external ID). Can be comma-separated for multiple scores.')
+@click.option('--version', default=None, type=str, help='Specific score version ID to evaluate (defaults to champion version)')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--reload', is_flag=True, help='Reload existing dataset by refreshing values for current records only.')
@@ -890,6 +1201,7 @@ def accuracy(
     random_seed: int,
     content_ids_to_sample: str,
     score: str,
+    version: Optional[str],
     experiment_label: str,
     fresh: bool,
     reload: bool,
@@ -905,7 +1217,7 @@ def accuracy(
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     """
     logging.info("Starting accuracy evaluation")
-    logging.info(f"Scorecard: {scorecard}, Score: {score}, Samples: {number_of_samples}, Dry run: {dry_run}")
+    logging.info(f"Scorecard: {scorecard}, Score: {score}, Version: {version or 'champion'}, Samples: {number_of_samples}, Dry run: {dry_run}")
     
     # Validate that fresh and reload are not both specified
     if fresh and reload:
@@ -922,6 +1234,7 @@ def accuracy(
         # Log the parameters that would be used
         console.print(f"[bold]Scorecard:[/bold] {scorecard}")
         console.print(f"[bold]Loading from:[/bold] {'YAML files' if yaml else 'API'}")
+        console.print(f"[bold]Version:[/bold] {version or 'champion'}")
         console.print(f"[bold]Number of samples:[/bold] {number_of_samples}")
         if score:
             console.print(f"[bold]Target scores:[/bold] {score}")
@@ -1137,8 +1450,11 @@ def accuracy(
                 
                 target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
                 try:
-                    scorecard_instance = load_scorecard_from_yaml_files(scorecard, target_score_identifiers)
+                    scorecard_instance = load_scorecard_from_yaml_files(scorecard, target_score_identifiers, specific_version=version)
                     logging.info(f"Loaded scorecard '{scorecard}' from YAML with {len(scorecard_instance.scores)} scores")
+                    
+                    # Log the actual configurations being used
+                    log_scorecard_configurations(scorecard_instance, "(YAML Loading)")
                     
                     # Extract score_id and score_version_id for the primary score
                     primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
@@ -1183,7 +1499,10 @@ def accuracy(
                 
                 target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
                 try:
-                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml)
+                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml, specific_version=version)
+                    
+                    # Log the actual configurations being used
+                    log_scorecard_configurations(scorecard_instance, "(API Loading)")
                         
                     # Immediately identify the primary score and extract score_id and score_version_id
                     primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
@@ -1594,12 +1913,34 @@ def accuracy(
                     logging.error(f"Could not complete evaluation record - error details: {str(e)}")
             
             # Display final results summary
-            logging.info(f"\n{'='*50}\nEVALUATION RESULTS\n{'='*50}")
-            logging.info(f"Completed evaluation of {len(labeled_samples_data)} samples")
-            logging.info(f"Overall accuracy: {final_metrics.get('accuracy', 'N/A')}")
-            logging.info(f"Precision: {final_metrics.get('precision', 'N/A')}")
-            logging.info(f"Alignment: {final_metrics.get('alignment', 'N/A')}")
-            logging.info(f"Recall: {final_metrics.get('recall', 'N/A')}")
+            logging.info(f"\n{'='*60}")
+            logging.info("EVALUATION RESULTS")
+            logging.info('='*60)
+            logging.info(f"Sample Size:        {len(labeled_samples_data)}")
+            logging.info(f"Overall Accuracy:   {final_metrics.get('accuracy', 'N/A'):.1%}" if isinstance(final_metrics.get('accuracy'), (int, float)) else f"Overall Accuracy:   {final_metrics.get('accuracy', 'N/A')}")
+            logging.info(f"Precision:          {final_metrics.get('precision', 'N/A'):.1%}" if isinstance(final_metrics.get('precision'), (int, float)) else f"Precision:          {final_metrics.get('precision', 'N/A')}")
+            logging.info(f"Recall:             {final_metrics.get('recall', 'N/A'):.1%}" if isinstance(final_metrics.get('recall'), (int, float)) else f"Recall:             {final_metrics.get('recall', 'N/A')}")
+            logging.info(f"Alignment:          {final_metrics.get('alignment', 'N/A'):.1%}" if isinstance(final_metrics.get('alignment'), (int, float)) else f"Alignment:          {final_metrics.get('alignment', 'N/A')}")
+            
+            # Add cost information if available
+            total_cost = final_metrics.get('total_cost')
+            if total_cost is not None:
+                cost_per_sample = total_cost / len(labeled_samples_data) if len(labeled_samples_data) > 0 else 0
+                logging.info(f"Cost per Sample:    ${cost_per_sample:.6f}")
+                logging.info(f"Total Cost:         ${total_cost:.6f}")
+            
+            skipped_results = final_metrics.get('skipped_results', 0)
+            if skipped_results > 0:
+                logging.info(f"Skipped Results:    {skipped_results} (due to unmet dependency conditions)")
+            
+            logging.info("")
+            
+            # Add detailed confusion matrix and metrics
+            detailed_summary = format_confusion_matrix_summary(final_metrics)
+            if detailed_summary:
+                logging.info(detailed_summary)
+            
+            logging.info('='*60)
             
             # Complete the Finalizing stage
             if tracker:
