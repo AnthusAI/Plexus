@@ -1647,16 +1647,17 @@ async def _create_version_from_code_with_parent(
             - parent_version_id: str (the parent version used)
     """
     try:
-        # Validate YAML code content
-        try:
-            import yaml
-            yaml.safe_load(code_content)
-        except yaml.YAMLError as e:
-            return {
-                "success": False,
-                "error": "INVALID_YAML",
-                "message": f"Invalid YAML code content: {str(e)}"
-            }
+        # Validate YAML code content if provided
+        if code_content:
+            try:
+                import yaml
+                yaml.safe_load(code_content)
+            except yaml.YAMLError as e:
+                return {
+                    "success": False,
+                    "error": "INVALID_YAML",
+                    "message": f"Invalid YAML code content: {str(e)}"
+                }
 
         # Get current content from parent version for comparison
         current_yaml = ''
@@ -1675,11 +1676,11 @@ async def _create_version_from_code_with_parent(
             version_result = client.execute(version_query)
             if version_result and 'getScoreVersion' in version_result:
                 current_version_data = version_result['getScoreVersion']
-                current_yaml = current_version_data.get('configuration', '').strip()
-                current_guidelines = current_version_data.get('guidelines', '').strip()
+                current_yaml = (current_version_data.get('configuration') or '').strip()
+                current_guidelines = (current_version_data.get('guidelines') or '').strip()
         
         # Compare both code and guidelines (ignoring whitespace differences)
-        code_unchanged = current_yaml == code_content.strip()
+        code_unchanged = current_yaml == (code_content or '').strip()
         guidelines_unchanged = current_guidelines == (guidelines or '').strip()
         
         if code_unchanged and guidelines_unchanged:
@@ -1711,14 +1712,16 @@ async def _create_version_from_code_with_parent(
         
         version_input = {
             'scoreId': score.id,
-            'configuration': code_content.strip(),
+            'configuration': (code_content or '').strip(),
             'note': note or 'Updated via MCP score update tool',
             'isFeatured': True  # Mark as featured by default
         }
         
         # Add guidelines if provided
         if guidelines:
-            version_input['guidelines'] = guidelines.strip()
+            stripped_guidelines = guidelines.strip()
+            if stripped_guidelines:
+                version_input['guidelines'] = stripped_guidelines
         
         # Include parent version if available
         if parent_version_id:
