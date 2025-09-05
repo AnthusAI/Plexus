@@ -104,7 +104,8 @@ from plexus_fastmcp_server import mcp as original_mcp
 mcp = FastMCP(
     name="Plexus MCP Server (Cognito OAuth)",
     instructions=original_mcp.instructions,
-    auth=auth
+    auth=auth,
+    stateless_http=True
 )
 
 # Dynamically register all tools from the original MCP server
