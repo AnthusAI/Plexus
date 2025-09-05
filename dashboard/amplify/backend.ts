@@ -3,6 +3,7 @@ import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
+import { McpStack } from './mcp/mcp_stack.js';
 import { Stack } from 'aws-cdk-lib';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -61,4 +62,14 @@ taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     })
 );
 
-export { backend };
+// Create the MCP stack
+const mcpStack = new McpStack(
+    backend.createStack('McpStack'),
+    'McpStack',
+    {
+        deploymentTagKey: 'Environment',
+        deploymentTagValue: process.env.NODE_ENV === 'production' ? 'production' : 'development'
+    }
+);
+
+export { backend, mcpStack };
