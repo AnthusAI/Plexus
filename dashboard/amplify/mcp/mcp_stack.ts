@@ -55,7 +55,7 @@ export class McpStack extends Stack {
         Workers: {
           type: 'String',
           description: 'Number of uvicorn workers.',
-          default: '4'
+          default: '3'
         }
       },
       mainSteps: [
