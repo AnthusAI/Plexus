@@ -110,7 +110,9 @@ export class McpStack extends Stack {
       `${constructId}-McpServiceConfigDoc`,
       {
         content: ssmDocContent,
-        documentType: 'Command'
+        documentType: 'Command',
+        documentFormat: 'JSON',
+        versionName: `v${Date.now()}` // Force new version on each deployment
       }
     );
 
@@ -125,7 +127,12 @@ export class McpStack extends Stack {
             key: `tag:${deploymentTagKey}`,
             values: [deploymentTagValue]
           }
-        ]
+        ],
+        scheduleExpression: 'rate(30 minutes)', // Re-run every 30 minutes
+        complianceSeverity: 'HIGH',
+        maxConcurrency: '100%',
+        maxErrors: '0',
+        associationName: `${constructId}-McpServiceAssociation-${deploymentTagValue}`
       }
     );
 
