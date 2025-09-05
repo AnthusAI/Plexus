@@ -6,6 +6,11 @@ Enables remote access via uvicorn with enterprise-grade authentication
 import os
 import sys
 
+# Import FastMCP with OAuth authentication
+from fastmcp import FastMCP
+from fastmcp.server.auth import OAuthProxy
+from fastmcp.server.auth.providers.jwt import JWTVerifier
+
 # Add project root to path
 mcp_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(mcp_dir)
@@ -31,11 +36,6 @@ try:
     load_config()
 except Exception as e:
     print(f"Warning: Failed to load Plexus configuration: {e}", file=sys.stderr)
-
-# Import FastMCP with OAuth authentication
-from fastmcp import FastMCP
-from fastmcp.server.auth import OAuthProxy
-from fastmcp.server.auth.providers.jwt import JWTVerifier
 
 # Cognito configuration from environment variables
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")  # e.g., "us-west-2_AbCdEf123"
@@ -74,13 +74,12 @@ print("Setting up AWS Cognito OAuth authentication", file=sys.stderr)
 jwks_uri = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json"
 issuer = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}"
 
-# Option 1: No audience validation (since Cognito uses client_id)
+# Token Verifier
 token_verifier = JWTVerifier(
     jwks_uri=jwks_uri,
     issuer=issuer,
     algorithm="RS256",
     resource_server_url=MCP_SERVER_BASE_URL
-    # No audience - Cognito uses client_id instead
 )
 
 # Configure OAuth Proxy for Cognito
@@ -108,40 +107,20 @@ mcp = FastMCP(
     auth=auth
 )
 
-# Register all tools from the original MCP server
+# Dynamically register all tools from the original MCP server
 try:
-    from tools.util.think import register_think_tool
-    from tools.scorecard.scorecards import register_scorecard_tools
-    from tools.report.reports import register_report_tools
-    from tools.score.scores import register_score_tools
-    from tools.item.items import register_item_tools
-    from tools.task.tasks import register_task_tools
-    from tools.feedback.feedback import register_feedback_tools
-    from tools.evaluation.evaluations import register_evaluation_tools
-    from tools.prediction.predictions import register_prediction_tools
-    from tools.documentation.docs import register_documentation_tools
-    from tools.cost.analysis import register_cost_analysis_tools
-    from tools.dataset.datasets import register_dataset_tools
+    tools_dict = original_mcp._tool_manager._tools
     
-    register_think_tool(mcp)
-    register_scorecard_tools(mcp)
-    register_report_tools(mcp)
-    register_score_tools(mcp)
-    register_item_tools(mcp)
-    register_task_tools(mcp)
-    register_feedback_tools(mcp)
-    register_evaluation_tools(mcp)
-    register_prediction_tools(mcp)
-    register_documentation_tools(mcp)
-    register_cost_analysis_tools(mcp)
-    register_dataset_tools(mcp)
+    for tool_name, tool_obj in tools_dict.items():
+        mcp.add_tool(tool_obj)
     
-    print("Successfully registered all tools for Cognito-authenticated MCP", file=sys.stderr)
+    print(f"Successfully registered {len(tools_dict)} tools dynamically for Cognito-authenticated MCP", file=sys.stderr)
+    
 except Exception as e:
-    print(f"Error registering tools: {e}", file=sys.stderr)
+    print(f"Error in dynamic tool registration: {e}", file=sys.stderr)
 
-# Create ASGI application
-app = mcp.http_app()
+# Create ASGI application with stateless HTTP
+app = mcp.http_app(stateless_http=True)
 
 if __name__ == "__main__":
     import uvicorn
