@@ -79,6 +79,75 @@ Nodes are executed sequentially unless redirected by conditions:
 2. Results flow to the next node unless conditions redirect
 3. Special node name `"END"` terminates processing
 
+### Critical: Node Independence
+
+**Each node is an independent LLM call with no access to other nodes' context or chat history.**
+
+**Nodes only know what you explicitly pass to them:**
+- Each node must contain ALL information needed to complete its task within its own prompts
+- Nodes can access outputs from previous nodes using Jinja2 syntax (e.g., `{{classification}}`, `{{explanation}}`)
+- Do not assume a node inherently "knows" about other nodes' requirements, decisions, or evaluation criteria
+- Avoid referencing concepts or requirements from other nodes unless explicitly passed as data
+
+❌ **Bad Example** (assuming implicit knowledge):
+```yaml
+- name: secondary_check
+  system_message: |
+    The previous node checked for script compliance. Now evaluate tone...
+    The specific script mentioned earlier is not required here...
+```
+
+✅ **Good Example** (self-contained with explicit data):
+```yaml
+- name: tone_evaluator
+  system_message: |
+    Evaluate the agent's tone during the conversation.
+    Previous classification: {{classification}}
+    Previous reasoning: {{explanation}}
+    
+    Based on this context, assess if the tone was appropriate...
+```
+
+✅ **Good Example** (completely independent):
+```yaml
+- name: tone_evaluator
+  system_message: |
+    Evaluate the agent's tone during the conversation.
+    Look for professional, helpful language...
+```
+
+### Important: Conditions and Output Structure
+
+**When using conditions, output must be nested within each condition - never at the same indentation level.**
+
+❌ **Incorrect** (output and conditions at same level):
+```yaml
+- name: classifier_node
+  class: Classifier
+  output:  # This is wrong!
+    result: classification
+  conditions:
+    - value: "Yes"
+      node: next_node
+```
+
+✅ **Correct** (output nested within conditions):
+```yaml
+- name: classifier_node
+  class: Classifier
+  conditions:
+    - value: "Yes"
+      node: next_node
+      output:
+        result: classification
+        reason: explanation
+    - value: "No"
+      node: END
+      output:
+        result: classification
+        reason: explanation
+```
+
 ### Combining Conditions and Edge Clauses
 
 You can use both `conditions:` and `edge:` clauses in the same node to provide more flexible routing:
@@ -312,9 +381,11 @@ data:
 
 ## Best Practices
 
-1. Use modern `Classifier` over legacy classifier types
-2. Structure graphs to handle early termination with conditions
-3. Use descriptive node names and field mappings
-4. Leverage slicers for complex transcript analysis
-5. Include clear system and user prompts
-6. Avoid redundant processing by sharing results between nodes 
+1. **Node Independence**: Each node must be self-contained with all necessary information in its prompts - nodes only know what you explicitly pass to them via outputs from previous nodes
+2. **Conditions Structure**: When using conditions, always nest output within each condition block - never place output and conditions at the same indentation level
+3. Use modern `Classifier` over legacy classifier types
+4. Structure graphs to handle early termination with conditions
+5. Use descriptive node names and field mappings
+6. Leverage slicers for complex transcript analysis
+7. Include clear system and user prompts
+8. Avoid redundant processing by sharing results between nodes 
