@@ -68,7 +68,7 @@ const mcpStack = new McpStack(
     'McpStack',
     {
         deploymentTagKey: 'Environment',
-        deploymentTagValue: process.env.NODE_ENV === 'production' ? 'production' : 'development'
+        deploymentTagValue: 'production' // Match your EC2 instance tags
     }
 );
 
