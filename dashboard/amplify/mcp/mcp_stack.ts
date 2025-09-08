@@ -25,7 +25,7 @@ export class McpStack extends Stack {
         ServiceName: {
           type: 'String',
           description: 'Name of the systemd service.',
-          default: 'mcp-server-oauth.service'
+          default: 'mcp-server.service'
         },
         ServiceUser: {
           type: 'String',
@@ -128,8 +128,6 @@ export class McpStack extends Stack {
             values: [deploymentTagValue]
           }
         ],
-        scheduleExpression: 'rate(30 minutes)', // Re-run every 30 minutes
-        complianceSeverity: 'HIGH',
         maxConcurrency: '100%',
         maxErrors: '0',
         associationName: `${constructId}-McpServiceAssociation-${deploymentTagValue}`
