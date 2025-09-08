@@ -25,7 +25,7 @@ export class McpStack extends Stack {
         ServiceName: {
           type: 'String',
           description: 'Name of the systemd service.',
-          default: 'mcp-server.service'
+          default: 'mcp-server-oauth.service'
         },
         ServiceUser: {
           type: 'String',
