@@ -175,20 +175,29 @@ class Classifier(BaseNode):
             if hasattr(state, 'chat_history') and state.chat_history:
                 logging.info(f"Using existing chat history with {len(state.chat_history)} messages")
                 
-                # Convert dict messages back to LangChain objects if needed
+                # Convert dict messages back to LangChain objects if needed, filtering out empty messages
                 chat_messages = []
                 for msg in state.chat_history:
+                    # Skip messages with empty or whitespace-only content
                     if isinstance(msg, dict):
+                        content = msg.get('content', '')
+                        if not content or not content.strip():
+                            continue
+                        
                         msg_type = msg.get('type', '').lower()
                         if msg_type == 'human':
-                            chat_messages.append(HumanMessage(content=msg['content']))
+                            chat_messages.append(HumanMessage(content=content))
                         elif msg_type == 'ai':
-                            chat_messages.append(AIMessage(content=msg['content']))
+                            chat_messages.append(AIMessage(content=content))
                         elif msg_type == 'system':
-                            chat_messages.append(SystemMessage(content=msg['content']))
+                            chat_messages.append(SystemMessage(content=content))
                         else:
-                            chat_messages.append(BaseMessage(content=msg['content']))
+                            chat_messages.append(BaseMessage(content=content))
                     else:
+                        # For non-dict messages, check content attribute
+                        content = getattr(msg, 'content', '')
+                        if not content or not content.strip():
+                            continue
                         chat_messages.append(msg)
                 
                 # Get the initial system and human messages from prompt template
@@ -201,6 +210,11 @@ class Classifier(BaseNode):
                 # 3. All chat history messages in order
                 messages = initial_messages + chat_messages
                 
+                # Check for empty message content in retry flow too
+                for i, msg in enumerate(messages):
+                    if not msg.content or not msg.content.strip():
+                        raise ValueError(f"Retry message {i} has empty content")
+                
                 # Log the final message sequence
                 logging.info("Final message sequence:")
                 for i, msg in enumerate(messages):
@@ -209,8 +223,15 @@ class Classifier(BaseNode):
             else:
                 logging.info("Building new messages from prompt template")
                 try:
-                    prompt = prompt_templates[0].format_prompt(**state.model_dump())
+                    state_dict = state.model_dump()
+                    prompt = prompt_templates[0].format_prompt(**state_dict)
                     messages = prompt.to_messages()
+                    
+                    # Check for empty message content
+                    for i, msg in enumerate(messages):
+                        if not msg.content or not msg.content.strip():
+                            raise ValueError(f"Message {i} has empty content")
+                    
                     logging.info(f"Built new messages: {[type(m).__name__ for m in messages]}")
                 except Exception as e:
                     logging.error(f"Error building messages: {e}")
@@ -247,8 +268,11 @@ class Classifier(BaseNode):
             
             logging.info(f"  - Input state completion for {self.node_name}: {state.completion!r}")
 
-            if state.completion is None:
+            if state.completion is None or state.completion.strip() == "":
                 logging.info(f"  ⚠ {self.node_name}: No completion to parse")
+                # Return state with None classification to trigger retry logic
+                state.classification = None
+                state.explanation = "No completion received from LLM"
                 return state
             
             result = parser.parse(state.completion)
@@ -365,7 +389,16 @@ class Classifier(BaseNode):
         if isinstance(state, dict):
             state = self.GraphState(**state)
         
-        if state.classification is not None:
+        # Check if this node produced a valid classification
+        # We need to check both classification and completion to ensure this node succeeded
+        has_valid_classification = (
+            state.classification is not None and 
+            state.classification in self.parameters.valid_classes and
+            state.completion is not None and 
+            state.completion.strip() != ""
+        )
+        
+        if has_valid_classification:
             logging.info(f"Classification found: {state.classification}, ending")
             return "end"
         if state.retry_count >= self.parameters.maximum_retry_count:
