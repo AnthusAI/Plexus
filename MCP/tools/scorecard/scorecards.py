@@ -20,7 +20,7 @@ def register_scorecard_tools(mcp: FastMCP):
     @mcp.tool()
     async def plexus_scorecards_list(
         identifier: Optional[str] = None, 
-        limit: Optional[int] = None
+        limit: Optional[str] = None
     ) -> Union[str, List[Dict]]:
         """
         Lists scorecards from the Plexus Dashboard.
@@ -38,6 +38,16 @@ def register_scorecard_tools(mcp: FastMCP):
         sys.stdout = temp_stdout
         
         try:
+            # Convert parameters to proper types (MCP passes strings)
+            limit_int = None
+            if limit is not None:
+                try:
+                    limit_int = int(limit)
+                    if limit_int < 1:
+                        return f"Error: Invalid limit parameter: {limit}. Must be a positive number."
+                except (ValueError, TypeError):
+                    return f"Error: Invalid limit parameter: {limit}. Must be a number."
+            
             # Try to import required modules directly
             try:
                 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -76,7 +86,7 @@ def register_scorecard_tools(mcp: FastMCP):
                 return "Error: Could not create dashboard client."
 
             # Handle limit=None as fetching a large number (proxy for all)
-            fetch_limit = limit if limit is not None else 1000 # Use 1000 if no limit specified
+            fetch_limit = limit_int if limit_int is not None else 1000 # Use 1000 if no limit specified
 
             filter_parts = []
             
