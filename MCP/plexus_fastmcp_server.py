@@ -59,6 +59,15 @@ if using_stdio:
             return False
         def __ge__(self, other):
             return True
+        def __iter__(self):
+            # Make DummyRichObject iterable to prevent 'not iterable' errors
+            return iter([])
+        def __len__(self):
+            return 0
+        def __getitem__(self, key):
+            return self
+        def __setitem__(self, key, value):
+            pass
     
     # Replace the rich module in sys.modules BEFORE importing FastMCP
     sys.modules['rich'] = DummyRichModule('rich')
@@ -66,6 +75,32 @@ if using_stdio:
     sys.modules['rich.logging'] = DummyRichModule('rich.logging')
     sys.modules['rich.table'] = DummyRichModule('rich.table')
     sys.modules['rich.traceback'] = DummyRichModule('rich.traceback')
+    sys.modules['rich.markdown'] = DummyRichModule('rich.markdown')
+    sys.modules['rich.panel'] = DummyRichModule('rich.panel')
+    sys.modules['rich.text'] = DummyRichModule('rich.text')
+    sys.modules['rich.progress'] = DummyRichModule('rich.progress')
+    sys.modules['rich.prompt'] = DummyRichModule('rich.prompt')
+    sys.modules['rich.status'] = DummyRichModule('rich.status')
+    sys.modules['rich.syntax'] = DummyRichModule('rich.syntax')
+    sys.modules['rich.tree'] = DummyRichModule('rich.tree')
+    sys.modules['rich.align'] = DummyRichModule('rich.align')
+    sys.modules['rich.columns'] = DummyRichModule('rich.columns')
+    sys.modules['rich.group'] = DummyRichModule('rich.group')
+    sys.modules['rich.layout'] = DummyRichModule('rich.layout')
+    sys.modules['rich.live'] = DummyRichModule('rich.live')
+    sys.modules['rich.rule'] = DummyRichModule('rich.rule')
+    sys.modules['rich.spinner'] = DummyRichModule('rich.spinner')
+    sys.modules['rich.style'] = DummyRichModule('rich.style')
+    sys.modules['rich.theme'] = DummyRichModule('rich.theme')
+    sys.modules['rich.box'] = DummyRichModule('rich.box')
+    sys.modules['rich.color'] = DummyRichModule('rich.color')
+    sys.modules['rich.console'] = DummyRichModule('rich.console')
+    sys.modules['rich.measure'] = DummyRichModule('rich.measure')
+    sys.modules['rich.padding'] = DummyRichModule('rich.padding')
+    sys.modules['rich.region'] = DummyRichModule('rich.region')
+    sys.modules['rich.segment'] = DummyRichModule('rich.segment')
+    sys.modules['rich.spacing'] = DummyRichModule('rich.spacing')
+    sys.modules['rich.terminal_theme'] = DummyRichModule('rich.terminal_theme')
     
     # Configure FastMCP to not use Rich
     import fastmcp

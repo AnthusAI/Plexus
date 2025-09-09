@@ -294,11 +294,15 @@ def register_feedback_tools(mcp: FastMCP):
             # DEBUG: Log what parameters we actually received
             logger.info(f"[MCP DEBUG] Received parameters - scorecard_name: '{scorecard_name}', score_name: '{score_name}', days: '{days}', output_format: '{output_format}'")
             
-            # Convert string parameters to appropriate types
+            # Convert string parameters to appropriate types (MCP may pass strings)
             try:
                 days = int(float(str(days)))  # Handle both int and float strings
             except (ValueError, TypeError):
                 return f"Error: Invalid days parameter: {days}. Must be a number."
+            
+            # Ensure output_format is a string
+            if not isinstance(output_format, str):
+                output_format = str(output_format)
             
             logger.info(f"[MCP] Generating feedback summary for '{score_name}' on '{scorecard_name}' (last {days} days)")
             
