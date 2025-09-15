@@ -296,11 +296,11 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
               <div className="flex items-center gap-2 mb-3">
                 <Waypoints className="h-5 w-5 text-muted-foreground" />
                 <span className="text-lg font-semibold text-muted-foreground">Procedure</span>
-                {procedure?.template?.category && (
+                {/* {procedure?.template?.category && (
                   <div className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
                     {procedure.template.category}
                   </div>
-                )}
+                )} */}
               </div>
               
               
