@@ -109,7 +109,7 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
       setNodes(fetchedNodes)
       
       // Set all nodes as expanded by default
-      const allNodeIds = new Set(fetchedNodes.map((node: GraphNode) => node.id as string))
+      const allNodeIds: Set<string> = new Set(fetchedNodes.map((node: GraphNode) => node.id as string))
       setExpandedNodes(allNodeIds)
     } catch (err) {
       console.error('Error loading nodes:', err)
