@@ -49,7 +49,7 @@ dependencies = [
     "langchain>=0.3.25",
     "langchain-core>=0.3.70",
     "langchain-community>=0.3.24",
-    "langgraph==0.2.60",
+    "langgraph==0.6.7",
     "langchain-aws>=0.2.23",
     "langchain-openai>=0.1.14",
     "langchain-ollama>=0.3.6",
