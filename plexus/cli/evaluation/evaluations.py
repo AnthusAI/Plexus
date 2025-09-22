@@ -1172,6 +1172,56 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None, 
         logging.error(error_msg)
         raise ValueError(f"{error_msg}\nEnsure that individual score YAML files exist in the scorecard directory.\nYou may need to run fetch_score_configurations first to create these files.") from e
 
+def get_latest_score_version(client, score_id: str) -> Optional[str]:
+    """
+    Get the most recent ScoreVersion ID for a given score using the scoreId index sorted by createdAt.
+    
+    Args:
+        client: GraphQL API client
+        score_id: The score ID to get the latest version for
+        
+    Returns:
+        The latest ScoreVersion ID, or None if no versions found
+    """
+    try:
+        query = """
+        query ListScoreVersionByScoreIdAndCreatedAt($scoreId: String!, $sortDirection: ModelSortDirection, $limit: Int) {
+            listScoreVersionByScoreIdAndCreatedAt(scoreId: $scoreId, sortDirection: $sortDirection, limit: $limit) {
+                items {
+                    id
+                    createdAt
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "scoreId": score_id,
+            "sortDirection": "DESC",  # Most recent first
+            "limit": 1
+        }
+        
+        logging.info(f"Fetching latest ScoreVersion for score ID: {score_id}")
+        result = client.execute(query, variables)
+        
+        if result and 'listScoreVersionByScoreIdAndCreatedAt' in result:
+            items = result['listScoreVersionByScoreIdAndCreatedAt']['items']
+            if items:
+                latest_version_id = items[0]['id']
+                created_at = items[0]['createdAt']
+                logging.info(f"Found latest ScoreVersion: {latest_version_id} (created: {created_at})")
+                return latest_version_id
+            else:
+                logging.warning(f"No ScoreVersions found for score ID: {score_id}")
+                return None
+        else:
+            logging.error(f"Unexpected response format when fetching latest ScoreVersion for score: {score_id}")
+            return None
+            
+    except Exception as e:
+        logging.error(f"Error fetching latest ScoreVersion for score {score_id}: {str(e)}")
+        return None
+
 @evaluate.command()
 @click.option('--scorecard', 'scorecard', default=None, help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--yaml', is_flag=True, help='Load scorecard from individual YAML files (from fetch_score_configurations) instead of the API')
@@ -1182,6 +1232,7 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None, 
 @click.option('--content-ids-to-sample', default='', type=str, help='Comma-separated list of content IDs to sample')
 @click.option('--score', 'score', default='', type=str, help='Score identifier (ID, name, key, or external ID). Can be comma-separated for multiple scores.')
 @click.option('--version', default=None, type=str, help='Specific score version ID to evaluate (defaults to champion version)')
+@click.option('--latest', is_flag=True, help='Use the most recent score version (overrides --version)')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--reload', is_flag=True, help='Reload existing dataset by refreshing values for current records only.')
@@ -1202,6 +1253,7 @@ def accuracy(
     content_ids_to_sample: str,
     score: str,
     version: Optional[str],
+    latest: bool,
     experiment_label: str,
     fresh: bool,
     reload: bool,
@@ -1217,13 +1269,25 @@ def accuracy(
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     """
     logging.info("Starting accuracy evaluation")
-    logging.info(f"Scorecard: {scorecard}, Score: {score}, Version: {version or 'champion'}, Samples: {number_of_samples}, Dry run: {dry_run}")
     
-    # Validate that fresh and reload are not both specified
+    # Validate mutually exclusive options
     if fresh and reload:
         logging.error("Cannot use both --fresh and --reload options. Choose one.")
         console.print("[bold red]Error: Cannot use both --fresh and --reload options. Choose one.[/bold red]")
         return
+    
+    if version and latest:
+        logging.error("Cannot use both --version and --latest options. Choose one.")
+        console.print("[bold red]Error: Cannot use both --version and --latest options. Choose one.[/bold red]")
+        return
+    
+    # Determine effective version for logging
+    effective_version = "latest" if latest else (version or "champion")
+    logging.info(f"Scorecard: {scorecard}, Score: {score}, Version: {effective_version}, Samples: {number_of_samples}, Dry run: {dry_run}")
+    
+    # Initialize resolved_version - will be updated later if --latest is used
+    # Don't initialize to version parameter since --latest needs to resolve it dynamically
+    resolved_version = version if not latest else None
     
     # If dry-run is enabled, provide a simplified successful execution path
     if dry_run:
@@ -1257,8 +1321,9 @@ def accuracy(
     # Proceeding with normal evaluation
     # Original implementation for non-dry-run mode
     async def _run_accuracy():
+        from plexus.dashboard.api.client import PlexusDashboardClient
         # Starting evaluation process
-        nonlocal task_id, score  # Make task_id and score accessible to modify in the async function
+        nonlocal task_id, score, resolved_version  # Make task_id, score, and resolved_version accessible to modify in the async function
         
         task = None  # Track the task
         evaluation_record = None  # Track the evaluation record
@@ -1356,6 +1421,12 @@ def accuracy(
                             "taskId": task.id
                         }
                         
+                        # Add scoreVersionId if using API loading and version is specified
+                        # Do not add scoreVersionId if using --yaml flag (local YAML files only contain champion versions)
+                        if not yaml and resolved_version:
+                            logging.info(f"Will set scoreVersionId to {resolved_version} in initial evaluation record (API loading with specific version)")
+                            experiment_params["scoreVersionId"] = resolved_version
+                        
                         # Validate 'score' parameter
                         if score is None:
                             score = ""  # Default to empty string if None
@@ -1419,6 +1490,12 @@ def accuracy(
                     "taskId": task.id
                 }
                 
+                # Add scoreVersionId if using API loading and version is specified
+                # Do not add scoreVersionId if using --yaml flag (local YAML files only contain champion versions)
+                if not yaml and resolved_version:
+                    logging.info(f"Will set scoreVersionId to {resolved_version} in initial evaluation record (Celery path - API loading with specific version)")
+                    experiment_params["scoreVersionId"] = resolved_version
+                
                 try:
                     logging.info("Creating initial Evaluation record for Celery path...")
                     evaluation_record = DashboardEvaluation.create(
@@ -1470,18 +1547,25 @@ def accuracy(
                                 sc_config.get('externalId') == primary_score_identifier or
                                 sc_config.get('originalExternalId') == primary_score_identifier):
                                 score_id_for_eval = sc_config.get('id')
-                                score_version_id_for_eval = sc_config.get('version')
                                 
-                                if not score_version_id_for_eval:
-                                    score_version_id_for_eval = sc_config.get('championVersionId')
+                                # When using --yaml flag, do not set score_version_id since local YAML files
+                                # represent the champion version and we don't want to associate with a specific version
+                                if yaml:
+                                    logging.info(f"Using --yaml flag: not setting score_version_id (local YAML represents champion version)")
+                                    score_version_id_for_eval = None
+                                else:
+                                    score_version_id_for_eval = sc_config.get('version')
+                                    
+                                    if not score_version_id_for_eval:
+                                        score_version_id_for_eval = sc_config.get('championVersionId')
                                 
                                 # The score_id_for_eval should be valid at this point
-                                if score_id_for_eval:
+                                if score_id_for_eval is not None:
                                     logging.info(f"Using primary score from YAML: {sc_config.get('name')}")
                                     break
                     
                     # If no match found and user specified a score, that's an error  
-                    if not score_id_for_eval and primary_score_identifier:
+                    if score_id_for_eval is None and primary_score_identifier:
                         error_msg = f"Could not find score '{primary_score_identifier}' in scorecard YAML files"
                         logging.error(error_msg)
                         raise ValueError(error_msg)
@@ -1498,8 +1582,40 @@ def accuracy(
                     logging.warning("'score' parameter is None, defaulting to empty string")
                 
                 target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
+                
+                # Handle --latest flag by resolving the latest version for the primary score
+                # resolved_version is already initialized in outer scope, don't reset it here
+                if latest and target_score_identifiers:
+                    primary_score_identifier = target_score_identifiers[0]
+                    logging.info(f"--latest flag specified for primary score: {primary_score_identifier}")
+                    
+                    # We need to resolve the score ID first to get the latest version
+                    # This requires a preliminary scorecard load to get score IDs
+                    temp_scorecard = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml, specific_version=None)
+                    
+                    # Find the primary score's ID from the loaded scorecard
+                    primary_score_id = None
+                    for sc_config in temp_scorecard.scores:
+                        if (sc_config.get('name') == primary_score_identifier or
+                            sc_config.get('key') == primary_score_identifier or 
+                            str(sc_config.get('id', '')) == primary_score_identifier or
+                            sc_config.get('externalId') == primary_score_identifier):
+                            primary_score_id = sc_config.get('id')
+                            break
+                    
+                    if primary_score_id:
+                        client = PlexusDashboardClient()
+                        latest_version_id = get_latest_score_version(client, primary_score_id)
+                        if latest_version_id:
+                            resolved_version = latest_version_id
+                            logging.info(f"Resolved --latest to version: {latest_version_id}")
+                        else:
+                            logging.warning(f"Could not find latest version for score {primary_score_identifier}, using champion version")
+                    else:
+                        logging.warning(f"Could not resolve score ID for {primary_score_identifier}, using champion version")
+                
                 try:
-                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml, specific_version=version)
+                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml, specific_version=resolved_version)
                     
                     # Log the actual configurations being used
                     log_scorecard_configurations(scorecard_instance, "(API Loading)")
@@ -1519,6 +1635,8 @@ def accuracy(
                                 sc_config.get('externalId') == primary_score_identifier or
                                 sc_config.get('originalExternalId') == primary_score_identifier):
                                 score_id_for_eval = sc_config.get('id')
+                                
+                                # API loading: set the score_version_id from configuration
                                 score_version_id_for_eval = sc_config.get('version')
                                 
                                 if not score_version_id_for_eval:
@@ -1539,12 +1657,12 @@ def accuracy(
                                         score_id_for_eval = None
                                 
                                 # The score_id_for_eval should be the database UUID at this point
-                                if score_id_for_eval:
+                                if score_id_for_eval is not None:
                                     logging.info(f"Using primary score from API: {sc_config.get('name')}")
                                     break
                     
                     # If no match found and user specified a score, that's an error
-                    if not score_id_for_eval and primary_score_identifier:
+                    if score_id_for_eval is None and primary_score_identifier:
                         error_msg = f"Could not find score '{primary_score_identifier}' in scorecard"
                         logging.error(error_msg)
                         raise ValueError(error_msg)
@@ -1733,10 +1851,17 @@ def accuracy(
 
             if primary_score_config:
                 score_id_for_eval = primary_score_config.get('id')
-                score_version_id_for_eval = primary_score_config.get('version')
                 
-                if not score_version_id_for_eval:
-                    score_version_id_for_eval = primary_score_config.get('championVersionId')
+                # When using --yaml flag, do not set score_version_id since local YAML files
+                # represent the champion version and we don't want to associate with a specific version
+                if yaml:
+                    logging.info(f"Using --yaml flag: not setting score_version_id for evaluation record (local YAML represents champion version)")
+                    score_version_id_for_eval = None
+                else:
+                    score_version_id_for_eval = primary_score_config.get('version')
+                    
+                    if not score_version_id_for_eval:
+                        score_version_id_for_eval = primary_score_config.get('championVersionId')
                 
                 # If the score_id_for_eval looks like an external ID (numeric),
                 # we need to resolve it to the actual DynamoDB UUID for Amplify Gen2 schema association
@@ -1886,8 +2011,14 @@ def accuracy(
                     if score_id and isinstance(score_id, str) and '-' in score_id:
                         update_fields['scoreId'] = score_id
                     
-                    if score_version_id:
+                    # Only set scoreVersionId if not using --yaml flag
+                    # When using --yaml, local files represent champion versions, not specific versions
+                    # Use resolved_version (which includes --latest resolution) instead of the original version parameter
+                    if score_version_id and not yaml:
                         update_fields['scoreVersionId'] = score_version_id
+                        logging.info(f"Setting scoreVersionId to {score_version_id} in final evaluation update (API loading)")
+                    elif yaml:
+                        logging.info("Using --yaml flag: not setting scoreVersionId in final evaluation update (local YAML represents champion version)")
                     
                     # Add other data fields
                     if final_metrics.get("confusionMatrix"):
