@@ -218,7 +218,9 @@ class Generator(BaseNode):
         
         # Check if either completion or explanation has content
         has_completion = state.completion is not None and state.completion.strip()
-        has_explanation = state.explanation is not None and state.explanation.strip()
+        has_explanation = (state.explanation is not None and 
+                          state.explanation.strip() and 
+                          state.explanation != "No completion received from LLM")
         
         if has_completion or has_explanation:
             logging.info(f"Content generated, ending")
