@@ -358,6 +358,7 @@ user_message: |
 Common metadata includes:
 - `text`: The primary content being scored
 - `metadata.schools`: School-related data (for education clients)
+- `metadata.other_data`: Other metadata
 - `results["Score Name"]`: Results from other scores
 - Custom metadata provided by data sources
 
