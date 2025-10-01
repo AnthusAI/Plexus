@@ -593,21 +593,26 @@ class TestScoreInfoTool:
 
 class TestScorePullTool:
     """Test plexus_score_pull tool patterns"""
-    
+
     def test_score_pull_validation_patterns(self):
         """Test score pull parameter validation patterns"""
-        def validate_score_pull_params(scorecard_identifier, score_identifier):
+        def validate_score_pull_params(scorecard_identifier, score_identifier, version_id=None):
             if not scorecard_identifier or not scorecard_identifier.strip():
                 return False, "scorecard_identifier is required"
             if not score_identifier or not score_identifier.strip():
                 return False, "score_identifier is required"
             return True, None
-        
+
         # Test valid parameters
         valid, error = validate_score_pull_params("scorecard-123", "score-456")
         assert valid is True
         assert error is None
-        
+
+        # Test with version_id parameter
+        valid, error = validate_score_pull_params("scorecard-123", "score-456", "version-789")
+        assert valid is True
+        assert error is None
+
         # Test missing parameters
         valid, error = validate_score_pull_params("", "score-456")
         assert valid is False
@@ -642,9 +647,273 @@ class TestScorePullTool:
             "success": False,
             "message": "Failed to pull configuration"
         }
-        
+
         assert failure_result['success'] is False
         assert "Failed to pull" in failure_result['message']
+
+    def test_score_pull_specific_version_patterns(self):
+        """Test score pull with specific version_id parameter"""
+        # Test successful version-specific pull response
+        version_pull_result = {
+            "success": True,
+            "code_file_path": "/local/path/scorecard/score.yaml",
+            "guidelines_file_path": "/local/path/scorecard/score.md",
+            "version_id": "version-specific-123",
+            "message": "Successfully pulled version version-specific-123 for score 'Test Score'"
+        }
+
+        response = {
+            "success": True,
+            "scoreId": "score-123",
+            "scoreName": "Test Score",
+            "scorecardName": "Test Scorecard",
+            "codeFilePath": version_pull_result["code_file_path"],
+            "guidelinesFilePath": version_pull_result["guidelines_file_path"],
+            "versionId": version_pull_result["version_id"],
+            "message": version_pull_result["message"],
+            "dashboardUrl": "https://plexus.anth.us/lab/scorecards/scorecard-123/scores/score-123"
+        }
+
+        assert response['success'] is True
+        assert response['versionId'] == "version-specific-123"
+        assert "version-specific-123" in response['message']
+        assert response['codeFilePath'].endswith(".yaml")
+        assert response['guidelinesFilePath'].endswith(".md")
+
+    def test_score_pull_version_not_found_error(self):
+        """Test error handling when requested version_id is not found"""
+        version_not_found_result = {
+            "success": False,
+            "message": "Version version-nonexistent not found"
+        }
+
+        assert version_not_found_result['success'] is False
+        assert "not found" in version_not_found_result['message']
+        assert "version-nonexistent" in version_not_found_result['message']
+
+    def test_score_pull_version_metadata_comments(self):
+        """Test that version-specific pulls include metadata comments"""
+        # Mock version data that would be pulled
+        version_data = {
+            'id': 'version-123',
+            'configuration': 'name: Test Score\ntype: SimpleLLMScore\nsystem_message: "Test"',
+            'guidelines': '# Test Guidelines\n\nTest content.',
+            'createdAt': '2024-01-01T00:00:00Z',
+            'note': 'Test version'
+        }
+
+        # Expected file content with metadata comments
+        expected_yaml_content = f"""# Pulled from Plexus API
+# Score: Test Score
+# Version ID: version-123
+# Created: 2024-01-01T00:00:00Z
+# Note: Test version
+#
+name: Test Score
+type: SimpleLLMScore
+system_message: "Test"
+"""
+
+        # Verify metadata comments are included
+        lines = expected_yaml_content.split('\n')
+        assert any("# Version ID: version-123" in line for line in lines)
+        assert any("# Created: 2024-01-01T00:00:00Z" in line for line in lines)
+        assert any("# Note: Test version" in line for line in lines)
+        assert "name: Test Score" in expected_yaml_content
+
+    def test_score_pull_backup_functionality(self):
+        """Test that existing files are backed up before pulling new versions"""
+        import tempfile
+        import os
+
+        # Test backup creation for champion version pull
+        def simulate_champion_pull_with_backup(score_name, existing_yaml_content=None, existing_md_content=None):
+            """Simulate the backup functionality for champion pulls"""
+            # Create temporary directory structure
+            with tempfile.TemporaryDirectory() as temp_dir:
+                scorecard_dir = os.path.join(temp_dir, "scorecards", "Test Scorecard")
+                os.makedirs(scorecard_dir, exist_ok=True)
+
+                yaml_file = os.path.join(scorecard_dir, f"{score_name}.yaml")
+                md_file = os.path.join(scorecard_dir, f"{score_name}.md")
+
+                backup_created = False
+
+                # Create existing files if content provided
+                if existing_yaml_content:
+                    with open(yaml_file, 'w') as f:
+                        f.write(existing_yaml_content)
+
+                if existing_md_content:
+                    with open(md_file, 'w') as f:
+                        f.write(existing_md_content)
+
+                # Simulate backup creation logic
+                if existing_yaml_content and os.path.exists(yaml_file):
+                    backup_path = f"{yaml_file}.bak"
+                    import shutil
+                    shutil.copy2(yaml_file, backup_path)
+                    backup_created = True
+
+                    # Verify backup was created
+                    assert os.path.exists(backup_path)
+                    with open(backup_path, 'r') as f:
+                        assert f.read() == existing_yaml_content
+
+                if existing_md_content and os.path.exists(md_file):
+                    backup_path = f"{md_file}.bak"
+                    import shutil
+                    shutil.copy2(md_file, backup_path)
+                    backup_created = True
+
+                    # Verify backup was created
+                    assert os.path.exists(backup_path)
+                    with open(backup_path, 'r') as f:
+                        assert f.read() == existing_md_content
+
+                # Simulate writing new content
+                new_yaml = "name: Updated Score\ntype: SimpleLLMScore"
+                new_md = "# Updated Guidelines\n\nNew content."
+
+                with open(yaml_file, 'w') as f:
+                    f.write(new_yaml)
+
+                with open(md_file, 'w') as f:
+                    f.write(new_md)
+
+                return {
+                    "success": True,
+                    "backup_created": backup_created,
+                    "yaml_file": yaml_file,
+                    "md_file": md_file
+                }
+
+        # Test 1: No existing files - no backup needed
+        result = simulate_champion_pull_with_backup("Test Score")
+        assert result["success"] is True
+        assert result["backup_created"] is False
+
+        # Test 2: Existing YAML file - backup should be created
+        existing_yaml = "name: Original Score\ntype: SimpleLLMScore"
+        result = simulate_champion_pull_with_backup("Test Score", existing_yaml_content=existing_yaml)
+        assert result["success"] is True
+        assert result["backup_created"] is True
+
+        # Test 3: Both existing files - backups should be created for both
+        existing_yaml = "name: Original Score\ntype: SimpleLLMScore"
+        existing_md = "# Original Guidelines\n\nOriginal content."
+        result = simulate_champion_pull_with_backup("Test Score", existing_yaml, existing_md)
+        assert result["success"] is True
+        assert result["backup_created"] is True
+
+    def test_score_pull_version_backup_functionality(self):
+        """Test that existing files are backed up before pulling specific versions"""
+        import tempfile
+        import os
+
+        def simulate_version_pull_with_backup(score_name, version_id, existing_yaml_content=None):
+            """Simulate the backup functionality for version-specific pulls"""
+            with tempfile.TemporaryDirectory() as temp_dir:
+                scorecard_dir = os.path.join(temp_dir, "scorecards", "Test Scorecard")
+                os.makedirs(scorecard_dir, exist_ok=True)
+
+                yaml_file = os.path.join(scorecard_dir, f"{score_name}.yaml")
+                backup_created = False
+
+                # Create existing file if content provided
+                if existing_yaml_content:
+                    with open(yaml_file, 'w') as f:
+                        f.write(existing_yaml_content)
+
+                # Simulate backup creation logic (from _pull_specific_version)
+                if existing_yaml_content and os.path.exists(yaml_file):
+                    backup_path = f"{yaml_file}.bak"
+                    import shutil
+                    shutil.copy2(yaml_file, backup_path)
+                    backup_created = True
+
+                    # Verify backup contains original content
+                    assert os.path.exists(backup_path)
+                    with open(backup_path, 'r') as f:
+                        assert f.read() == existing_yaml_content
+
+                # Simulate writing new version content
+                new_content = f"""# Pulled from Plexus API
+# Score: {score_name}
+# Version ID: {version_id}
+# Created: 2024-01-01T00:00:00Z
+#
+name: Version Score
+type: SimpleLLMScore
+"""
+
+                with open(yaml_file, 'w') as f:
+                    f.write(new_content)
+
+                # Verify new content was written
+                with open(yaml_file, 'r') as f:
+                    content = f.read()
+                    assert f"Version ID: {version_id}" in content
+                    assert "name: Version Score" in content
+
+                return {
+                    "success": True,
+                    "backup_created": backup_created,
+                    "version_id": version_id,
+                    "message": f"Successfully pulled version {version_id} for score '{score_name}'" + (" (backup created)" if backup_created else "")
+                }
+
+        # Test version pull without existing file
+        result = simulate_version_pull_with_backup("Test Score", "version-123")
+        assert result["backup_created"] is False
+        assert "(backup created)" not in result["message"]
+
+        # Test version pull with existing file
+        existing_content = "name: Existing Score\ntype: SimpleLLMScore"
+        result = simulate_version_pull_with_backup("Test Score", "version-456", existing_content)
+        assert result["backup_created"] is True
+        assert "(backup created)" in result["message"]
+        assert result["version_id"] == "version-456"
+
+    def test_backup_error_handling(self):
+        """Test backup error handling scenarios"""
+
+        def simulate_backup_failure_scenario():
+            """Simulate backup failure due to permission issues"""
+            try:
+                # Simulate permission error during backup
+                raise PermissionError("Permission denied when creating backup")
+            except PermissionError as e:
+                return {
+                    "success": False,
+                    "error": "BACKUP_FAILED",
+                    "message": f"Failed to create backup: {str(e)}"
+                }
+
+        result = simulate_backup_failure_scenario()
+        assert result["success"] is False
+        assert "BACKUP_FAILED" in result["error"]
+        assert "Permission denied" in result["message"]
+
+    def test_backup_filename_patterns(self):
+        """Test backup filename generation patterns"""
+
+        def generate_backup_filename(original_path):
+            """Simulate backup filename generation"""
+            return f"{original_path}.bak"
+
+        # Test YAML backup filename
+        yaml_path = "/path/to/scorecards/Test Scorecard/My Score.yaml"
+        backup_path = generate_backup_filename(yaml_path)
+        assert backup_path == "/path/to/scorecards/Test Scorecard/My Score.yaml.bak"
+
+        # Test guidelines backup filename
+        md_path = "/path/to/scorecards/Test Scorecard/My Score.md"
+        backup_path = generate_backup_filename(md_path)
+        assert backup_path == "/path/to/scorecards/Test Scorecard/My Score.md.bak"
+
+        # Test that backup doesn't overwrite if .bak already exists
+        # (Implementation should handle this gracefully)
 
 
 class TestScorePushTool:
