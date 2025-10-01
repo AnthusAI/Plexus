@@ -397,7 +397,8 @@ def _generate_report_core(
     run_parameters: Dict[str, Any],
     client: PlexusDashboardClient,
     tracker: TaskProgressTracker,
-    log_prefix_override: Optional[str] = None # For CLI context
+    log_prefix_override: Optional[str] = None, # For CLI context
+    config_content_override: Optional[str] = None # For pre-rendered configuration (e.g., with Jinja2 parameters)
 ) -> Tuple[str, Optional[str]]:
     """
     Core logic for generating a report. Assumes Task exists and tracker is initialized.
@@ -409,6 +410,8 @@ def _generate_report_core(
         client: Initialized PlexusDashboardClient.
         tracker: Initialized TaskProgressTracker for status and progress updates.
         log_prefix_override: Optional prefix for logs (e.g., for CLI context).
+        config_content_override: Optional pre-rendered configuration content (e.g., with Jinja2 parameters).
+                                 If provided, this will be used instead of loading from the database.
 
     Returns:
         A tuple containing:
@@ -431,7 +434,13 @@ def _generate_report_core(
         if not report_config_model:
             raise ValueError(f"ReportConfiguration not found or failed to load: {report_config_id}")
 
-        config_markdown = report_config_model.configuration
+        # Use override content if provided (e.g., pre-rendered with Jinja2 parameters)
+        if config_content_override:
+            config_markdown = config_content_override
+            logger.info(f"{log_prefix} Using provided configuration content override (e.g., rendered with parameters)")
+        else:
+            config_markdown = report_config_model.configuration
+        
         report_config_name = report_config_model.name
         logger.info(f"{log_prefix} Loaded ReportConfiguration: {report_config_name} ({report_config_id})")
 

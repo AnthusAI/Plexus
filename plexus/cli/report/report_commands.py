@@ -83,13 +83,14 @@ logger = logging.getLogger(__name__)
 # Note: The @click.group() definition remains in the main ReportCommands.py
 # These commands will be added to that group.
 
-@click.command(name="run") # Changed from report.command to click.command
+@click.command(name="run", context_settings=dict(ignore_unknown_options=True, allow_extra_args=True, allow_interspersed_args=False))
 @click.option('--config', 'config_identifier', required=True, help='ID or name of the ReportConfiguration to use.')
-@click.option('--days', type=int, help='Number of days to analyze (overrides the default in the report configuration).')
+@click.option('--days', type=int, help='Number of days to analyze (legacy support, prefer --param-days or parameter name).')
 @click.option('--fresh', is_flag=True, help='Force fresh processing, bypassing any cached transformations')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
-@click.argument('params', nargs=-1)
-def run(config_identifier: str, days: Optional[int], fresh: bool, task_id: Optional[str], params: Tuple[str]):
+@click.argument('params', nargs=-1, type=click.UNPROCESSED)
+@click.pass_context
+def run(ctx: click.Context, config_identifier: str, days: Optional[int], fresh: bool, task_id: Optional[str], params: Tuple[str]):
     """
     Generate a new report instance from a ReportConfiguration synchronously.
 
@@ -104,8 +105,40 @@ def run(config_identifier: str, days: Optional[int], fresh: bool, task_id: Optio
         # --- Step 1: Parse Parameters & Resolve Account ---
         run_parameters = parse_kv_pairs(params)
         
-        # Add days parameter to run_parameters if provided
+        # Parse parameter options from command line args
+        # Supports two formats:
+        # 1. --param-NAME=value (explicit parameter prefix, avoids collisions)
+        # 2. --NAME=value (direct parameter name, more convenient)
+        cli_params = {}
+        
+        console.print(f"[dim]Parsing command line args: {ctx.args}[/dim]")
+        console.print(f"[dim]Params tuple: {params}[/dim]")
+        
+        # Process all arguments (both ctx.args and params)
+        all_args = list(ctx.args) + list(params)
+        
+        for arg in all_args:
+            if isinstance(arg, str) and arg.startswith('--'):
+                # Check for --param-NAME=value format
+                if arg.startswith('--param-'):
+                    parts = arg[8:].split('=', 1)  # Remove '--param-' prefix
+                    if len(parts) == 2:
+                        param_name, param_value = parts
+                        cli_params[param_name.replace('-', '_')] = param_value
+                        console.print(f"[dim]Found --param-{param_name}: {param_value}[/dim]")
+                # Check for --NAME=value format (direct parameter name)
+                elif '=' in arg:
+                    parts = arg[2:].split('=', 1)  # Remove '--' prefix
+                    if len(parts) == 2:
+                        param_name, param_value = parts
+                        # Skip known CLI options (config, fresh, task-id, days)
+                        if param_name not in ('config', 'fresh', 'task-id', 'days'):
+                            cli_params[param_name.replace('-', '_')] = param_value
+                            console.print(f"[dim]Found --{param_name}: {param_value}[/dim]")
+        
+        # Legacy: Add --days parameter to cli_params if provided
         if days is not None:
+            cli_params['days'] = str(days)
             run_parameters['days'] = str(days)
             
         # Add fresh flag to run_parameters if provided
@@ -113,7 +146,7 @@ def run(config_identifier: str, days: Optional[int], fresh: bool, task_id: Optio
             run_parameters['fresh_transform_cache'] = 'true'
             console.print("[dim]Fresh processing enabled - will bypass cached transformations[/dim]")
             
-        console.print(f"Attempting to run report from configuration: [cyan]'{config_identifier}'[/cyan] with parameters: {run_parameters}")
+        console.print(f"Attempting to run report from configuration: [cyan]'{config_identifier}'[/cyan]")
 
         # Resolve account ID first (needed for config lookup by name)
         # Use the utility function
@@ -128,6 +161,74 @@ def run(config_identifier: str, days: Optional[int], fresh: bool, task_id: Optio
             raise click.Abort()
         resolved_config_id = report_config.id
         console.print(f"Resolved to Configuration ID: [cyan]{resolved_config_id}[/cyan] (Name: {report_config.name})")
+        
+        # Debug: Check if configuration content is loaded
+        console.print(f"[dim]Configuration content loaded: {bool(report_config.configuration)}[/dim]")
+        if report_config.configuration:
+            console.print(f"[dim]Configuration length: {len(report_config.configuration)} chars[/dim]")
+            console.print(f"[dim]First 100 chars: {report_config.configuration[:100]}[/dim]")
+        
+        # --- Step 2.5: Handle Parameters ---
+        from plexus.reports.parameter_utils import (
+            extract_parameters_from_config,
+            validate_all_parameters,
+            render_configuration_with_parameters,
+            normalize_parameter_value
+        )
+        from plexus.cli.report.parameter_prompts import (
+            collect_parameters_interactively,
+            display_collected_parameters
+        )
+        
+        # Extract parameter definitions from configuration
+        param_defs, _ = extract_parameters_from_config(report_config.configuration or '')
+        
+        if param_defs:
+            console.print(f"[cyan]Report configuration requires {len(param_defs)} parameter(s)[/cyan]")
+            
+            # Collect parameters interactively for any not provided via CLI
+            collected_params = collect_parameters_interactively(
+                report_config.configuration or '',
+                cli_params
+            )
+            
+            # Normalize parameter values to correct types
+            for param_def in param_defs:
+                param_name = param_def.get('name')
+                if param_name in collected_params:
+                    collected_params[param_name] = normalize_parameter_value(
+                        param_def, 
+                        collected_params[param_name]
+                    )
+            
+            # Validate all parameters
+            is_valid, errors = validate_all_parameters(param_defs, collected_params)
+            if not is_valid:
+                console.print("[bold red]Parameter validation failed:[/bold red]")
+                for error in errors:
+                    console.print(f"  [red]• {error}[/red]")
+                raise click.Abort()
+            
+            # Display collected parameters
+            display_collected_parameters(collected_params)
+            
+            # Render configuration with Jinja2
+            try:
+                rendered_config = render_configuration_with_parameters(
+                    report_config.configuration or '',
+                    collected_params
+                )
+                # Update the report_config object with rendered configuration
+                report_config.configuration = rendered_config
+                console.print("[dim]Configuration rendered with parameters[/dim]")
+            except Exception as e:
+                console.print(f"[bold red]Failed to render configuration with parameters:[/bold red] {e}")
+                raise click.Abort()
+            
+            # Store parameters for metadata
+            run_parameters.update({f"param_{k}": str(v) for k, v in collected_params.items()})
+        
+        console.print(f"[dim]Running with parameters: {run_parameters}[/dim]")
 
         # --- Step 3: Create Task Record ---
         console.print(f"Creating Task record for synchronous run...")
@@ -182,13 +283,17 @@ def run(config_identifier: str, days: Optional[int], fresh: bool, task_id: Optio
         console.print(f"Executing report generation synchronously for Task [cyan]{task_id}[/cyan]...")
         log_prefix = f"[ReportGenCLI task_id={task_id}]"
 
+        # Pass rendered configuration if we have one (from parameter processing)
+        config_override = report_config.configuration if param_defs else None
+
         report_id, first_block_error = _generate_report_core(
             report_config_id=resolved_config_id,
             account_id=account_id,
             run_parameters=run_parameters,
             client=client,
             tracker=tracker,
-            log_prefix_override=log_prefix
+            log_prefix_override=log_prefix,
+            config_content_override=config_override
         )
 
         # --- Step 6: Mark Task Status based on Core Logic Result ---

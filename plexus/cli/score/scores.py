@@ -994,12 +994,15 @@ def push(scorecard: str, score: str, note: str):
             'input': {
                 'scoreId': score_id,
                 'configuration': cleaned_yaml_content,
-                'parentVersionId': parent_version_id,
                 'note': note,
                 # Never auto-promote to champion via CLI push
                 'isFeatured': False
             }
         }
+        
+        # Only include parentVersionId if it has a value
+        if parent_version_id:
+            mutation_input['input']['parentVersionId'] = parent_version_id
         
         with client as session:
             result = session.execute(gql(mutation), mutation_input)
@@ -1045,7 +1048,7 @@ def push(scorecard: str, score: str, note: str):
                 updated_yaml = (
                     cleaned_yaml[:insertion_point] + 
                     f"version: {new_version_id}\n" + 
-                    f"parent: {parent_version_id}" +
+                    f"parent: {parent_version_id}\n" +
                     cleaned_yaml[insertion_point:]
                 )
                 

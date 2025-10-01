@@ -448,7 +448,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     setShowTemplateSelector(true)
   }
 
-  const handleCreateProcedureFromTemplate = async (template: Schema['ProcedureTemplate']['type']) => {
+  const handleCreateProcedureFromTemplate = async (template: Schema['ProcedureTemplate']['type'], parameters?: Record<string, any>) => {
     if (!selectedAccount?.id) {
       toast.error('No account selected')
       return
@@ -458,24 +458,70 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       console.log('Creating procedure from template:', { 
         templateId: template.id, 
         templateName: template.name,
-        templateCode: template.template?.substring(0, 100) + '...'
+        templateCode: template.template?.substring(0, 100) + '...',
+        parameters
       })
       
-      // Create procedure with template reference and copy template code
+      // Process template YAML to inject parameter values
+      let processedCode = template.template || ''
+      
+      if (parameters && template.template) {
+        // Parse the YAML to find the parameters section
+        const yaml = require('yaml')
+        try {
+          const parsed = yaml.parse(template.template)
+          
+          // If there's a parameters section, add values to it
+          if (parsed.parameters && Array.isArray(parsed.parameters)) {
+            parsed.parameters = parsed.parameters.map((param: any) => ({
+              ...param,
+              value: parameters[param.name] // Add the actual value
+            }))
+          }
+          
+          // Convert back to YAML
+          processedCode = yaml.stringify(parsed)
+        } catch (yamlError) {
+          console.warn('Could not parse template YAML, using original:', yamlError)
+        }
+      }
+      
+      // Create procedure with template reference and processed code
       const createInput = {
         featured: false,
         templateId: template.id,
-        code: template.template, // Copy template YAML code to procedure
+        code: processedCode,
         rootNodeId: null, // Will be set when nodes are created
-        scorecardId: selectedScorecard || null,
-        scoreId: selectedScore || null,
+        scorecardId: parameters?.scorecard_id || selectedScorecard || null,
+        scoreId: parameters?.score_id || selectedScore || null,
         accountId: selectedAccount.id,
       }
       
       console.log('Create input:', createInput)
       
-      const result = await (client.models.Procedure.create as any)(createInput as any)
-      const { data: newProcedure, errors } = result
+      // Use direct GraphQL mutation instead of client.models
+      const result = await client.graphql({
+        query: `
+          mutation CreateProcedure($input: CreateProcedureInput!) {
+            createProcedure(input: $input) {
+              id
+              featured
+              templateId
+              code
+              rootNodeId
+              scorecardId
+              scoreId
+              accountId
+              createdAt
+              updatedAt
+            }
+          }
+        `,
+        variables: { input: createInput }
+      })
+
+      const newProcedure = (result as any).data?.createProcedure
+      const errors = (result as any).errors
 
       if (errors && errors.length > 0) {
         console.error('GraphQL errors creating procedure:', errors)
