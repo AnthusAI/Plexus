@@ -1210,7 +1210,76 @@ class Evaluation:
 
         # Build confusion matrix metrics for the summary
         confusion_metrics = self._build_confusion_metrics_from_results()
-        
+
+        # Analyze confidence calibration if confidence features are detected (preserve raw values)
+        calibration_report = None
+        try:
+            from plexus.confidence_calibration import (
+                detect_confidence_feature_enabled,
+                extract_confidence_accuracy_pairs,
+                compute_isotonic_regression_calibration,
+                serialize_calibration_model,
+                generate_calibration_report
+            )
+
+            logging.info(f"About to check confidence detection on {len(self.all_results)} results")
+            print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+            confidence_detected = detect_confidence_feature_enabled(self.all_results)
+            logging.info(f"Confidence detection result: {confidence_detected}")
+            print(f"DEBUG: Confidence detection result: {confidence_detected}")
+
+            if confidence_detected:
+                logging.info("Confidence feature detected - computing isotonic regression calibration")
+
+                # Extract confidence-accuracy pairs
+                confidence_scores, accuracy_labels = extract_confidence_accuracy_pairs(self.all_results)
+
+                if len(confidence_scores) >= 10:
+                    # Compute calibration model
+                    calibration_model = compute_isotonic_regression_calibration(confidence_scores, accuracy_labels)
+
+                    if calibration_model is not None:
+                        # Generate calibration report with serialized model data
+                        calibration_report = generate_calibration_report(
+                            confidence_scores, accuracy_labels, calibration_model
+                        )
+
+                        # Add serialized calibration data for future use
+                        calibration_report["calibration_model"] = serialize_calibration_model(calibration_model)
+
+                        # Generate reliability diagram visualization
+                        try:
+                            from plexus.confidence_calibration import plot_reliability_diagram
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            reliability_plot_path = f"{report_folder_path}/reliability_diagram_{timestamp}.png"
+
+                            plot_reliability_diagram(
+                                confidence_scores=confidence_scores,
+                                accuracy_labels=accuracy_labels,
+                                save_path=reliability_plot_path,
+                                title="Confidence Calibration - Raw Model Output",
+                                n_bins=20  # 5% buckets
+                            )
+
+                            logging.info(f"Reliability diagram saved to: {reliability_plot_path}")
+                        except Exception as e:
+                            logging.warning(f"Could not generate reliability diagram: {e}")
+
+                        logging.info(f"Computed isotonic regression calibration from {len(confidence_scores)} confidence scores")
+                        logging.info(f"Expected Calibration Error: {calibration_report.get('expected_calibration_error', 'N/A'):.4f}")
+                        logging.info("Raw confidence values preserved - calibration data stored for future application")
+                    else:
+                        logging.warning("Could not compute calibration model")
+                else:
+                    logging.info(f"Insufficient data for calibration: {len(confidence_scores)} samples (need at least 10)")
+            else:
+                logging.debug("No confidence features detected - skipping calibration")
+
+        except ImportError:
+            logging.warning("sklearn not available - skipping confidence calibration")
+        except Exception as e:
+            logging.error(f"Error during confidence calibration: {e}")
+
         report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows), confusion_metrics)
         logging.info(report)
 
@@ -1219,7 +1288,7 @@ class Evaluation:
         for question in self.score_names():
             self.create_performance_visualization(self.all_results, question, report_folder_path)
 
-        self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
+        self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses, calibration_report)
 
     async def score_all_texts_for_score(self, selected_sample_rows, score_name: str, tracker):
         """Score all texts for a specific score with controlled concurrency"""
@@ -1735,7 +1804,7 @@ class Evaluation:
         plt.savefig(f"{report_folder_path}/performance_{safe_question}.png", bbox_inches='tight', dpi=600)
         plt.close()
         
-    def generate_metrics_json(self, report_folder_path, sample_size, expenses):
+    def generate_metrics_json(self, report_folder_path, sample_size, expenses, calibration_report=None):
         overall_accuracy = None if self.total_questions == 0 else (self.total_correct / self.total_questions) * 100
         
         if sample_size < 120:
@@ -1754,6 +1823,10 @@ class Evaluation:
             "cost_per_call": f"{expenses['cost_per_text']:.7f}".rstrip('0').rstrip('.'),
             "total_cost": f"{expenses['total_cost']:.7f}".rstrip('0').rstrip('.')
         }
+
+        # Add calibration report if available
+        if calibration_report is not None:
+            metrics["confidence_calibration"] = calibration_report
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         metrics_filename = f"metrics_{timestamp}.json"
@@ -2239,7 +2312,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'results': {
                     score_result.parameters.name: {
                         'value': value,
-                        'confidence': None,
+                        'confidence': score_result.confidence,
                         'explanation': score_result.metadata.get('explanation', ''),
                         'metadata': {
                             'human_label': score_result.metadata.get('human_label', ''),
@@ -2266,6 +2339,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'scorecardId': self.scorecard_id,
                 'metadata': json.dumps(metadata_dict),  # Add the metadata that was created earlier
                 'value': value,  # Add the score result value
+                'confidence': score_result.confidence,  # Add confidence from Score.Result
+                'explanation': score_result.explanation,  # Add explanation from Score.Result
                 'code': '200',  # Add success code
             }
             
@@ -2313,6 +2388,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     accountId
                     scorecardId
                     value
+                    confidence
+                    explanation
                     metadata
                     trace
                     code
@@ -2325,7 +2402,14 @@ Total cost:       ${expenses['total_cost']:.6f}
             variables = {
                 "input": data
             }
-            
+
+            # DEBUG: Log the data being sent to GraphQL
+            logging.info(f"🚀 CREATING SCORERESULT WITH DATA:")
+            logging.info(f"   value = {data.get('value')!r}")
+            logging.info(f"   confidence = {data.get('confidence')!r}")
+            logging.info(f"   explanation = {data.get('explanation')!r}")
+            logging.info(f"   evaluationId = {data.get('evaluationId')!r}")
+
             # Execute the API call in a non-blocking way
             response = await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
             
@@ -2338,6 +2422,14 @@ Total cost:       ${expenses['total_cost']:.6f}
             
             if not response.get('createScoreResult'):
                 raise Exception("Failed to create score result - no data returned")
+
+            # DEBUG: Log the response from GraphQL
+            created_result = response.get('createScoreResult', {})
+            logging.info(f"✅ SCORERESULT CREATED SUCCESSFULLY:")
+            logging.info(f"   id = {created_result.get('id')!r}")
+            logging.info(f"   confidence = {created_result.get('confidence')!r}")
+            logging.info(f"   explanation = {created_result.get('explanation')!r}")
+            logging.info(f"   value = {created_result.get('value')!r}")
             
         except Exception as e:
             self.logging.error(f"ScoreResult creation failed: {str(e)}")
@@ -2848,44 +2940,54 @@ class AccuracyEvaluation(Evaluation):
 
     async def _run_evaluation(self, tracker):
         try:
-            # Prefer dataset specified in score YAML (data section). Fallback to labeled_samples only if provided explicitly.
+            # Use labeled_samples that were provided during AccuracyEvaluation construction
             import pandas as pd
             df = None
-            try:
-                # New path: use the data cache specified in score YAML directly
-                from plexus.data.FeedbackItems import FeedbackItems
-                target_scores = self.get_scores_to_process(self.scorecard.get_score_names())
-                primary_score_name = target_scores[0] if target_scores else None
-                score_config = None
-                for sc in self.scorecard.scores:
-                    if sc.get('name') == primary_score_name:
-                        score_config = sc
-                        break
-                if not score_config:
-                    score_config = self.scorecard.scores[0] if self.scorecard.scores else {}
 
-                data_section = score_config.get('data') or {}
-                if data_section:
-                    cls = data_section.get('class')
-                    params = data_section.get('parameters') or {}
-                    # Support shorthand where params are at root
-                    if not params:
-                        params = {k: v for k, v in data_section.items() if k != 'class'}
+            # Check if we have labeled_samples from the constructor
+            if self.labeled_samples:
+                df = pd.DataFrame(self.labeled_samples)
+                self.logging.info(f"Using {len(df)} labeled samples provided to AccuracyEvaluation")
+            elif self.labeled_samples_filename:
+                df = pd.read_csv(self.labeled_samples_filename)
+                self.logging.info(f"Loaded {len(df)} samples from file: {self.labeled_samples_filename}")
+            else:
+                # Fallback: try to load data from score YAML (for backwards compatibility)
+                try:
+                    from plexus.data.FeedbackItems import FeedbackItems
+                    # For AccuracyEvaluation, we don't have get_scores_to_process method
+                    # so we'll work with what we have in the scorecard
+                    if hasattr(self, 'subset_of_score_names') and self.subset_of_score_names:
+                        primary_score_name = self.subset_of_score_names[0]
+                    else:
+                        primary_score_name = self.scorecard.scores[0].get('name') if self.scorecard.scores else None
 
-                    # Map known aliases to fully-qualified class
-                    if cls in ['FeedbackItems', 'plexus.data.FeedbackItems']:
-                        data_cache = FeedbackItems(**params)
-                        df = data_cache.load_dataframe(data=params, fresh=True)
-            except Exception as e:
-                self.logging.warning(f"Falling back from score YAML dataset load: {e}")
+                    score_config = None
+                    for sc in self.scorecard.scores:
+                        if sc.get('name') == primary_score_name:
+                            score_config = sc
+                            break
+                    if not score_config:
+                        score_config = self.scorecard.scores[0] if self.scorecard.scores else {}
 
-            if df is None:
-                if self.labeled_samples:
-                    df = pd.DataFrame(self.labeled_samples)
-                elif self.labeled_samples_filename:
-                    df = pd.read_csv(self.labeled_samples_filename)
-                else:
-                    raise ValueError("Dataset not found. Score YAML lacks a usable 'data' section and no labeled samples were provided.")
+                    data_section = score_config.get('data') or {}
+                    if data_section:
+                        cls = data_section.get('class')
+                        params = data_section.get('parameters') or {}
+                        # Support shorthand where params are at root
+                        if not params:
+                            params = {k: v for k, v in data_section.items() if k != 'class'}
+
+                        # Map known aliases to fully-qualified class
+                        if cls in ['FeedbackItems', 'plexus.data.FeedbackItems']:
+                            data_cache = FeedbackItems(**params)
+                            df = data_cache.load_dataframe(data=params, fresh=True)
+                            self.logging.info(f"Loaded {len(df)} samples from FeedbackItems data source")
+                except Exception as e:
+                    self.logging.warning(f"Could not load data from score YAML: {e}")
+
+            if df is None or len(df) == 0:
+                raise ValueError("Dataset not found. No labeled samples were provided and score YAML data loading failed.")
 
             # Adjust the sample size if necessary
             self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
@@ -3060,6 +3162,95 @@ class AccuracyEvaluation(Evaluation):
 
                 # Generate metrics JSON
                 self.generate_metrics_json(report_folder_path, self.number_of_texts_to_sample, expenses)
+
+                # Analyze confidence calibration if confidence features are detected (preserve raw values)
+                calibration_report = None
+                try:
+                    from plexus.confidence_calibration import (
+                        detect_confidence_feature_enabled,
+                        extract_confidence_accuracy_pairs,
+                        compute_two_stage_calibration,
+                        serialize_calibration_model,
+                        generate_calibration_report
+                    )
+
+                    logging.info(f"About to check confidence detection on {len(self.all_results)} results")
+                    print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+                    confidence_detected = detect_confidence_feature_enabled(self.all_results)
+                    logging.info(f"Confidence detection result: {confidence_detected}")
+                    print(f"DEBUG: Confidence detection result: {confidence_detected}")
+
+                    if confidence_detected:
+                        logging.info("Confidence feature detected - computing two-stage calibration (temperature scaling + isotonic regression)")
+
+                        # Extract confidence-accuracy pairs
+                        confidence_scores, accuracy_labels = extract_confidence_accuracy_pairs(self.all_results)
+
+                        if len(confidence_scores) >= 10:
+                            # Compute two-stage calibration model
+                            optimal_temperature, isotonic_model, temp_scaled_scores = compute_two_stage_calibration(
+                                confidence_scores, accuracy_labels
+                            )
+
+                            if isotonic_model is not None:
+                                # Generate calibration report with isotonic model data
+                                calibration_report = generate_calibration_report(
+                                    temp_scaled_scores, accuracy_labels, isotonic_model
+                                )
+
+                                # Add temperature scaling info and serialized calibration data
+                                calibration_report["temperature_scaling"] = {
+                                    "optimal_temperature": float(optimal_temperature),
+                                    "method": "two_stage_calibration"
+                                }
+                                calibration_report["calibration_model"] = serialize_calibration_model(isotonic_model)
+
+                                # Generate reliability diagram visualization with all three series
+                                try:
+                                    from plexus.confidence_calibration import plot_reliability_diagram
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    reliability_plot_path = f"{report_folder_path}/reliability_diagram_{timestamp}.png"
+
+                                    # Apply final calibration to get fully calibrated confidence scores
+                                    final_calibrated_scores = isotonic_model.predict(temp_scaled_scores)
+
+                                    plot_reliability_diagram(
+                                        confidence_scores=confidence_scores,
+                                        accuracy_labels=accuracy_labels,
+                                        save_path=reliability_plot_path,
+                                        title=f"Two-Stage Confidence Calibration (T={optimal_temperature:.3f})",
+                                        n_bins=20,  # 5% buckets
+                                        temperature_scaled_scores=temp_scaled_scores,
+                                        calibrated_confidence_scores=final_calibrated_scores.tolist()
+                                    )
+
+                                    logging.info(f"Two-stage reliability diagram saved to: {reliability_plot_path}")
+                                    logging.info(f"Temperature scaling: T={optimal_temperature:.4f}")
+                                    print(f"DEBUG: Two-stage reliability diagram saved to: {reliability_plot_path}")
+                                    print(f"DEBUG: Temperature scaling: T={optimal_temperature:.4f}")
+
+                                    # Save calibration metrics to JSON file
+                                    calibration_metrics_path = f"{report_folder_path}/calibration_metrics_{timestamp}.json"
+                                    with open(calibration_metrics_path, 'w') as f:
+                                        import json
+                                        json.dump(calibration_report, f, indent=2)
+                                    logging.info(f"Calibration metrics saved to: {calibration_metrics_path}")
+
+                                except Exception as viz_error:
+                                    logging.error(f"Error generating two-stage reliability diagram: {viz_error}")
+                                    print(f"DEBUG: Error generating two-stage reliability diagram: {viz_error}")
+                            else:
+                                logging.warning("Could not compute two-stage calibration model (isotonic regression failed)")
+                        else:
+                            logging.info(f"Insufficient confidence data for calibration analysis: {len(confidence_scores)} samples (need >= 10)")
+                            print(f"DEBUG: Insufficient confidence data: {len(confidence_scores)} samples")
+                    else:
+                        logging.info("No confidence features detected - skipping calibration analysis")
+                        print(f"DEBUG: No confidence features detected")
+
+                except Exception as calib_error:
+                    logging.error(f"Error in confidence calibration analysis: {calib_error}")
+                    print(f"DEBUG: Error in calibration analysis: {calib_error}")
 
             return metrics
         except Exception as e:

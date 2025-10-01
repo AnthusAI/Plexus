@@ -18,7 +18,7 @@ class TestPredictionTool:
         """Test prediction parameter validation patterns"""
         def validate_prediction_params(scorecard_name, score_name, item_id=None, item_ids=None,
                                      include_input=False, include_trace=False, output_format="json",
-                                     no_cache=False, yaml_only=False):
+                                     no_cache=False, yaml_only=False, version=None, latest=False):
             if not scorecard_name or not scorecard_name.strip():
                 return False, "scorecard_name is required"
             if not score_name or not score_name.strip():
@@ -35,6 +35,10 @@ class TestPredictionTool:
             # Cannot specify both no_cache and yaml_only
             if no_cache and yaml_only:
                 return False, "Cannot specify both no_cache and yaml_only. Use one or the other"
+            
+            # Cannot specify both version and latest
+            if version and latest:
+                return False, "Cannot use both version and latest options. Choose one."
             
             # Validate boolean parameters
             if not isinstance(include_input, bool):
@@ -95,6 +99,12 @@ class TestPredictionTool:
                                                  no_cache=True, yaml_only=True)
         assert valid is False
         assert "Cannot specify both no_cache and yaml_only" in error
+        
+        # Test both version and latest
+        valid, error = validate_prediction_params("test-scorecard", "test-score", item_id="item-123",
+                                                 version="version-123", latest=True)
+        assert valid is False
+        assert "Cannot use both version and latest" in error
         
         # Test invalid boolean parameters
         valid, error = validate_prediction_params("test-scorecard", "test-score", item_id="item-123",

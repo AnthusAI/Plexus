@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import { formatConfidence } from '@/lib/confidence-formatting';
 
 import { Timestamp } from '@/components/ui/timestamp';
 import Link from 'next/link';
@@ -137,7 +138,7 @@ const ScoreResultCard: React.FC<{
           </Badge>
           {result.confidence !== null && (
             <span className="text-xs text-muted-foreground">
-              {Math.round((result.confidence || 0) * 100)}% confidence
+              {formatConfidence(result.confidence || 0)} confidence
             </span>
           )}
         </div>

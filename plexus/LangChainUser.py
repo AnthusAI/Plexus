@@ -41,6 +41,8 @@ class LangChainUser:
         temperature: Optional[float] = 0
         top_p: Optional[float] = 0.03
         max_tokens: Optional[int] = 500
+        logprobs: Optional[bool] = False
+        top_logprobs: Optional[int] = None
 
     MAX_RETRY_ATTEMPTS = 20
 
@@ -204,6 +206,11 @@ class LangChainUser:
                     chat_kwargs["top_p"] = params.top_p
                 if not is_gpt5 and params.temperature is not None:
                     chat_kwargs["temperature"] = params.temperature
+                # Add logprobs parameters for confidence calculation
+                if params.logprobs:
+                    chat_kwargs["logprobs"] = True
+                    if params.top_logprobs is not None:
+                        chat_kwargs["top_logprobs"] = params.top_logprobs
                 try:
                     base_model = ChatOpenAI(**chat_kwargs)
                 except TypeError as e:
@@ -315,6 +322,11 @@ class LangChainUser:
             }
             if not is_gpt5 and self.parameters.temperature is not None:
                 kwargs["temperature"] = self.parameters.temperature
+            # Add logprobs parameters for confidence calculation
+            if self.parameters.logprobs:
+                kwargs["logprobs"] = True
+                if self.parameters.top_logprobs is not None:
+                    kwargs["top_logprobs"] = self.parameters.top_logprobs
             model = ChatOpenAI(**kwargs)
             await model.agenerate([])  # Initialize the async client
             return model

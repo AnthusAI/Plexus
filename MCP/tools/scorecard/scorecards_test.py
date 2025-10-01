@@ -46,8 +46,7 @@ class TestScorecardToolsRegistration:
         # Verify tools were registered
         expected_tools = [
             'plexus_scorecards_list',
-            'plexus_scorecard_info',
-            'run_plexus_evaluation'
+            'plexus_scorecard_info'
         ]
         
         for tool_name in expected_tools:
@@ -320,12 +319,10 @@ class TestScorecardSharedPatterns:
         # Verify tools were registered
         assert 'plexus_scorecards_list' in registered_tools
         assert 'plexus_scorecard_info' in registered_tools
-        assert 'run_plexus_evaluation' in registered_tools
-        
+
         # Verify they are callable
         assert callable(registered_tools['plexus_scorecards_list'])
         assert callable(registered_tools['plexus_scorecard_info'])
-        assert callable(registered_tools['run_plexus_evaluation'])
     
     def test_scorecard_data_patterns(self):
         """Test scorecard data handling patterns"""
