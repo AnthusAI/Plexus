@@ -517,16 +517,18 @@ def register_score_tools(mcp: FastMCP):
     @mcp.tool()
     async def plexus_score_pull(
         scorecard_identifier: str,
-        score_identifier: str
+        score_identifier: str,
+        version_id: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
         Pulls a score's champion version code and guidelines to local files.
         Uses the reusable Score.pull_code_and_guidelines() method for implementation.
-        
+
         Parameters:
         - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
         - score_identifier: Identifier for the score (ID, name, key, or external ID)
-        
+        - version_id: Optional specific version ID to pull. If not provided, pulls champion version.
+
         Returns:
         - Information about the pulled code and guidelines, including local file paths
         """
@@ -579,9 +581,17 @@ def register_score_tools(mcp: FastMCP):
             scorecard_name = find_result["scorecard_name"]
             scorecard_id = find_result["scorecard_id"]
 
-            # Use the Score model's pull_code_and_guidelines method
-            pull_result = score.pull_code_and_guidelines(scorecard_name=scorecard_name)
-            
+            # Use the Score model's pull_code_and_guidelines method with version support
+            if version_id:
+                # Pull specific version by implementing the logic directly since the Score model may not support version_id parameter
+                pull_result = await _pull_specific_version(score, scorecard_name, version_id, client)
+            else:
+                # Pull champion version using existing method with backup
+                pull_result = _pull_champion_with_backup(score, scorecard_name)
+
+            if pull_result is None:
+                return "Error: Failed to pull score configuration"
+
             if not pull_result["success"]:
                 return f"Error: {pull_result.get('message', 'Failed to pull code and guidelines')}"
             
@@ -1759,20 +1769,179 @@ async def _create_version_from_code_with_parent(
         }
 
 
+def _pull_champion_with_backup(score, scorecard_name: str) -> Dict[str, Any]:
+    """
+    Pull champion version with backup of existing local files.
+
+    Parameters:
+    - score: Score instance
+    - scorecard_name: Name of the scorecard
+
+    Returns:
+    - Dict with success status, file paths, and backup information
+    """
+    import os
+    import shutil
+
+    try:
+        # Prepare file paths
+        scorecard_dir = f"scorecards/{scorecard_name}"
+        yaml_filename = f"{score.name}.yaml"
+        guidelines_filename = f"{score.name}.md"
+        code_file_path = os.path.join(scorecard_dir, yaml_filename)
+        guidelines_file_path = os.path.join(scorecard_dir, guidelines_filename)
+
+        # Create backups if files exist
+        backup_created = False
+
+        if os.path.exists(code_file_path):
+            backup_path = f"{code_file_path}.bak"
+            shutil.copy2(code_file_path, backup_path)
+            backup_created = True
+
+        if os.path.exists(guidelines_file_path):
+            backup_path = f"{guidelines_file_path}.bak"
+            shutil.copy2(guidelines_file_path, backup_path)
+            backup_created = True
+
+        # Call the original pull method
+        original_result = score.pull_code_and_guidelines(scorecard_name=scorecard_name)
+
+        if original_result and original_result.get("success"):
+            # Add backup information to the result
+            backup_message = " (backup created)" if backup_created else ""
+            original_result["backup_created"] = backup_created
+            original_result["message"] = original_result.get("message", "Successfully pulled champion version") + backup_message
+
+        return original_result
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error pulling champion version with backup: {str(e)}"
+        }
+
+
+async def _pull_specific_version(score, scorecard_name: str, version_id: str, client) -> Dict[str, Any]:
+    """
+    Pull a specific version of a score to local files.
+
+    Parameters:
+    - score: Score instance
+    - scorecard_name: Name of the scorecard
+    - version_id: Specific version ID to pull
+    - client: API client
+
+    Returns:
+    - Dict with success status, file paths, and version information
+    """
+    import os
+    import yaml
+
+    try:
+        # Query for the specific version
+        version_query = f"""
+        query GetScoreVersion {{
+            getScoreVersion(id: "{version_id}") {{
+                id
+                configuration
+                guidelines
+                createdAt
+                note
+                score {{
+                    id
+                    name
+                    key
+                }}
+            }}
+        }}
+        """
+
+        version_result = client.execute(version_query)
+        version_data = version_result.get('getScoreVersion')
+
+        if not version_data:
+            return {
+                "success": False,
+                "message": f"Version {version_id} not found"
+            }
+
+        # Ensure scorecard directory exists
+        scorecard_dir = f"scorecards/{scorecard_name}"
+        os.makedirs(scorecard_dir, exist_ok=True)
+
+        # Prepare file paths
+        yaml_filename = f"{score.name}.yaml"
+        guidelines_filename = f"{score.name}.md"
+        code_file_path = os.path.join(scorecard_dir, yaml_filename)
+        guidelines_file_path = os.path.join(scorecard_dir, guidelines_filename)
+
+        # Create backups of existing files before overwriting
+        backup_created = False
+        configuration = version_data.get('configuration')
+        guidelines = version_data.get('guidelines')
+
+        if configuration and os.path.exists(code_file_path):
+            backup_path = f"{code_file_path}.bak"
+            import shutil
+            shutil.copy2(code_file_path, backup_path)
+            backup_created = True
+
+        if guidelines and os.path.exists(guidelines_file_path):
+            backup_path = f"{guidelines_file_path}.bak"
+            import shutil
+            shutil.copy2(guidelines_file_path, backup_path)
+            backup_created = True
+
+        # Write YAML configuration if present
+        if configuration:
+            # Add version metadata comment at the top
+            with open(code_file_path, 'w') as f:
+                f.write(f"# Pulled from Plexus API\n")
+                f.write(f"# Score: {score.name}\n")
+                f.write(f"# Version ID: {version_id}\n")
+                f.write(f"# Created: {version_data.get('createdAt')}\n")
+                if version_data.get('note'):
+                    f.write(f"# Note: {version_data.get('note')}\n")
+                f.write(f"#\n")
+                f.write(configuration)
+
+        # Write guidelines if present
+        if guidelines:
+            with open(guidelines_file_path, 'w') as f:
+                f.write(guidelines)
+
+        backup_message = " (backup created)" if backup_created else ""
+        return {
+            "success": True,
+            "code_file_path": code_file_path if configuration else None,
+            "guidelines_file_path": guidelines_file_path if guidelines else None,
+            "version_id": version_id,
+            "backup_created": backup_created,
+            "message": f"Successfully pulled version {version_id} for score '{score.name}'{backup_message}"
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error pulling version {version_id}: {str(e)}"
+        }
+
+
 def _get_plexus_url(path: str) -> str:
     """
     Safely concatenates the PLEXUS_APP_URL with the provided path.
     Handles cases where base URL may or may not have trailing slashes
     and path may or may not have leading slashes.
-    
+
     Parameters:
     - path: The URL path to append to the base URL
-    
+
     Returns:
     - Full URL string
     """
     from urllib.parse import urljoin
-    
+
     base_url = os.environ.get('PLEXUS_APP_URL', 'https://plexus.anth.us')
     # Ensure base URL ends with a slash for urljoin to work correctly
     if not base_url.endswith('/'):

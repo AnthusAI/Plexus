@@ -7,8 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ConfigurableParametersDialog } from '@/components/ui/ConfigurableParametersDialog'
 import { Sparkles, Beaker, FileCode2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { parseParametersFromYaml, hasParameters } from '@/lib/parameter-parser'
 
 const client = generateClient<Schema>()
 
@@ -19,13 +21,15 @@ interface TemplateSelectorProps {
   accountId: string
   open: boolean
   onOpenChange: (open: boolean) => void
-  onTemplateSelect: (template: ProcedureTemplate) => void
+  onTemplateSelect: (template: ProcedureTemplate, parameters?: Record<string, any>) => void
 }
 
 export default function TemplateSelector({ accountId, open, onOpenChange, onTemplateSelect }: TemplateSelectorProps) {
   const [templates, setTemplates] = useState<ProcedureTemplate[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [creatingProcedureFromTemplate, setCreatingProcedureFromTemplate] = useState<string | null>(null)
+  const [showParametersDialog, setShowParametersDialog] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<ProcedureTemplate | null>(null)
 
   // Load templates when dialog opens
   useEffect(() => {
@@ -37,13 +41,43 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
   const loadTemplates = async () => {
     setIsLoading(true)
     try {
-      const result = await (client.models.ProcedureTemplate.listProcedureTemplateByAccountIdAndUpdatedAt as any)({
-        accountId: accountId
+      const result = await client.graphql({
+        query: `
+          query ListProcedureTemplateByAccountIdAndUpdatedAt(
+            $accountId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+          ) {
+            listProcedureTemplateByAccountIdAndUpdatedAt(
+              accountId: $accountId
+              sortDirection: $sortDirection
+              limit: $limit
+            ) {
+              items {
+                id
+                name
+                description
+                template
+                category
+                version
+                isDefault
+                accountId
+                createdAt
+                updatedAt
+              }
+              nextToken
+            }
+          }
+        `,
+        variables: {
+          accountId: accountId,
+          sortDirection: 'DESC',
+          limit: 100
+        }
       })
       
-      if (result.data) {
-        setTemplates(result.data)
-      }
+      const templatesData = (result as any).data?.listProcedureTemplateByAccountIdAndUpdatedAt?.items || []
+      setTemplates(templatesData)
     } catch (error) {
       console.error('Error loading templates:', error)
       toast.error("Failed to load experiment templates")
@@ -53,11 +87,33 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
   }
 
   const handleCreateProcedureFromTemplate = async (template: ProcedureTemplate) => {
-    setCreatingProcedureFromTemplate(template.id)
+    // Check if template has parameters
+    if (template.template && hasParameters(template.template)) {
+      // Show parameters dialog
+      setSelectedTemplate(template)
+      setShowParametersDialog(true)
+    } else {
+      // Create directly without parameters
+      setCreatingProcedureFromTemplate(template.id)
+      try {
+        await onTemplateSelect(template)
+      } finally {
+        setCreatingProcedureFromTemplate(null)
+      }
+    }
+  }
+
+  const handleParametersSubmit = async (parameters: Record<string, any>) => {
+    if (!selectedTemplate) return
+    
+    setCreatingProcedureFromTemplate(selectedTemplate.id)
+    setShowParametersDialog(false)
+    
     try {
-      await onTemplateSelect(template)
+      await onTemplateSelect(selectedTemplate, parameters)
     } finally {
       setCreatingProcedureFromTemplate(null)
+      setSelectedTemplate(null)
     }
   }
 
@@ -159,6 +215,22 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
           )}
         </div>
       </DialogContent>
+
+      {/* Parameters Dialog */}
+      {selectedTemplate && (
+        <ConfigurableParametersDialog
+          open={showParametersDialog}
+          onOpenChange={(open) => {
+            setShowParametersDialog(open)
+            if (!open) setSelectedTemplate(null)
+          }}
+          title={`Configure ${selectedTemplate.name}`}
+          description="Please provide the required parameters for this procedure template"
+          parameters={parseParametersFromYaml(selectedTemplate.template || '')}
+          onSubmit={handleParametersSubmit}
+          submitLabel="Create Procedure"
+        />
+      )}
     </Dialog>
   )
 }

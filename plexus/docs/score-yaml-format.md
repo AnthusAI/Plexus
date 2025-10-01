@@ -226,6 +226,167 @@ parse_from_start: true  # Parse from beginning (default: false)
 - `false` (default): Parse from the end of text (for "reasoning then answer" patterns)
 - `true`: Parse from the beginning (for "answer then explanation" patterns)
 
+## Critical: Avoiding Post-Hoc Rationalization
+
+**NEVER ask for the answer value first and then ask for an explanation.** This creates "Potemkin understanding" - post-hoc rationalization rather than actual reasoning that led to the answer.
+
+### The Problem with Answer-First Patterns
+
+❌ **Dangerous Pattern** (leads to inconsistent results):
+```yaml
+# DON'T DO THIS - Answer first, explanation second
+- name: bad_classifier
+  class: Classifier
+  system_message: |
+    Answer Yes or No, then explain your reasoning.
+  valid_classes: ["Yes", "No"]
+```
+
+❌ **Very Common Anti-Pattern** (two classifiers in sequence):
+```yaml
+# DON'T DO THIS - Binary classifier followed by explanation classifier
+- name: binary_decision
+  class: Classifier
+  valid_classes: ["Yes", "No"]
+  user_message: |
+    Did the agent do the right thing? Answer Yes or No.
+
+- name: explanation_classifier
+  class: Classifier
+  valid_classes: ["Missing greeting", "Wrong procedure", "Poor tone", "No issues"]
+  user_message: |
+    The previous answer was {{binary_decision}}.
+    {% if binary_decision == "No" %}
+    What specific thing did the agent do wrong?
+    {% else %}
+    Select "No issues" since the agent did well.
+    {% endif %}
+```
+
+**Why this fails:** The LLM provides explanations that justify the already-given answer rather than explaining the actual reasoning process. Over time, this leads to inconsistent answer/explanation pairs where the explanation doesn't match the true reasoning. The second classifier is forced to rationalize the first classifier's decision rather than independently evaluating the content.
+
+### Recommended Patterns
+
+✅ **Best Practice: Reasoning-First with LogicalClassifier**
+```yaml
+# Step 1: Get detailed reasoning about specific failure modes (FIRST!)
+- name: failure_analysis
+  class: Classifier
+  valid_classes:
+    - "Missing greeting"
+    - "Incorrect procedure"
+    - "Poor tone"
+    - "Multiple issues"
+    - "None"
+  system_message: |
+    Analyze what the agent did wrong. Choose the primary issue or "None" if they did everything correctly.
+    Do NOT think about whether this is a "Yes" or "No" - just identify the specific issue.
+  user_message: |
+    {{text}}
+
+# Step 2: Use logic to determine final binary answer based on reasoning
+- name: final_decision
+  class: LogicalClassifier
+  code: |
+    def score(parameters: Score.Parameters, input: Score.Input) -> Score.Result:
+        failure_type = input.metadata.get('failure_analysis', 'None')
+
+        if failure_type == 'None':
+            value = "Yes"
+            explanation = "Agent followed all procedures correctly"
+        else:
+            value = "No"
+            explanation = f"Agent failed because: {failure_type}"
+
+        return Score.Result(
+            parameters=parameters,
+            value=value,
+            metadata={"explanation": explanation}
+        )
+```
+
+This pattern replaces the dangerous "binary classifier → explanation classifier" sequence by:
+1. **First** asking for specific failure analysis without any binary framing
+2. **Then** using deterministic logic to convert that analysis into a binary answer
+3. Ensuring the explanation always matches the binary decision
+
+✅ **Alternative: Chain-of-Thought with Explanation First**
+```yaml
+- name: reasoning_classifier
+  class: Classifier
+  parse_from_start: false  # Parse answer from end
+  valid_classes: ["Yes", "No"]
+  system_message: |
+    First, think through your reasoning step by step.
+    Then provide your final answer as the last word.
+  user_message: |
+    Analyze the agent's performance. Explain your reasoning thoroughly,
+    then end with either "Yes" or "No".
+
+    {{text}}
+```
+
+**Note on Fine-Tuned Models**: If using a fine-tuned classifier that outputs answers first (`parse_from_start: true`), structure the training data so the model generates explanations rather than classification values to avoid post-hoc rationalization.
+
+✅ **Multi-Check Pattern for Complex Evaluations**
+```yaml
+# Check each requirement separately
+- name: greeting_check
+  class: Classifier
+  valid_classes: ["Present", "Missing"]
+  output:
+    has_greeting: classification
+
+- name: procedure_check
+  class: Classifier
+  valid_classes: ["Correct", "Incorrect"]
+  output:
+    correct_procedure: classification
+
+- name: tone_check
+  class: Classifier
+  valid_classes: ["Professional", "Unprofessional"]
+  output:
+    professional_tone: classification
+
+# Combine results with consistent logic
+- name: final_evaluation
+  class: LogicalClassifier
+  code: |
+    def score(parameters: Score.Parameters, input: Score.Input) -> Score.Result:
+        greeting = input.metadata.get('has_greeting', '')
+        procedure = input.metadata.get('correct_procedure', '')
+        tone = input.metadata.get('professional_tone', '')
+
+        failures = []
+        if greeting == 'Missing':
+            failures.append('missing greeting')
+        if procedure == 'Incorrect':
+            failures.append('incorrect procedure')
+        if tone == 'Unprofessional':
+            failures.append('unprofessional tone')
+
+        if not failures:
+            value = "Yes"
+            explanation = "Agent met all requirements"
+        else:
+            value = "No"
+            explanation = f"Failed on: {', '.join(failures)}"
+
+        return Score.Result(
+            parameters=parameters,
+            value=value,
+            metadata={"explanation": explanation}
+        )
+```
+
+### Key Principles
+
+1. **Reasoning Before Decision**: Always capture the reasoning process before determining the final answer
+2. **Logical Consistency**: Use `LogicalClassifier` to ensure the final answer is always consistent with the reasoning
+3. **Specific Analysis**: Ask about specific failure modes rather than generic "good/bad" judgments
+4. **Separate Concerns**: Use multiple focused classifier nodes rather than trying to do everything in one prompt
+
 ## BeforeAfterSlicer Usage
 
 Segment text into "before" and "after" parts based on a found quote:
@@ -428,13 +589,32 @@ data:
   balance: false  # Whether to balance positive/negative examples
 ```
 
+## Confidence Scoring
+
+Enable confidence calculation based on first token log probabilities:
+
+```yaml
+- name: confident_classifier
+  class: Classifier
+  enable_confidence: true    # Enable confidence scoring
+  parse_from_start: true     # Required for confidence mode
+  valid_classes: ["Yes", "No"]
+```
+
+When enabled:
+- Returns `confidence` field with uncalibrated probability (0.0-1.0)
+- Requires `parse_from_start: true`
+- Works best with fine-tuned models
+- Only supported with OpenAI models
+
 ## Best Practices
 
 1. **Node Independence**: Each node must be self-contained with all necessary information in its prompts - nodes only know what you explicitly pass to them via outputs from previous nodes
 2. **Conditions Structure**: When using conditions, always nest output within each condition block - never place output and conditions at the same indentation level
-3. Use modern `Classifier` over legacy classifier types
-4. Structure graphs to handle early termination with conditions
-5. Use descriptive node names and field mappings
-6. Leverage slicers for complex transcript analysis
-7. Include clear system and user prompts
-8. Avoid redundant processing by sharing results between nodes 
+3. **Avoid Post-Hoc Rationalization**: Never ask for answer values first and then explanations. Always capture reasoning before determining final answers, preferably using `LogicalClassifier` for consistent answer/explanation pairs
+4. Use modern `Classifier` over legacy classifier types
+5. Structure graphs to handle early termination with conditions
+6. Use descriptive node names and field mappings
+7. Leverage slicers for complex transcript analysis
+8. Include clear system and user prompts
+9. Avoid redundant processing by sharing results between nodes

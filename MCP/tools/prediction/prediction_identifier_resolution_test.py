@@ -103,7 +103,7 @@ def test_resolves_scorecard_score_and_item_identifiers(mock_local_resolver, mock
                         include_trace=True,
                         output_format="json",
                         no_cache=False,
-                        yaml_only=False
+                        yaml=False
                     ))
 
                     # Accept either a successful response with cost, or a structured error

@@ -27,7 +27,9 @@ def register_prediction_tools(mcp: FastMCP):
         include_trace: bool = False,
         output_format: str = "json",
         no_cache: bool = False,
-        yaml_only: bool = False
+        yaml: bool = False,
+        version: Optional[str] = None,
+        latest: bool = False
     ) -> Union[str, Dict[str, Any]]:
         """
         Run predictions on one or more items using a specific score configuration.
@@ -42,7 +44,9 @@ def register_prediction_tools(mcp: FastMCP):
         - include_trace: Whether to include detailed execution trace for debugging (default: False)
         - output_format: Output format - "json" or "yaml" (default: "json")
         - no_cache: If True, disable local caching entirely (always fetch from API) (default: False)
-        - yaml_only: If True, load only from local YAML files without API calls (default: False)
+        - yaml: If True, load only from local YAML files without API calls (default: False)
+        - version: Specific score version ID to predict with (defaults to champion version)
+        - latest: If True, use the most recent score version (overrides version parameter)
         
         Returns:
         - Prediction results with scores, explanations, and optional input/trace data
@@ -58,8 +62,10 @@ def register_prediction_tools(mcp: FastMCP):
                 return "Error: Either item_id or item_ids must be provided."
             if item_id and item_ids:
                 return "Error: Cannot specify both item_id and item_ids. Use one or the other."
-            if no_cache and yaml_only:
-                return "Error: Cannot specify both no_cache and yaml_only. Use one or the other."
+            if no_cache and yaml:
+                return "Error: Cannot specify both no_cache and yaml. Use one or the other."
+            if version and latest:
+                return "Error: Cannot use both version and latest options. Choose one."
             
             # Try to import required modules directly
             try:
@@ -96,66 +102,102 @@ def register_prediction_tools(mcp: FastMCP):
             if not client:
                 return "Error: Could not create dashboard client."
 
-            # Find the scorecard
-            scorecard_id = resolve_scorecard_identifier(client, scorecard_name)
-            if not scorecard_id:
-                return f"Error: Scorecard '{scorecard_name}' not found."
+            # Handle scorecard and score resolution based on yaml mode
+            if yaml:
+                # YAML mode: Skip API resolution, use placeholder data
+                logger.info(f"YAML mode: Using local scorecard '{scorecard_name}' and score '{score_name}'")
+                scorecard_id = "yaml-mode-scorecard"
+                resolved_score = {
+                    "id": "yaml-mode-score",
+                    "name": score_name,
+                    "key": score_name.lower().replace(" ", "-"),
+                    "championVersionId": "yaml-mode-version"
+                }
+            else:
+                # API mode: Resolve normally
+                scorecard_id = resolve_scorecard_identifier(client, scorecard_name)
+                if not scorecard_id:
+                    return f"Error: Scorecard '{scorecard_name}' not found."
 
-            # Find the score within the scorecard
-            scorecard_query = f"""
-            query GetScorecardForPrediction {{
-                getScorecard(id: "{scorecard_id}") {{
-                    id
-                    name
-                    sections {{
-                        items {{
-                            id
-                            scores {{
-                                items {{
-                                    id
-                                    name
-                                    key
-                                    externalId
-                                    championVersionId
-                                    isDisabled
+                # Find the score within the scorecard
+                scorecard_query = f"""
+                query GetScorecardForPrediction {{
+                    getScorecard(id: "{scorecard_id}") {{
+                        id
+                        name
+                        sections {{
+                            items {{
+                                id
+                                scores {{
+                                    items {{
+                                        id
+                                        name
+                                        key
+                                        externalId
+                                        championVersionId
+                                        isDisabled
+                                    }}
                                 }}
                             }}
                         }}
                     }}
                 }}
-            }}
-            """
-            
-            scorecard_result = client.execute(scorecard_query)
-            scorecard_data = scorecard_result.get('getScorecard')
-            if not scorecard_data:
-                return f"Error: Could not retrieve scorecard data for '{scorecard_name}'."
+                """
 
-            # Resolve the specific score using CLI resolver (accept id, key, name, externalId)
-            resolved_score = None
-            try:
-                from plexus.cli.shared.identifier_resolution import resolve_score_identifier as _resolve_score_identifier
-                resolved_score_id = _resolve_score_identifier(client, scorecard_id, score_name)
-            except Exception:
-                resolved_score_id = None
+                scorecard_result = client.execute(scorecard_query)
+                scorecard_data = scorecard_result.get('getScorecard')
+                if not scorecard_data:
+                    return f"Error: Could not retrieve scorecard data for '{scorecard_name}'."
 
-            # Scan scorecard to select the resolved score (or match by flexible fields if resolver unavailable)
-            for section in scorecard_data.get('sections', {}).get('items', []):
-                for score in section.get('scores', {}).get('items', []):
-                    if (
-                        (resolved_score_id and score.get('id') == resolved_score_id) or
-                        score.get('id') == score_name or
-                        score.get('externalId') == score_name or
-                        score.get('key') == score_name or
-                        score.get('name') == score_name
-                    ):
-                        resolved_score = score
+                # Resolve the specific score using CLI resolver (accept id, key, name, externalId)
+                resolved_score = None
+                try:
+                    from plexus.cli.shared.identifier_resolution import resolve_score_identifier as _resolve_score_identifier
+                    resolved_score_id = _resolve_score_identifier(client, scorecard_id, score_name)
+                except Exception:
+                    resolved_score_id = None
+
+                # Scan scorecard to select the resolved score (or match by flexible fields if resolver unavailable)
+                for section in scorecard_data.get('sections', {}).get('items', []):
+                    for score in section.get('scores', {}).get('items', []):
+                        if (
+                            (resolved_score_id and score.get('id') == resolved_score_id) or
+                            score.get('id') == score_name or
+                            score.get('externalId') == score_name or
+                            score.get('key') == score_name or
+                            score.get('name') == score_name
+                        ):
+                            resolved_score = score
+                            break
+                    if resolved_score:
                         break
-                if resolved_score:
-                    break
 
-            if not resolved_score:
-                return f"Error: Score '{score_name}' not found within scorecard '{scorecard_name}'."
+                if not resolved_score:
+                    return f"Error: Score '{score_name}' not found within scorecard '{scorecard_name}'."
+
+            # Handle version resolution (same as evaluation tool)
+            resolved_version = version if not latest else None
+            effective_version = "latest" if latest else (version or "champion")
+            logger.info(f"MCP Prediction - Scorecard: {scorecard_name}, Score: {score_name}, Version: {effective_version}")
+            
+            # Handle --latest flag by resolving the latest version for the score
+            if latest:
+                logger.info(f"--latest flag specified for score: {score_name}")
+                try:
+                    from plexus.cli.evaluation.evaluations import get_latest_score_version
+                    
+                    score_id = resolved_score.get('id')
+                    if score_id:
+                        latest_version_id = get_latest_score_version(client, score_id)
+                        if latest_version_id:
+                            resolved_version = latest_version_id
+                            logger.info(f"Resolved --latest to version: {latest_version_id}")
+                        else:
+                            logger.warning(f"Could not find latest version for score {score_name}, using champion version")
+                    else:
+                        logger.warning(f"Could not resolve score ID for {score_name}, using champion version")
+                except Exception as e:
+                    logger.warning(f"Error resolving latest version for score {score_name}: {e}, using champion version")
 
             # Prepare item IDs list (raw identifiers)
             if item_id:
@@ -164,99 +206,159 @@ def register_prediction_tools(mcp: FastMCP):
                 target_item_ids = [id.strip() for id in item_ids.split(',')]
 
             # Resolve raw identifiers to canonical item UUIDs using CLI resolver (accepts UUID, externalId, or other identifiers)
-            try:
-                from plexus.dashboard.api.models.account import Account as _Account
-                from plexus.cli.shared.identifier_resolution import resolve_item_identifier as _resolve_item_identifier
-                # Derive account_id once (prefer env account key when available)
-                account_id = None
+            if not yaml:
+                # Only resolve item identifiers in API mode
                 try:
-                    account = _Account.list_by_key(key="call-criteria", client=client)
-                    if account:
-                        account_id = account.id
-                except Exception:
+                    from plexus.dashboard.api.models.account import Account as _Account
+                    from plexus.cli.shared.identifier_resolution import resolve_item_identifier as _resolve_item_identifier
+                    # Derive account_id once (prefer env account key when available)
                     account_id = None
-
-                resolved_ids = []
-                for raw_id in target_item_ids:
                     try:
-                        resolved_id = _resolve_item_identifier(client, raw_id, account_id)
+                        account = _Account.list_by_key(key="call-criteria", client=client)
+                        if account:
+                            account_id = account.id
                     except Exception:
-                        resolved_id = None
-                    resolved_ids.append(resolved_id or raw_id)
-                target_item_ids = resolved_ids
-            except Exception as _resolve_err:
-                logger.warning(f"Item identifier resolution skipped due to error: {_resolve_err}")
+                        account_id = None
 
-            # Validate that all items exist and get their data
+                    resolved_ids = []
+                    for raw_id in target_item_ids:
+                        try:
+                            resolved_id = _resolve_item_identifier(client, raw_id, account_id)
+                        except Exception:
+                            resolved_id = None
+                        resolved_ids.append(resolved_id or raw_id)
+                    target_item_ids = resolved_ids
+                except Exception as _resolve_err:
+                    logger.warning(f"Item identifier resolution skipped due to error: {_resolve_err}")
+            else:
+                # YAML mode: Use item IDs as-is for testing
+                logger.info(f"YAML mode: Using item IDs as-is: {target_item_ids}")
+
+            # Handle item data differently based on yaml mode
             prediction_results_list = []
-            
+
             try:
                 for target_id in target_item_ids:
                     try:
-                        # Get item details
-                        item_query = f"""
-                    query GetItem {{
-                        getItem(id: "{target_id}") {{
-                            id
-                            description
-                            metadata
-                            attachedFiles
-                            externalId
-                            createdAt
-                            updatedAt
-                        }}
-                    }}
-                    """
-                        
-                        item_result = client.execute(item_query)
-                        item_data = item_result.get('getItem')
-                        
-                        if not item_data:
-                            prediction_results_list.append({
-                                "item_id": target_id,
-                                "error": f"Item '{target_id}' not found"
-                            })
-                            continue
+                        item_text = None
+                        metadata = {}
 
-                        # Call the actual prediction service using the shared CLI implementation
-                        logger.info(f"Running actual prediction for item '{target_id}' with score '{score_name}'")
-                        
-                        try:
+                        if yaml:
+                            # YAML mode: Get item data but use local scoring
+                            # We still need real item data for proper testing, just use local YAML for scoring
+                            logger.info(f"YAML mode: Getting item data but using local score configuration for '{target_id}'")
+
+                            # Still get the real item data for testing purposes
+                            item_query = f"""
+                        query GetItem {{
+                            getItem(id: "{target_id}") {{
+                                id
+                                text
+                                description
+                                metadata
+                                attachedFiles
+                                externalId
+                                createdAt
+                                updatedAt
+                            }}
+                        }}
+                        """
+
+                            item_result = client.execute(item_query)
+                            item_data = item_result.get('getItem')
+
+                            if not item_data:
+                                prediction_results_list.append({
+                                    "item_id": target_id,
+                                    "error": f"Item '{target_id}' not found (YAML mode still needs real item data)"
+                                })
+                                continue
+
+                            # Get the real item text content
+                            item_text = item_data.get('text', '') or item_data.get('description', '')
+                            if not item_text:
+                                raise Exception("No text content found in item text or description fields")
+
+                            # Handle metadata
+                            metadata_raw = item_data.get('metadata', {})
+                            if isinstance(metadata_raw, dict):
+                                metadata = metadata_raw
+                            else:
+                                try:
+                                    import json
+                                    metadata = json.loads(metadata_raw)
+                                except (json.JSONDecodeError, TypeError):
+                                    logger.warning(f"Failed to parse metadata for item {target_id}: {metadata_raw}")
+                                    metadata = {}
+                        else:
+                            # API mode: Get real item data
+                            item_query = f"""
+                        query GetItem {{
+                            getItem(id: "{target_id}") {{
+                                id
+                                text
+                                description
+                                metadata
+                                attachedFiles
+                                externalId
+                                createdAt
+                                updatedAt
+                            }}
+                        }}
+                        """
+
+                            item_result = client.execute(item_query)
+                            item_data = item_result.get('getItem')
+
+                            if not item_data:
+                                prediction_results_list.append({
+                                    "item_id": target_id,
+                                    "error": f"Item '{target_id}' not found"
+                                })
+                                continue
+
                             # Get the item text content for prediction
                             item_text = item_data.get('text', '') or item_data.get('description', '')
                             if not item_text:
                                 raise Exception("No text content found in item text or description fields")
-                            
-                            # Parse metadata from JSON string if needed
+
+                            # Handle both dict objects (from FeedbackItems) and JSON strings (from other sources)
                             metadata_raw = item_data.get('metadata', {})
-                            if isinstance(metadata_raw, str):
+                            if isinstance(metadata_raw, dict):
+                                metadata = metadata_raw
+                            else:
                                 try:
                                     import json
                                     metadata = json.loads(metadata_raw)
-                                except json.JSONDecodeError:
-                                    logger.warning(f"Failed to parse metadata JSON: {metadata_raw}")
+                                except (json.JSONDecodeError, TypeError):
+                                    logger.warning(f"Failed to parse metadata for item {item_id}: {metadata_raw}")
                                     metadata = {}
-                            else:
-                                metadata = metadata_raw
-                            
+
+                        # Call the actual prediction service using the shared CLI implementation
+                        logger.info(f"Running actual prediction for item '{target_id}' with score '{score_name}'")
+
+                        try:
                             # Use the canonical Scorecard dependency system for all predictions
                             # This ensures consistent behavior with CLI, evaluations, and production
                             # IMPORTANT: Do not call Scorecard.load() here (not available in this branch).
                             # Instead, reuse the CLI loaders that support API-first and YAML-only modes.
 
                             use_cache = not no_cache
-                            cache_mode = "YAML-only" if yaml_only else ("no-cache" if no_cache else "default")
+                            cache_mode = "YAML-only" if yaml else ("no-cache" if no_cache else "default")
                             logger.info(f"Using canonical Scorecard system to predict '{score_name}' from '{scorecard_name}' with {cache_mode} mode")
 
                             # Defer imports to runtime to avoid heavy module import on server startup
-                            if yaml_only:
+                            if yaml:
                                 logger.info("Loading scorecard from YAML files for dependency resolution (CLI-compatible path)")
                                 from plexus.cli.evaluation.evaluations import load_scorecard_from_yaml_files
                                 scorecard_instance = load_scorecard_from_yaml_files(scorecard_name, score_names=[score_name])
+                                # Set yaml flag IMMEDIATELY after creation so it's honored during score processing
+                                scorecard_instance.yaml_only = True
+                                logger.info("Set scorecard_instance.yaml_only = True for local YAML processing")
                             else:
                                 logger.info("Loading scorecard from API for dependency resolution (CLI-compatible path)")
                                 from plexus.cli.evaluation.evaluations import load_scorecard_from_api
-                                scorecard_instance = load_scorecard_from_api(scorecard_name, score_names=[score_name], use_cache=use_cache)
+                                scorecard_instance = load_scorecard_from_api(scorecard_name, score_names=[score_name], use_cache=use_cache, specific_version=resolved_version)
                             
                             # Use the battle-tested score_entire_text method which handles all dependency logic:
                             # - Builds dependency graphs automatically
@@ -294,11 +396,6 @@ def register_prediction_tools(mcp: FastMCP):
                             except Exception:
                                 name_to_id = {}
 
-                            # Honor yaml_only by disabling API loads during backfill
-                            try:
-                                setattr(scorecard_instance, 'yaml_only', bool(yaml_only))
-                            except Exception:
-                                pass
 
                             results = await scorecard_instance.score_entire_text(
                                 text=item_text,
@@ -372,26 +469,40 @@ def register_prediction_tools(mcp: FastMCP):
                                 # Extract trace information if available
                                 if include_trace:
                                     trace = None
+                                    # Check if the result has a trace attribute (not typical)
                                     if hasattr(prediction_results, 'trace'):
                                         trace = prediction_results.trace
+                                    # Check for trace in metadata (most common location)
                                     elif hasattr(prediction_results, 'metadata') and prediction_results.metadata:
                                         trace = prediction_results.metadata.get('trace')
-                                    
-                                    if trace:
-                                        prediction_result["scores"][0]["trace"] = trace
+
+                                    # Always include trace field for debugging, even if None
+                                    prediction_result["scores"][0]["trace"] = trace
+
+                                    # Also include full metadata for debugging if trace is missing
+                                    if trace is None and hasattr(prediction_results, 'metadata') and prediction_results.metadata:
+                                        prediction_result["scores"][0]["debug_metadata"] = prediction_results.metadata
                             else:
                                 raise Exception("No valid prediction value returned from canonical scorecard system")
                             
                         except Exception as pred_error:
                             logger.error(f"Error running actual prediction: {str(pred_error)}", exc_info=True)
-                            # Fall back to indicating the error
+                            # Fall back to indicating the error with full details
+                            import traceback
+                            error_traceback = traceback.format_exc()
                             prediction_result = {
                                 "item_id": target_id,
                                 "scores": [
                                     {
                                         "name": score_name,
-                                        "value": "Error",
-                                        "explanation": f"Failed to execute prediction: {str(pred_error)}"
+                                        "value": "ERROR",
+                                        "explanation": f"Failed to execute prediction: {str(pred_error)}",
+                                        "error_details": {
+                                            "error_message": str(pred_error),
+                                            "error_type": type(pred_error).__name__,
+                                            "traceback": error_traceback
+                                        },
+                                        "cost": {}
                                     }
                                 ]
                             }

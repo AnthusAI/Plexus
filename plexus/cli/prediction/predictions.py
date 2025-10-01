@@ -45,8 +45,10 @@ from plexus.dashboard.api.models.feedback_item import FeedbackItem
 @click.option('--format', type=click.Choice(['fixed', 'json', 'yaml']), default='fixed', help='Output format: fixed (human-readable), json (parseable JSON), or yaml (token-efficient YAML)')
 @click.option('--input', is_flag=True, help='Include input text and metadata in YAML output (only for --format=yaml)')
 @click.option('--trace', is_flag=True, help='Include full execution trace in YAML output (only for --format=yaml)')
+@click.option('--version', default=None, type=str, help='Specific score version ID to predict with (defaults to champion version)')
+@click.option('--latest', is_flag=True, help='Use the most recent score version (overrides --version)')
 @click.option('--compare-to-feedback', is_flag=True, help='Compare current prediction to historical feedback corrections for this item and score')
-def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, fresh, no_cache, yaml, task_id, format, input, trace, compare_to_feedback):
+def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, fresh, no_cache, yaml, task_id, format, input, trace, version, latest, compare_to_feedback):
     """Predict scores for a scorecard"""
     try:
         # Configure event loop with custom exception handler
@@ -59,6 +61,10 @@ def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, f
         # Validate that only one of --item or --items is provided
         if item and items:
             raise click.BadParameter("Cannot specify both --item and --items. Use --items for multiple items.")
+        
+        # Validate version options (same as evaluation tool)
+        if version and latest:
+            raise click.BadParameter("Cannot use both --version and --latest options. Choose one.")
         
         # Create and run coroutine
         if score:
@@ -88,6 +94,8 @@ def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, f
             format=format,
             include_input=input,
             include_trace=trace,
+            version=version,
+            latest=latest,
             compare_to_feedback=compare_to_feedback
         )
         try:
@@ -129,12 +137,62 @@ async def predict_impl(
     format: str = 'fixed',
     include_input: bool = False,
     include_trace: bool = False,
+    version: str = None,
+    latest: bool = False,
     compare_to_feedback: bool = False
 ):
     """Implementation of predict command"""
     # Validate conflicting options
     if no_cache and yaml_only:
         raise click.BadParameter("Cannot use both --no-cache and --yaml options together")
+    
+    # Validate version options (same as evaluation tool)
+    if version and latest:
+        logging.error("Cannot use both --version and --latest options. Choose one.")
+        raise click.BadParameter("Cannot use both --version and --latest options. Choose one.")
+    
+    # Determine effective version for logging
+    effective_version = "latest" if latest else (version or "champion")
+    logging.info(f"Prediction - Scorecard: {scorecard_identifier}, Scores: {score_names}, Version: {effective_version}")
+    
+    # Initialize resolved_version - will be updated later if --latest is used
+    resolved_version = version if not latest else None
+    
+    # Handle --latest flag by resolving the latest version for the primary score (same as evaluation tool)
+    if latest and score_names:
+        primary_score_name = score_names[0]
+        logging.info(f"--latest flag specified for primary score: {primary_score_name}")
+        
+        try:
+            # Import required modules for version resolution
+            from plexus.cli.evaluation.evaluations import load_scorecard_from_api, get_latest_score_version
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            
+            # Load scorecard temporarily to get score ID
+            temp_scorecard = load_scorecard_from_api(scorecard_identifier, [primary_score_name], use_cache=yaml_only, specific_version=None)
+            
+            # Find the primary score's ID from the loaded scorecard
+            primary_score_id = None
+            if temp_scorecard and hasattr(temp_scorecard, 'score_configs'):
+                for sc_config in temp_scorecard.score_configs:
+                    if (sc_config.get('name') == primary_score_name or 
+                        sc_config.get('key') == primary_score_name or
+                        sc_config.get('externalId') == primary_score_name):
+                        primary_score_id = sc_config.get('id')
+                        break
+            
+            if primary_score_id:
+                client = PlexusDashboardClient()
+                latest_version_id = get_latest_score_version(client, primary_score_id)
+                if latest_version_id:
+                    resolved_version = latest_version_id
+                    logging.info(f"Resolved --latest to version: {latest_version_id}")
+                else:
+                    logging.warning(f"Could not find latest version for score {primary_score_name}, using champion version")
+            else:
+                logging.warning(f"Could not resolve score ID for {primary_score_name}, using champion version")
+        except Exception as e:
+            logging.warning(f"Error resolving latest version for score {primary_score_name}: {e}, using champion version")
     
     tracker: Optional[TaskProgressTracker] = None
     task: Optional[Task] = None
@@ -318,7 +376,7 @@ async def predict_impl(
                     
                     # Use centralized Scorecard path for dependency-aware predictions
                     transcript, predictions, costs = await predict_score_with_individual_loading(
-                        scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only
+                        scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only, specific_version=resolved_version
                     )
                     
                     if predictions:
@@ -516,7 +574,7 @@ async def predict_impl(
                                 tracker.update(current_items=current_prediction)
                             
                             transcript, predictions, costs = await predict_score_with_individual_loading(
-                                scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only
+                                scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only, specific_version=resolved_version
                             )
                             
                             if predictions:
@@ -1100,7 +1158,7 @@ async def predict_score(score_name, scorecard_class, sample_row, used_item_id):
         logging.error(f"Full traceback: {traceback.format_exc()}")
         raise
 
-async def predict_score_with_individual_loading(scorecard_identifier, score_name, sample_row, used_item_id, no_cache=False, yaml_only=False):
+async def predict_score_with_individual_loading(scorecard_identifier, score_name, sample_row, used_item_id, no_cache=False, yaml_only=False, specific_version=None):
     """
     Predict a single score using Scorecard.score_entire_text with dependency backfilling.
     """
@@ -1126,7 +1184,7 @@ async def predict_score_with_individual_loading(scorecard_identifier, score_name
             raise Exception(f"Score '{score_name}' not found in scorecard '{scorecard_identifier}'")
 
         # Fetch target + dependency configurations
-        configs = iteratively_fetch_configurations(client, scorecard_structure, targets, use_cache=not no_cache)
+        configs = iteratively_fetch_configurations(client, scorecard_structure, targets, use_cache=not no_cache, specific_version=specific_version)
         if not configs:
             raise Exception("Failed to fetch configurations for prediction")
 
@@ -1309,8 +1367,18 @@ def create_score_input(sample_row, item_id, scorecard_class, score_name):
     if sample_row is not None:
         row_dictionary = sample_row.iloc[0].to_dict()
         text = row_dictionary.get('text', '')
-        metadata_str = row_dictionary.get('metadata', '{}')
-        metadata = json.loads(metadata_str)
+        metadata_raw = row_dictionary.get('metadata', {})
+        
+        # Handle both dict objects (from FeedbackItems) and JSON strings (from other sources)
+        if isinstance(metadata_raw, dict):
+            metadata = metadata_raw
+        else:
+            try:
+                metadata = json.loads(metadata_raw)
+            except (json.JSONDecodeError, TypeError):
+                logging.warning(f"Failed to parse metadata, using empty dict: {metadata_raw}")
+                metadata = {}
+        
         if 'item_id' not in metadata:
             metadata['item_id'] = str(item_id)
         
