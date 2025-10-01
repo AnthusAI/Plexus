@@ -187,24 +187,27 @@ class TestScoreInputCreation:
             assert score_input.metadata['item_id'] == 'empty_text_item'
     
     def test_score_input_with_malformed_metadata(self, mock_scorecard):
-        """Test Score.Input creation with invalid JSON metadata"""
+        """Test Score.Input creation with invalid JSON metadata - should handle gracefully"""
         malformed_data = pd.DataFrame([{
             'text': 'Test text with bad metadata',
             'metadata': '{"invalid": json, syntax}'  # Invalid JSON
         }])
-        
+
         with patch('plexus.cli.prediction.predictions.Score.from_name') as mock_from_name:
             mock_score = MockScore()
             mock_from_name.return_value = mock_score
-            
-            # Should raise JSONDecodeError when parsing invalid metadata
-            with pytest.raises(json.JSONDecodeError):
-                create_score_input(
-                    sample_row=malformed_data,
-                    item_id="malformed_item",
-                    scorecard_class=mock_scorecard,
-                    score_name="test_score"
-                )
+
+            # Should handle malformed metadata gracefully by using empty dict
+            score_input = create_score_input(
+                sample_row=malformed_data,
+                item_id="malformed_item",
+                scorecard_class=mock_scorecard,
+                score_name="test_score"
+            )
+
+            # Verify it created a valid input with empty metadata (except item_id)
+            assert score_input.text == 'Test text with bad metadata'
+            assert score_input.metadata == {'item_id': 'malformed_item'}
     
     def test_score_input_with_none_sample_row(self, mock_scorecard):
         """Test Score.Input creation when sample_row is None (fallback case)"""

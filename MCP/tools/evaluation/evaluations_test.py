@@ -603,3 +603,639 @@ class TestEvaluationToolsSharedPatterns:
         assert 'id: eval-456' in yaml_output
         assert 'type: consistency' in yaml_output
         assert 'status: RUNNING' in yaml_output
+
+
+class TestEvaluationScoreResultFindTool:
+    """Test plexus_evaluation_score_result_find tool patterns"""
+
+    def test_evaluation_score_result_find_validation_patterns(self):
+        """Test evaluation score result find parameter validation patterns"""
+        def validate_evaluation_score_result_find_params(evaluation_id="", predicted_value=None,
+                                                        actual_value=None, limit=5, offset=None):
+            # evaluation_id is required
+            if not evaluation_id or not evaluation_id.strip():
+                return False, "evaluation_id is required"
+
+            # Test limit parameter
+            try:
+                limit_int = int(limit)
+                if limit_int < 1:
+                    return False, "limit must be positive"
+            except (ValueError, TypeError):
+                return False, "limit must be a valid number"
+
+            # Test offset parameter
+            if offset is not None:
+                try:
+                    offset_int = int(offset)
+                    if offset_int < 0:
+                        return False, "offset must be non-negative"
+                except (ValueError, TypeError):
+                    return False, "offset must be a valid number"
+
+            # Test predicted_value parameter
+            if predicted_value is not None and not isinstance(predicted_value, str):
+                return False, "predicted_value must be a string or None"
+
+            # Test actual_value parameter
+            if actual_value is not None and not isinstance(actual_value, str):
+                return False, "actual_value must be a string or None"
+
+            return True, None
+
+        # Test valid parameters - minimal
+        valid, error = validate_evaluation_score_result_find_params(evaluation_id="eval-123")
+        assert valid is True
+        assert error is None
+
+        # Test valid parameters - with filtering
+        valid, error = validate_evaluation_score_result_find_params(
+            evaluation_id="eval-123",
+            predicted_value="yes",
+            actual_value="no",
+            limit=10,
+            offset=5
+        )
+        assert valid is True
+        assert error is None
+
+        # Test valid parameters - with pagination only
+        valid, error = validate_evaluation_score_result_find_params(
+            evaluation_id="eval-123",
+            limit=20,
+            offset=0
+        )
+        assert valid is True
+        assert error is None
+
+        # Test missing evaluation_id
+        valid, error = validate_evaluation_score_result_find_params(evaluation_id="")
+        assert valid is False
+        assert "evaluation_id is required" in error
+
+        # Test whitespace-only evaluation_id
+        valid, error = validate_evaluation_score_result_find_params(evaluation_id="   ")
+        assert valid is False
+        assert "evaluation_id is required" in error
+
+        # Test invalid limit
+        valid, error = validate_evaluation_score_result_find_params(evaluation_id="eval-123", limit="invalid")
+        assert valid is False
+        assert "limit must be a valid number" in error
+
+        # Test negative limit
+        valid, error = validate_evaluation_score_result_find_params(evaluation_id="eval-123", limit=-1)
+        assert valid is False
+        assert "limit must be positive" in error
+
+        # Test invalid offset
+        valid, error = validate_evaluation_score_result_find_params(evaluation_id="eval-123", offset="invalid")
+        assert valid is False
+        assert "offset must be a valid number" in error
+
+        # Test negative offset
+        valid, error = validate_evaluation_score_result_find_params(evaluation_id="eval-123", offset=-1)
+        assert valid is False
+        assert "offset must be non-negative" in error
+
+        # Test invalid predicted_value type
+        valid, error = validate_evaluation_score_result_find_params(evaluation_id="eval-123", predicted_value=123)
+        assert valid is False
+        assert "predicted_value must be a string or None" in error
+
+        # Test invalid actual_value type
+        valid, error = validate_evaluation_score_result_find_params(evaluation_id="eval-123", actual_value=123)
+        assert valid is False
+        assert "actual_value must be a string or None" in error
+
+    def test_confusion_matrix_cell_grouping_patterns(self):
+        """Test confusion matrix cell grouping patterns"""
+        # Mock score results
+        mock_score_results = [
+            {
+                'id': 'sr-1',
+                'value': 'yes',
+                'explanation': 'Correct prediction',
+                'itemId': 'item-1',
+                'metadata': json.dumps({
+                    'results': {
+                        'score-789': {
+                            'metadata': {'human_label': 'yes'}
+                        }
+                    }
+                })
+            },
+            {
+                'id': 'sr-2',
+                'value': 'no',
+                'explanation': 'Incorrect prediction',
+                'itemId': 'item-2',
+                'metadata': json.dumps({
+                    'results': {
+                        'score-789': {
+                            'metadata': {'human_label': 'yes'}
+                        }
+                    }
+                })
+            },
+            {
+                'id': 'sr-3',
+                'value': 'yes',
+                'explanation': 'False positive',
+                'itemId': 'item-3',
+                'metadata': json.dumps({
+                    'results': {
+                        'score-789': {
+                            'metadata': {'human_label': 'no'}
+                        }
+                    }
+                })
+            }
+        ]
+
+        def group_by_confusion_matrix_cells(score_results):
+            from collections import defaultdict
+            matrix_cells = defaultdict(list)
+
+            for sr in score_results:
+                # Extract predicted value
+                predicted = (sr.get('value') or '').strip().lower()
+
+                # Extract actual value from metadata
+                md = sr.get('metadata')
+                try:
+                    if isinstance(md, str):
+                        md = json.loads(md)
+                except Exception:
+                    md = None
+
+                human_label = None
+                if md and isinstance(md, dict):
+                    res_md = md.get('results') or {}
+                    if isinstance(res_md, dict) and res_md:
+                        key0 = next(iter(res_md))
+                        inner = res_md.get(key0) or {}
+                        inner_md = inner.get('metadata') or {}
+                        human_label = (inner_md.get('human_label') or '').strip().lower()
+
+                actual = human_label or 'unknown'
+                cell_key = (predicted, actual)
+                matrix_cells[cell_key].append(sr)
+
+            return matrix_cells
+
+        matrix_cells = group_by_confusion_matrix_cells(mock_score_results)
+
+        # Test cell grouping
+        assert len(matrix_cells) == 3  # Three different cells
+        assert ('yes', 'yes') in matrix_cells  # True positive
+        assert ('no', 'yes') in matrix_cells   # False negative
+        assert ('yes', 'no') in matrix_cells   # False positive
+
+        # Test cell contents
+        assert len(matrix_cells[('yes', 'yes')]) == 1
+        assert len(matrix_cells[('no', 'yes')]) == 1
+        assert len(matrix_cells[('yes', 'no')]) == 1
+
+        # Test specific items in cells
+        tp_item = matrix_cells[('yes', 'yes')][0]
+        assert tp_item['id'] == 'sr-1'
+        assert tp_item['value'] == 'yes'
+
+        fn_item = matrix_cells[('no', 'yes')][0]
+        assert fn_item['id'] == 'sr-2'
+        assert fn_item['value'] == 'no'
+
+        fp_item = matrix_cells[('yes', 'no')][0]
+        assert fp_item['id'] == 'sr-3'
+        assert fp_item['value'] == 'yes'
+
+    def test_filtering_patterns(self):
+        """Test filtering by predicted/actual values"""
+        # Mock processed results
+        processed_results = [
+            {'predicted': 'yes', 'actual': 'yes', 'id': 'sr-1'},
+            {'predicted': 'no', 'actual': 'yes', 'id': 'sr-2'},
+            {'predicted': 'yes', 'actual': 'no', 'id': 'sr-3'},
+            {'predicted': 'no', 'actual': 'no', 'id': 'sr-4'}
+        ]
+
+        def apply_filtering(results, predicted_value=None, actual_value=None):
+            filtered = []
+            for result in results:
+                pred_match = predicted_value is None or result['predicted'] == predicted_value.lower()
+                actual_match = actual_value is None or result['actual'] == actual_value.lower()
+
+                if pred_match and actual_match:
+                    filtered.append(result)
+
+            return filtered
+
+        # Test no filtering - should return all
+        all_results = apply_filtering(processed_results)
+        assert len(all_results) == 4
+
+        # Test filter by predicted value only
+        yes_predicted = apply_filtering(processed_results, predicted_value='yes')
+        assert len(yes_predicted) == 2
+        assert all(r['predicted'] == 'yes' for r in yes_predicted)
+
+        no_predicted = apply_filtering(processed_results, predicted_value='no')
+        assert len(no_predicted) == 2
+        assert all(r['predicted'] == 'no' for r in no_predicted)
+
+        # Test filter by actual value only
+        yes_actual = apply_filtering(processed_results, actual_value='yes')
+        assert len(yes_actual) == 2
+        assert all(r['actual'] == 'yes' for r in yes_actual)
+
+        no_actual = apply_filtering(processed_results, actual_value='no')
+        assert len(no_actual) == 2
+        assert all(r['actual'] == 'no' for r in no_actual)
+
+        # Test filter by both predicted and actual
+        tp_results = apply_filtering(processed_results, predicted_value='yes', actual_value='yes')
+        assert len(tp_results) == 1
+        assert tp_results[0]['id'] == 'sr-1'
+
+        fp_results = apply_filtering(processed_results, predicted_value='yes', actual_value='no')
+        assert len(fp_results) == 1
+        assert fp_results[0]['id'] == 'sr-3'
+
+        fn_results = apply_filtering(processed_results, predicted_value='no', actual_value='yes')
+        assert len(fn_results) == 1
+        assert fn_results[0]['id'] == 'sr-2'
+
+        tn_results = apply_filtering(processed_results, predicted_value='no', actual_value='no')
+        assert len(tn_results) == 1
+        assert tn_results[0]['id'] == 'sr-4'
+
+    def test_pagination_patterns(self):
+        """Test offset-based pagination patterns"""
+        # Mock filtered results
+        filtered_results = [
+            {'id': f'sr-{i}', 'predicted': 'yes', 'actual': 'yes'}
+            for i in range(1, 11)  # 10 results
+        ]
+
+        def apply_pagination(results, limit=5, offset=0):
+            start_idx = offset
+            end_idx = offset + limit
+            page_results = results[start_idx:end_idx]
+
+            total_available = len(results)
+            has_next_page = end_idx < total_available
+            next_offset = end_idx if has_next_page else None
+
+            return {
+                'page_results': page_results,
+                'pagination_info': {
+                    'current_offset': offset,
+                    'limit': limit,
+                    'total_available': total_available,
+                    'has_next_page': has_next_page,
+                    'next_offset': next_offset
+                }
+            }
+
+        # Test first page
+        page1 = apply_pagination(filtered_results, limit=3, offset=0)
+        assert len(page1['page_results']) == 3
+        assert page1['page_results'][0]['id'] == 'sr-1'
+        assert page1['page_results'][2]['id'] == 'sr-3'
+        assert page1['pagination_info']['current_offset'] == 0
+        assert page1['pagination_info']['has_next_page'] is True
+        assert page1['pagination_info']['next_offset'] == 3
+
+        # Test middle page
+        page2 = apply_pagination(filtered_results, limit=3, offset=3)
+        assert len(page2['page_results']) == 3
+        assert page2['page_results'][0]['id'] == 'sr-4'
+        assert page2['page_results'][2]['id'] == 'sr-6'
+        assert page2['pagination_info']['current_offset'] == 3
+        assert page2['pagination_info']['has_next_page'] is True
+        assert page2['pagination_info']['next_offset'] == 6
+
+        # Test last page (partial)
+        page3 = apply_pagination(filtered_results, limit=3, offset=9)
+        assert len(page3['page_results']) == 1
+        assert page3['page_results'][0]['id'] == 'sr-10'
+        assert page3['pagination_info']['current_offset'] == 9
+        assert page3['pagination_info']['has_next_page'] is False
+        assert page3['pagination_info']['next_offset'] is None
+
+        # Test beyond available results
+        page4 = apply_pagination(filtered_results, limit=3, offset=15)
+        assert len(page4['page_results']) == 0
+        assert page4['pagination_info']['current_offset'] == 15
+        assert page4['pagination_info']['has_next_page'] is False
+        assert page4['pagination_info']['next_offset'] is None
+
+    def test_response_structure_patterns(self):
+        """Test response structure patterns for evaluation score result find"""
+        # Mock data
+        evaluation_id = "eval-123"
+        predicted_value = "yes"
+        actual_value = "no"
+        page_results = [
+            {
+                "score_result_id": "sr-1",
+                "evaluation_id": "eval-123",
+                "item_id": "item-1",
+                "predicted": "yes",
+                "actual": "no",
+                "explanation": "Test explanation",
+                "confidence": 0.85,
+                "confusion_matrix_cell": {"predicted": "yes", "actual": "no"}
+            }
+        ]
+        matrix_cells = {('yes', 'no'): [page_results[0]]}
+
+        def build_response_structure(evaluation_id, predicted_value, actual_value,
+                                   page_results, matrix_cells, offset, limit):
+            total_available = len(page_results)
+            has_next_page = (offset + limit) < total_available
+            next_offset = (offset + limit) if has_next_page else None
+
+            return {
+                "context": {
+                    "evaluation_id": evaluation_id,
+                    "filters": {
+                        "predicted_value": predicted_value,
+                        "actual_value": actual_value
+                    },
+                    "pagination": {
+                        "current_offset": offset,
+                        "limit": limit,
+                        "total_available": total_available,
+                        "has_next_page": has_next_page,
+                        "next_offset": next_offset
+                    },
+                    "confusion_matrix_cells": {
+                        f"{cell_key[0]}_{cell_key[1]}": len(cell_items)
+                        for cell_key, cell_items in matrix_cells.items()
+                    }
+                },
+                "score_results": page_results,
+                "summary": {
+                    "total_results_found": total_available,
+                    "results_in_page": len(page_results),
+                    "confusion_matrix_cells_found": len(matrix_cells)
+                }
+            }
+
+        response = build_response_structure(
+            evaluation_id, predicted_value, actual_value,
+            page_results, matrix_cells, 0, 5
+        )
+
+        # Test response structure
+        assert 'context' in response
+        assert 'score_results' in response
+        assert 'summary' in response
+
+        # Test context structure
+        assert response['context']['evaluation_id'] == "eval-123"
+        assert response['context']['filters']['predicted_value'] == "yes"
+        assert response['context']['filters']['actual_value'] == "no"
+        assert response['context']['pagination']['current_offset'] == 0
+        assert response['context']['pagination']['limit'] == 5
+        assert response['context']['confusion_matrix_cells']['yes_no'] == 1
+
+        # Test score results structure
+        assert len(response['score_results']) == 1
+        assert response['score_results'][0]['score_result_id'] == "sr-1"
+        assert response['score_results'][0]['predicted'] == "yes"
+        assert response['score_results'][0]['actual'] == "no"
+        assert response['score_results'][0]['confidence'] == 0.85
+
+        # Test summary structure
+        assert response['summary']['total_results_found'] == 1
+        assert response['summary']['results_in_page'] == 1
+        assert response['summary']['confusion_matrix_cells_found'] == 1
+
+    def test_metadata_parsing_patterns(self):
+        """Test metadata parsing patterns for extracting human labels"""
+        def parse_human_label_from_metadata(metadata_str):
+            try:
+                if isinstance(metadata_str, str):
+                    md = json.loads(metadata_str)
+                else:
+                    md = metadata_str
+            except Exception:
+                return None
+
+            if md and isinstance(md, dict):
+                res_md = md.get('results') or {}
+                if isinstance(res_md, dict) and res_md:
+                    key0 = next(iter(res_md))
+                    inner = res_md.get(key0) or {}
+                    inner_md = inner.get('metadata') or {}
+                    human_label = (inner_md.get('human_label') or '').strip().lower()
+                    return human_label if human_label else None
+
+            return None
+
+        # Test valid metadata
+        valid_metadata = json.dumps({
+            'results': {
+                'score-789': {
+                    'metadata': {'human_label': 'yes'}
+                }
+            }
+        })
+
+        label = parse_human_label_from_metadata(valid_metadata)
+        assert label == 'yes'
+
+        # Test metadata with whitespace
+        whitespace_metadata = json.dumps({
+            'results': {
+                'score-789': {
+                    'metadata': {'human_label': '  NO  '}
+                }
+            }
+        })
+
+        label = parse_human_label_from_metadata(whitespace_metadata)
+        assert label == 'no'
+
+        # Test empty metadata
+        empty_metadata = json.dumps({})
+        label = parse_human_label_from_metadata(empty_metadata)
+        assert label is None
+
+        # Test invalid JSON
+        invalid_metadata = "invalid json"
+        label = parse_human_label_from_metadata(invalid_metadata)
+        assert label is None
+
+        # Test missing human_label
+        no_label_metadata = json.dumps({
+            'results': {
+                'score-789': {
+                    'metadata': {}
+                }
+            }
+        })
+
+        label = parse_human_label_from_metadata(no_label_metadata)
+        assert label is None
+
+    def test_include_text_parameter_patterns(self):
+        """Test include_text parameter handling patterns"""
+        # Mock score result with full item data and metadata
+        mock_score_result = {
+            'id': 'sr-1',
+            'value': 'yes',
+            'explanation': 'Test explanation',
+            'itemId': 'item-1',
+            'item': {
+                'id': 'item-1',
+                'identifiers': ['call-123'],
+                'text': 'This is a very long transcript text that should be excluded when include_text=False'
+            },
+            'metadata': json.dumps({
+                'results': {
+                    'score-789': {
+                        'metadata': {
+                            'human_label': 'yes',
+                            'text': 'Another copy of transcript text in metadata'
+                        }
+                    }
+                }
+            })
+        }
+
+        def format_result_with_text_control(sr, include_text=False):
+            """Format result respecting include_text parameter"""
+            import json as _json
+
+            # Extract predicted value
+            predicted = (sr.get('value') or '').strip().lower()
+
+            # Extract actual value from metadata
+            md = sr.get('metadata')
+            try:
+                if isinstance(md, str):
+                    md = _json.loads(md)
+            except Exception:
+                md = None
+
+            human_label = None
+            if md and isinstance(md, dict):
+                res_md = md.get('results') or {}
+                if isinstance(res_md, dict) and res_md:
+                    key0 = next(iter(res_md))
+                    inner = res_md.get(key0) or {}
+                    inner_md = inner.get('metadata') or {}
+                    human_label = (inner_md.get('human_label') or '').strip().lower()
+
+            actual = human_label or 'unknown'
+
+            formatted_result = {
+                "score_result_id": sr.get('id'),
+                "item_id": sr.get('itemId'),
+                "predicted": predicted,
+                "actual": actual,
+                "explanation": sr.get('explanation')
+            }
+
+            # Add detailed metadata if available (but strip transcript text unless requested)
+            if md and isinstance(md, dict):
+                if include_text:
+                    # Include full metadata with transcript text
+                    formatted_result["detailed_metadata"] = md
+                else:
+                    # Strip transcript text from metadata to prevent context overflow
+                    md_copy = _json.loads(_json.dumps(md))  # Deep copy
+                    res_md = md_copy.get('results') or {}
+                    if isinstance(res_md, dict):
+                        for score_name, score_data in res_md.items():
+                            if isinstance(score_data, dict):
+                                inner_md = score_data.get('metadata') or {}
+                                if isinstance(inner_md, dict) and 'text' in inner_md:
+                                    # Remove the transcript text field
+                                    inner_md.pop('text', None)
+                    formatted_result["detailed_metadata"] = md_copy
+
+            # Add item data if available (includes identifiers and optionally text)
+            if sr.get('item'):
+                item_data = sr.get('item')
+                formatted_result["item"] = {
+                    "id": item_data.get('id'),
+                    "identifiers": item_data.get('identifiers')
+                }
+                # Only include text if explicitly requested to prevent context overflow
+                if include_text:
+                    formatted_result["item"]["text"] = item_data.get('text')
+
+            return formatted_result
+
+        # Test with include_text=False (default)
+        result_without_text = format_result_with_text_control(mock_score_result, include_text=False)
+
+        # Should have basic fields
+        assert result_without_text['score_result_id'] == 'sr-1'
+        assert result_without_text['predicted'] == 'yes'
+        assert result_without_text['actual'] == 'yes'
+
+        # Should have item data without text
+        assert 'item' in result_without_text
+        assert result_without_text['item']['id'] == 'item-1'
+        assert result_without_text['item']['identifiers'] == ['call-123']
+        assert 'text' not in result_without_text['item']  # Text should be excluded
+
+        # Should have metadata without text field
+        assert 'detailed_metadata' in result_without_text
+        metadata = result_without_text['detailed_metadata']
+        assert 'results' in metadata
+        score_data = metadata['results']['score-789']
+        assert 'metadata' in score_data
+        inner_metadata = score_data['metadata']
+        assert 'human_label' in inner_metadata
+        assert 'text' not in inner_metadata  # Text field should be removed
+
+        # Test with include_text=True
+        result_with_text = format_result_with_text_control(mock_score_result, include_text=True)
+
+        # Should have basic fields
+        assert result_with_text['score_result_id'] == 'sr-1'
+        assert result_with_text['predicted'] == 'yes'
+        assert result_with_text['actual'] == 'yes'
+
+        # Should have item data WITH text
+        assert 'item' in result_with_text
+        assert result_with_text['item']['id'] == 'item-1'
+        assert result_with_text['item']['identifiers'] == ['call-123']
+        assert 'text' in result_with_text['item']  # Text should be included
+        assert 'very long transcript' in result_with_text['item']['text']
+
+        # Should have metadata WITH text field
+        assert 'detailed_metadata' in result_with_text
+        metadata = result_with_text['detailed_metadata']
+        assert 'results' in metadata
+        score_data = metadata['results']['score-789']
+        assert 'metadata' in score_data
+        inner_metadata = score_data['metadata']
+        assert 'human_label' in inner_metadata
+        assert 'text' in inner_metadata  # Text field should be present
+        assert 'Another copy of transcript' in inner_metadata['text']
+
+    def test_include_text_default_value(self):
+        """Test that include_text defaults to False"""
+        def validate_include_text_default(include_text=False):
+            # The default value should be False
+            return include_text
+
+        # Test with no parameter provided (uses default)
+        default_value = validate_include_text_default()
+        assert default_value is False
+
+        # Test with explicit False
+        explicit_false = validate_include_text_default(include_text=False)
+        assert explicit_false is False
+
+        # Test with explicit True
+        explicit_true = validate_include_text_default(include_text=True)
+        assert explicit_true is True

@@ -49,6 +49,7 @@ class FeedbackItems(DataCache):
         initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
         final_value: Optional[str] = Field(None, description="Filter by corrected human value")
         identifier_extractor: Optional[str] = Field(None, description="Optional client-specific identifier extractor class (e.g., 'CallCriteriaIdentifierExtractor')")
+        column_mappings: Optional[Dict[str, str]] = Field(None, description="Optional mapping of original score names to new column names (e.g., {'Agent Misrepresentation': 'Agent Misrepresentation - With Confidence'})")
         cache_file: str = Field(default="feedback_items_cache.parquet", description="Cache file name")
         local_cache_directory: str = Field(default='./.plexus_training_data_cache/', description="Local cache directory")
         
@@ -684,6 +685,13 @@ class FeedbackItems(DataCache):
             DataFrame with properly formatted rows matching CallCriteriaDBCache format
         """
         logger.debug(f"FeedbackItems: Creating dataset with {len(feedback_items)} items for score: {score_name}")
+        
+        # Apply column mapping if specified
+        mapped_score_name = score_name
+        if self.parameters.column_mappings and score_name in self.parameters.column_mappings:
+            mapped_score_name = self.parameters.column_mappings[score_name]
+            logger.info(f"Column mapping applied: '{score_name}' -> '{mapped_score_name}'")
+        
         # Create properly formatted dataset rows
         rows = []
         
@@ -748,9 +756,9 @@ class FeedbackItems(DataCache):
                 'metadata': metadata,
                 'text': text,
                 'call_date': call_date,
-                score_name: score_value,
-                f"{score_name} comment": score_comment,
-                f"{score_name} edit comment": edit_comment
+                mapped_score_name: score_value,
+                f"{mapped_score_name} comment": score_comment,
+                f"{mapped_score_name} edit comment": edit_comment
             }
             
             rows.append(row)
@@ -761,7 +769,7 @@ class FeedbackItems(DataCache):
         # Create DataFrame with proper column structure even when empty
         if not rows:
             # Create empty DataFrame with expected columns (IDs first, then metadata, then text)
-            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', 'call_date', score_name, f"{score_name} comment", f"{score_name} edit comment"]
+            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', 'call_date', mapped_score_name, f"{mapped_score_name} comment", f"{mapped_score_name} edit comment"]
             df = pd.DataFrame(columns=columns)
         else:
             df = pd.DataFrame(rows)
@@ -776,7 +784,7 @@ class FeedbackItems(DataCache):
         logger.info("FEEDBACK_ITEMS_SPECIFIC_CHECKS:")
         
         # Check for missing required columns specific to FeedbackItems format
-        required_columns = ['content_id', 'feedback_item_id', 'text', 'metadata', 'IDs', score_name, f"{score_name} comment", f"{score_name} edit comment"]
+        required_columns = ['content_id', 'feedback_item_id', 'text', 'metadata', 'IDs', mapped_score_name, f"{mapped_score_name} comment", f"{mapped_score_name} edit comment"]
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             logger.error(f"Missing required FeedbackItems columns: {missing_columns}")
@@ -805,37 +813,45 @@ class FeedbackItems(DataCache):
     def _create_metadata_structure(self, feedback_item: FeedbackItem) -> str:
         """
         Create metadata JSON string from feedback item and associated item.
-        
+
         Args:
             feedback_item: The feedback item with associated item data
-            
+
         Returns:
             JSON string containing relevant metadata
         """
         import json  # Move import to top of function
+        from datetime import datetime
+
+        # Helper function to convert datetime to ISO string
+        def serialize_datetime(value):
+            if isinstance(value, datetime):
+                return value.isoformat()
+            return value
+
         metadata = {
             'feedback_item_id': feedback_item.id,
             'scorecard_id': feedback_item.scorecardId,
             'score_id': feedback_item.scoreId,
             'account_id': feedback_item.accountId,
-            'created_at': feedback_item.createdAt,
-            'updated_at': feedback_item.updatedAt,
-            'edited_at': feedback_item.editedAt,
+            'created_at': serialize_datetime(feedback_item.createdAt),
+            'updated_at': serialize_datetime(feedback_item.updatedAt),
+            'edited_at': serialize_datetime(feedback_item.editedAt),
             'editor_name': feedback_item.editorName,
             'is_agreement': feedback_item.isAgreement,
             'cache_key': feedback_item.cacheKey,
             'initial_answer_value': feedback_item.initialAnswerValue,
             'initial_comment_value': feedback_item.initialCommentValue
         }
-        
+
         # Add item metadata if available - use the cached metadata directly from API
         if feedback_item.item:
             logger.info(f"Adding item metadata for feedback_item_id={feedback_item.id}, item_id={feedback_item.item.id}")
             item_metadata = {
                 'item_id': feedback_item.item.id,
                 'external_id': getattr(feedback_item.item, 'externalId', None),
-                'item_created_at': getattr(feedback_item.item, 'createdAt', None),
-                'item_updated_at': getattr(feedback_item.item, 'updatedAt', None),
+                'item_created_at': serialize_datetime(getattr(feedback_item.item, 'createdAt', None)),
+                'item_updated_at': serialize_datetime(getattr(feedback_item.item, 'updatedAt', None)),
                 'item_metadata': getattr(feedback_item.item, 'metadata', None)
             }
             metadata['item'] = item_metadata
@@ -868,7 +884,25 @@ class FeedbackItems(DataCache):
                 except Exception as e:
                     logger.warning(f"Could not parse cached item metadata for item_id={feedback_item.item.id}: {e}")
                     # Continue without the cached metadata
-        return json.dumps(metadata, default=str)
+        
+        # Parse other_data if it's a JSON string (fix the root cause)
+        if 'other_data' in metadata and isinstance(metadata['other_data'], str):
+            try:
+                metadata['other_data'] = json.loads(metadata['other_data'])
+                logger.info(f"Parsed other_data from JSON string to dict for item_id={feedback_item.item.id}")
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Could not parse other_data JSON string for item_id={feedback_item.item.id}: {e}")
+                # Keep as string if parsing fails
+
+        # Check for non-serializable objects before attempting JSON serialization
+        try:
+            return json.dumps(metadata)
+        except TypeError as e:
+            # Log which key has the problematic value
+            logger.error(f"Failed to serialize metadata to JSON: {e}")
+            for key, value in metadata.items():
+                logger.error(f"  metadata['{key}'] = {value} (type: {type(value)})")
+            raise
     
     def _create_ids_hash(self, feedback_item: FeedbackItem) -> str:
         """

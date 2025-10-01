@@ -261,9 +261,72 @@ class TypeValidationRule(ValidationRule):
                         'actual_type': type(current).__name__
                     }
                 ))
-                
+
         except (KeyError, TypeError):
             # Field path is invalid - not our concern
             pass
-        
+
+        return messages
+
+
+class ConfidenceConfigurationRule(ValidationRule):
+    """Rule that validates confidence configuration requirements."""
+
+    def __init__(self):
+        super().__init__(
+            rule_id="CONFIDENCE_REQUIRES_PARSE_FROM_START",
+            description="enable_confidence requires parse_from_start: true",
+            severity='error'
+        )
+
+    def validate(self, data: Dict[str, Any]) -> List['LintMessage']:
+        from .yaml_linter import LintMessage
+
+        messages = []
+
+        # Check if data has scores configuration
+        scores = data.get('scores', [])
+        if not isinstance(scores, list):
+            return messages
+
+        # Check each score
+        for i, score in enumerate(scores):
+            if not isinstance(score, dict):
+                continue
+
+            # Check if score has a graph with nodes
+            graph = score.get('graph', [])
+            if not isinstance(graph, list):
+                continue
+
+            # Check each node in the graph
+            for j, node in enumerate(graph):
+                if not isinstance(node, dict):
+                    continue
+
+                # Check if this is a Classifier node with enable_confidence
+                node_class = node.get('class', '')
+                enable_confidence = node.get('enable_confidence', False)
+                parse_from_start = node.get('parse_from_start', False)
+
+                if (node_class == 'Classifier' and
+                    enable_confidence and
+                    not parse_from_start):
+
+                    node_name = node.get('name', f'node_{j}')
+                    messages.append(LintMessage(
+                        level=self.severity,
+                        code=self.rule_id,
+                        title='Invalid Confidence Configuration',
+                        message=f"Node '{node_name}' has 'enable_confidence: true' but 'parse_from_start' is not true.",
+                        suggestion="Set 'parse_from_start: true' when using 'enable_confidence: true' for Classifier nodes.",
+                        doc_url="https://docs.plexus.ai/yaml-dsl/confidence-scoring",
+                        context={
+                            'score_index': i,
+                            'node_index': j,
+                            'node_name': node_name,
+                            'node_class': node_class
+                        }
+                    ))
+
         return messages
