@@ -10,6 +10,7 @@ import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
+import { formatConfidence, formatConfidenceDetailed } from '@/lib/confidence-formatting'
 
 export interface ScoreResultData {
   id: string
@@ -113,7 +114,7 @@ export function ScoreResultComponent({
             </div>
             {result.confidence && (
               <Badge className="bg-card self-start shadow-none">
-                {Math.round(result.confidence * 100)}%
+                {formatConfidence(result.confidence)}
               </Badge>
             )}
           </div>
@@ -247,7 +248,7 @@ export function ScoreResultComponent({
                   <p className="text-sm text-muted-foreground">Confidence</p>
                 </div>
                 <p className="text-lg font-semibold">
-                  {Math.round(result.confidence * 100)}%
+                  {formatConfidenceDetailed(result.confidence)}
                 </p>
               </div>
             )}
