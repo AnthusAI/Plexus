@@ -984,6 +984,12 @@ class LangGraphScore(Score, LangChainUser):
                             for alias, original in condition['output'].items():
                                 base_annotations[alias] = Optional[str]
 
+            # Add fields from LogicalNode output_mapping with proper types
+            if hasattr(instance.parameters, 'output_mapping') and instance.parameters.output_mapping is not None:
+                from typing import Any
+                for state_field, result_key in instance.parameters.output_mapping.items():
+                    base_annotations[state_field] = Optional[Any]
+
         # Also check the graph configuration directly from the YAML
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
             for node_config in self.parameters.graph:

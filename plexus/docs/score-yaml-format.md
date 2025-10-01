@@ -189,6 +189,7 @@ Common node types:
 - `BeforeAfterSlicer`: Segments text based on a quote
 - `LogicalClassifier`: Applies custom code-based logic
 - `LogicalNode`: Execute arbitrary Python code and return custom output values
+- `FuzzyMatchClassifier`: Fuzzy string matching with classification output
 
 ```yaml
 - name: my_classifier
@@ -502,6 +503,53 @@ Execute arbitrary Python code and return custom output values. Use for data proc
   function_name: apply_rules
 ```
 
+## FuzzyMatchClassifier Usage
+
+Perform fuzzy string matching on state data and return classification results. Ideal for matching variations of names, text patterns, or identifiers with tolerance for spelling differences.
+
+```yaml
+- name: school_matcher
+  class: FuzzyMatchClassifier
+  data_paths: ["metadata.schools[].school_id"]  # JSONPath to extract values
+  targets:
+    operator: "or"  # "and" or "or" for multiple targets
+    items:
+      - target: "American InterContinental University"
+        threshold: 80
+        scorer: "partial_ratio"  # Best for substring matching
+      - target: "Colorado Technical University"
+        threshold: 80
+        scorer: "partial_ratio"
+  classification_mapping:  # Map matched targets to output values
+    "American InterContinental University": "AIU"
+    "Colorado Technical University": "CTU"
+  default_classification: "Other"  # When no matches found
+  output:
+    school_type: classification
+    match_details: explanation
+```
+
+**Key Parameters:**
+- `data_paths`: JSONPath expressions to extract values from state
+  - `["text"]` - Extract from state.text
+  - `["metadata.schools[].school_id"]` - Extract school_id from each item in schools array
+  - `["metadata.schools[0].name"]` - Extract name from first school only
+- `targets`: Single target or group with AND/OR logic
+- `classification_mapping`: Maps target names to classification values
+- `default_classification`: Fallback when no matches found
+
+**Scorers for different use cases:**
+- `partial_ratio`: Best for substring matching (school names in longer text)
+- `ratio`: Good for similar-length strings
+- `token_set_ratio`: Handles word order differences
+- `token_sort_ratio`: Handles reordered words
+
+**Output fields:**
+- `classification`: Primary result for conditions/routing
+- `explanation`: Human-readable match explanation
+- `match_found`: Boolean success indicator
+- `matches`: Detailed match information with scores
+
 ## Message Templates
 
 Templates support Jinja2 syntax for dynamic content:
@@ -519,6 +567,7 @@ user_message: |
 Common metadata includes:
 - `text`: The primary content being scored
 - `metadata.schools`: School-related data (for education clients)
+- `metadata.other_data`: Other metadata
 - `results["Score Name"]`: Results from other scores
 - Custom metadata provided by data sources
 

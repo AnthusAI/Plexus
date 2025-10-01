@@ -48,6 +48,7 @@ class FeedbackItems(DataCache):
         limit_per_cell: Optional[int] = Field(None, description="Maximum number of items to sample from each confusion matrix cell")
         initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
         final_value: Optional[str] = Field(None, description="Filter by corrected human value")
+        feedback_id: Optional[str] = Field(None, description="Specific feedback item ID to create dataset for (if specified, only this item will be included)")
         identifier_extractor: Optional[str] = Field(None, description="Optional client-specific identifier extractor class (e.g., 'CallCriteriaIdentifierExtractor')")
         column_mappings: Optional[Dict[str, str]] = Field(None, description="Optional mapping of original score names to new column names (e.g., {'Agent Misrepresentation': 'Agent Misrepresentation - With Confidence'})")
         cache_file: str = Field(default="feedback_items_cache.parquet", description="Cache file name")
@@ -90,7 +91,10 @@ class FeedbackItems(DataCache):
         if self.parameters.identifier_extractor:
             self.identifier_extractor = self._load_identifier_extractor(self.parameters.identifier_extractor)
         
-        logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
+        if self.parameters.feedback_id:
+            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for specific feedback_id='{self.parameters.feedback_id}' in scorecard='{self.parameters.scorecard}', score='{self.parameters.score}'")
+        else:
+            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
 
     def _perform_reload(self, cache_identifier: str, scorecard_id: str, score_id: str, 
                         scorecard_name: str, score_name: str) -> pd.DataFrame:
@@ -310,11 +314,17 @@ class FeedbackItems(DataCache):
             'limit': self.parameters.limit,
             'limit_per_cell': self.parameters.limit_per_cell,
             'initial_value': self.normalized_initial_value,
-            'final_value': self.normalized_final_value
+            'final_value': self.normalized_final_value,
+            'feedback_id': self.parameters.feedback_id
         }
         params_str = json.dumps(params, sort_keys=True)
         params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
-        return f"feedback_items_{scorecard_id}_{score_id}_{self.parameters.days}d_{params_hash}"
+        
+        # If a specific feedback_id is provided, include it in the identifier
+        if self.parameters.feedback_id:
+            return f"feedback_items_{scorecard_id}_{score_id}_single_{self.parameters.feedback_id[:8]}_{params_hash}"
+        else:
+            return f"feedback_items_{scorecard_id}_{score_id}_{self.parameters.days}d_{params_hash}"
 
     def _get_cache_file_path(self, identifier: str) -> str:
         """Get the full path to the cache file."""
@@ -415,14 +425,19 @@ class FeedbackItems(DataCache):
         
         logger.info(f"Found {len(feedback_items)} feedback items")
         
-        # Build confusion matrix and sample items
-        sampled_items = self._sample_items_from_confusion_matrix(feedback_items)
-        
-        if not sampled_items:
-            logger.warning("No items after sampling")
-            return pd.DataFrame()
-        
-        logger.info(f"Sampled {len(sampled_items)} items from confusion matrix")
+        # If a specific feedback_id was provided, skip sampling and use the single item
+        if self.parameters.feedback_id:
+            sampled_items = feedback_items
+            logger.info(f"Using single feedback item {self.parameters.feedback_id} without sampling")
+        else:
+            # Build confusion matrix and sample items
+            sampled_items = self._sample_items_from_confusion_matrix(feedback_items)
+            
+            if not sampled_items:
+                logger.warning("No items after sampling")
+                return pd.DataFrame()
+            
+            logger.info(f"Sampled {len(sampled_items)} items from confusion matrix")
         
         # Create dataset rows
         df = self._create_dataset_rows(sampled_items, score_name)
@@ -524,8 +539,28 @@ class FeedbackItems(DataCache):
     
     async def _fetch_feedback_items(self, scorecard_id: str, score_id: str, 
                                    scorecard_name: str, score_name: str) -> List[FeedbackItem]:
-        """Fetch feedback items using the FeedbackService."""
-        # First, get all items without value filtering (since FeedbackService is case-sensitive)
+        """Fetch feedback items using the FeedbackService or specific feedback ID."""
+        
+        # If a specific feedback_id is provided, fetch only that item
+        if self.parameters.feedback_id:
+            logger.info(f"Fetching specific feedback item: {self.parameters.feedback_id}")
+            specific_items = await self._fetch_specific_feedback_items([self.parameters.feedback_id])
+            
+            if not specific_items:
+                logger.warning(f"Feedback item {self.parameters.feedback_id} not found")
+                return []
+            
+            # Validate that the item belongs to the correct scorecard and score
+            item = specific_items[0]
+            if item.scorecardId != scorecard_id or item.scoreId != score_id:
+                logger.error(f"Feedback item {self.parameters.feedback_id} belongs to scorecard {item.scorecardId}/score {item.scoreId}, "
+                           f"but expected scorecard {scorecard_id}/score {score_id}")
+                return []
+            
+            logger.info(f"Successfully fetched specific feedback item {self.parameters.feedback_id}")
+            return specific_items
+        
+        # Otherwise, fetch items using the normal FeedbackService approach
         logger.error(f"🔍 FEEDBACK SERVICE DEBUG: About to call FeedbackService.find_feedback_items")
         all_items = await FeedbackService.find_feedback_items(
             client=self.client,
