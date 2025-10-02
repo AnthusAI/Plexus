@@ -400,6 +400,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId"),
             idx("itemId"),
+            idx("itemId").sortKeys(["scoreId"]).name("byItemScore"),
             idx("scoreId")
         ]),
 
