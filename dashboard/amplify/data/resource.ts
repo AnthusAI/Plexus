@@ -400,7 +400,6 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId"),
             idx("itemId"),
-            idx("scorecardId"),
             idx("scoreId")
         ]),
 
