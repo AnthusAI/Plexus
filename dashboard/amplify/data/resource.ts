@@ -206,7 +206,8 @@ const schema = a.schema({
             parentVersion: a.belongsTo('ScoreVersion', 'parentVersionId'),
             childVersions: a.hasMany('ScoreVersion', 'parentVersionId'),
             evaluations: a.hasMany('Evaluation', 'scoreVersionId'),
-            dataSets: a.hasMany('DataSet', 'scoreVersionId')
+            dataSets: a.hasMany('DataSet', 'scoreVersionId'),
+            procedures: a.hasMany('Procedure', 'scoreVersionId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -928,8 +929,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"]),
-            idx("category").sortKeys(["updatedAt"])
+            idx("accountId").sortKeys(["updatedAt"])
         ]),
 
     ChatSession: a
@@ -990,8 +990,7 @@ const schema = a.schema({
             idx("sessionId").sortKeys(["sequenceNumber"]),
             idx("sessionId").sortKeys(["createdAt"]),
             idx("procedureId").sortKeys(["createdAt"]),
-            idx("parentMessageId"),
-            idx("messageType").sortKeys(["createdAt"])
+            idx("parentMessageId")
         ]),
 });
 
