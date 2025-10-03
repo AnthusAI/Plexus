@@ -27,6 +27,10 @@ import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, ge
 
 import GraphNodesList from "./graph-nodes-list"
 import ProcedureConversationViewer from "./procedure-conversation-viewer"
+import { ParametersDisplay } from "./ui/ParametersDisplay"
+import { parseParametersFromYaml } from "@/lib/parameter-parser"
+import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
+import * as yaml from 'js-yaml'
 
 const client = generateClient<Schema>()
 
@@ -114,6 +118,8 @@ export default function ProcedureTask({
   const [isLoadingYaml, setIsLoadingYaml] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
   const [isConversationFullscreen, setIsConversationFullscreen] = useState(false)
+  const [parameters, setParameters] = useState<ParameterDefinition[]>([])
+  const [parameterValues, setParameterValues] = useState<ParameterValue>({})
 
   // Load procedure YAML when component mounts or procedure changes
   useEffect(() => {
@@ -121,6 +127,38 @@ export default function ProcedureTask({
       loadProcedureYaml()
     }
   }, [variant, procedure.id])
+
+  // Parse parameters from YAML whenever it changes
+  useEffect(() => {
+    if (loadedYaml) {
+      try {
+        const parsedParams = parseParametersFromYaml(loadedYaml)
+        console.log('[ProcedureTask] Parsed parameters:', parsedParams.length, parsedParams)
+        setParameters(parsedParams)
+        
+        // Extract values from the YAML
+        const config = yaml.load(loadedYaml) as any
+        console.log('[ProcedureTask] YAML config:', config)
+        if (config && config.parameters && Array.isArray(config.parameters)) {
+          const values: ParameterValue = {}
+          config.parameters.forEach((param: any) => {
+            if (param.value !== undefined) {
+              values[param.name] = param.value
+            }
+          })
+          console.log('[ProcedureTask] Parameter values:', values)
+          setParameterValues(values)
+        } else {
+          console.log('[ProcedureTask] No parameters array found in config')
+          setParameterValues({})
+        }
+      } catch (error) {
+        console.error('Error parsing parameters:', error)
+        setParameters([])
+        setParameterValues({})
+      }
+    }
+  }, [loadedYaml])
 
   const loadProcedureYaml = async () => {
     if (!procedure.id) return
@@ -234,17 +272,27 @@ export default function ProcedureTask({
         <div className="space-y-1.5 p-0 flex flex-col items-start w-full max-w-full px-1">
           <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
             <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-1">
                 <Waypoints className="h-5 w-5 text-muted-foreground" />
                 <span className="text-lg font-semibold text-muted-foreground">Procedure</span>
               </div>
-              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
-                <div className="text-sm text-muted-foreground truncate">{props.task.scorecard}</div>
+              
+              {/* Timestamp */}
+              <div className="mb-2">
+                <Timestamp time={props.task.time} variant="relative" />
+              </div>
+              
+              {/* Only show scorecard/score if there are no parameters */}
+              {parameters.length === 0 && (
+                <>
+                  {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                    <div className="text-sm text-muted-foreground truncate">{props.task.scorecard}</div>
+                  )}
+                  {props.task.score && props.task.score.trim() !== '' && (
+                    <div className="text-sm text-muted-foreground truncate">{props.task.score}</div>
+                  )}
+                </>
               )}
-              {props.task.score && props.task.score.trim() !== '' && (
-                <div className="text-sm text-muted-foreground truncate">{props.task.score}</div>
-              )}
-              <Timestamp time={props.task.time} variant="relative" />
             </div>
             <div className="flex flex-col items-end flex-shrink-0 gap-2">
               <div className="flex gap-2">
@@ -298,6 +346,17 @@ export default function ProcedureTask({
         null
       ) : (
         <div className="p-3">
+          {/* Parameters section - show at top if parameters exist */}
+          {parameters.length > 0 && (
+            <div className="mb-4">
+              <ParametersDisplay
+                parameters={parameters}
+                values={parameterValues}
+                variant="table"
+              />
+            </div>
+          )}
+          
           {/* Configuration section */}
           <Accordion type="multiple" className="w-full">
             <AccordionItem value="configuration" className="border-b-0">

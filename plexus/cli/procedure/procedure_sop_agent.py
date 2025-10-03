@@ -36,12 +36,13 @@ class ProcedureProcedureDefinition:
     """
     
     def __init__(self):
-        # Worker agent gets access to a curated subset of tools
+        # Worker agent gets access to a minimal, curated subset of tools
+        # We pre-load all context (evaluation results, score config, etc.) so the agent
+        # doesn't need to call tools to fetch that information
         self.available_tools = [
-            "plexus_feedback_find", 
-            "upsert_procedure_node", 
-            "get_procedure_info",
-            "stop_procedure"
+            "plexus_evaluation_score_result_find",  # Find specific evaluation error cases to analyze
+            "upsert_procedure_node",  # Create hypothesis experiment nodes
+            "stop_procedure"  # Signal completion when done
         ]
         # Will be set by ProcedureSOPAgent.setup() when YAML is parsed
         self.experiment_config = None

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowLeft, Save, Trash2, Waypoints, FileText, ChevronRight, ChevronDown } from "lucide-react"
+import { Trash2, Waypoints, FileText, ChevronRight, ChevronDown } from "lucide-react"
 import { Timestamp } from "./ui/timestamp"
 import { toast } from "sonner"
 import Editor from "@monaco-editor/react"
@@ -21,6 +21,15 @@ import ProcedureTask from "./ProcedureTask"
 import GraphNodesList from "./graph-nodes-list"
 import { useAccount } from '@/app/contexts/AccountContext'
 import ScorecardContext from '@/components/ScorecardContext'
+import { ConfigurableParametersForm } from "@/components/ui/ConfigurableParametersForm"
+import { ParametersDisplay } from "@/components/ui/ParametersDisplay"
+import { parseParametersFromYaml } from "@/lib/parameter-parser"
+import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
+import { CardButton } from "@/components/CardButton"
+import { X } from "lucide-react"
+
+type ParameterValues = ParameterValue
+import * as yaml from 'js-yaml'
 import {
   Accordion,
   AccordionContent,
@@ -44,7 +53,7 @@ interface Props {
   initialEditMode?: boolean
 }
 
-export default function ProcedureDetail({ procedureId, onSave, onCancel, initialEditMode = false }: Props) {
+export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initialEditMode = false }: Props) {
   const router = useRouter()
   const { selectedAccount } = useAccount()
   
@@ -59,6 +68,11 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
   const [code, setCode] = useState('')
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
+  
+  // Parameters
+  const [parameters, setParameters] = useState<ParameterDefinition[]>([])
+  const [parameterValues, setParameterValues] = useState<ParameterValues>({})
+  const [parameterErrors, setParameterErrors] = useState<Record<string, string>>({})
   
   // YAML linting
   const { lintResult, isLinting, lint, setupMonacoIntegration, jumpToLine } = useYamlLinter({ context: 'experiment' })
@@ -80,6 +94,32 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
       setCode(MINIMAL_YAML_FALLBACK)
     }
   }, [procedureId])
+
+  // Parse parameters from code whenever code changes
+  useEffect(() => {
+    if (code) {
+      try {
+        const parsedParams = parseParametersFromYaml(code)
+        setParameters(parsedParams)
+        
+        // Extract values from the YAML
+        const config = yaml.load(code) as any
+        if (config && config.parameters && Array.isArray(config.parameters)) {
+          const values: ParameterValues = {}
+          config.parameters.forEach((param: any) => {
+            if (param.value !== undefined) {
+              values[param.name] = param.value
+            }
+          })
+          setParameterValues(values)
+        }
+      } catch (error) {
+        console.error('Error parsing parameters from code:', error)
+        setParameters([])
+        setParameterValues({})
+      }
+    }
+  }, [code])
 
   const loadProcedure = async () => {
     if (!procedureId) return
@@ -140,17 +180,52 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
     }
   }
 
+  const injectParameterValuesIntoCode = (codeStr: string, values: ParameterValues): string => {
+    try {
+      const config = yaml.load(codeStr) as any
+      if (config && config.parameters && Array.isArray(config.parameters)) {
+        config.parameters = config.parameters.map((param: any) => ({
+          ...param,
+          value: values[param.name] !== undefined ? values[param.name] : param.value
+        }))
+        return yaml.dump(config)
+      }
+      return codeStr
+    } catch (error) {
+      console.error('Error injecting parameter values:', error)
+      return codeStr
+    }
+  }
+
   const handleSave = async () => {
     if (!selectedAccount?.id) {
       toast.error('No account selected')
       return
     }
 
+    // Validate required parameters
+    const errors: Record<string, string> = {}
+    parameters.forEach(param => {
+      if (param.required && !parameterValues[param.name]) {
+        errors[param.name] = `${param.label} is required`
+      }
+    })
+
+    if (Object.keys(errors).length > 0) {
+      setParameterErrors(errors)
+      toast.error('Please fill in all required parameters')
+      return
+    }
+
     try {
       setIsSaving(true)
       
+      // Inject parameter values into code
+      const codeWithValues = injectParameterValuesIntoCode(code, parameterValues)
+      
       if (procedureId) {
         // Update existing procedure
+        // Note: scoreVersionId is stored in the YAML code, not as a separate field
         await client.graphql({
           query: `
             mutation UpdateProcedure($input: UpdateProcedureInput!) {
@@ -168,9 +243,9 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
             input: {
               id: procedureId,
               featured,
-              code: code || null,
-              scorecardId: selectedScorecard || null,
-              scoreId: selectedScore || null,
+              code: codeWithValues || null,
+              scorecardId: parameterValues.scorecard_id || selectedScorecard || null,
+              scoreId: parameterValues.score_id || selectedScore || null,
             }
           }
         })
@@ -178,6 +253,7 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
         toast.success('Procedure updated successfully')
       } else {
         // Create new procedure
+        // Note: scoreVersionId is stored in the YAML code, not as a separate field
         const result = await client.graphql({
           query: `
             mutation CreateProcedure($input: CreateProcedureInput!) {
@@ -195,9 +271,9 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
           variables: {
             input: {
               featured,
-              code: code || null,
-              scorecardId: selectedScorecard || null,
-              scoreId: selectedScore || null,
+              code: codeWithValues || null,
+              scorecardId: parameterValues.scorecard_id || selectedScorecard || null,
+              scoreId: parameterValues.score_id || selectedScore || null,
               accountId: selectedAccount.id,
             }
           }
@@ -216,6 +292,18 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
       }
     } catch (error) {
       console.error('Error saving procedure:', error)
+      // Log the detailed error if it's a GraphQL error
+      if ((error as any).errors && Array.isArray((error as any).errors)) {
+        (error as any).errors.forEach((err: any, index: number) => {
+          console.error(`GraphQL Error ${index + 1}:`, {
+            message: err.message,
+            errorType: err.errorType,
+            errorInfo: err.errorInfo,
+            path: err.path,
+            locations: err.locations
+          })
+        })
+      }
       toast.error('Failed to save procedure')
     } finally {
       setIsSaving(false)
@@ -293,78 +381,36 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
         <div className="space-y-1.5 p-0 flex flex-col items-start w-full max-w-full px-1">
           <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
             <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-1">
                 <Waypoints className="h-5 w-5 text-muted-foreground" />
                 <span className="text-lg font-semibold text-muted-foreground">Procedure</span>
-                {/* {procedure?.template?.category && (
-                  <div className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
-                    {procedure.template.category}
-                  </div>
-                )} */}
               </div>
               
-              
-              {/* Scorecard selector */}
-              {isEditMode ? (
-                <div className="mb-2 w-full max-w-sm">
-                  <ScorecardContext
-                    selectedScorecard={selectedScorecard}
-                    setSelectedScorecard={setSelectedScorecard}
-                    selectedScore={selectedScore}
-                    setSelectedScore={setSelectedScore}
-                  />
-                </div>
-              ) : (
-                <>
-                  {procedure?.scorecard && (
-                    <div className="text-sm text-muted-foreground truncate">{procedure.scorecard.name}</div>
-                  )}
-                  {procedure?.score && (
-                    <div className="text-sm text-muted-foreground truncate">{procedure.score.name}</div>
-                  )}
-                </>
-              )}
-              
+              {/* Timestamp */}
               {procedure && (
-                <Timestamp time={procedure.updatedAt} variant="relative" />
+                <div className="mb-1">
+                  <Timestamp time={procedure.updatedAt} variant="relative" />
+                </div>
               )}
             </div>
             
             <div className="flex flex-col items-end flex-shrink-0 gap-2">
               <div className="flex gap-2">
                 {isEditMode ? (
-                  <>
-                    <Button 
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
-                      onClick={handleCancel} 
-                      disabled={isSaving}
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
-                      onClick={handleSave} 
-                      disabled={isSaving}
-                    >
-                      <Save className="h-4 w-4" />
-                    </Button>
-                  </>
+                  <CardButton
+                    icon={X}
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    aria-label="Cancel"
+                  />
                 ) : (
                   <>
                     {onCancel && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                      <CardButton
+                        icon={X}
                         onClick={onCancel}
                         aria-label="Close"
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                      </Button>
+                      />
                     )}
                   </>
                 )}
@@ -377,6 +423,48 @@ export default function ProcedureDetail({ procedureId, onSave, onCancel, initial
       {/* Content - similar to ProcedureTask content structure */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-3">
+          {/* Parameters section */}
+          {isEditMode ? (
+            parameters.length > 0 ? (
+              <div className="mb-4 w-full">
+                <ConfigurableParametersForm
+                  parameters={parameters}
+                  values={parameterValues}
+                  onChange={setParameterValues}
+                  errors={parameterErrors}
+                />
+              </div>
+            ) : (
+              <div className="mb-4 w-full max-w-sm">
+                <ScorecardContext
+                  selectedScorecard={selectedScorecard}
+                  setSelectedScorecard={setSelectedScorecard}
+                  selectedScore={selectedScore}
+                  setSelectedScore={setSelectedScore}
+                />
+              </div>
+            )
+          ) : (
+            parameters.length > 0 ? (
+              <div className="mb-4 w-full">
+                <ParametersDisplay
+                  parameters={parameters}
+                  values={parameterValues}
+                  variant="table"
+                />
+              </div>
+            ) : (
+              <>
+                {procedure?.scorecard && (
+                  <div className="text-sm text-muted-foreground mb-2">{procedure.scorecard.name}</div>
+                )}
+                {procedure?.score && (
+                  <div className="text-sm text-muted-foreground mb-4">{procedure.score.name}</div>
+                )}
+              </>
+            )
+          )}
+
           {/* Configuration section */}
           <Accordion type="multiple" defaultValue={isEditMode ? ["configuration"] : []} className="w-full">
             <AccordionItem value="configuration" className="border-b-0">

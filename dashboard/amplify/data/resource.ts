@@ -47,7 +47,7 @@ type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "r
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
+type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
 type GraphNodeIndexFields = "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
 type ProcedureTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
 
@@ -868,6 +868,8 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
+            scoreVersionId: a.string(),
+            scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             nodes: a.hasMany('GraphNode', 'procedureId'),
             chatSessions: a.hasMany('ChatSession', 'procedureId'),
             chatMessages: a.hasMany('ChatMessage', 'procedureId'),

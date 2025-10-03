@@ -32,6 +32,7 @@ class Procedure(BaseModel):
     accountId: str
     scorecardId: Optional[str]
     scoreId: Optional[str]
+    scoreVersionId: Optional[str]
 
     def __init__(
         self,
@@ -41,24 +42,32 @@ class Procedure(BaseModel):
         createdAt: datetime,
         updatedAt: datetime,
         rootNodeId: Optional[str] = None,
+        code: Optional[str] = None,
+        templateId: Optional[str] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
+        scoreVersionId: Optional[str] = None,
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.featured = featured
+        self.code = code
+        self.templateId = templateId
         self.rootNodeId = rootNodeId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.accountId = accountId
         self.scorecardId = scorecardId
         self.scoreId = scoreId
+        self.scoreVersionId = scoreVersionId
 
     @classmethod
     def fields(cls) -> str:
         return """
             id
             featured
+            code
+            templateId
             rootNodeId
             createdAt
             updatedAt
@@ -76,12 +85,15 @@ class Procedure(BaseModel):
         return cls(
             id=data['id'],
             featured=data.get('featured', False),
+            code=data.get('code'),
+            templateId=data.get('templateId'),
             rootNodeId=data.get('rootNodeId'),
             createdAt=created_at,
             updatedAt=updated_at,
             accountId=data['accountId'],
             scorecardId=data.get('scorecardId'),
             scoreId=data.get('scoreId'),
+            scoreVersionId=data.get('scoreVersionId'),
             client=client
         )
 

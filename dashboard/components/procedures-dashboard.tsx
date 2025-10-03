@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Plus, Waypoints, FileText, Shrink, BookOpenCheck } from "lucide-react"
 import { toast } from "sonner"
 import ProcedureTask, { ProcedureTaskData } from "@/components/ProcedureTask"
-import ProcedureDetail from "@/components/procedure-detail"
+import ProcedureTaskEdit from "@/components/ProcedureTaskEdit"
 import ProcedureConversationViewer from "@/components/procedure-conversation-viewer"
 import ScorecardContext from "@/components/ScorecardContext"
 import TemplateSelector from "@/components/template-selector"
@@ -666,7 +666,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     // If in edit mode, render the edit form instead of the detail view
     if (isEditMode) {
       return (
-        <ProcedureDetail 
+        <ProcedureTaskEdit 
           procedureId={selectedProcedureId}
           initialEditMode={true}
           onSave={() => {
