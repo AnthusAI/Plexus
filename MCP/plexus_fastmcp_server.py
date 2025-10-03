@@ -367,7 +367,7 @@ mcp = FastMCP(
     - plexus_score_delete: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
     
     ## Evaluation Tools
-    - run_plexus_evaluation: Dispatches a scorecard evaluation to run in the background. 
+    - plexus_evaluation_run: Run an accuracy evaluation on a Plexus scorecard using the same code path as the CLI. 
       The server will confirm dispatch but will not track progress or results. 
       Monitor evaluation status via Plexus Dashboard or system logs.
     - plexus_evaluation_info: Get detailed information about a specific evaluation by ID or get the latest evaluation.
