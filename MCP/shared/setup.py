@@ -37,13 +37,22 @@ def redirect_stdout_to_stderr():
         except Exception as e:
             print(f"Error redirecting stdout: {e}", file=sys.stderr)
 
-# Configure logging to stderr only
+# Configure logging to both stderr and file
+log_file = os.path.join(os.path.expanduser('~'), '.plexus', 'mcp-server.log')
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+handlers = [
+    logging.StreamHandler(sys.stderr),
+    logging.FileHandler(log_file, mode='a')
+]
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s  [%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler(sys.stderr)]
+    format='%(asctime)s  [%(levelname)s] %(name)s - %(message)s',
+    handlers=handlers
 )
 logger = logging.getLogger(__name__)
+logger.info(f"Logging to file: {log_file}")
 
 # Safety measure: Monkey patch builtins.print to always use stderr
 original_print = print
@@ -114,12 +123,17 @@ def setup_plexus_imports():
         # Try to import the Plexus core modules
         try:
             # Attempt to import Plexus modules for core functionality
+            logger.info("Importing PlexusDashboardClient...")
             from plexus.dashboard.api.client import PlexusDashboardClient
+            logger.info("Importing create_client...")
             # Assign imported functions to pre-defined names
             # Prefer minimal-dependency resolution path to avoid importing heavy CLI groups
             from plexus.cli.shared.client_utils import create_client as _create_dashboard_client
+            logger.info("Importing resolve_account_identifier...")
             from plexus.cli.scorecard.scorecards import resolve_account_identifier as _resolve_account_identifier
+            logger.info("Importing resolve_scorecard_identifier...")
             from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier as _resolve_scorecard_identifier
+            logger.info("All core imports completed.")
             
             # Create a wrapper around create_dashboard_client to add better error logging
             def enhanced_create_dashboard_client():

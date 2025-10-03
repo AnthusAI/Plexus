@@ -39,7 +39,7 @@ mcp = FastMCP(
     - plexus_score_delete: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
     
     ## Evaluation Tools
-    - run_plexus_evaluation: Dispatches a scorecard evaluation to run in the background. 
+    - plexus_evaluation_run: Run an accuracy evaluation on a Plexus scorecard using the same code path as the CLI. 
       The server will confirm dispatch but will not track progress or results. 
       Monitor evaluation status via Plexus Dashboard or system logs.
     
@@ -110,28 +110,37 @@ def run_server(args):
     # Load environment variables from .env file if specified
     if args.env_dir:
         load_env_file(args.env_dir)
-    
+
     # Register all tools
     register_all_tools()
-    
+
     # Initialize default account as early as possible after env vars are loaded
     # but after the Plexus core is available
     logger.info("Initializing default account from environment...")
     initialize_default_account()
-    
+
+    # Setup global exception handler for uncaught exceptions
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+    sys.excepthook = handle_exception
+
     # Run the server with appropriate transport
     try:
         logger.info("Starting FastMCP server")
-        
+
         # Flush any pending writes
         sys.stderr.flush()
-        
+
         # For the actual FastMCP run, we need clean stdout for JSON-RPC
         restore_stdout()
-        
+
         # Flush to ensure clean state
         sys.stdout.flush()
-        
+
         if args.transport == "stdio":
             # For stdio transport
             mcp.run(transport="stdio")
