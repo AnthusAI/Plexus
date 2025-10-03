@@ -42,14 +42,13 @@ class TestProcedureProcedureDefinition:
         """Test ProcedureProcedureDefinition initializes correctly."""
         procedure_def = ProcedureProcedureDefinition()
         
-        # Test that the hardcoded available tools are returned
+        # Test that the evaluation analysis tools are returned
         available_tools = procedure_def.get_allowed_tools()
-        assert "plexus_feedback_find" in available_tools
+        assert "plexus_evaluation_score_result_find" in available_tools
         assert "upsert_procedure_node" in available_tools
-        assert "get_procedure_info" in available_tools
         assert "stop_procedure" in available_tools
-        # Should have exactly 4 tools (simplified from dynamic scoping)
-        assert len(available_tools) == 4
+        # Should have exactly 3 tools for evaluation analysis
+        assert len(available_tools) == 3
     
     def test_procedure_prompts_load_from_yaml_config(self):
         """Test that procedure procedure definition loads prompts from YAML configuration."""
