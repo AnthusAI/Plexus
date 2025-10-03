@@ -1,0 +1,142 @@
+parameters:
+  - name: scorecard_id
+    label: Scorecard
+    type: scorecard_select
+    required: true
+    description: Select the scorecard to analyze
+
+  - name: time_range
+    label: Time Range (days)
+    type: number
+    min: 1
+    max: 365
+    default: 30
+    description: Number of days to include in the analysis
+
+  - name: include_summary
+    label: Include Summary Section
+    type: boolean
+    default: true
+    description: Include a high-level summary at the top of the report
+
+  - name: report_format
+    label: Report Format
+    type: select
+    options:
+      - value: summary
+        label: Summary Only
+      - value: detailed
+        label: Detailed Analysis
+      - value: executive
+        label: Executive Summary
+    default: summary
+    description: Choose the level of detail for the report
+
+  - name: comparison_period
+    label: Comparison Period
+    type: select
+    options:
+      - value: none
+        label: No Comparison
+      - value: previous
+        label: Previous Period
+      - value: yoy
+        label: Year-over-Year
+    default: none
+    description: Compare against a previous period
+
+---
+
+# Scorecard Performance Report
+
+**Generated:** {{ "now" | date: "%Y-%m-%d %H:%M" }}  
+**Scorecard ID:** {{ scorecard_id }}  
+**Analysis Period:** Last {{ time_range }} days  
+**Report Format:** {{ report_format | capitalize }}
+
+---
+
+{% if include_summary %}
+## Executive Summary
+
+This report analyzes the performance of scorecard `{{ scorecard_id }}` over the past {{ time_range }} days.
+
+{% if comparison_period != "none" %}
+**Comparison Mode:** {{ comparison_period | replace: "_", " " | capitalize }}
+{% endif %}
+
+{% endif %}
+
+## Metrics Overview
+
+```block name="Metrics Query"
+type: metrics
+scorecard_id: {{ scorecard_id }}
+days: {{ time_range }}
+comparison: {{ comparison_period }}
+```
+
+{% if report_format == "detailed" or report_format == "executive" %}
+
+## Detailed Analysis
+
+```block name="Detailed Breakdown"
+type: analysis
+scorecard_id: {{ scorecard_id }}
+days: {{ time_range }}
+granularity: daily
+```
+
+{% endif %}
+
+{% if report_format == "detailed" %}
+
+## Individual Score Performance
+
+```block name="Score Breakdown"
+type: scores
+scorecard_id: {{ scorecard_id }}
+days: {{ time_range }}
+show_charts: true
+```
+
+{% endif %}
+
+{% if comparison_period == "previous" %}
+
+## Period Comparison
+
+Comparing current period (last {{ time_range }} days) with previous {{ time_range }} days.
+
+```block name="Period Comparison"
+type: comparison
+scorecard_id: {{ scorecard_id }}
+current_days: {{ time_range }}
+compare_to: previous
+```
+
+{% elif comparison_period == "yoy" %}
+
+## Year-over-Year Comparison
+
+Comparing current period with same period last year.
+
+```block name="YoY Comparison"
+type: comparison
+scorecard_id: {{ scorecard_id }}
+current_days: {{ time_range }}
+compare_to: year_over_year
+```
+
+{% endif %}
+
+---
+
+## Report Configuration
+
+- **Scorecard:** {{ scorecard_id }}
+- **Time Range:** {{ time_range }} days
+- **Include Summary:** {{ include_summary }}
+- **Report Format:** {{ report_format }}
+- **Comparison:** {{ comparison_period }}
+

@@ -271,6 +271,14 @@ def convert_mcp_tools_to_langchain(mcp_tools):
             'prioritize_edit_comments': 'Whether to prioritize feedback items with edit comments',
             'offset': 'Simple numeric offset for pagination'
         },
+        'plexus_evaluation_score_result_find': {
+            'evaluation_id': 'The unique ID of the evaluation to examine',
+            'predicted_value': 'Optional filter for the AI predicted value (e.g., "yes", "no", "high", "medium")',
+            'actual_value': 'Optional filter for the human label value (e.g., "yes", "no", "low")',
+            'limit': 'Maximum number of results to return (default 5)',
+            'offset': 'Starting index for pagination within filtered results (default 0)',
+            'include_text': 'Whether to include full transcript text (default False)'
+        },
         'plexus_item_info': {
             'item_id': 'The unique ID of the item OR an external identifier value'
         },

@@ -683,12 +683,10 @@ class ManagerAgentConversationFilter(ConversationFilterBase, ConversationFilter)
             if actual_index == 0 and hasattr(msg, '__class__') and msg.__class__.__name__ == 'SystemMessage':
                 continue
             
-            # For recent messages, preserve them but may lightly summarize very long ones
+            # For recent messages, preserve them in full
+            # Don't truncate - the manager needs full context to coach effectively
             if hasattr(msg, 'content') and msg.content:
                 content = msg.content
-                if len(content) > 500:
-                    # Lightly summarize very long messages
-                    content = content[:500] + f"... [SUMMARIZED - originally {len(msg.content)} chars]"
                 
                 # Add to context summary
                 message_summary = self._create_message_summary(msg, actual_index)

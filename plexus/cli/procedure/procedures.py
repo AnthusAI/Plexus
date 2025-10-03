@@ -25,7 +25,7 @@ from datetime import datetime
 
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
-from .service import ProcedureService, DEFAULT_PROCEDURE_YAML
+from .service import ProcedureService
 
 @click.group()
 def procedure():
@@ -571,24 +571,19 @@ def run(procedure_id: str, max_iterations: Optional[int], timeout: Optional[int]
 def template(output: Optional[str]):
     """Generate a template YAML configuration for procedures.
     
-    Creates a sample YAML file with the default BeamSearch configuration
-    that can be customized for new experiments.
+    DEPRECATED: Users should manage procedure templates via the dashboard or API.
+    See example-procedure-prompts.yaml in the project root for reference.
     
     Examples:
         plexus procedure template
         plexus procedure template --output my-template.yaml
     """
-    if not output:
-        output = "experiment-template.yaml"
-    
-    try:
-        with open(output, 'w') as f:
-            f.write(DEFAULT_PROCEDURE_YAML)
-        console.print(f"[green]✓ Created template at {output}[/green]")
-        console.print("\nEdit the template and use it with:")
-        console.print(f"  plexus procedure create -s SCORECARD -c SCORE --yaml {output}")
-    except Exception as e:
-        console.print(f"[red]Error writing template to {output}: {str(e)}[/red]")
+    console.print("[yellow]⚠️  This command is deprecated.[/yellow]")
+    console.print("\nProcedure templates should be managed via:")
+    console.print("  1. Dashboard UI (create ProcedureTemplate)")
+    console.print("  2. Store YAML directly in Procedure.code field")
+    console.print("\nSee example-procedure-prompts.yaml for reference.")
+    return
 
 # Add to CLI
 if __name__ == "__main__":

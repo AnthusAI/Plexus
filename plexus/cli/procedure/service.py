@@ -26,6 +26,7 @@ from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
 from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
 from plexus.cli.scorecard.scorecards import resolve_account_identifier
+from plexus.cli.procedure.parameter_parser import ProcedureParameterParser
 
 logger = logging.getLogger(__name__)
 
@@ -40,54 +41,6 @@ try:
 except Exception:
     # Non-fatal: tests will still patch/mocks as needed
     pass
-
-# Default YAML template loaded from file
-# This ensures the default template always has the latest prompts
-def _load_default_experiment_yaml():
-    """Load the default procedure YAML template with robust error handling."""
-    import os
-    import yaml
-    
-    # Multiple possible locations for the template file
-    possible_paths = [
-        # Relative to this file
-        os.path.join(os.path.dirname(__file__), '..', '..', '..', 'current-hardcoded-prompts.yaml'),
-        # From current working directory
-        os.path.join(os.getcwd(), 'current-hardcoded-prompts.yaml'),
-        # Absolute path fallback
-        '/Users/ryan.porter/Projects/Plexus/current-hardcoded-prompts.yaml'
-    ]
-    
-    for template_path in possible_paths:
-        try:
-            template_path = os.path.abspath(template_path)
-            if os.path.exists(template_path):
-                logger.info(f"Loading procedure template from: {template_path}")
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    template_content = f.read()
-                
-                # Validate that it's parseable YAML
-                try:
-                    template_data = yaml.safe_load(template_content)
-                    # Validate required sections exist
-                    if not _validate_yaml_template(template_data):
-                        logger.warning(f"Template at {template_path} is missing required sections")
-                        continue
-                    
-                    logger.info("Successfully loaded and validated procedure template")
-                    return template_content
-                except yaml.YAMLError as e:
-                    logger.error(f"Invalid YAML in template file {template_path}: {e}")
-                    continue
-        except (IOError, OSError) as e:
-            logger.debug(f"Could not read template from {template_path}: {e}")
-            continue
-    
-    # If we get here, no valid template was found
-    error_msg = f"CRITICAL: Could not load procedure template from any of: {possible_paths}"
-    logger.error(error_msg)
-    raise FileNotFoundError(error_msg)
-
 
 def _validate_yaml_template(template_data):
     """Validate that a YAML template has required sections for procedures."""
@@ -114,20 +67,8 @@ def _validate_yaml_template(template_data):
     
     return True
 
-# Load the default template
-try:
-    DEFAULT_PROCEDURE_YAML = _load_default_experiment_yaml()
-except FileNotFoundError as e:
-    logger.error(f"Failed to load default procedure template: {e}")
-    # Provide a minimal working template as absolute fallback
-    DEFAULT_PROCEDURE_YAML = """class: "BeamSearch"
-value: "return 1"
-max_total_rounds: 500
-prompts:
-  worker_system_prompt: "You are a procedure analysis assistant."
-  worker_user_prompt: "Begin analysis."
-  manager_system_prompt: "You are a coaching manager."
-"""
+# NO DEFAULT TEMPLATE - procedures must have YAML in database
+# Users MUST provide their own YAML via Procedure.code or ProcedureTemplate
 
 @dataclass
 class ProcedureCreationResult:
@@ -156,14 +97,17 @@ class ProcedureService:
     def __init__(self, client: PlexusDashboardClient):
         self.client = client
     
-    def get_or_create_default_template(self, account_id: str) -> ProcedureTemplate:
-        """Get or create the default procedure template for an account.
+    def get_or_create_default_template(self, account_id: str) -> Optional[ProcedureTemplate]:
+        """Get the default procedure template for an account.
+        
+        NOTE: This no longer creates templates automatically. Users must create
+        their own ProcedureTemplates via the dashboard or API.
         
         Args:
             account_id: The account ID
             
         Returns:
-            The default ProcedureTemplate instance
+            The default ProcedureTemplate instance if one exists, None otherwise
         """
         # Try to get existing default template
         template = ProcedureTemplate.get_default_for_account(
@@ -174,22 +118,9 @@ class ProcedureService:
             logger.debug(f"Found existing default template {template.id} for account {account_id}")
             return template
         
-        # Create default template
-        logger.info(f"Creating default procedure template for account {account_id}")
-        
-        template = ProcedureTemplate.create(
-            client=self.client,
-            name="Default Hypothesis Generation",
-            template=DEFAULT_PROCEDURE_YAML,
-            version="1.0",
-            accountId=account_id,
-            description="Default template for hypothesis generation experiments with state machine conversation flow",
-            isDefault=True,
-            category="hypothesis_generation"
-        )
-        
-        logger.info(f"Created default template {template.id} for account {account_id}")
-        return template
+        logger.warning(f"No default procedure template found for account {account_id}")
+        logger.warning("Users must create ProcedureTemplates via dashboard or API")
+        return None
         
     def create_procedure(
         self,
@@ -514,10 +445,15 @@ class ProcedureService:
             return False, f"Error updating configuration: {str(e)}"
     
     def get_procedure_yaml(self, procedure_id: str) -> Optional[str]:
-        """Get the YAML configuration for an procedure from its template.
+        """Get the YAML configuration for a procedure.
+        
+        Priority order:
+        1. Procedure.code field (directly stored YAML)
+        2. Procedure.templateId -> ProcedureTemplate
+        3. Account default template
         
         Args:
-            procedure_id: ID of the experiment
+            procedure_id: ID of the procedure
             
         Returns:
             YAML configuration string, or None if not found
@@ -527,19 +463,27 @@ class ProcedureService:
             if not procedure:
                 return None
             
-            # Get template if procedure has one
+            # FIRST: Check if procedure has code directly stored
+            if hasattr(procedure, 'code') and procedure.code:
+                logger.info(f"Using YAML from Procedure.code field for {procedure_id}")
+                return procedure.code
+            
+            # SECOND: Get template if procedure has one
             if hasattr(procedure, 'templateId') and procedure.templateId:
                 template = ProcedureTemplate.get_by_id(procedure.templateId, self.client)
                 if template:
+                    logger.info(f"Using YAML from ProcedureTemplate {procedure.templateId} for {procedure_id}")
                     return template.get_template_content()
             
-            # Fallback: try to get from account default template
+            # THIRD: Fallback to account default template
             template = ProcedureTemplate.get_default_for_account(
                 procedure.accountId, self.client, "hypothesis_generation"
             )
             if template:
+                logger.info(f"Using YAML from account default template for {procedure_id}")
                 return template.get_template_content()
-                
+            
+            logger.warning(f"No YAML configuration found for procedure {procedure_id}")
             return None
             
         except Exception as e:
@@ -719,8 +663,34 @@ class ProcedureService:
             try:
                 from .mcp_transport import create_procedure_mcp_server
                 
-                # Pre-load all context to minimize AI tool calls
-                logger.info("Pre-loading context: documentation, score config, and feedback summary...")
+                # STEP 1: Get YAML and parse parameters FIRST (before fetching any context)
+                logger.info("Getting procedure YAML configuration and parsing parameters...")
+                experiment_yaml = self.get_procedure_yaml(procedure_id)
+                if not experiment_yaml:
+                    error_msg = f"No YAML configuration found for procedure {procedure_id}. Procedure must have YAML in Procedure.code field or linked ProcedureTemplate."
+                    logger.error(error_msg)
+                    return {
+                        'procedure_id': procedure_id,
+                        'status': 'error',
+                        'error': error_msg
+                    }
+                
+                # Parse configurable parameters from YAML
+                parameter_values = ProcedureParameterParser.extract_parameter_values(experiment_yaml)
+                logger.info(f"Extracted {len(parameter_values)} parameter values from YAML: {list(parameter_values.keys())}")
+                
+                # Validate required parameters
+                is_valid, missing = ProcedureParameterParser.validate_parameter_values(experiment_yaml, parameter_values)
+                if not is_valid:
+                    logger.error(f"Missing required parameters: {missing}")
+                    return {
+                        'procedure_id': procedure_id,
+                        'status': 'error',
+                        'error': f'Missing required parameters: {", ".join(missing)}'
+                    }
+                
+                # STEP 2: Use parsed parameters to determine what context to fetch
+                logger.info("Pre-loading context: documentation, score config, and evaluation results...")
                 
                 # 1. Get feedback alignment documentation
                 feedback_docs = await self._get_feedback_alignment_docs()
@@ -728,35 +698,48 @@ class ProcedureService:
                 # 2. Get score YAML format documentation
                 score_yaml_docs = await self._get_score_yaml_format_docs()
                 
-                # 3. Get current score configuration
-                current_score_config = await self._get_champion_score_config(procedure_info.procedure.scoreId)
+                # 3. Determine which score version to use (from YAML parameters or Procedure model)
+                score_version_id = parameter_values.get('score_version_id') or getattr(procedure_info.procedure, 'scoreVersionId', None)
                 
-                # 4. Get feedback summary for the last 7 days
-                feedback_summary = await self._get_feedback_summary(
-                    procedure_info.scorecard_name, 
-                    procedure_info.score_name,
-                    procedure_info.procedure.accountId  # Pass the account ID directly
+                # 4. Get score configuration for the determined version
+                if score_version_id:
+                    logger.info(f"Using score version from YAML parameters: {score_version_id}")
+                    current_score_config = await self._get_score_version_config(score_version_id)
+                else:
+                    logger.info("No score version specified, using champion version")
+                    current_score_config = await self._get_champion_score_config(procedure_info.procedure.scoreId)
+                
+                # 5. Run evaluation to get baseline results (replaces feedback summary approach)
+                logger.info("Running evaluation to establish baseline performance...")
+                evaluation_results = await self._run_evaluation_for_procedure(
+                    scorecard_name=procedure_info.scorecard_name,
+                    score_name=procedure_info.score_name,
+                    score_version_id=score_version_id,
+                    account_id=procedure_info.procedure.accountId,
+                    parameter_values=parameter_values
                 )
                 
-                # 5. Get existing procedure nodes to avoid duplication
+                # 6. Get existing procedure nodes to avoid duplication
                 existing_nodes = await self._get_existing_experiment_nodes(procedure_id)
                 
                 # Create procedure context for MCP tools with pre-loaded data
                 experiment_context = {
                     'procedure_id': procedure_id,
                     'account_id': procedure_info.procedure.accountId,
-                    'scorecard_id': procedure_info.procedure.scorecardId,
-                    'score_id': procedure_info.procedure.scoreId,
+                    'scorecard_id': parameter_values.get('scorecard_id') or procedure_info.procedure.scorecardId,
+                    'score_id': parameter_values.get('score_id') or procedure_info.procedure.scoreId,
+                    'score_version_id': score_version_id,
                     'scorecard_name': procedure_info.scorecard_name,
                     'score_name': procedure_info.score_name,
                     'node_count': procedure_info.node_count,
                     'version_count': procedure_info.version_count,
                     'options': options,
+                    'parameter_values': parameter_values,  # Make all parameters available
                     # Pre-loaded context to minimize tool calls
                     'feedback_alignment_docs': feedback_docs,
                     'score_yaml_format_docs': score_yaml_docs,
                     'current_score_config': current_score_config,
-                    'feedback_summary': feedback_summary,
+                    'evaluation_results': evaluation_results,  # NEW: Evaluation results instead of feedback summary
                     'existing_nodes': existing_nodes
                 }
                 
@@ -822,11 +805,8 @@ class ProcedureService:
             # AI-powered procedure execution with MCP tools
             if mcp_server and not dry_run:
                 try:
-                    # Get procedure YAML configuration
-                    experiment_yaml = self.get_procedure_yaml(procedure_id)
-                    if not experiment_yaml:
-                        logger.warning(f"No YAML configuration found for procedure {procedure_id}, using default")
-                        experiment_yaml = DEFAULT_PROCEDURE_YAML
+                    # Note: YAML and parameters have already been parsed above (before context building)
+                    # experiment_yaml and parameter_values are already in experiment_context
                     
                     # Import and run AI experiment
                     from .procedure_sop_agent import run_sop_guided_procedure
@@ -1075,6 +1055,27 @@ class ProcedureService:
             logger.error(f"Error getting champion score config for {score_id}: {e}")
             return None
     
+    async def _get_score_version_config(self, score_version_id: str) -> Optional[str]:
+        """Get the YAML configuration for a specific score version."""
+        try:
+            from plexus.dashboard.api.models.score_version import ScoreVersion
+            
+            score_version = ScoreVersion.get_by_id(score_version_id, self.client)
+            if not score_version:
+                logger.error(f"Score version {score_version_id} not found")
+                return None
+            
+            if score_version.code:
+                logger.info(f"Retrieved configuration for score version {score_version_id}")
+                return score_version.code
+            else:
+                logger.warning(f"No configuration found for score version {score_version_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting score version config for {score_version_id}: {e}")
+            return None
+    
     async def _get_feedback_alignment_docs(self) -> Optional[str]:
         """Get the feedback alignment documentation."""
         try:
@@ -1130,6 +1131,69 @@ class ProcedureService:
         except Exception as e:
             logger.error(f"Error getting score YAML format docs: {e}")
             return "# Score YAML Format Documentation\nDocumentation not available - proceed with general score configuration principles."
+    
+    async def _run_evaluation_for_procedure(
+        self,
+        scorecard_name: str,
+        score_name: str,
+        score_version_id: Optional[str],
+        account_id: str,
+        parameter_values: Dict[str, Any],
+        n_samples: int = 50
+    ) -> str:
+        """
+        Run an evaluation to establish baseline performance for the procedure.
+        
+        This replaces the feedback summary approach with actual evaluation data,
+        providing the AI agent with quantitative metrics and confusion matrix results.
+        
+        Args:
+            scorecard_name: Name of the scorecard
+            score_name: Name of the score
+            score_version_id: Optional specific score version to evaluate
+            account_id: Account ID
+            parameter_values: Parsed parameter values from YAML
+            n_samples: Number of samples to evaluate (default 50)
+            
+        Returns:
+            Formatted string with evaluation results for procedure context
+        """
+        try:
+            from plexus.cli.shared.evaluation_runner import run_accuracy_evaluation
+            import json
+            
+            logger.info(f"Running evaluation: {scorecard_name}/{score_name} (version: {score_version_id or 'champion'}, samples: {n_samples})")
+            
+            # Run the evaluation using the shared runner
+            # Note: run_accuracy_evaluation doesn't currently support score_version parameter
+            # It evaluates the current champion version from the database
+            # TODO: Extend run_accuracy_evaluation to support specific score versions
+            evaluation_result = await run_accuracy_evaluation(
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                number_of_samples=n_samples,
+                sampling_method="random",
+                fresh=True,
+                use_yaml=False  # Use database configuration, not local YAML
+            )
+            
+            # Log warning if a specific version was requested but can't be used yet
+            if score_version_id:
+                logger.warning(f"Score version {score_version_id} specified, but evaluation system doesn't support version-specific evaluation yet. Using champion version.")
+            
+            # Return evaluation results as JSON - same format as MCP tool
+            # This is token-efficient and contains all necessary information
+            logger.info("Evaluation completed successfully")
+            return json.dumps(evaluation_result, indent=2)
+                
+        except Exception as e:
+            logger.error(f"Error running evaluation for procedure: {e}", exc_info=True)
+            error_result = {
+                "error": str(e),
+                "message": "Error running evaluation - procedure cannot proceed without baseline metrics"
+            }
+            return json.dumps(error_result, indent=2)
+    
     
     async def _get_feedback_summary(self, scorecard_name: str, score_name: str, account_id: str, days: int = 7) -> Optional[str]:
         """Get feedback summary for the last N days."""

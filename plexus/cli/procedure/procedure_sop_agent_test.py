@@ -290,7 +290,7 @@ prompts:
     Scorecard: {scorecard_name}
     Score: {score_name}
     
-    Current Score Configuration (Champion Version):
+    Current Score Configuration:
     {current_score_config}
     
     Performance Analysis Summary:

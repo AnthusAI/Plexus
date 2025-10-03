@@ -9,10 +9,11 @@ interface TextParameterProps {
   definition: ParameterDefinition
   value: string
   onChange: (value: string) => void
+  disabled?: boolean
   error?: string
 }
 
-export function TextParameter({ definition, value, onChange, error }: TextParameterProps) {
+export function TextParameter({ definition, value, onChange, disabled, error }: TextParameterProps) {
   return (
     <div className="space-y-2">
       <Label htmlFor={definition.name}>
@@ -27,6 +28,7 @@ export function TextParameter({ definition, value, onChange, error }: TextParame
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         placeholder={definition.placeholder}
+        disabled={disabled}
         className={error ? 'border-destructive' : ''}
       />
       {error && <p className="text-xs text-destructive">{error}</p>}

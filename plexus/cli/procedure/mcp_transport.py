@@ -275,6 +275,7 @@ class EmbeddedMCPServer:
             from tools.score.scores import register_score_tools
             from tools.item.items import register_item_tools
             from tools.feedback.feedback import register_feedback_tools
+            from tools.evaluation.evaluations import register_evaluation_tools
             from tools.prediction.predictions import register_prediction_tools
             from tools.procedure.procedure_nodes import register_procedure_node_tools
             
@@ -364,6 +365,7 @@ class EmbeddedMCPServer:
                 "score": lambda: register_score_tools(tool_capture),
                 "item": lambda: register_item_tools(tool_capture),
                 "feedback": lambda: register_feedback_tools(tool_capture),
+                "evaluation": lambda: register_evaluation_tools(tool_capture),
                 "prediction": lambda: register_prediction_tools(tool_capture),
                 "experiment_node": lambda: register_procedure_node_tools(tool_capture, self.experiment_context)
             }

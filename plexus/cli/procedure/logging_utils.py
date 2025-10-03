@@ -80,8 +80,15 @@ def log_chat_history_for_agent(agent_name: str,
                 tool_calls_info.append(f"{tool_name}({tool_args})")
             content = f"[TOOL_CALLS: {', '.join(tool_calls_info)}]"
         
-        truncated_content = truncate_log_message(content, max_lines=4)
-        logger.info(f"   [{i+1}] {message_type}: {truncated_content}")
+        # Don't truncate initial messages (SYSTEM and first USER message) - they contain critical context
+        # Only truncate subsequent conversation messages
+        if i <= 1:
+            # First two messages (system prompt and initial user prompt) - don't truncate
+            logger.info(f"   [{i+1}] {message_type}: {content}")
+        else:
+            # Later messages - truncate for readability
+            truncated_content = truncate_log_message(content, max_lines=4)
+            logger.info(f"   [{i+1}] {message_type}: {truncated_content}")
 
 
 def log_filtered_vs_full_history(agent_name: str,
