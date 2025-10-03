@@ -789,8 +789,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["key"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
-            idx("key"),
-            idx("name")
+            idx("key")
         ]),
 
     DataSourceVersion: a
@@ -859,6 +858,7 @@ const schema = a.schema({
             templateId: a.string(),
             template: a.belongsTo('ProcedureTemplate', 'templateId'),
             code: a.string(), // YAML template code copied from template
+            state: a.string(), // Current workflow state (e.g., 'hypothesis_generation', 'score_version_generation', 'completed')
             rootNodeId: a.id(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
