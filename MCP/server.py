@@ -17,6 +17,7 @@ from tools.scorecard.scorecards import register_scorecard_tools
 from tools.evaluation.evaluations import register_evaluation_tools
 from tools.score.scores import register_score_tools
 from tools.procedure.procedures import register_procedure_tools
+from tools.procedure.procedure_nodes import register_procedure_node_tools
 
 # Setup Plexus imports and core functionality
 setup_plexus_imports()
@@ -95,7 +96,11 @@ def register_all_tools():
     # Register procedure tools
     register_procedure_tools(mcp)
     logger.info("Registered procedure tools")
-    
+
+    # Register procedure node tools
+    register_procedure_node_tools(mcp)
+    logger.info("Registered procedure node tools")
+
     # TODO: Register additional tool modules here as they are created
     # register_report_tools(mcp)
     # register_item_tools(mcp)

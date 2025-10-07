@@ -7,6 +7,7 @@ import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, Fil
 
 import { Timestamp } from './ui/timestamp'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +38,27 @@ const client = generateClient<Schema>()
 // Minimal fallback for YAML editor - actual templates come from procedure data
 const MINIMAL_YAML_FALLBACK = `class: "BeamSearch"
 # Loading procedure configuration...`
+
+// Status display helper function
+const getStatusDisplay = (status?: string): { text: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' } => {
+  if (!status) return { text: 'Pending', variant: 'secondary' }
+  
+  const statusMap: Record<string, { text: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+    // Task states
+    PENDING: { text: 'Pending', variant: 'secondary' },
+    RUNNING: { text: 'Running', variant: 'default' },
+    COMPLETED: { text: 'Completed', variant: 'outline' },
+    FAILED: { text: 'Failed', variant: 'destructive' },
+    // Procedure states (state machine)
+    START: { text: 'Start', variant: 'secondary' },
+    HYPOTHESIS: { text: 'Hypothesis', variant: 'default' },
+    CODE: { text: 'Coding', variant: 'default' },
+    ERROR: { text: 'Error', variant: 'destructive' },
+  }
+  
+  const upperStatus = status.toUpperCase()
+  return statusMap[upperStatus] || { text: status, variant: 'secondary' }
+}
 
 // Define the procedure data type
 export interface ProcedureTaskData extends BaseTaskData {
@@ -206,6 +228,35 @@ export default function ProcedureTask({
   }
 
   // Create the task object that matches the Task component's expected interface
+  // Format stages with proper colors based on status
+  const formattedStages = (procedure.task?.stages?.items || []).map((stage: any) => {
+    const isCompleted = stage.status === 'COMPLETED';
+    const isRunning = stage.status === 'RUNNING';
+    const isFailed = stage.status === 'FAILED';
+    
+    return {
+      id: stage.id,
+      key: stage.name,
+      label: stage.name,
+      color: isCompleted ? 'bg-primary' :
+             isRunning ? 'bg-secondary' :
+             isFailed ? 'bg-false' :
+             'bg-neutral',
+      name: stage.name,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      statusMessage: stage.statusMessage,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt,
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      completed: isCompleted
+    };
+  });
+  
+  console.log('[ProcedureTask] Formatted stages for procedure', procedure.id, ':', formattedStages.map(s => `${s.name}:${s.status}`).join(', '));
+  
   const taskObject = {
     id: procedure.id,
     type: 'Procedure',
@@ -217,15 +268,15 @@ export default function ProcedureTask({
     command: procedure.command,
     output: (procedure as any).output, // May not exist in type definition yet
     data: taskData,
-    stages: (procedure as any).stages, // May not exist in type definition yet
-    currentStageName: (procedure as any).currentStageName, // May not exist in type definition yet
+    stages: formattedStages, // Use formatted stages with colors
+    currentStageName: procedure.task?.currentStageId, // Get from task
     processedItems: (procedure as any).processedItems, // May not exist in type definition yet
     totalItems: (procedure as any).totalItems, // May not exist in type definition yet
-    startedAt: (procedure as any).startedAt, // May not exist in type definition yet
-    estimatedCompletionAt: (procedure as any).estimatedCompletionAt, // May not exist in type definition yet
-    completedAt: (procedure as any).completedAt, // May not exist in type definition yet
-    status: (procedure as any).status, // May not exist in type definition yet
-    errorMessage: procedure.errorMessage
+    startedAt: procedure.task?.startedAt, // Get from task
+    estimatedCompletionAt: procedure.task?.estimatedCompletionAt, // Get from task
+    completedAt: procedure.task?.completedAt, // Get from task
+    status: procedure.task?.status || 'PENDING', // Use task.status
+    errorMessage: procedure.task?.errorMessage || procedure.errorMessage
   }
 
   const headerContent = (

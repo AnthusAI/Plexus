@@ -16,7 +16,20 @@ from unittest.mock import Mock, patch, mock_open
 from datetime import datetime
 import yaml
 
-from plexus.cli.procedure.service import ProcedureService, ProcedureCreationResult, ProcedureInfo, DEFAULT_PROCEDURE_YAML
+from plexus.cli.procedure.service import ProcedureService, ProcedureCreationResult, ProcedureInfo
+
+# Test-only YAML template for tests that need a template
+TEST_PROCEDURE_YAML = """
+class: BeamSearch
+prompts:
+  worker_system_prompt: |
+    Test procedure worker system prompt
+  worker_user_prompt: |
+    Test procedure worker user prompt  
+  manager_system_prompt: |
+    Test procedure manager system prompt
+parameters: []
+"""
 
 
 class TestProcedureService(unittest.TestCase):
@@ -58,17 +71,15 @@ prompts:
     @patch('plexus.cli.procedure.service.Procedure')
     @patch('plexus.cli.procedure.service.ProcedureTemplate')
     def test_create_procedure_success(self, mock_template_class, mock_procedure_class, mock_resolve_scorecard, mock_resolve_account):
-        """Test successful procedure creation."""
+        """Test successful procedure creation with YAML config."""
         # Setup mocks
         mock_resolve_account.return_value = 'account-123'
         mock_resolve_scorecard.return_value = 'scorecard-456'
         
-        # Mock template
+        # Template exists but we're providing our own YAML
         mock_template = Mock()
         mock_template.id = 'template-123'
-        mock_template.get_template_content.return_value = self.valid_yaml_config
-        mock_template_class.get_default_for_account.return_value = None  # Force creation
-        mock_template_class.create.return_value = mock_template
+        mock_template_class.get_default_for_account.return_value = mock_template
         
         mock_procedure_class.create.return_value = self.mock_procedure
         self.mock_procedure.create_root_node.return_value = self.mock_root_node
@@ -79,7 +90,7 @@ prompts:
                 account_identifier='test-account',
                 scorecard_identifier='test-scorecard',
                 score_identifier='test-score',
-                yaml_config=self.valid_yaml_config,
+                yaml_config=self.valid_yaml_config,  # Providing YAML config
                 featured=True
             )
         
@@ -180,17 +191,16 @@ prompts:
     @patch('plexus.cli.procedure.service.resolve_account_identifier')
     @patch('plexus.cli.procedure.service.resolve_scorecard_identifier')
     @patch('plexus.cli.procedure.service.ProcedureTemplate')
-    def test_create_procedure_uses_default_yaml(self, mock_template_class, mock_resolve_scorecard, mock_resolve_account):
-        """Test procedure creation uses default YAML when none provided."""
+    def test_create_procedure_uses_template_yaml(self, mock_template_class, mock_resolve_scorecard, mock_resolve_account):
+        """Test procedure creation uses template YAML when none provided and root node is requested."""
         mock_resolve_account.return_value = 'account-123'
         mock_resolve_scorecard.return_value = 'scorecard-456'
         
         # Mock template
         mock_template = Mock()
         mock_template.id = 'template-123'
-        mock_template.get_template_content.return_value = DEFAULT_PROCEDURE_YAML
-        mock_template_class.get_default_for_account.return_value = None  # Force creation
-        mock_template_class.create.return_value = mock_template
+        mock_template.get_template_content.return_value = TEST_PROCEDURE_YAML
+        mock_template_class.get_default_for_account.return_value = mock_template
         
         mock_procedure_class = Mock()
         mock_procedure_class.create.return_value = self.mock_procedure
@@ -202,13 +212,14 @@ prompts:
             result = self.service.create_procedure(
                 account_identifier='test-account',
                 scorecard_identifier='test-scorecard',
-                score_identifier='test-score'
+                score_identifier='test-score',
+                create_root_node=True  # Request root node to trigger template usage
                 # No yaml_config provided
             )
         
         self.assertTrue(result.success)
-        # Verify default YAML was used
-        self.mock_procedure.create_root_node.assert_called_once_with(DEFAULT_PROCEDURE_YAML, None)
+        # Verify template YAML was used
+        self.mock_procedure.create_root_node.assert_called_once_with(TEST_PROCEDURE_YAML, None)
     
     @patch('plexus.cli.procedure.service.Procedure')
     def test_get_procedure_info_success(self, mock_procedure_class):
@@ -374,39 +385,45 @@ prompts:
     @patch('plexus.cli.procedure.service.Procedure')
     @patch('plexus.cli.procedure.service.ProcedureTemplate')
     def test_get_experiment_yaml_success(self, mock_template_class, mock_procedure_class):
-        """Test getting procedure YAML successfully."""
+        """Test getting procedure YAML successfully from Procedure.code field."""
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
+        # Now prioritizes Procedure.code field
+        self.mock_procedure.code = self.valid_yaml_config
         self.mock_procedure.templateId = 'template-123'
-        
-        # Mock template
-        mock_template = Mock()
-        mock_template.get_template_content.return_value = self.valid_yaml_config
-        mock_template_class.get_by_id.return_value = mock_template
         
         result = self.service.get_procedure_yaml('exp-123')
         
         self.assertEqual(result, self.valid_yaml_config)
     
     @patch('plexus.cli.procedure.service.Procedure')
-    def test_get_experiment_yaml_no_root_node(self, mock_procedure_class):
-        """Test getting procedure YAML when no root node."""
+    def test_get_experiment_yaml_no_code_or_template(self, mock_procedure_class):
+        """Test getting procedure YAML when no code or template exists."""
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
-        self.mock_procedure.get_root_node.return_value = None
+        # No code field and no template
+        self.mock_procedure.code = None
+        self.mock_procedure.templateId = None
         
         result = self.service.get_procedure_yaml('exp-123')
         
         self.assertIsNone(result)
     
     @patch('plexus.cli.procedure.service.Procedure')
-    def test_get_experiment_yaml_no_versions(self, mock_procedure_class):
-        """Test getting procedure YAML when no versions exist."""
+    @patch('plexus.cli.procedure.service.ProcedureTemplate')
+    def test_get_experiment_yaml_from_template(self, mock_template_class, mock_procedure_class):
+        """Test getting procedure YAML from template when code field is empty."""
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
-        self.mock_procedure.get_root_node.return_value = self.mock_root_node
-        self.mock_root_node.get_latest_version.return_value = None
+        # No code field, but has template
+        self.mock_procedure.code = None
+        self.mock_procedure.templateId = 'template-123'
+        
+        # Mock template
+        mock_template = Mock()
+        mock_template.get_template_content.return_value = TEST_PROCEDURE_YAML
+        mock_template_class.get_by_id.return_value = mock_template
         
         result = self.service.get_procedure_yaml('exp-123')
         
-        self.assertIsNone(result)
+        self.assertEqual(result, TEST_PROCEDURE_YAML)
     
     def test_resolve_score_identifier_by_id(self):
         """Test resolving score by direct ID."""

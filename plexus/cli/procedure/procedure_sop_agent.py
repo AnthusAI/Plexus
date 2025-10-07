@@ -41,6 +41,7 @@ class ProcedureProcedureDefinition:
         # doesn't need to call tools to fetch that information
         self.available_tools = [
             "plexus_evaluation_score_result_find",  # Find specific evaluation error cases to analyze
+            "plexus_evaluation_info",  # Get evaluation metadata and summary
             "upsert_procedure_node",  # Create hypothesis experiment nodes
             "stop_procedure"  # Signal completion when done
         ]

@@ -76,6 +76,10 @@ class ModelConfig:
         # Add standard parameters only if they're set
         if self.temperature is not None:
             combined_model_kwargs["temperature"] = self.temperature
+        elif self.model.startswith("gpt-5"):
+            # gpt-5 requires temperature=1 (its only supported value)
+            # If we don't pass it, LangChain/OpenAI SDK adds 0.7 as default
+            combined_model_kwargs["temperature"] = 1
         
         if self.max_tokens is not None:
             kwargs["max_tokens"] = self.max_tokens  # max_tokens is a direct ChatOpenAI parameter
@@ -106,6 +110,7 @@ class ModelConfig:
         kwargs = self.to_langchain_kwargs()
         
         logger.info(f"Creating LLM with model='{self.model}' and parameters: {list(kwargs.get('model_kwargs', {}).keys())}")
+        logger.info(f"DEBUG: FULL kwargs being passed to ChatOpenAI: {kwargs}")
         
         try:
             return ChatOpenAI(**kwargs)
@@ -272,7 +277,8 @@ def create_configured_llm(
         # Try environment first, then fall back to default
         config = ModelConfigs.from_environment()
         if config.model == "gpt-4o":  # No environment config found
-            config = ModelConfigs.gpt_4o_default()
+            # Default to gpt-5 which works out of the box
+            config = ModelConfigs.gpt_5_default()
     elif isinstance(model_config, str):
         # Just a model name, use appropriate defaults
         if model_config.startswith("gpt-5"):

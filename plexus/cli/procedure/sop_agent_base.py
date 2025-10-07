@@ -268,9 +268,9 @@ class StandardOperatingProcedureAgent:
                 manager_config.openai_api_key = self.openai_api_key
                 sop_guidance_llm = manager_config.create_langchain_llm()
             else:
-                # Fall back to default manager configuration
+                # Fall back to default manager configuration (gpt-5)
                 sop_guidance_llm = create_configured_llm(
-                    model_config=ModelConfigs.gpt_4o_precise(),
+                    model_config=ModelConfigs.gpt_5_default(),
                     openai_api_key=self.openai_api_key
                 )
             
@@ -544,11 +544,15 @@ Your response will become the next user message to guide the coding assistant.
                 # Use configured model for coding assistant
                 worker_config = self._model_config_instance
                 worker_config.openai_api_key = self.openai_api_key
+                
+                # DEBUG: Log the config being used
+                logger.info(f"Worker config - model: {worker_config.model}, temperature: {worker_config.temperature}, model_kwargs: {worker_config.model_kwargs}")
+                
                 coding_assistant_llm = worker_config.create_langchain_llm()
             else:
-                # Fall back to default worker configuration
+                # Fall back to default worker configuration (gpt-5)
                 coding_assistant_llm = create_configured_llm(
-                    model_config=ModelConfigs.gpt_4o_default(),
+                    model_config=ModelConfigs.gpt_5_default(),
                     openai_api_key=self.openai_api_key
                 )
             
@@ -560,12 +564,15 @@ Your response will become the next user message to guide the coding assistant.
                 
                 # Filter tools to only include allowed ones
                 allowed_tool_names = self.procedure_definition.get_allowed_tools()
+                logger.info(f"Filtering {len(all_tools)} MCP tools to {len(allowed_tool_names)} allowed tools")
+                logger.info(f"Allowed tools: {', '.join(allowed_tool_names)}")
+                
                 filtered_tools = []
                 for tool in all_tools:
                     if tool.name in allowed_tool_names:
                         filtered_tools.append(tool)
                 
-                logger.info(f"Worker agent has access to {len(filtered_tools)}/{len(all_tools)} tools: {[t.name for t in filtered_tools]}")
+                logger.info(f"✓ Worker agent has {len(filtered_tools)} tools: {', '.join([t.name for t in filtered_tools])}")
                 
                 # Convert to LangChain format and bind to LLM
                 from .mcp_adapter import convert_mcp_tools_to_langchain
@@ -588,6 +595,7 @@ Your response will become the next user message to guide the coding assistant.
                     return f"Stop request acknowledged: {reason} (success: {success})"
                 
                 langchain_tools.append(stop_procedure)
+                logger.info(f"✓ Total tools after adding stop_procedure: {len(langchain_tools)} tools")
                 llm_with_tools = coding_assistant_llm.bind_tools(langchain_tools)
                 
                 # Store filtered tools for later tool execution
@@ -887,6 +895,9 @@ Your response will become the next user message to guide the coding assistant.
         """
         Handle the stop_procedure tool call from the worker agent.
         
+        When the agent calls stop_procedure after hypothesis generation,
+        check if we should transition to score_version_generation state.
+        
         Args:
             tool_args: Arguments including 'reason' for stopping
             
@@ -898,12 +909,76 @@ Your response will become the next user message to guide the coding assistant.
         
         logger.info(f"🛑 Worker agent requested to stop procedure: {reason}")
         
+        # Check current state and determine if we should transition
+        self._check_and_transition_state()
+        
         return {
             "success": True,
             "message": "Procedure stop request acknowledged",
             "reason": reason,
             "worker_success": success
         }
+    
+    def _check_and_transition_state(self) -> None:
+        """
+        Check if we should transition from hypothesis to code state.
+        
+        Uses the ProcedureStateMachine to validate and execute state transitions.
+        
+        Transitions if:
+        1. Current state is hypothesis
+        2. There are hypothesis nodes without associated ScoreVersions
+        """
+        try:
+            from ..states import STATE_HYPOTHESIS, STATE_CODE
+            from plexus.dashboard.api.models.procedure import Procedure
+            from plexus.dashboard.api.models.graph_node import GraphNode
+            
+            # Get current procedure state
+            procedure = Procedure.get_by_id(self.procedure_id, self.client)
+            if not procedure:
+                logger.warning(f"Could not find procedure {self.procedure_id} for state transition check")
+                return
+            
+            current_state = procedure.state
+            logger.info(f"Checking state transition. Current state: {current_state}")
+            
+            # Only transition from hypothesis
+            if current_state != STATE_HYPOTHESIS:
+                logger.info(f"Not in hypothesis state, skipping transition check")
+                return
+            
+            # Get all hypothesis nodes (non-root nodes)
+            all_nodes = GraphNode.list_by_procedure(self.procedure_id, self.client)
+            hypothesis_nodes = [node for node in all_nodes if not node.is_root]
+            
+            if not hypothesis_nodes:
+                logger.info("No hypothesis nodes found, staying in hypothesis state")
+                return
+            
+            # Check if any hypothesis nodes need ScoreVersions
+            # For now, assume all hypothesis nodes need ScoreVersions
+            # TODO: Check metadata for scoreVersionId to see which ones already have versions
+            nodes_needing_versions = len(hypothesis_nodes)
+            
+            if nodes_needing_versions > 0:
+                logger.info(f"Found {nodes_needing_versions} hypothesis nodes needing ScoreVersions")
+                logger.info(f"Transitioning from {STATE_HYPOTHESIS} → {STATE_CODE}")
+                
+                # Use ProcedureService which now uses state machine for validation
+                from ..service import ProcedureService
+                service = ProcedureService(self.client)
+                service._update_procedure_state(self.procedure_id, STATE_CODE)
+                # Also update root node status to match
+                if procedure.rootNodeId:
+                    service._update_node_status(procedure.rootNodeId, STATE_CODE)
+            else:
+                logger.info("All hypothesis nodes have ScoreVersions, procedure may be complete")
+                
+        except Exception as e:
+            logger.error(f"Error checking state transition: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def _request_final_summarization(self, conversation_history: List, results: Dict[str, Any]) -> Optional[Dict[str, str]]:
         """
@@ -928,10 +1003,25 @@ Your response will become the next user message to guide the coding assistant.
             # Set up LLM for final summarization (no tools needed) using model configuration
             from .model_config import create_configured_llm, ModelConfigs
             
+            # Use the same model as worker, but with appropriate parameters
             if self._model_config_instance:
                 # Use configured model for summarization
-                summary_config = self._model_config_instance
+                import copy
+                summary_config = copy.deepcopy(self._model_config_instance)
                 summary_config.openai_api_key = self.openai_api_key
+                
+                # For gpt-5, don't set temperature; for others, use 0.3
+                if summary_config.model.startswith("gpt-5"):
+                    # gpt-5 doesn't support custom temperature, remove it completely
+                    summary_config.temperature = None
+                    # Also remove from model_kwargs if present
+                    if "temperature" in summary_config.model_kwargs:
+                        del summary_config.model_kwargs["temperature"]
+                else:
+                    # Other models support temperature
+                    summary_config.temperature = 0.3
+                
+                summary_config.max_tokens = 2000
                 summarization_llm = summary_config.create_langchain_llm()
             else:
                 # Fall back to default summarization configuration
