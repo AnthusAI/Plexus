@@ -64,28 +64,22 @@ def get_prediction_stage_configs(total_items: int = 1) -> Dict[str, StageConfig]
 
 def get_procedure_stage_configs(total_items: int = 0) -> Dict[str, StageConfig]:
     """Get stage configuration for procedure operations.
-    
+
+    Delegates to the state machine configuration to ensure consistency.
+    Stage names match the state machine states: Start -> Evaluation -> Hypothesis -> Test -> Insights -> Completed.
+    The 'Completed' state is handled by the Task status, not as a separate stage.
+
     Args:
-        total_items: Total number of items to process (for Evaluation stage)
-        
+        total_items: Total number of items to process (currently unused as procedures don't have item counts)
+
     Returns:
         Dictionary mapping stage names to StageConfig objects
     """
-    return {
-        "Hypothesis": StageConfig(
-            order=1,
-            status_message="Generating procedure hypothesis..."
-        ),
-        "Evaluation": StageConfig(
-            order=2,
-            total_items=total_items,
-            status_message="Running procedure evaluation..."
-        ),
-        "Analysis": StageConfig(
-            order=3,
-            status_message="Analyzing procedure results..."
-        )
-    }
+    # Import here to avoid circular dependencies
+    from plexus.cli.procedure.state_machine_stages import get_stages_from_state_machine
+
+    # Use the state machine configuration as the single source of truth
+    return get_stages_from_state_machine()
 
 
 def get_stage_configs_for_operation_type(operation_type: str, total_items: int = 0) -> Dict[str, StageConfig]:

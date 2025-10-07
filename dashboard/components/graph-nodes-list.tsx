@@ -230,10 +230,10 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
 
     return (
       <div className="space-y-2">
-        {/* Metadata section (code) - collapsed by default */}
+        {/* Code section - collapsed by default */}
         <details>
           <summary className={`cursor-pointer p-2 text-sm font-medium hover:bg-muted rounded ${hasContent(code) ? 'text-foreground' : 'text-muted-foreground'}`}>
-            Metadata {!hasContent(code) && <span className="text-xs font-normal">(empty)</span>}
+            Code {!hasContent(code) && <span className="text-xs font-normal">(empty)</span>}
           </summary>
           <div className="px-2 pb-2">
             {hasContent(code) ? (

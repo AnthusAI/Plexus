@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import socket
 from typing import Optional, Tuple, Dict, Any
 import logging
@@ -10,6 +10,82 @@ from plexus.cli.shared.task_progress_tracker import TaskProgressTracker
 from plexus.cli.shared.stage_configurations import get_procedure_stage_configs
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.procedure import Procedure as DashboardProcedure
+from plexus.dashboard.api.models.task import Task
+
+logger = logging.getLogger(__name__)
+
+
+def _find_existing_task_for_procedure(procedure_id: str, account_id: str, client) -> Optional[str]:
+    """
+    Find an existing Task for a procedure by querying using the accountId GSI.
+
+    Args:
+        procedure_id: The procedure ID
+        account_id: The account ID
+        client: The PlexusDashboardClient
+
+    Returns:
+        Task ID if found, None otherwise
+    """
+    try:
+        # Use GSI to query tasks for this account
+        query = """
+        query ListTaskByAccountIdAndUpdatedAt($accountId: String!, $updatedAt: ModelStringKeyConditionInput, $limit: Int, $nextToken: String) {
+            listTaskByAccountIdAndUpdatedAt(accountId: $accountId, updatedAt: $updatedAt, limit: $limit, nextToken: $nextToken) {
+                items {
+                    id
+                    target
+                }
+                nextToken
+            }
+        }
+        """
+
+        # Query all tasks for this account
+        very_old_date = "2000-01-01T00:00:00.000Z"
+        # Check for both target patterns (ProcedureService uses "procedure/{id}", TaskProgressTracker uses "procedure/run/{id}")
+        target_patterns = [f"procedure/run/{procedure_id}", f"procedure/{procedure_id}"]
+
+        next_token = None
+        while True:
+            variables = {
+                "accountId": account_id,
+                "updatedAt": {"ge": very_old_date},
+                "limit": 1000
+            }
+            if next_token:
+                variables["nextToken"] = next_token
+
+            result = client.execute(query, variables)
+            page_tasks = result.get('listTaskByAccountIdAndUpdatedAt', {}).get('items', [])
+
+            # Check this page for matching task - prefer "procedure/{id}" format (from ProcedureService)
+            found_tasks = []
+            for task in page_tasks:
+                if task['target'] in target_patterns:
+                    found_tasks.append((task['target'], task['id']))
+
+            # Prefer the task created by ProcedureService (without "/run")
+            for target, task_id in found_tasks:
+                if target == f"procedure/{procedure_id}":
+                    logger.info(f"Found existing task {task_id} with target '{target}'")
+                    return task_id
+
+            # Fall back to "/run" format if that's all we have
+            for target, task_id in found_tasks:
+                if target == f"procedure/run/{procedure_id}":
+                    logger.info(f"Found existing task {task_id} with target '{target}'")
+                    return task_id
+
+            next_token = result.get('listTaskByAccountIdAndUpdatedAt', {}).get('nextToken')
+            if not next_token:
+                break
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error finding existing task for procedure {procedure_id}: {e}")
+        return None
 
 
 def create_tracker_and_experiment_task(
@@ -20,12 +96,12 @@ def create_tracker_and_experiment_task(
     scorecard_name: Optional[str] = None,
     score_name: Optional[str] = None,
     total_items: int = 0,
-) -> Tuple[TaskProgressTracker, Optional[DashboardProcedure]]:
+) -> Tuple[Optional[TaskProgressTracker], Optional[DashboardProcedure], Optional['Task']]:
     """Create a TaskProgressTracker for an experiment run.
 
     Mirrors the evaluation behavior for experiment operations.
     Returns the tracker (with its Task created/claimed) and optionally updates the Experiment record.
-    
+
     Args:
         client: Dashboard API client
         account_id: Account ID
@@ -33,9 +109,9 @@ def create_tracker_and_experiment_task(
         scorecard_name: Optional scorecard name for metadata
         score_name: Optional score name for metadata
         total_items: Total number of items to process (for Evaluation stage)
-    
+
     Returns:
-        Tuple of (TaskProgressTracker, Procedure record or None)
+        Tuple of (TaskProgressTracker or None, Procedure record or None, Task)
     """
     # Configure stages and create tracker (creates API Task)
     stage_configs = get_procedure_stage_configs(total_items=total_items)
@@ -51,22 +127,26 @@ def create_tracker_and_experiment_task(
     if score_name:
         metadata["score"] = score_name
     
-    # Create task tracker
-    tracker = TaskProgressTracker(
-        total_items=total_items,
-        stage_configs=stage_configs,
-        target=f"procedure/run/{procedure_id}",
-        command=f"procedure run {procedure_id}",
-        description=f"Procedure run for {procedure_id}",
-        dispatch_status="DISPATCHED",
-        prevent_new_task=False,
-        metadata=metadata,
-        account_id=account_id,
-        client=client,
-    )
+    # Find or create task for this procedure
+    existing_task_id = _find_existing_task_for_procedure(procedure_id, account_id, client)
+
+    if existing_task_id:
+        logger.info(f"Reusing existing Task {existing_task_id} for procedure {procedure_id}")
+        # Get the existing task directly - DON'T use TaskProgressTracker since
+        # ProcedureService manages TaskStages directly via state machine
+        task = Task.get_by_id(existing_task_id, client)
+        tracker = None  # No tracker needed - state machine handles it
+    else:
+        # This should never happen - ProcedureService.create_procedure() always creates a Task
+        logger.error(f"No Task found for procedure {procedure_id}. This indicates the procedure was created incorrectly.")
+        logger.error(f"Procedures should always have a Task created by ProcedureService.create_procedure()")
+        raise RuntimeError(
+            f"No Task found for procedure {procedure_id}. "
+            f"The procedure may have been created incorrectly or the Task was deleted. "
+            f"Please recreate the procedure."
+        )
 
     # Claim task like CLI (set worker and RUNNING)
-    task = tracker.task
     if task:
         worker_id = f"{socket.gethostname()}-{__import__('os').getpid()}"
         task.update(
@@ -106,7 +186,7 @@ def create_tracker_and_experiment_task(
         logging.warning(f"Could not get Procedure record {procedure_id}: {str(e)}")
         # Continue without the procedure record - the task tracking still works
 
-    return tracker, procedure_record
+    return tracker, procedure_record, task
 
 
 async def run_experiment_with_task_tracking(
@@ -147,7 +227,7 @@ async def run_experiment_with_task_tracking(
         account_id = resolve_account_id_for_command(client, None)
     
     # Create tracker and update experiment
-    tracker, experiment_record = create_tracker_and_experiment_task(
+    tracker, experiment_record, task = create_tracker_and_experiment_task(
         client=client,
         account_id=account_id,
         procedure_id=procedure_id,
@@ -155,16 +235,16 @@ async def run_experiment_with_task_tracking(
         score_name=score_name,
         total_items=total_items,
     )
-    
+
     result = {
         'procedure_id': procedure_id,
-        'task_id': tracker.task.id if tracker.task else None,
+        'task_id': task.id if task else None,
         'status': 'initiated',
         'message': 'Task tracking initialized'
     }
-    
+
     try:
-        # Start with Hypothesis stage
+        # Start with Hypothesis stage (only if we have a tracker)
         if tracker:
             tracker.current_stage.status_message = "Starting experiment hypothesis generation"
             tracker.update(current_items=0)

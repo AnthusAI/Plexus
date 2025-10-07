@@ -425,6 +425,7 @@ try:
     from tools.cost.analysis import register_cost_analysis_tools
     from tools.dataset.datasets import register_dataset_tools
     from tools.procedure.procedures import register_procedure_tools
+    from tools.procedure.procedure_nodes import register_procedure_node_tools
     
     register_think_tool(mcp)
     register_scorecard_tools(mcp)
@@ -439,7 +440,8 @@ try:
     register_cost_analysis_tools(mcp)
     register_dataset_tools(mcp)
     register_procedure_tools(mcp)
-    
+    register_procedure_node_tools(mcp)
+
     logger.info("Successfully registered separated tools")
 except ImportError as e:
     logger.warning(f"Could not import separated tools: {e}")

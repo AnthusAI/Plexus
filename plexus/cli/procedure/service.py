@@ -125,13 +125,14 @@ class ProcedureService:
     def create_procedure(
         self,
         account_identifier: str,
-        scorecard_identifier: str, 
+        scorecard_identifier: str,
         score_identifier: str,
         yaml_config: Optional[str] = None,
         featured: bool = False,
         initial_value: Optional[Dict[str, Any]] = None,
         create_root_node: bool = True,
-        template_id: Optional[str] = None
+        template_id: Optional[str] = None,
+        score_version_id: Optional[str] = None
     ) -> ProcedureCreationResult:
         """Create a new procedure with optional root node and initial version.
         
@@ -233,8 +234,19 @@ class ProcedureService:
                 scorecardId=scorecard_id,
                 scoreId=score_id,
                 templateId=template.id,
-                featured=featured
+                featured=featured,
+                scoreVersionId=score_version_id
             )
+            
+            # Get or create Task with stages from state machine
+            task = self._get_or_create_task_with_stages_for_procedure(
+                procedure_id=procedure.id,
+                account_id=account_id,
+                scorecard_id=scorecard_id,
+                score_id=score_id
+            )
+            if task:
+                logger.info(f"Using Task {task.id} with {len(task.get_stages())} stages for procedure {procedure.id}")
             
             root_node = None
             
@@ -513,7 +525,7 @@ class ProcedureService:
             
             # Try looking up by key or name within the scorecard
             query = """
-            query GetScoresByScorecard($scorecardId: String!) {
+            query GetScoresByScorecard($scorecardId: ID!) {
                 getScorecard(id: $scorecardId) {
                     sections {
                         items {
@@ -644,6 +656,95 @@ class ProcedureService:
                 }
             
             logger.info(f"Found experiment: {procedure_id} (Scorecard: {procedure_info.scorecard_name})")
+
+            # Determine current state and what phase to run
+            from .states import (
+                STATE_START,
+                STATE_EVALUATION,
+                STATE_HYPOTHESIS,
+                STATE_TEST,
+                STATE_INSIGHTS,
+                STATE_COMPLETED,
+                STATE_ERROR
+            )
+
+            # Get current state from TaskStages (source of truth), not Procedure.state
+            current_state = self._get_current_state_from_task_stages(procedure_id, procedure_info.procedure.accountId)
+            logger.info(f"Procedure current state from TaskStages: {current_state or 'None (initial)'}")
+
+            # If TaskStages query failed, fall back to Procedure.state as a last resort
+            if current_state is None:
+                current_state = procedure_info.procedure.state
+                logger.warning(f"TaskStages query failed, falling back to Procedure.state: {current_state}")
+                # Reset to start if it's in an invalid state
+                if current_state in [STATE_HYPOTHESIS, STATE_TEST, STATE_INSIGHTS]:
+                    logger.warning(f"Procedure.state is {current_state} but TaskStages not found - resetting to start")
+                    current_state = STATE_START
+            elif procedure_info.procedure.state != current_state:
+                # Log mismatch but use TaskStage state
+                logger.warning(f"Procedure.state ({procedure_info.procedure.state}) differs from TaskStage state ({current_state}) - using TaskStage state")
+
+            # Determine what state we should be in based on where we are
+            # If no state or 'start', transition to evaluation
+            if not current_state or current_state == STATE_START:
+                logger.info(f"State is {current_state or 'None'}, transitioning to evaluation")
+                self._update_procedure_state(procedure_id, STATE_EVALUATION, current_state)
+                # Also update root node status to match
+                if procedure_info.procedure.rootNodeId:
+                    self._update_node_status(procedure_info.procedure.rootNodeId, STATE_EVALUATION)
+                current_state = STATE_EVALUATION
+            elif current_state == STATE_EVALUATION:
+                # Already in evaluation state, continue with evaluation
+                logger.info("Procedure already in evaluation state, continuing")
+            elif current_state == STATE_HYPOTHESIS:
+                # Already in hypothesis state, skip evaluation
+                logger.info("Procedure already in hypothesis state, skipping evaluation phase")
+            elif current_state == STATE_TEST:
+                # Already in test state, continue with testing
+                logger.info("Procedure already in test state, continuing with testing")
+            elif current_state == STATE_INSIGHTS:
+                # Already in insights state, continue with insights generation
+                logger.info("Procedure already in insights state, continuing with insights generation")
+
+            # Check if procedure is already completed
+            if current_state == STATE_COMPLETED:
+                logger.info("Procedure already completed")
+                return {
+                    'procedure_id': procedure_id,
+                    'status': 'completed',
+                    'message': 'Procedure has already completed'
+                }
+
+            # For 'evaluation' state, we'll run evaluation then move to hypothesis
+            # For 'hypothesis' state, run hypothesis engine (unless hypothesis nodes already exist)
+            # For 'test' state, we'll implement testing later
+            # For 'insights' state, we'll implement insights generation later
+            if current_state not in [STATE_EVALUATION, STATE_HYPOTHESIS, STATE_TEST, STATE_INSIGHTS]:
+                logger.warning(f"Unexpected state: {current_state}, treating as evaluation")
+                current_state = STATE_EVALUATION
+
+            # Check if we should skip hypothesis generation (nodes already exist)
+            skip_hypothesis_generation = False
+            if current_state == STATE_HYPOTHESIS:
+                # Query for all nodes in this procedure
+                try:
+                    all_nodes = GraphNode.list_by_procedure(procedure_id, self.client)
+                    # Count nodes without 'code' in metadata (hypothesis nodes) and excluding root node (parentNodeId is None)
+                    hypothesis_nodes = [n for n in all_nodes if n.parentNodeId is not None and not (n.metadata and 'code' in str(n.metadata))]
+                    logger.info(f"Found {len(hypothesis_nodes)} hypothesis nodes for procedure {procedure_id}")
+                    if len(hypothesis_nodes) >= 3:
+                        logger.info(f"Found {len(hypothesis_nodes)} existing hypothesis nodes, skipping hypothesis generation")
+                        skip_hypothesis_generation = True
+                        # Transition to test state since hypotheses already exist
+                        logger.info("Hypothesis nodes already exist, transitioning to test state")
+                        self._update_procedure_state(procedure_id, STATE_TEST, STATE_HYPOTHESIS)
+                        if procedure_info.procedure.rootNodeId:
+                            self._update_node_status(procedure_info.procedure.rootNodeId, STATE_TEST)
+                        current_state = STATE_TEST
+                except Exception as e:
+                    logger.warning(f"Could not check for existing hypothesis nodes: {e}")
+                    # If we can't check, assume we need to generate hypotheses
+                    pass
             
             # PROGRAMMATIC PHASE: Ensure proper procedure structure
             await self._ensure_procedure_structure(procedure_info)
@@ -709,16 +810,81 @@ class ProcedureService:
                     logger.info("No score version specified, using champion version")
                     current_score_config = await self._get_champion_score_config(procedure_info.procedure.scoreId)
                 
-                # 5. Run evaluation to get baseline results (replaces feedback summary approach)
-                logger.info("Running evaluation to establish baseline performance...")
-                evaluation_results = await self._run_evaluation_for_procedure(
-                    scorecard_name=procedure_info.scorecard_name,
-                    score_name=procedure_info.score_name,
-                    score_version_id=score_version_id,
-                    account_id=procedure_info.procedure.accountId,
-                    parameter_values=parameter_values
-                )
-                
+                # 5. Run evaluation only if we're in EVALUATION state
+                # Check if evaluation ID is stored in root node metadata
+                root_node_evaluation_id = None
+                if procedure_info.procedure.rootNodeId:
+                    root_node = GraphNode.get_by_id(procedure_info.procedure.rootNodeId, self.client)
+                    logger.info(f"[DEBUG] Root node exists: {root_node is not None}, has metadata: {root_node.metadata is not None if root_node else False}")
+                    if root_node and root_node.metadata:
+                        try:
+                            import json
+                            # Log the raw metadata before parsing
+                            logger.info(f"[DEBUG] Raw root_node.metadata type: {type(root_node.metadata)}")
+                            logger.info(f"[DEBUG] Raw root_node.metadata value (first 500 chars): {str(root_node.metadata)[:500]}")
+
+                            metadata = json.loads(root_node.metadata) if isinstance(root_node.metadata, str) else root_node.metadata
+                            logger.info(f"[DEBUG] Parsed metadata type: {type(metadata)}")
+                            logger.info(f"[DEBUG] Root node metadata keys: {list(metadata.keys()) if isinstance(metadata, dict) else 'not a dict'}")
+                            root_node_evaluation_id = metadata.get('evaluation_id')
+                            logger.info(f"[DEBUG] Retrieved evaluation_id from root node metadata: {root_node_evaluation_id}")
+                        except Exception as e:
+                            logger.warning(f"[DEBUG] Failed to parse root node metadata: {e}")
+                else:
+                    logger.warning(f"[DEBUG] No root node ID found on procedure")
+
+                if current_state == STATE_EVALUATION:
+                    if root_node_evaluation_id:
+                        logger.info(f"Evaluation already exists (ID: {root_node_evaluation_id}), retrieving results...")
+                        evaluation_results = await self._get_evaluation_results(root_node_evaluation_id)
+                    else:
+                        logger.info("Running evaluation to establish baseline performance...")
+                        evaluation_results = await self._run_evaluation_for_procedure(
+                            scorecard_name=procedure_info.scorecard_name,
+                            score_name=procedure_info.score_name,
+                            score_version_id=score_version_id,
+                            account_id=procedure_info.procedure.accountId,
+                            parameter_values=parameter_values
+                        )
+
+                        # Store evaluation ID in root node metadata
+                        evaluation_stored = False
+                        if procedure_info.procedure.rootNodeId:
+                            # Extract evaluation ID from results
+                            try:
+                                import json
+                                eval_data = json.loads(evaluation_results) if isinstance(evaluation_results, str) else evaluation_results
+                                evaluation_id = eval_data.get('evaluation_id')
+                                if evaluation_id:
+                                    evaluation_stored = await self._store_evaluation_id_in_root_node(procedure_info.procedure.rootNodeId, evaluation_id)
+                                    if not evaluation_stored:
+                                        logger.error("Failed to store evaluation ID - cannot transition to hypothesis state")
+                                        raise RuntimeError("Failed to store evaluation ID in root node metadata")
+                                else:
+                                    logger.error("No evaluation_id found in evaluation results")
+                                    raise RuntimeError("No evaluation_id found in evaluation results")
+                            except Exception as e:
+                                logger.error(f"Could not extract/store evaluation ID: {e}")
+                                raise RuntimeError(f"Could not extract/store evaluation ID: {e}")
+                        else:
+                            logger.error("No root node ID available to store evaluation ID")
+                            raise RuntimeError("No root node ID available to store evaluation ID")
+
+                    # Evaluation complete - transition to hypothesis state ONLY if evaluation ID was stored
+                    logger.info("Evaluation complete, transitioning to hypothesis state")
+                    self._update_procedure_state(procedure_id, STATE_HYPOTHESIS, STATE_EVALUATION)
+                    if procedure_info.procedure.rootNodeId:
+                        self._update_node_status(procedure_info.procedure.rootNodeId, STATE_HYPOTHESIS)
+                    current_state = STATE_HYPOTHESIS
+                else:
+                    # Skip evaluation, but retrieve results if we have the ID
+                    if root_node_evaluation_id:
+                        logger.info(f"Retrieving stored evaluation results (ID: {root_node_evaluation_id})")
+                        evaluation_results = await self._get_evaluation_results(root_node_evaluation_id)
+                    else:
+                        logger.info(f"Skipping evaluation phase (current state: {current_state}), no stored evaluation ID")
+                        evaluation_results = '{"message": "Evaluation skipped - procedure already past evaluation phase"}'
+
                 # 6. Get existing procedure nodes to avoid duplication
                 existing_nodes = await self._get_existing_experiment_nodes(procedure_id)
                 
@@ -807,33 +973,50 @@ class ProcedureService:
                 try:
                     # Note: YAML and parameters have already been parsed above (before context building)
                     # experiment_yaml and parameter_values are already in experiment_context
-                    
-                    # Import and run AI experiment
-                    from .procedure_sop_agent import run_sop_guided_procedure
-                    
-                    logger.info("Starting AI-powered procedure execution with MCP tools...")
-                    
-                    # Get OpenAI API key from options or use None (let AI runner handle config loading)
-                    openai_api_key = options.get('openai_api_key')
-                    # Don't manually load config here - let ProcedureAIRunner handle it properly
-                    # This avoids double-loading and ensures consistent configuration handling
-                    if openai_api_key:
-                        logger.info(f"Service using OpenAI key from options: Yes")
+
+                    # Only run hypothesis generation if we're in hypothesis state and haven't skipped it
+                    ai_result = None
+                    if current_state == STATE_HYPOTHESIS and not skip_hypothesis_generation:
+                        # Import and run AI experiment
+                        from .procedure_sop_agent import run_sop_guided_procedure
+
+                        logger.info("Starting AI-powered hypothesis generation with MCP tools...")
+
+                        # Get OpenAI API key from options or use None (let AI runner handle config loading)
+                        openai_api_key = options.get('openai_api_key')
+                        # Don't manually load config here - let ProcedureAIRunner handle it properly
+                        # This avoids double-loading and ensures consistent configuration handling
+                        if openai_api_key:
+                            logger.info(f"Service using OpenAI key from options: Yes")
+                        else:
+                            logger.info("Service will let AI runner handle OpenAI key loading from config")
+
+                        ai_result = await run_sop_guided_procedure(
+                            procedure_id=procedure_id,
+                            experiment_yaml=experiment_yaml,
+                            mcp_server=mcp_server,
+                            openai_api_key=openai_api_key,
+                            experiment_context=experiment_context,
+                            client=self.client
+                        )
+                    elif skip_hypothesis_generation:
+                        logger.info("Hypothesis generation skipped - using existing nodes")
+                        ai_result = {'success': True, 'skipped': True, 'message': 'Hypothesis nodes already exist'}
                     else:
-                        logger.info("Service will let AI runner handle OpenAI key loading from config")
-                    
-                    ai_result = await run_sop_guided_procedure(
-                        procedure_id=procedure_id,
-                        experiment_yaml=experiment_yaml,
-                        mcp_server=mcp_server,
-                        openai_api_key=openai_api_key,
-                        experiment_context=experiment_context,
-                        client=self.client
-                    )
+                        logger.info(f"Skipping hypothesis generation in {current_state} state")
+                        ai_result = {'success': True, 'skipped': True, 'message': f'Not in hypothesis state (current: {current_state})'}
                     
                     if ai_result.get('success'):
                         logger.info("AI procedure execution completed successfully")
-                        
+
+                        # Transition hypothesis → test after hypothesis generation completes
+                        if current_state == STATE_HYPOTHESIS:
+                            logger.info("Hypothesis generation complete, transitioning to test state")
+                            self._update_procedure_state(procedure_id, STATE_TEST, STATE_HYPOTHESIS)
+                            if procedure_info.procedure.rootNodeId:
+                                self._update_node_status(procedure_info.procedure.rootNodeId, STATE_TEST)
+                            current_state = STATE_TEST
+
                         # Add AI results to the response
                         result['ai_execution'] = {
                             'completed': True,
@@ -1019,11 +1202,19 @@ class ProcedureService:
                 # Fallback placeholder config per tests
                 score_config = "# Champion score configuration not available (placeholder)\nname: placeholder"
 
-            # Update root node with champion configuration using simplified schema
+            # Update root node with champion configuration, preserving existing metadata
+            import json
+            existing_metadata = {}
+            if root_node.metadata:
+                try:
+                    existing_metadata = json.loads(root_node.metadata) if isinstance(root_node.metadata, str) else root_node.metadata
+                except:
+                    pass
+
+            # Merge with new metadata, preserving existing fields like evaluation_id
             metadata = {
-                'code': score_config,
-                'type': 'programmatic_root_node_update',
-                'created_by': 'system:programmatic'
+                **existing_metadata,  # Preserve existing fields
+                'code': score_config
             }
             root_node.update_content(
                 metadata=metadata
@@ -1354,3 +1545,502 @@ Based on this data, you should prioritize examining error types with the highest
         
         logger.info(f"Retrieved feedback summary for {scorecard_name}/{score_name} (last {days} days)")
         return feedback_analysis
+    
+    def _update_node_status(self, node_id: str, new_status: str) -> bool:
+        """
+        Update the status of a GraphNode.
+        
+        Args:
+            node_id: The node ID
+            new_status: The new status value
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            mutation = """
+                mutation UpdateGraphNode($input: UpdateGraphNodeInput!) {
+                    updateGraphNode(input: $input) {
+                        id
+                        status
+                        updatedAt
+                    }
+                }
+            """
+            
+            variables = {
+                "input": {
+                    "id": node_id,
+                    "status": new_status
+                }
+            }
+            
+            result = self.client.execute(mutation, variables)
+            
+            if result and 'updateGraphNode' in result:
+                logger.info(f"Updated node {node_id} status to {new_status}")
+                return True
+            else:
+                logger.error(f"Failed to update node status: {result}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error updating node status: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def _update_procedure_state(self, procedure_id: str, new_state: str, current_state: Optional[str] = None) -> bool:
+        """
+        Update the state of a procedure using state machine validation.
+
+        Args:
+            procedure_id: The procedure ID
+            new_state: The new state value
+            current_state: The current state (if None, reads from Procedure.state)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        from .state_machine import create_state_machine
+
+        try:
+            # Get current procedure
+            procedure = Procedure.get_by_id(procedure_id, self.client)
+            if not procedure:
+                logger.error(f"Procedure {procedure_id} not found")
+                return False
+
+            # Use provided current_state or fall back to Procedure.state
+            if current_state is None:
+                current_state = procedure.state
+                logger.info(f"[DEBUG] No current_state provided, using Procedure.state: {current_state}")
+            else:
+                logger.info(f"[DEBUG] Using provided current_state: {current_state}")
+
+            # Create state machine and validate transition
+            logger.info(f"[DEBUG] Creating state machine with client: {self.client}")
+            sm = create_state_machine(procedure_id, current_state, self.client)
+            logger.info(f"[DEBUG] State machine created, sm.client = {sm.client}")
+            
+            # Map state transitions to event names (hardcoded to avoid executing callbacks twice)
+            transition_map = {
+                ('start', 'evaluation'): 'begin',
+                (None, 'evaluation'): 'begin',  # None is treated as start
+                ('evaluation', 'hypothesis'): 'analyze',
+                ('hypothesis', 'test'): 'start_testing',
+                ('test', 'insights'): 'analyze_results',
+                ('insights', 'completed'): 'finish_from_insights',
+                ('hypothesis', 'completed'): 'finish_from_hypothesis',
+                ('hypothesis', 'error'): 'fail_from_hypothesis',
+                ('test', 'error'): 'fail_from_test',
+                ('insights', 'error'): 'fail_from_insights',
+                ('evaluation', 'error'): 'fail_from_evaluation',
+                ('error', 'evaluation'): 'retry_from_error',
+                ('error', 'start'): 'restart_from_error',
+            }
+
+            transition_key = (current_state, new_state)
+            transition_name = transition_map.get(transition_key)
+
+            if not transition_name:
+                logger.error(f"Invalid state transition from {current_state} to {new_state}")
+                logger.error(f"Valid transitions from {current_state}: {[k for k in transition_map.keys() if k[0] == current_state]}")
+                return False
+            
+            # Execute the transition (this will run callbacks and validate)
+            try:
+                getattr(sm, transition_name)()
+                logger.info(f"State machine transition executed: {transition_name} ({current_state} → {new_state})")
+            except Exception as e:
+                logger.error(f"State machine transition failed: {e}")
+                return False
+            
+            # Update the procedure in the database
+            mutation = """
+                mutation UpdateProcedure($input: UpdateProcedureInput!) {
+                    updateProcedure(input: $input) {
+                        id
+                        state
+                        updatedAt
+                    }
+                }
+            """
+            
+            variables = {
+                "input": {
+                    "id": procedure_id,
+                    "state": new_state
+                }
+            }
+            
+            result = self.client.execute(mutation, variables)
+            
+            if result and 'updateProcedure' in result:
+                logger.info(f"✓ Updated procedure {procedure_id} state in database: {current_state} → {new_state}")
+                return True
+            else:
+                logger.error(f"Failed to update procedure state in database: {result}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error updating procedure state: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def _get_current_state_from_task_stages(self, procedure_id: str, account_id: str) -> Optional[str]:
+        """
+        Get the current state of a procedure by examining its TaskStages.
+
+        TaskStages are the source of truth for procedure state. This method finds
+        the Task for this procedure and determines the current state based on
+        which TaskStage is currently RUNNING or the last COMPLETED stage.
+
+        Args:
+            procedure_id: The procedure ID
+            account_id: The account ID
+
+        Returns:
+            The current state name (lowercase: "start", "evaluation", "hypothesis", "test", "insights")
+            or None if no Task/TaskStages exist
+        """
+        try:
+            from plexus.dashboard.api.models.task import Task
+
+            # Find the Task for this procedure using GSI on accountId
+            # Use listTaskByAccountIdAndUpdatedAt which is indexed
+            from datetime import datetime, timezone, timedelta
+
+            query = """
+            query ListTaskByAccountIdAndUpdatedAt($accountId: String!, $updatedAt: ModelStringKeyConditionInput, $limit: Int, $nextToken: String) {
+                listTaskByAccountIdAndUpdatedAt(accountId: $accountId, updatedAt: $updatedAt, limit: $limit, nextToken: $nextToken) {
+                    items {
+                        id
+                        target
+                    }
+                    nextToken
+                }
+            }
+            """
+
+            # Query ALL tasks for this account (no date filter to avoid GSI lag issues)
+            # Start from a very old date to get everything
+            very_old_date = "2000-01-01T00:00:00.000Z"
+
+            tasks = []
+            next_token = None
+            target_patterns = [f"procedure/run/{procedure_id}", f"procedure/{procedure_id}"]
+
+            while True:
+                variables = {
+                    "accountId": account_id,
+                    "updatedAt": {"ge": very_old_date},  # Get all tasks
+                    "limit": 1000
+                }
+                if next_token:
+                    variables["nextToken"] = next_token
+
+                result = self.client.execute(query, variables)
+                page_tasks = result.get('listTaskByAccountIdAndUpdatedAt', {}).get('items', [])
+
+                # Check this page for matching tasks
+                for task in page_tasks:
+                    if any(pattern in task['target'] for pattern in target_patterns):
+                        tasks.append(task)
+
+                # If we found our task, stop scanning
+                if tasks:
+                    logger.info(f"Found {len(tasks)} tasks matching procedure ID '{procedure_id}'")
+                    break
+
+                next_token = result.get('listTaskByAccountIdAndUpdatedAt', {}).get('nextToken')
+                if not next_token:
+                    break
+
+            if not tasks:
+                logger.warning(f"No Task found for procedure {procedure_id} in account {account_id}")
+
+
+            # Find exact match - check both formats
+            # TaskProgressTracker uses "procedure/run/{id}" format
+            # ProcedureService._get_or_create_task uses "procedure/{id}" format
+            task_id = None
+            for task_data in tasks:
+                if task_data['target'] == f"procedure/run/{procedure_id}" or task_data['target'] == f"procedure/{procedure_id}":
+                    task_id = task_data['id']
+                    logger.info(f"Found Task {task_id} with target: {task_data['target']}")
+                    break
+
+            if not task_id:
+                logger.warning(f"No Task found for procedure {procedure_id}, cannot determine state from TaskStages")
+                return None
+
+            # Get TaskStages for this task
+            stage_query = """
+            query GetTask($id: ID!) {
+                getTask(id: $id) {
+                    stages {
+                        items {
+                            id
+                            name
+                            status
+                            order
+                        }
+                    }
+                }
+            }
+            """
+
+            result = self.client.execute(stage_query, {"id": task_id})
+            stages = result.get('getTask', {}).get('stages', {}).get('items', [])
+
+            if not stages:
+                logger.warning(f"Task {task_id} has no TaskStages")
+                return None
+
+            # Sort stages by order
+            stages.sort(key=lambda s: s['order'])
+
+            # Find the current state:
+            # 1. If any stage is RUNNING, that's the current state
+            # 2. Otherwise, find the last COMPLETED stage and return the next one
+            # 3. If all are PENDING, we're at the start
+
+            running_stage = None
+            last_completed_stage = None
+            last_completed_order = -1
+
+            for stage in stages:
+                if stage['status'] == 'RUNNING':
+                    running_stage = stage
+                    break
+                elif stage['status'] == 'COMPLETED' and stage['order'] > last_completed_order:
+                    last_completed_stage = stage
+                    last_completed_order = stage['order']
+
+            if running_stage:
+                # Convert stage name to lowercase state
+                return running_stage['name'].lower()
+            elif last_completed_stage:
+                # Find the next stage after the last completed one
+                next_order = last_completed_order + 1
+                for stage in stages:
+                    if stage['order'] == next_order:
+                        return stage['name'].lower()
+                # If no next stage, we're at the end
+                return "completed"
+            else:
+                # All stages are PENDING, we're at the first stage
+                return stages[0]['name'].lower() if stages else None
+
+        except Exception as e:
+            logger.error(f"Error getting current state from TaskStages: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    async def _store_evaluation_id_in_root_node(self, root_node_id: str, evaluation_id: str) -> bool:
+        """Store evaluation ID in root node metadata.
+
+        Returns:
+            True if successfully stored, False otherwise
+        """
+        try:
+            import json
+            from plexus.dashboard.api.models.graph_node import GraphNode
+
+            node = GraphNode.get_by_id(root_node_id, self.client)
+            if not node:
+                logger.error(f"Root node {root_node_id} not found")
+                return False
+
+            # Update metadata with evaluation ID
+            metadata = {}
+            if node.metadata:
+                try:
+                    metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+                except:
+                    pass
+
+            metadata['evaluation_id'] = evaluation_id
+
+            logger.info(f"[DEBUG] Storing metadata in root node: {metadata}")
+            node.update_content(metadata=metadata)
+            logger.info(f"✓ Stored evaluation ID {evaluation_id} in root node metadata")
+
+            # Verify it was stored correctly
+            updated_node = GraphNode.get_by_id(root_node_id, self.client)
+            logger.info(f"[DEBUG] Verification - node.metadata after update: {updated_node.metadata}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to store evaluation ID in root node: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    async def _get_evaluation_results(self, evaluation_id: str) -> str:
+        """Retrieve evaluation results by ID."""
+        try:
+            from plexus.Evaluation import Evaluation
+            import json
+
+            eval_obj = Evaluation.get_by_id(evaluation_id, self.client)
+            if not eval_obj:
+                logger.error(f"Evaluation {evaluation_id} not found")
+                return '{"error": "Evaluation not found"}'
+
+            # Format evaluation results as JSON string
+            results = {
+                'evaluation_id': evaluation_id,
+                'accuracy': eval_obj.accuracy,
+                'ac1': getattr(eval_obj, 'ac1', None),
+                'confusion_matrix': getattr(eval_obj, 'confusionMatrix', None),
+                'precision': getattr(eval_obj, 'precision', None),
+                'recall': getattr(eval_obj, 'recall', None),
+                'status': eval_obj.status
+            }
+
+            logger.info(f"✓ Retrieved evaluation results for {evaluation_id}: accuracy={results['accuracy']}")
+            return json.dumps(results)
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve evaluation results: {e}")
+            return '{"error": "Failed to retrieve evaluation results"}'
+
+    def _get_or_create_task_with_stages_for_procedure(
+        self,
+        procedure_id: str,
+        account_id: str,
+        scorecard_id: Optional[str] = None,
+        score_id: Optional[str] = None
+    ) -> Optional['Task']:
+        """
+        Get or create a Task with stages based on the procedure's state machine.
+
+        This method reuses existing Tasks for a procedure if they exist, otherwise
+        creates a new Task record and TaskStage records for each state in the
+        procedure's state machine workflow.
+
+        Args:
+            procedure_id: The procedure ID
+            account_id: The account ID
+            scorecard_id: Optional scorecard ID
+            score_id: Optional score ID
+
+        Returns:
+            The existing or created Task object, or None if creation failed
+        """
+        from plexus.dashboard.api.models.task import Task
+        from .state_machine_stages import get_stages_from_state_machine
+        import json
+        from datetime import datetime, timezone
+
+        try:
+            # First, check if a Task already exists for this procedure
+            # Use the indexed query listTaskByAccountIdAndUpdatedAt
+            query = """
+            query ListTaskByAccountIdAndUpdatedAt($accountId: String!, $updatedAt: ModelStringKeyConditionInput, $limit: Int) {
+                listTaskByAccountIdAndUpdatedAt(accountId: $accountId, updatedAt: $updatedAt, limit: $limit) {
+                    items {
+                        id
+                        target
+                        status
+                    }
+                }
+            }
+            """
+
+            # Query all tasks for this account
+            variables = {
+                "accountId": account_id,
+                "updatedAt": {"ge": "2000-01-01T00:00:00.000Z"},  # Get all tasks
+                "limit": 1000
+            }
+
+            result = self.client.execute(query, variables)
+            all_tasks = result.get('listTaskByAccountIdAndUpdatedAt', {}).get('items', [])
+
+            # Filter for tasks matching this procedure ID
+            existing_tasks = [
+                task for task in all_tasks
+                if procedure_id in task.get('target', '')
+            ]
+
+            # Find the task with exact target match
+            existing_task = None
+            for task_data in existing_tasks:
+                if task_data['target'] == f"procedure/{procedure_id}":
+                    existing_task = task_data
+                    break
+
+            if existing_task:
+                logger.info(f"Reusing existing Task {existing_task['id']} for procedure {procedure_id}")
+                # Get the full Task object
+                task = Task.get_by_id(existing_task['id'], self.client)
+                return task
+
+            # No existing task found, create a new one
+            logger.info(f"No existing Task found, creating new Task for procedure {procedure_id}")
+
+            # Get stages from state machine
+            stage_configs = get_stages_from_state_machine()
+
+            # Build metadata
+            metadata = {
+                "type": "Procedure",
+                "procedure_id": procedure_id,
+                "task_type": "Procedure"
+            }
+
+            # Create the Task
+            logger.info(f"Creating Task for procedure {procedure_id}")
+            task = Task.create(
+                client=self.client,
+                accountId=account_id,
+                type="Procedure",
+                status="PENDING",  # Initial status
+                target=f"procedure/{procedure_id}",
+                command=f"procedure {procedure_id}",
+                description=f"Procedure workflow for {procedure_id}",
+                dispatchStatus="ANNOUNCED",
+                metadata=json.dumps(metadata)
+                # createdAt and updatedAt are auto-generated by the database
+            )
+
+            if not task:
+                logger.error(f"Failed to create Task for procedure {procedure_id}")
+                return None
+
+            logger.info(f"Created Task {task.id} for procedure {procedure_id}")
+            
+            # Create TaskStage records for each state
+            from plexus.dashboard.api.models.task_stage import TaskStage
+            
+            logger.info(f"Creating {len(stage_configs)} TaskStages for Task {task.id}")
+            for stage_name, stage_config in stage_configs.items():
+                try:
+                    logger.info(f"Creating TaskStage: {stage_name} (order {stage_config.order})")
+                    stage = TaskStage.create(
+                        client=self.client,
+                        taskId=task.id,
+                        name=stage_name,
+                        order=stage_config.order,
+                        status="PENDING",  # All stages start as PENDING
+                        statusMessage=stage_config.status_message or f"{stage_name} stage"
+                        # createdAt and updatedAt are auto-generated by the database
+                    )
+                    logger.info(f"✓ Created TaskStage {stage.id}: {stage_name}")
+                except Exception as e:
+                    logger.error(f"✗ Failed to create TaskStage {stage_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            return task
+            
+        except Exception as e:
+            logger.error(f"Error creating Task with stages for procedure {procedure_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None

@@ -199,6 +199,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       
       console.log('Raw tasks query result:', tasksResult)
       const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
+      console.log(`[loadProcedures] Found ${allTasks.length} total tasks`)
       
       // Filter tasks that have procedure_id in metadata
       const procedureTasks = allTasks.filter((task: Task) => {
@@ -212,10 +213,12 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       
       // Create a map of procedure_id -> task for quick lookup
       const procedureTaskMap = new Map()
+      console.log(`[loadProcedures] Found ${procedureTasks.length} procedure tasks`)
       procedureTasks.forEach((task: Task) => {
         try {
           const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
           if (metadata && metadata.procedure_id) {
+            console.log(`[loadProcedures] Mapping task ${task.id} to procedure ${metadata.procedure_id}, stages: ${task.stages?.items?.length || 0}`)
             procedureTaskMap.set(metadata.procedure_id, task)
           }
         } catch {
@@ -224,10 +227,19 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       })
       
       // Combine procedures with their tasks
-      const data = proceduresData.map((procedure: Procedure): ProcedureWithTask => ({
-        ...procedure,
-        task: procedureTaskMap.get(procedure.id) || null
-      }))
+      const data = proceduresData.map((procedure: Procedure): ProcedureWithTask => {
+        const task = procedureTaskMap.get(procedure.id) || null
+        if (task) {
+          const stageStatuses = task.stages?.items?.map((s: any) => `${s.name}:${s.status}`).join(', ') || 'none';
+          console.log(`[loadProcedures] Procedure ${procedure.id} has task ${task.id} with ${task.stages?.items?.length || 0} stages: ${stageStatuses}`)
+        } else {
+          console.log(`[loadProcedures] Procedure ${procedure.id} has NO task`)
+        }
+        return {
+          ...procedure,
+          task
+        }
+      })
       console.log('Procedures data from query:', data)
       
       // Check if we're looking for a specific procedure (for debugging)
@@ -300,13 +312,18 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             if (metadata?.procedure_id) {
               console.log(`Updating procedure ${metadata.procedure_id} with task data:`, data);
               
-              // Update the procedures list with new task data
+              // Update the procedures list with new task data, preserving stages
               setProcedures(prevProcedures => 
-                prevProcedures.map(procedure => 
-                  procedure.id === metadata.procedure_id 
-                    ? { ...procedure, task: data }
-                    : procedure
-                )
+                prevProcedures.map(procedure => {
+                  if (procedure.id === metadata.procedure_id) {
+                    // Merge new task data with existing task, preserving stages
+                    const updatedTask = procedure.task 
+                      ? { ...procedure.task, ...data, stages: procedure.task.stages } // Preserve existing stages
+                      : data;
+                    return { ...procedure, task: updatedTask };
+                  }
+                  return procedure;
+                })
               );
             }
           } catch (error) {
@@ -448,6 +465,89 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     setShowTemplateSelector(true)
   }
 
+  // Helper function to create Task with stages for a procedure
+  const createTaskWithStagesForProcedure = async (procedureId: string, accountId: string) => {
+    console.log('[createTaskWithStagesForProcedure] Starting for procedure:', procedureId, 'account:', accountId)
+    
+    // Create Task
+    const taskInput = {
+      accountId: accountId,
+      type: 'Procedure',
+      status: 'PENDING',
+      target: `procedure/${procedureId}`,
+      command: `procedure ${procedureId}`,
+      description: `Procedure workflow for ${procedureId}`,
+      dispatchStatus: 'ANNOUNCED',
+      metadata: JSON.stringify({
+        type: 'Procedure',
+        procedure_id: procedureId,
+        task_type: 'Procedure'
+      })
+    }
+
+    const taskResult = await client.graphql({
+      query: `
+        mutation CreateTask($input: CreateTaskInput!) {
+          createTask(input: $input) {
+            id
+            accountId
+            type
+            status
+          }
+        }
+      `,
+      variables: { input: taskInput }
+    })
+
+    const task = (taskResult as any).data?.createTask
+    console.log('[createTaskWithStagesForProcedure] Task created:', task)
+    
+    if (!task) {
+      console.error('[createTaskWithStagesForProcedure] No task returned from mutation')
+      throw new Error('Failed to create Task')
+    }
+
+    // Define stages matching the state machine
+    const stages = [
+      { name: 'Start', order: 1, statusMessage: 'Initializing procedure...' },
+      { name: 'Evaluation', order: 2, statusMessage: 'Running initial evaluation...' },
+      { name: 'Hypothesis', order: 3, statusMessage: 'Analyzing results and generating hypotheses...' },
+      { name: 'Test', order: 4, statusMessage: 'Testing hypothesis with score version...' },
+      { name: 'Insights', order: 5, statusMessage: 'Analyzing test results and generating insights...' }
+    ]
+
+    // Create each stage
+    console.log('[createTaskWithStagesForProcedure] Creating', stages.length, 'stages (Start, Evaluation, Hypothesis, Test, Insights) for task:', task.id)
+    for (const stage of stages) {
+      console.log('[createTaskWithStagesForProcedure] Creating stage:', stage.name, 'order:', stage.order)
+      await client.graphql({
+        query: `
+          mutation CreateTaskStage($input: CreateTaskStageInput!) {
+            createTaskStage(input: $input) {
+              id
+              taskId
+              name
+              order
+              status
+            }
+          }
+        `,
+        variables: {
+          input: {
+            taskId: task.id,
+            name: stage.name,
+            order: stage.order,
+            status: 'PENDING',
+            statusMessage: stage.statusMessage
+          }
+        }
+      })
+    }
+
+    console.log(`✓ Created Task ${task.id} with ${stages.length} stages (Start, Evaluation, Hypothesis, Test, Insights)`)
+    return task
+  }
+
   const handleCreateProcedureFromTemplate = async (template: Schema['ProcedureTemplate']['type'], parameters?: Record<string, any>) => {
     if (!selectedAccount?.id) {
       toast.error('No account selected')
@@ -531,6 +631,22 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
       if (newProcedure) {
         console.log('Procedure created successfully:', newProcedure)
+        
+        // Create Task with stages for the new procedure
+        let createdTask = null
+        try {
+          console.log('Creating Task with stages for procedure:', newProcedure.id)
+          createdTask = await createTaskWithStagesForProcedure(newProcedure.id, selectedAccount.id)
+          console.log('✓ Task and stages created:', createdTask)
+        } catch (taskError) {
+          console.error('Failed to create Task for procedure:', taskError)
+          // Don't fail the whole operation - procedure is still created
+          toast.warning('Procedure created but task stages may not be set up')
+        }
+        
+        // Small delay to ensure database writes complete
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
         // Refresh procedures list and select the new procedure
         console.log('About to reload procedures for newly created procedure:', newProcedure.id)
         await loadProcedures(true) // Force reload to ensure new procedure appears

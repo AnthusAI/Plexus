@@ -37,7 +37,7 @@ def register_procedure_tools(mcp):
             sys.path.insert(0, project_root)
         
         from plexus.cli.shared.client_utils import create_client
-        from plexus.cli.procedure.service import ProcedureService, DEFAULT_PROCEDURE_YAML
+        from plexus.cli.procedure.service import ProcedureService
         
         def get_procedure_service():
             """Get an ProcedureService instance."""
@@ -58,6 +58,8 @@ def register_procedure_tools(mcp):
         yaml_config: Annotated[Optional[str], Field(description="YAML configuration (uses default if not provided)")] = None
         featured: Annotated[bool, Field(description="Whether to mark as featured")] = False
         create_root_node: Annotated[bool, Field(description="Whether to create a root node (default: True)")] = True
+        template_id: Annotated[Optional[str], Field(description="Optional template ID to use for the procedure")] = None
+        score_version_id: Annotated[Optional[str], Field(description="Optional score version ID to use for the procedure")] = None
     
     class ListProceduresRequest(BaseModel):
         account_identifier: Annotated[str, Field(description="Account identifier (key, name, or ID)")]
@@ -114,7 +116,9 @@ def register_procedure_tools(mcp):
                 score_identifier=request.score_identifier,
                 yaml_config=request.yaml_config,
                 featured=request.featured,
-                create_root_node=request.create_root_node
+                create_root_node=request.create_root_node,
+                template_id=request.template_id,
+                score_version_id=request.score_version_id
             )
             
             if not result.success:
@@ -356,17 +360,17 @@ def register_procedure_tools(mcp):
     @mcp.tool()
     def plexus_procedure_template() -> Dict[str, Any]:
         """Get the default procedure YAML template.
-        
-        Returns the default BeamSearch configuration template that can be customized
-        for creating new procedures. Useful as a starting point for procedure design.
+
+        Note: Procedures now use ProcedureTemplates stored in the database.
+        Use plexus_procedure_create with a template_id parameter instead.
         """
         try:
             return {
-                "success": True,
-                "template": DEFAULT_PROCEDURE_YAML,
-                "description": "Default BeamSearch procedure template with value calculation and exploration prompts"
+                "success": False,
+                "error": "Default template no longer available. Use plexus_procedure_create with a template_id parameter to create procedures from stored templates.",
+                "suggestion": "Query for available templates using the dashboard or use an existing template ID"
             }
-            
+
         except Exception as e:
             logger.error(f"Error getting procedure template: {e}")
             return {

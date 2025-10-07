@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 class Procedure(BaseModel):
     featured: bool
     rootNodeId: Optional[str]
+    state: Optional[str]
     createdAt: datetime
     updatedAt: datetime
     accountId: str
@@ -43,6 +44,7 @@ class Procedure(BaseModel):
         updatedAt: datetime,
         rootNodeId: Optional[str] = None,
         code: Optional[str] = None,
+        state: Optional[str] = None,
         templateId: Optional[str] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
@@ -52,6 +54,7 @@ class Procedure(BaseModel):
         super().__init__(id, client)
         self.featured = featured
         self.code = code
+        self.state = state
         self.templateId = templateId
         self.rootNodeId = rootNodeId
         self.createdAt = createdAt
@@ -67,6 +70,7 @@ class Procedure(BaseModel):
             id
             featured
             code
+            state
             templateId
             rootNodeId
             createdAt
@@ -86,6 +90,7 @@ class Procedure(BaseModel):
             id=data['id'],
             featured=data.get('featured', False),
             code=data.get('code'),
+            state=data.get('state'),
             templateId=data.get('templateId'),
             rootNodeId=data.get('rootNodeId'),
             createdAt=created_at,
@@ -104,7 +109,11 @@ class Procedure(BaseModel):
         accountId: str,
         scorecardId: str,
         scoreId: str,
-        featured: bool = False
+        featured: bool = False,
+        templateId: Optional[str] = None,
+        code: Optional[str] = None,
+        state: str = "start",
+        scoreVersionId: Optional[str] = None
     ) -> 'Procedure':
         """Create a new procedure.
         
@@ -114,6 +123,9 @@ class Procedure(BaseModel):
             scorecardId: ID of the scorecard this procedure is associated with
             scoreId: ID of the score this procedure is associated with
             featured: Whether this procedure should be featured
+            templateId: Optional ID of the template this procedure is based on
+            code: Optional YAML code for the procedure
+            state: Initial state (default: "start")
             
         Returns:
             The created Procedure instance
@@ -124,8 +136,17 @@ class Procedure(BaseModel):
             'accountId': accountId,
             'scorecardId': scorecardId,
             'scoreId': scoreId,
-            'featured': featured
+            'featured': featured,
+            'state': state
         }
+        
+        # Add optional fields if provided
+        if templateId:
+            input_data['templateId'] = templateId
+        if code:
+            input_data['code'] = code
+        if scoreVersionId:
+            input_data['scoreVersionId'] = scoreVersionId
             
         mutation = """
         mutation CreateProcedure($input: CreateProcedureInput!) {
@@ -317,7 +338,7 @@ class Procedure(BaseModel):
         # Set initial metadata
         if initial_metadata is None:
             initial_metadata = {"initialized": True, "code": yaml_config}
-            
+
         node.update_content(
             status='QUEUED',
             metadata=initial_metadata
