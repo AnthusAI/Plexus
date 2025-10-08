@@ -116,18 +116,25 @@ def run(ctx: click.Context, config_identifier: str, days: Optional[int], fresh: 
         
         # Process all arguments (both ctx.args and params)
         all_args = list(ctx.args) + list(params)
-        
+
         for arg in all_args:
-            if isinstance(arg, str) and arg.startswith('--'):
+            if isinstance(arg, str):
+                # Check for key=value format (without --)
+                if '=' in arg and not arg.startswith('--'):
+                    parts = arg.split('=', 1)
+                    if len(parts) == 2:
+                        param_name, param_value = parts
+                        cli_params[param_name.replace('-', '_')] = param_value
+                        console.print(f"[dim]Found {param_name}: {param_value}[/dim]")
                 # Check for --param-NAME=value format
-                if arg.startswith('--param-'):
+                elif arg.startswith('--param-'):
                     parts = arg[8:].split('=', 1)  # Remove '--param-' prefix
                     if len(parts) == 2:
                         param_name, param_value = parts
                         cli_params[param_name.replace('-', '_')] = param_value
                         console.print(f"[dim]Found --param-{param_name}: {param_value}[/dim]")
                 # Check for --NAME=value format (direct parameter name)
-                elif '=' in arg:
+                elif arg.startswith('--') and '=' in arg:
                     parts = arg[2:].split('=', 1)  # Remove '--' prefix
                     if len(parts) == 2:
                         param_name, param_value = parts
@@ -168,150 +175,70 @@ def run(ctx: click.Context, config_identifier: str, days: Optional[int], fresh: 
             console.print(f"[dim]Configuration length: {len(report_config.configuration)} chars[/dim]")
             console.print(f"[dim]First 100 chars: {report_config.configuration[:100]}[/dim]")
         
-        # --- Step 2.5: Handle Parameters ---
-        from plexus.reports.parameter_utils import (
-            extract_parameters_from_config,
-            validate_all_parameters,
-            render_configuration_with_parameters,
-            normalize_parameter_value
-        )
+        # --- Step 2.5: Handle Parameters (CLI-specific interactive collection) ---
+        from plexus.reports.parameter_utils import extract_parameters_from_config
         from plexus.cli.report.parameter_prompts import (
             collect_parameters_interactively,
             display_collected_parameters
         )
-        
-        # Extract parameter definitions from configuration
+        from plexus.reports.service import generate_report_with_parameters
+
+        # Extract parameter definitions to check if interactive collection is needed
         param_defs, _ = extract_parameters_from_config(report_config.configuration or '')
-        
+
+        # Collect parameters interactively for any not provided via CLI
+        collected_params = {}
         if param_defs:
             console.print(f"[cyan]Report configuration requires {len(param_defs)} parameter(s)[/cyan]")
-            
-            # Collect parameters interactively for any not provided via CLI
             collected_params = collect_parameters_interactively(
                 report_config.configuration or '',
                 cli_params
             )
-            
-            # Normalize parameter values to correct types
-            for param_def in param_defs:
-                param_name = param_def.get('name')
-                if param_name in collected_params:
-                    collected_params[param_name] = normalize_parameter_value(
-                        param_def, 
-                        collected_params[param_name]
-                    )
-            
-            # Validate all parameters
-            is_valid, errors = validate_all_parameters(param_defs, collected_params)
-            if not is_valid:
-                console.print("[bold red]Parameter validation failed:[/bold red]")
-                for error in errors:
-                    console.print(f"  [red]• {error}[/red]")
-                raise click.Abort()
-            
             # Display collected parameters
             display_collected_parameters(collected_params)
-            
-            # Render configuration with Jinja2
-            try:
-                rendered_config = render_configuration_with_parameters(
-                    report_config.configuration or '',
-                    collected_params
-                )
-                # Update the report_config object with rendered configuration
-                report_config.configuration = rendered_config
-                console.print("[dim]Configuration rendered with parameters[/dim]")
-            except Exception as e:
-                console.print(f"[bold red]Failed to render configuration with parameters:[/bold red] {e}")
-                raise click.Abort()
-            
-            # Store parameters for metadata
-            run_parameters.update({f"param_{k}": str(v) for k, v in collected_params.items()})
-        
-        console.print(f"[dim]Running with parameters: {run_parameters}[/dim]")
+        else:
+            # Even if config has no parameters, use any CLI-provided parameters
+            # This supports legacy usage and ad-hoc parameters
+            collected_params = cli_params.copy()
 
-        # --- Step 3: Create Task Record ---
-        console.print(f"Creating Task record for synchronous run...")
-        task_metadata = {
-            "report_configuration_id": resolved_config_id,
-            "report_parameters": run_parameters,
-            "account_id": account_id, # Include account ID in metadata
-            "trigger": "cli_sync" # Indicate synchronous trigger
-        }
-        metadata_json = json.dumps(task_metadata)
-        task_description = f"Synchronously generate report from config '{report_config.name}' ({resolved_config_id})"
-
+        # Prepare task object if using existing task_id from Celery
+        task_object = None
         if task_id:
-            # Use existing task from Celery execution
             console.print(f"Using existing task from Celery: [cyan]{task_id}[/cyan]")
-            new_task = Task.get_by_id(task_id, client)
-        else:
-            # Create new task for standalone execution
-            new_task = Task.create(
+            task_object = Task.get_by_id(task_id, client)
+
+        # --- Step 3-6: Execute Report Generation using shared function ---
+        console.print(f"Executing report generation...")
+
+        try:
+            report_id, first_block_error, task_id = generate_report_with_parameters(
+                config_id=resolved_config_id,
+                parameters=collected_params,
+                account_id=account_id,
                 client=client,
-                accountId=account_id, # Explicitly set account ID
-                type="report_generation",
-                target=resolved_config_id,
-                command="plexus report run (sync)",
-                description=task_description,
-                metadata=metadata_json,
-                dispatchStatus="SYNC", # Indicate synchronous execution
-                status="PENDING" # Initial status, will be updated by tracker
+                trigger="cli_sync",
+                task_object=task_object,
+                log_prefix=f"[ReportGenCLI]"
             )
-            task_id = new_task.id # Store task_id for potential error reporting
-            console.print(f"Created Task: [cyan]{task_id}[/cyan]")
 
-        # --- Step 4: Initialize Task Progress Tracker ---
-        console.print(f"Initializing progress tracker for Task [cyan]{task_id}[/cyan]...")
-        stage_configs = {
-            "Loading Configuration": StageConfig(order=1, status_message="Loading report configuration details."),
-            "Initializing Report Record": StageConfig(order=2, status_message="Creating initial database entry for the report."),
-            "Parsing Configuration": StageConfig(order=3, status_message="Analyzing report structure and block definitions."),
-            "Processing Report Blocks": StageConfig(order=4, status_message="Executing individual report block components.", total_items=0),
-            "Finalizing Report": StageConfig(order=5, status_message="Saving results and completing generation."),
-        }
-        tracker = TaskProgressTracker(
-            task_object=new_task,
-            stage_configs=stage_configs,
-            total_items=0,
-            prevent_new_task=True,
-            client=client
-        )
-        console.print("Tracker initialized.")
+            # Display results
+            if first_block_error is None:
+                console.print(f"[green]Report generation completed successfully![/green]")
+                console.print(f"  Report ID: [magenta]{report_id}[/magenta]")
+                console.print(f"  Task ID:   [cyan]{task_id}[/cyan]")
+            else:
+                console.print(f"[yellow]Report generation finished with errors.[/yellow]")
+                console.print(f"  [bold red]Error:[/bold red] {first_block_error}")
+                console.print(f"  Report ID: [magenta]{report_id}[/magenta] (may be incomplete)")
+                console.print(f"  Task ID:   [cyan]{task_id}[/cyan]")
 
-        # --- Step 5: Execute Report Generation Synchronously ---
-        console.print(f"Executing report generation synchronously for Task [cyan]{task_id}[/cyan]...")
-        log_prefix = f"[ReportGenCLI task_id={task_id}]"
-
-        # Pass rendered configuration if we have one (from parameter processing)
-        config_override = report_config.configuration if param_defs else None
-
-        report_id, first_block_error = _generate_report_core(
-            report_config_id=resolved_config_id,
-            account_id=account_id,
-            run_parameters=run_parameters,
-            client=client,
-            tracker=tracker,
-            log_prefix_override=log_prefix,
-            config_content_override=config_override
-        )
-
-        # --- Step 6: Mark Task Status based on Core Logic Result ---
-        if first_block_error is None:
-            console.print(f"[green]Report generation completed successfully![/green]")
-            console.print(f"  Report ID: [magenta]{report_id}[/magenta]")
-            console.print(f"  Task ID:   [cyan]{task_id}[/cyan]")
-            tracker.complete()
-            console.print(f"Task [cyan]{task_id}[/cyan] marked as COMPLETED.")
-        else:
-            # Blocks failed, but core process didn't crash critically
-            console.print(f"[yellow]Report generation finished with errors.[/yellow]")
-            console.print(f"  [bold red]Error:[/bold red] {first_block_error}") # Show specific error
-            console.print(f"  Report ID: [magenta]{report_id}[/magenta] (may be incomplete)")
-            console.print(f"  Task ID:   [cyan]{task_id}[/cyan]")
-            # Mark task as failed using the specific error message
-            tracker.fail(first_block_error)
-            console.print(f"[yellow]Task [cyan]{task_id}[/cyan] marked as FAILED due to block errors.[/yellow]")
+        except ValueError as e:
+            console.print(f"[bold red]Error:[/bold red] {str(e)}")
+            raise click.Abort()
+        except Exception as e:
+            console.print(f"[bold red]Unexpected error:[/bold red] {str(e)}")
+            logger.exception("Unexpected error during report generation")
+            raise click.Abort()
 
     except ValueError as e:
         console.print(f"[bold red]Error parsing parameters:[/bold red] {e}")
@@ -332,6 +259,7 @@ def run(ctx: click.Context, config_identifier: str, days: Optional[int], fresh: 
                      console.print(f"[yellow]Task {task_id} marked as FAILED via direct update due to abort.[/yellow]")
               except Exception as update_err:
                  console.print(f"[red]Error marking task {task_id} as FAILED via direct update after abort: {update_err}[/red]")
+         raise  # Re-raise Abort to ensure non-zero exit code
     except Exception as e:
         error_msg = f"An error occurred during synchronous report generation"
         detailed_error = traceback.format_exc()

@@ -12,12 +12,16 @@ from shared.utils import load_env_file, initialize_default_account, get_default_
 # Import tool registration functions
 from tools.util.think import register_think_tool
 from tools.util.docs import register_docs_tool
-from tools.util.think import register_think_tool
 from tools.scorecard.scorecards import register_scorecard_tools
 from tools.evaluation.evaluations import register_evaluation_tools
 from tools.score.scores import register_score_tools
 from tools.procedure.procedures import register_procedure_tools
 from tools.procedure.procedure_nodes import register_procedure_node_tools
+from tools.report.reports import register_report_tools
+from tools.feedback.feedback import register_feedback_tools
+from tools.task.tasks import register_task_tools
+from tools.item.items import register_item_tools
+from tools.prediction.predictions import register_prediction_tools
 
 # Setup Plexus imports and core functionality
 setup_plexus_imports()
@@ -40,11 +44,14 @@ mcp = FastMCP(
     - plexus_score_delete: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
     
     ## Evaluation Tools
-    - plexus_evaluation_run: Run an accuracy evaluation on a Plexus scorecard using the same code path as the CLI. 
-      The server will confirm dispatch but will not track progress or results. 
+    - plexus_evaluation_run: Run an accuracy evaluation on a Plexus scorecard using the same code path as the CLI.
+      The server will confirm dispatch but will not track progress or results.
       Monitor evaluation status via Plexus Dashboard or system logs.
+    - plexus_evaluation_info: Get detailed information about a specific evaluation by ID or get the latest evaluation.
+      Supports multiple output formats (json, yaml, text) and optional examples/quadrants.
     
     ## Report Tools
+    - plexus_report_run: Generate a new report instance from a ReportConfiguration with optional parameters
     - plexus_reports_list: List available reports with optional filtering by report configuration
     - plexus_report_info: Get detailed information about a specific report
     - plexus_report_last: Get the most recent report, optionally filtered by report configuration
@@ -65,7 +72,19 @@ mcp = FastMCP(
     
     ## Documentation Tools
     - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback analysis and score testing guide)
-    
+
+    ## Procedure Tools
+    - plexus_procedure_create: Create a new procedure
+    - plexus_procedure_list: List procedures for an account
+    - plexus_procedure_info: Get detailed procedure information
+    - plexus_procedure_update: Update a procedure's configuration
+    - plexus_procedure_delete: Delete a procedure and all its data
+    - plexus_procedure_yaml: Get the latest YAML configuration for a procedure
+    - plexus_procedure_run: Run a procedure
+    - plexus_procedure_template: Get the default procedure YAML template
+    - plexus_procedure_chat_sessions: Get chat sessions for a procedure (optional - shows conversation activity)
+    - plexus_procedure_chat_messages: Get detailed chat messages for debugging conversation flow and tool calls/responses
+
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
     """
@@ -101,12 +120,26 @@ def register_all_tools():
     register_procedure_node_tools(mcp)
     logger.info("Registered procedure node tools")
 
-    # TODO: Register additional tool modules here as they are created
-    # register_report_tools(mcp)
-    # register_item_tools(mcp)
-    # register_task_tools(mcp)
-    # register_feedback_tools(mcp)
-    
+    # Register report tools
+    register_report_tools(mcp)
+    logger.info("Registered report tools")
+
+    # Register feedback tools
+    register_feedback_tools(mcp)
+    logger.info("Registered feedback tools")
+
+    # Register task tools
+    register_task_tools(mcp)
+    logger.info("Registered task tools")
+
+    # Register item tools
+    register_item_tools(mcp)
+    logger.info("Registered item tools")
+
+    # Register prediction tools
+    register_prediction_tools(mcp)
+    logger.info("Registered prediction tools")
+
     logger.info("All MCP tools registered successfully")
 
 # Function to run the server

@@ -34,6 +34,11 @@ if using_stdio:
     
     # Create a dummy module that replaces rich
     class DummyRichModule(types.ModuleType):
+        def __init__(self, name):
+            super().__init__(name)
+            # Add __spec__ to prevent "is None" errors
+            self.__spec__ = types.SimpleNamespace(name=name, loader=None, origin=None, submodule_search_locations=[])
+
         def __getattr__(self, name):
             # Return a dummy object for any attribute access
             return DummyRichObject()
@@ -591,9 +596,15 @@ if __name__ == "__main__":
     
     # Load Plexus configuration (including secrets) using DRY configuration loader
     try:
+        import os
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Looking for config at: {os.path.join(os.getcwd(), '.plexus', 'config.yaml')}")
+        logger.info(f"Config exists: {os.path.exists(os.path.join(os.getcwd(), '.plexus', 'config.yaml'))}")
+
         from plexus.config.loader import load_config
         load_config()  # This loads .plexus/config.yaml and sets environment variables
         logger.info("Loaded Plexus configuration at MCP server startup")
+        logger.info(f"PLEXUS_ACCOUNT_KEY after load_config: {os.environ.get('PLEXUS_ACCOUNT_KEY')}")
     except Exception as e:
         logger.warning(f"Failed to load Plexus configuration: {e}")
     
@@ -604,8 +615,86 @@ if __name__ == "__main__":
         logger.error("Plexus core not available")
         sys.exit(1)
     logger.info("Initializing default account from environment...")
+    # Use the shared initialization function so tools can access the same global
+    from shared.utils import initialize_default_account as shared_initialize_default_account
+    shared_initialize_default_account()
+    # Also initialize the local one for backward compatibility
     initialize_default_account()
-    
+
+    # Register ALL modular tools
+    print("=" * 80, file=sys.stderr)
+    print("STARTING MODULAR TOOL REGISTRATION", file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
+    try:
+        print("Importing tool registration functions...", file=sys.stderr)
+        from tools.util.think import register_think_tool
+        from tools.util.docs import register_docs_tool
+        from tools.scorecard.scorecards import register_scorecard_tools
+        from tools.score.scores import register_score_tools
+        from tools.evaluation.evaluations import register_evaluation_tools
+        from tools.procedure.procedures import register_procedure_tools
+        from tools.procedure.procedure_nodes import register_procedure_node_tools
+        from tools.report.reports import register_report_tools
+        from tools.feedback.feedback import register_feedback_tools
+        from tools.task.tasks import register_task_tools
+        from tools.item.items import register_item_tools
+        from tools.prediction.predictions import register_prediction_tools
+        print("✓ All imports successful", file=sys.stderr)
+
+        print("Registering utility tools...", file=sys.stderr)
+        register_think_tool(mcp)
+        register_docs_tool(mcp)
+        print("✓ Registered utility tools", file=sys.stderr)
+
+        print("Registering scorecard tools...", file=sys.stderr)
+        register_scorecard_tools(mcp)
+        print("✓ Registered scorecard tools", file=sys.stderr)
+
+        print("Registering score management tools...", file=sys.stderr)
+        register_score_tools(mcp)
+        print("✓ Registered score management tools", file=sys.stderr)
+
+        print("Registering evaluation tools...", file=sys.stderr)
+        register_evaluation_tools(mcp)
+        print("✓ Registered evaluation tools", file=sys.stderr)
+
+        print("Registering procedure tools...", file=sys.stderr)
+        register_procedure_tools(mcp)
+        print("✓ Registered procedure tools", file=sys.stderr)
+
+        print("Registering procedure node tools...", file=sys.stderr)
+        register_procedure_node_tools(mcp)
+        print("✓ Registered procedure node tools", file=sys.stderr)
+
+        print("Registering report tools...", file=sys.stderr)
+        register_report_tools(mcp)
+        print("✓ Registered report tools", file=sys.stderr)
+
+        print("Registering feedback tools...", file=sys.stderr)
+        register_feedback_tools(mcp)
+        print("✓ Registered feedback tools", file=sys.stderr)
+
+        print("Registering task tools...", file=sys.stderr)
+        register_task_tools(mcp)
+        print("✓ Registered task tools", file=sys.stderr)
+
+        print("Registering item tools...", file=sys.stderr)
+        register_item_tools(mcp)
+        print("✓ Registered item tools", file=sys.stderr)
+
+        print("Registering prediction tools...", file=sys.stderr)
+        register_prediction_tools(mcp)
+        print("✓ Registered prediction tools", file=sys.stderr)
+
+        print("=" * 80, file=sys.stderr)
+        print("ALL MODULAR TOOLS REGISTERED SUCCESSFULLY", file=sys.stderr)
+        print("=" * 80, file=sys.stderr)
+    except Exception as e:
+        print(f"✗ ERROR registering modular tools: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        # Continue anyway - some tools may still work
+
     # Run the server with appropriate transport
     try:
         logger.info("Starting FastMCP server")
