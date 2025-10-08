@@ -92,15 +92,32 @@ class FeedbackAnalysis(BaseReportBlock):
                 self._log(f"Call Criteria Question ID from config: {cc_question_id_param}")
 
             # --- 2. Resolve Plexus Scorecard ---
-            self._log(f"Resolving Plexus Scorecard for CC Scorecard ID: {cc_scorecard_id_param}...")
+            self._log(f"Resolving Plexus Scorecard for parameter: {cc_scorecard_id_param}...")
             try:
-                plexus_scorecard_obj = await asyncio.to_thread(
-                    Scorecard.get_by_external_id,
-                    external_id=str(cc_scorecard_id_param),
-                    client=self.api_client
-                )
+                # Try to determine if this is a UUID or external ID
+                # UUIDs are typically 36 characters with dashes (e.g., "f4076c72-e74b-4eaf-afd6-d4f61c9f0142")
+                # External IDs are typically shorter numeric strings (e.g., "97")
+                is_uuid = len(str(cc_scorecard_id_param)) > 20 and '-' in str(cc_scorecard_id_param)
+
+                if is_uuid:
+                    # Try to fetch by ID (UUID)
+                    self._log(f"Parameter appears to be a UUID, fetching by ID...")
+                    plexus_scorecard_obj = await asyncio.to_thread(
+                        Scorecard.get_by_id,
+                        id=str(cc_scorecard_id_param),
+                        client=self.api_client
+                    )
+                else:
+                    # Try to fetch by external ID
+                    self._log(f"Parameter appears to be an external ID, fetching by external_id...")
+                    plexus_scorecard_obj = await asyncio.to_thread(
+                        Scorecard.get_by_external_id,
+                        external_id=str(cc_scorecard_id_param),
+                        client=self.api_client
+                    )
+
                 if not plexus_scorecard_obj:
-                    msg = f"Plexus Scorecard not found for Call Criteria Scorecard ID: {cc_scorecard_id_param}"
+                    msg = f"Plexus Scorecard not found for parameter: {cc_scorecard_id_param}"
                     self._log(f"ERROR: {msg}", level="ERROR")
                     raise ValueError(msg)
                 self._log(f"Found Plexus Scorecard: '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id})")

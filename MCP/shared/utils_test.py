@@ -138,67 +138,76 @@ class TestAccountManagement:
     """Test account management utilities"""
     
     @patch.dict(os.environ, {"PLEXUS_ACCOUNT_KEY": "test-account"})
-    # Core availability is enforced at server startup; no patching required
-    @patch('shared.utils.create_dashboard_client')
-    @patch('shared.utils.resolve_account_identifier')
-    def test_get_default_account_id_success(self, mock_resolve, mock_create_client):
+    @patch('plexus.cli.shared.client_utils.create_client')
+    @patch('plexus.dashboard.api.models.account.Account.get_by_key')
+    def test_get_default_account_id_success(self, mock_get_by_key, mock_create_client):
         """Test successful default account ID resolution"""
         mock_client = Mock()
         mock_create_client.return_value = mock_client
-        mock_resolve.return_value = "account-123"
-        
-        # Reset the global cache for testing
-        from shared import utils
-        utils.DEFAULT_ACCOUNT_ID = None
-        utils.ACCOUNT_CACHE.clear()
-        
+
+        # Mock Account object with ID
+        mock_account = Mock()
+        mock_account.id = "account-123"
+        mock_get_by_key.return_value = mock_account
+
+        # Reset the global cache for testing - must clear setup module's globals
+        from shared import setup
+        setup.DEFAULT_ACCOUNT_ID = None
+        setup.ACCOUNT_CACHE.clear()
+
         result = get_default_account_id()
-        
+
         assert result == "account-123"
         mock_create_client.assert_called_once()
-        mock_resolve.assert_called_once_with(mock_client, "test-account")
+        mock_get_by_key.assert_called_once_with("test-account", mock_client)
     
     @patch.dict(os.environ, {}, clear=True)
     def test_get_default_account_id_no_key(self):
         """Test when PLEXUS_ACCOUNT_KEY is not set"""
-        # Reset the global cache for testing
-        from shared import utils
-        utils.DEFAULT_ACCOUNT_ID = None
-        utils.DEFAULT_ACCOUNT_KEY = None
-        utils.ACCOUNT_CACHE.clear()
-        
+        # Reset the global cache for testing - must clear setup module's globals
+        from shared import setup
+        setup.DEFAULT_ACCOUNT_ID = None
+        setup.DEFAULT_ACCOUNT_KEY = None
+        setup.ACCOUNT_CACHE.clear()
+
         result = get_default_account_id()
-        
+
         assert result is None
     
     @patch.dict(os.environ, {"PLEXUS_ACCOUNT_KEY": "test-account"})
-    # Core availability is enforced at server startup; no patching required
-    def test_get_default_account_id_core_unavailable(self):
-        """Test when Plexus core is not available"""
-        # Reset the global cache for testing
-        from shared import utils
-        utils.DEFAULT_ACCOUNT_ID = None
-        utils.ACCOUNT_CACHE.clear()
-        
+    @patch('plexus.cli.shared.client_utils.create_client')
+    @patch('plexus.dashboard.api.models.account.Account.get_by_key')
+    def test_get_default_account_id_core_unavailable(self, mock_get_by_key, mock_create_client):
+        """Test when Plexus core is not available (Account.get_by_key raises exception)"""
+        # Reset the global cache for testing - must clear setup module's globals
+        from shared import setup
+        setup.DEFAULT_ACCOUNT_ID = None
+        setup.ACCOUNT_CACHE.clear()
+
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        # Simulate core unavailability by raising an exception
+        mock_get_by_key.side_effect = Exception("Core not available")
+
         result = get_default_account_id()
-        
+
         assert result is None
     
     @patch.dict(os.environ, {"PLEXUS_ACCOUNT_KEY": "test-account"})
-    # Core availability is enforced at server startup; no patching required
-    @patch('shared.utils.create_dashboard_client')
+    @patch('plexus.cli.shared.client_utils.create_client')
     def test_get_default_account_id_client_creation_fails(self, mock_create_client):
         """Test when client creation fails"""
         mock_create_client.return_value = None
-        
-        # Reset the global cache for testing
-        from shared import utils
-        utils.DEFAULT_ACCOUNT_ID = None
-        utils.ACCOUNT_CACHE.clear()
-        
+
+        # Reset the global cache for testing - must clear setup module's globals
+        from shared import setup
+        setup.DEFAULT_ACCOUNT_ID = None
+        setup.ACCOUNT_CACHE.clear()
+
         result = get_default_account_id()
-        
+
         assert result is None
+        mock_create_client.assert_called_once()
 
 class TestDataHelpers:
     """Test data helper functions"""
