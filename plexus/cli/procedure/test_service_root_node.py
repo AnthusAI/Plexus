@@ -106,8 +106,9 @@ class TestProcedureServiceRootNodeLogic:
             def __init__(self):
                 self.id = "existing-root-node"
                 self.code = None  # Missing score config
+                self.metadata = None  # No existing metadata
                 self.update_content = Mock()
-        
+
         mock_root_node = FakeNode()
         
         procedure_info = Mock()

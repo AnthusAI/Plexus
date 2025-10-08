@@ -930,18 +930,23 @@ Your response will become the next user message to guide the coding assistant.
         2. There are hypothesis nodes without associated ScoreVersions
         """
         try:
-            from ..states import STATE_HYPOTHESIS, STATE_CODE
+            from ..states import STATE_HYPOTHESIS, STATE_TEST
             from plexus.dashboard.api.models.procedure import Procedure
             from plexus.dashboard.api.models.graph_node import GraphNode
             
-            # Get current procedure state
+            # Get current procedure state from TaskStages (source of truth)
             procedure = Procedure.get_by_id(self.procedure_id, self.client)
             if not procedure:
                 logger.warning(f"Could not find procedure {self.procedure_id} for state transition check")
                 return
-            
-            current_state = procedure.state
-            logger.info(f"Checking state transition. Current state: {current_state}")
+
+            # Use ProcedureService to get state from TaskStages
+            from ..service import ProcedureService
+            service = ProcedureService(self.client)
+            current_state = service._get_current_state_from_task_stages(self.procedure_id, procedure.accountId)
+            if current_state is None:
+                current_state = 'start'  # Default if no TaskStages
+            logger.info(f"Checking state transition. Current state from TaskStages: {current_state}")
             
             # Only transition from hypothesis
             if current_state != STATE_HYPOTHESIS:
@@ -963,15 +968,15 @@ Your response will become the next user message to guide the coding assistant.
             
             if nodes_needing_versions > 0:
                 logger.info(f"Found {nodes_needing_versions} hypothesis nodes needing ScoreVersions")
-                logger.info(f"Transitioning from {STATE_HYPOTHESIS} → {STATE_CODE}")
-                
+                logger.info(f"Transitioning from {STATE_HYPOTHESIS} → {STATE_TEST}")
+
                 # Use ProcedureService which now uses state machine for validation
                 from ..service import ProcedureService
                 service = ProcedureService(self.client)
-                service._update_procedure_state(self.procedure_id, STATE_CODE)
+                service._update_procedure_state(self.procedure_id, STATE_TEST, current_state=current_state)
                 # Also update root node status to match
                 if procedure.rootNodeId:
-                    service._update_node_status(procedure.rootNodeId, STATE_CODE)
+                    service._update_node_status(procedure.rootNodeId, STATE_TEST)
             else:
                 logger.info("All hypothesis nodes have ScoreVersions, procedure may be complete")
                 

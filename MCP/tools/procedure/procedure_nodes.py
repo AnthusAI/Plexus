@@ -17,15 +17,16 @@ logger = logging.getLogger(__name__)
 
 def register_procedure_node_tools(server, procedure_context: Optional[Dict[str, Any]] = None):
     """Register procedure node management tools."""
-    
+
     @server.tool()
     async def upsert_procedure_node(
-        procedure_id: str,
+        procedure_id: Optional[str] = None,
         node_id: Optional[str] = None,
         node_name: Optional[str] = None,
         parent_node_id: Optional[str] = None,
         status: Optional[str] = None,
-        metadata_json: Optional[str] = None
+        metadata_json: Optional[str] = None,
+        input: Optional[str] = None  # Handle wrapped input from MCP protocol
     ) -> str:
         """
         Create or update a procedure node with arbitrary metadata.
@@ -52,6 +53,23 @@ def register_procedure_node_tools(server, procedure_context: Optional[Dict[str, 
         """
         try:
             import json
+
+            # Handle wrapped input from MCP protocol
+            if input is not None:
+                try:
+                    params = json.loads(input)
+                    procedure_id = params.get('procedure_id', procedure_id)
+                    node_id = params.get('node_id', node_id)
+                    node_name = params.get('node_name', node_name)
+                    parent_node_id = params.get('parent_node_id', parent_node_id)
+                    status = params.get('status', status)
+                    metadata_json = params.get('metadata_json', metadata_json)
+                except json.JSONDecodeError as e:
+                    return f"Error: Invalid JSON in input parameter: {e}"
+
+            # Validate required parameter
+            if not procedure_id:
+                return "Error: procedure_id is required"
 
             # Parse metadata from JSON string
             metadata_fields = {}

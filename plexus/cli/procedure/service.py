@@ -668,21 +668,14 @@ class ProcedureService:
                 STATE_ERROR
             )
 
-            # Get current state from TaskStages (source of truth), not Procedure.state
+            # Get current state from TaskStages (source of truth)
             current_state = self._get_current_state_from_task_stages(procedure_id, procedure_info.procedure.accountId)
             logger.info(f"Procedure current state from TaskStages: {current_state or 'None (initial)'}")
 
-            # If TaskStages query failed, fall back to Procedure.state as a last resort
+            # If TaskStages query failed, default to start state
             if current_state is None:
-                current_state = procedure_info.procedure.state
-                logger.warning(f"TaskStages query failed, falling back to Procedure.state: {current_state}")
-                # Reset to start if it's in an invalid state
-                if current_state in [STATE_HYPOTHESIS, STATE_TEST, STATE_INSIGHTS]:
-                    logger.warning(f"Procedure.state is {current_state} but TaskStages not found - resetting to start")
-                    current_state = STATE_START
-            elif procedure_info.procedure.state != current_state:
-                # Log mismatch but use TaskStage state
-                logger.warning(f"Procedure.state ({procedure_info.procedure.state}) differs from TaskStage state ({current_state}) - using TaskStage state")
+                logger.info(f"No TaskStages found, defaulting to start state")
+                current_state = STATE_START
 
             # Determine what state we should be in based on where we are
             # If no state or 'start', transition to evaluation
@@ -1214,7 +1207,9 @@ class ProcedureService:
             # Merge with new metadata, preserving existing fields like evaluation_id
             metadata = {
                 **existing_metadata,  # Preserve existing fields
-                'code': score_config
+                'code': score_config,
+                'type': 'programmatic_root_node_update',
+                'created_by': 'system:programmatic'
             }
             root_node.update_content(
                 metadata=metadata
@@ -1611,10 +1606,14 @@ Based on this data, you should prioritize examining error types with the highest
                 logger.error(f"Procedure {procedure_id} not found")
                 return False
 
-            # Use provided current_state or fall back to Procedure.state
+            # Use provided current_state or fall back to reading from TaskStages
             if current_state is None:
-                current_state = procedure.state
-                logger.info(f"[DEBUG] No current_state provided, using Procedure.state: {current_state}")
+                # TaskStages are the source of truth for state
+                current_state = self._get_current_state_from_task_stages(procedure_id, procedure.accountId)
+                logger.info(f"[DEBUG] No current_state provided, reading from TaskStages: {current_state}")
+                if current_state is None:
+                    current_state = 'start'  # Default to start if no TaskStages exist
+                    logger.info(f"[DEBUG] No TaskStages found, defaulting to 'start'")
             else:
                 logger.info(f"[DEBUG] Using provided current_state: {current_state}")
 
@@ -1649,38 +1648,13 @@ Based on this data, you should prioritize examining error types with the highest
                 return False
             
             # Execute the transition (this will run callbacks and validate)
+            # The state machine callbacks handle updating TaskStages, which are the source of truth
             try:
                 getattr(sm, transition_name)()
                 logger.info(f"State machine transition executed: {transition_name} ({current_state} → {new_state})")
+                return True
             except Exception as e:
                 logger.error(f"State machine transition failed: {e}")
-                return False
-            
-            # Update the procedure in the database
-            mutation = """
-                mutation UpdateProcedure($input: UpdateProcedureInput!) {
-                    updateProcedure(input: $input) {
-                        id
-                        state
-                        updatedAt
-                    }
-                }
-            """
-            
-            variables = {
-                "input": {
-                    "id": procedure_id,
-                    "state": new_state
-                }
-            }
-            
-            result = self.client.execute(mutation, variables)
-            
-            if result and 'updateProcedure' in result:
-                logger.info(f"✓ Updated procedure {procedure_id} state in database: {current_state} → {new_state}")
-                return True
-            else:
-                logger.error(f"Failed to update procedure state in database: {result}")
                 return False
                 
         except Exception as e:
