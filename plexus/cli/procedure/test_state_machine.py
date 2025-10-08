@@ -34,18 +34,18 @@ def test_valid_transition_evaluation_to_hypothesis():
     assert sm.state_value == "hypothesis"
 
 
-def test_valid_transition_hypothesis_to_code():
-    """Test transition from hypothesis to code"""
+def test_valid_transition_hypothesis_to_test():
+    """Test transition from hypothesis to test"""
     sm = create_state_machine("test-proc-4", current_state="hypothesis")
-    sm.start_coding()
-    assert sm.state_value == "code"
+    sm.start_testing()
+    assert sm.state_value == "test"
 
 
-def test_valid_transition_code_to_completed():
-    """Test transition from code to completed"""
-    sm = create_state_machine("test-proc-5", current_state="code")
-    sm.finish_from_code()
-    assert sm.state_value == "completed"
+def test_valid_transition_test_to_insights():
+    """Test transition from test to insights"""
+    sm = create_state_machine("test-proc-5", current_state="test")
+    sm.analyze_results()
+    assert sm.state_value == "insights"
 
 
 def test_valid_transition_hypothesis_to_completed():
@@ -58,10 +58,10 @@ def test_valid_transition_hypothesis_to_completed():
 def test_invalid_transition_raises_error():
     """Test that invalid transitions raise errors"""
     sm = create_state_machine("test-proc-7", current_state="start")
-    
-    # Can't go from start directly to code
+
+    # Can't go from start directly to test
     with pytest.raises(Exception):
-        sm.start_coding()
+        sm.start_testing()
 
 
 def test_error_transitions():
@@ -84,13 +84,13 @@ def test_get_valid_transitions_from_start():
     assert "evaluation" in transitions
     assert "error" in transitions
     assert "hypothesis" not in transitions  # Can't go directly from start to hypothesis
-    assert "code" not in transitions
+    assert "test" not in transitions
 
 
 def test_get_valid_transitions_from_hypothesis():
     """Test getting valid transitions from hypothesis state"""
     transitions = get_valid_transitions("hypothesis")
-    assert "code" in transitions
+    assert "test" in transitions
     assert "completed" in transitions
     assert "error" in transitions
 
@@ -99,10 +99,11 @@ def test_is_valid_transition_helper():
     """Test the is_valid_transition helper function"""
     assert is_valid_transition("start", "evaluation") == True
     assert is_valid_transition("evaluation", "hypothesis") == True
-    assert is_valid_transition("hypothesis", "code") == True
-    assert is_valid_transition("code", "completed") == True
+    assert is_valid_transition("hypothesis", "test") == True
+    assert is_valid_transition("test", "insights") == True
+    assert is_valid_transition("insights", "completed") == True
     assert is_valid_transition("start", "hypothesis") == False  # Invalid - must go through evaluation
-    assert is_valid_transition("start", "code") == False  # Invalid
+    assert is_valid_transition("start", "test") == False  # Invalid
     assert is_valid_transition("completed", "hypothesis") == False  # Can't leave completed
 
 
@@ -110,12 +111,12 @@ def test_allowed_transitions_property():
     """Test that we can query allowed transitions from state machine"""
     sm = create_state_machine("test-proc-10", current_state="hypothesis")
     allowed = sm.allowed_events
-    
+
     # Should have multiple transitions available
     assert len(allowed) > 0
-    
+
     # Should have event names (python-statemachine uses 'allowed_events')
-    assert "start_coding" in allowed
+    assert "start_testing" in allowed
     assert "finish_from_hypothesis" in allowed
 
 

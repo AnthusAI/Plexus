@@ -70,7 +70,6 @@ class Procedure(BaseModel):
             id
             featured
             code
-            state
             templateId
             rootNodeId
             createdAt

@@ -108,7 +108,8 @@ prompts:
             scorecardId='scorecard-456',
             scoreId='score-789',
             templateId='template-123',
-            featured=True
+            featured=True,
+            scoreVersionId=None
         )
         self.mock_procedure.create_root_node.assert_called_once_with(self.valid_yaml_config, None)
     
