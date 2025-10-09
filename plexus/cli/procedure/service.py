@@ -738,10 +738,7 @@ class ProcedureService:
                     logger.warning(f"Could not check for existing hypothesis nodes: {e}")
                     # If we can't check, assume we need to generate hypotheses
                     pass
-            
-            # PROGRAMMATIC PHASE: Ensure proper procedure structure
-            await self._ensure_procedure_structure(procedure_info)
-            
+
             # Extract options for future use
             max_iterations = options.get('max_iterations', 500)
             timeout = options.get('timeout', 3600)  # 1 hour default
@@ -794,7 +791,10 @@ class ProcedureService:
                 
                 # 3. Determine which score version to use (from YAML parameters or Procedure model)
                 score_version_id = parameter_values.get('score_version_id') or getattr(procedure_info.procedure, 'scoreVersionId', None)
-                
+
+                # 3.5. PROGRAMMATIC PHASE: Ensure proper procedure structure with correct score version
+                await self._ensure_procedure_structure(procedure_info, score_version_id)
+
                 # 4. Get score configuration for the determined version
                 if score_version_id:
                     logger.info(f"Using score version from YAML parameters: {score_version_id}")
@@ -1010,6 +1010,29 @@ class ProcedureService:
                                 self._update_node_status(procedure_info.procedure.rootNodeId, STATE_TEST)
                             current_state = STATE_TEST
 
+                        # Execute test phase if we're in TEST state
+                        if current_state == STATE_TEST:
+                            logger.info("Executing test phase: creating ScoreVersions for hypotheses")
+                            test_results = await self._execute_test_phase(
+                                procedure_id,
+                                procedure_info,
+                                experiment_context
+                            )
+
+                            if test_results.get('success'):
+                                logger.info("Test phase completed successfully, transitioning to insights state")
+                                self._update_procedure_state(procedure_id, STATE_INSIGHTS, STATE_TEST)
+                                if procedure_info.procedure.rootNodeId:
+                                    self._update_node_status(procedure_info.procedure.rootNodeId, STATE_INSIGHTS)
+                                current_state = STATE_INSIGHTS
+
+                                # Add test results to response
+                                result['test_phase'] = test_results
+                            else:
+                                logger.error(f"Test phase failed: {test_results.get('error')}")
+                                result['test_phase'] = test_results
+                                # Stay in TEST state for retry
+
                         # Add AI results to the response
                         result['ai_execution'] = {
                             'completed': True,
@@ -1085,15 +1108,19 @@ class ProcedureService:
                 'error': error_msg
             }
     
-    async def _ensure_procedure_structure(self, procedure_info: 'ProcedureInfo') -> None:
+    async def _ensure_procedure_structure(self, procedure_info: 'ProcedureInfo', score_version_id: Optional[str] = None) -> None:
         """
         Programmatically ensure the procedure has the proper structure.
-        
+
         This includes:
         1. Creating a root node if it doesn't exist
-        2. Populating the root node with the champion score configuration
+        2. Populating the root node with the correct score configuration (specific version or champion)
         3. Any other structural requirements
-        
+
+        Args:
+            procedure_info: Information about the procedure
+            score_version_id: Optional specific score version to use. If None, uses champion.
+
         This is done programmatically (not by AI agents) for reliability.
         """
         procedure = procedure_info.procedure
@@ -1105,7 +1132,7 @@ class ProcedureService:
         if not root_node:
             logger.info("No root node found - creating root node programmatically")
             try:
-                new_root_node = await self._create_root_node_with_champion_config(procedure)
+                new_root_node = await self._create_root_node_with_champion_config(procedure, score_version_id)
                 logger.info(f"Successfully created root node {new_root_node.id} for procedure {procedure.id}")
                 # Update the procedure_info to reflect the new root node
                 procedure_info.root_node = new_root_node
@@ -1133,8 +1160,9 @@ class ProcedureService:
             if not latest_code:
                 logger.info("Root node exists but lacks score configuration - updating")
                 try:
-                    await self._update_root_node_with_champion_config(root_node, procedure)
-                    logger.info(f"Successfully updated root node {root_node.id} with champion configuration")
+                    await self._update_root_node_with_champion_config(root_node, procedure, score_version_id)
+                    config_type = f"version {score_version_id}" if score_version_id else "champion"
+                    logger.info(f"Successfully updated root node {root_node.id} with {config_type} configuration")
                 except Exception as e:
                     logger.error(f"Failed to update root node {root_node.id} with champion config: {e}")
                     # This is less critical - the procedure can still proceed with an empty root node
@@ -1142,18 +1170,37 @@ class ProcedureService:
             else:
                 logger.info("Root node structure appears valid - no action needed")
     
-    async def _create_root_node_with_champion_config(self, experiment: Procedure) -> GraphNode:
-        """Create a root node populated with the champion score configuration.
+    async def _create_root_node_with_champion_config(self, experiment: Procedure, score_version_id: Optional[str] = None) -> GraphNode:
+        """Create a root node populated with the score configuration.
 
+        Uses the provided score_version_id if specified, otherwise checks procedure's scoreVersionId,
+        and finally falls back to champion if neither is provided.
         Test expectations: create the node first (no code), then create an initial
-        version on that node with the champion score configuration and value metadata.
+        version on that node with the score configuration and value metadata.
+
+        Args:
+            experiment: The Procedure to create a root node for
+            score_version_id: Optional specific score version to use. Takes precedence over procedure's scoreVersionId.
         """
         try:
-            # Get the champion score configuration
-            score_config = await self._get_champion_score_config(experiment.scoreId)
+            # Priority: 1) Passed parameter, 2) Procedure attribute, 3) Champion
+            if not score_version_id:
+                score_version_id = getattr(experiment, 'scoreVersionId', None)
+
+            if score_version_id:
+                # Get specific version configuration
+                logger.info(f"Using specified score version {score_version_id} for root node")
+                score_config = await self._get_score_version_config(score_version_id)
+                config_source = f"version {score_version_id}"
+            else:
+                # Fall back to champion score configuration
+                logger.info(f"No scoreVersionId specified, using champion for root node")
+                score_config = await self._get_champion_score_config(experiment.scoreId)
+                config_source = "champion"
+
             if not score_config:
-                logger.warning(f"Could not get champion config for score {experiment.scoreId}")
-                score_config = "# Champion score configuration not available\nname: placeholder"
+                logger.warning(f"Could not get {config_source} config for score {experiment.scoreId}")
+                score_config = "# Score configuration not available\nname: placeholder"
             
             # Create the root node with champion configuration stored in metadata
             root_node = GraphNode.create(
@@ -1174,26 +1221,46 @@ class ProcedureService:
             # Update procedure to point to this root node (persist to database)
             experiment = experiment.update_root_node(root_node.id)
 
-            logger.info(f"Created root node {root_node.id} with champion score configuration")
+            logger.info(f"Created root node {root_node.id} with {config_source} score configuration")
             return root_node
             
         except Exception as e:
             logger.error(f"Error creating root node: {e}")
             raise
     
-    async def _update_root_node_with_champion_config(self, root_node: GraphNode, experiment: Procedure) -> None:
-        """Update existing root node with champion score configuration.
+    async def _update_root_node_with_champion_config(self, root_node: GraphNode, experiment: Procedure, score_version_id: Optional[str] = None) -> None:
+        """Update existing root node with score configuration.
 
+        Uses the provided score_version_id if specified, otherwise checks procedure's scoreVersionId,
+        and finally falls back to champion if neither is provided.
         Test expectations: create a new version on the existing root node that
-        adds the champion configuration and records programmatic update metadata.
+        adds the score configuration and records programmatic update metadata.
+
+        Args:
+            root_node: The GraphNode to update
+            experiment: The Procedure this node belongs to
+            score_version_id: Optional specific score version to use. Takes precedence over procedure's scoreVersionId.
         """
         try:
-            # Get the champion score configuration
-            score_config = await self._get_champion_score_config(experiment.scoreId)
+            # Priority: 1) Passed parameter, 2) Procedure attribute, 3) Champion
+            if not score_version_id:
+                score_version_id = getattr(experiment, 'scoreVersionId', None)
+
+            if score_version_id:
+                # Get specific version configuration
+                logger.info(f"Using specified score version {score_version_id} to update root node")
+                score_config = await self._get_score_version_config(score_version_id)
+                config_source = f"version {score_version_id}"
+            else:
+                # Fall back to champion score configuration
+                logger.info(f"No scoreVersionId specified, using champion to update root node")
+                score_config = await self._get_champion_score_config(experiment.scoreId)
+                config_source = "champion"
+
             if not score_config:
-                logger.warning(f"Could not get champion config for score {experiment.scoreId}")
+                logger.warning(f"Could not get {config_source} config for score {experiment.scoreId}")
                 # Fallback placeholder config per tests
-                score_config = "# Champion score configuration not available (placeholder)\nname: placeholder"
+                score_config = "# Score configuration not available (placeholder)\nname: placeholder"
 
             # Update root node with champion configuration, preserving existing metadata
             import json
@@ -1244,20 +1311,29 @@ class ProcedureService:
     async def _get_score_version_config(self, score_version_id: str) -> Optional[str]:
         """Get the YAML configuration for a specific score version."""
         try:
-            from plexus.dashboard.api.models.score_version import ScoreVersion
-            
-            score_version = ScoreVersion.get_by_id(score_version_id, self.client)
-            if not score_version:
+            # Fetch the specific version's configuration via GraphQL query
+            query = f"""
+            query GetScoreVersionCode {{
+                getScoreVersion(id: "{score_version_id}") {{
+                    id
+                    configuration
+                }}
+            }}
+            """
+
+            result = self.client.execute(query)
+            if not result or 'getScoreVersion' not in result or not result['getScoreVersion']:
                 logger.error(f"Score version {score_version_id} not found")
                 return None
-            
-            if score_version.code:
+
+            configuration = result['getScoreVersion'].get('configuration')
+            if configuration:
                 logger.info(f"Retrieved configuration for score version {score_version_id}")
-                return score_version.code
+                return configuration
             else:
                 logger.warning(f"No configuration found for score version {score_version_id}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error getting score version config for {score_version_id}: {e}")
             return None
@@ -1329,10 +1405,10 @@ class ProcedureService:
     ) -> str:
         """
         Run an evaluation to establish baseline performance for the procedure.
-        
+
         This replaces the feedback summary approach with actual evaluation data,
         providing the AI agent with quantitative metrics and confusion matrix results.
-        
+
         Args:
             scorecard_name: Name of the scorecard
             score_name: Name of the score
@@ -1340,38 +1416,55 @@ class ProcedureService:
             account_id: Account ID
             parameter_values: Parsed parameter values from YAML
             n_samples: Number of samples to evaluate (default 50)
-            
+
         Returns:
             Formatted string with evaluation results for procedure context
         """
         try:
             from plexus.cli.shared.evaluation_runner import run_accuracy_evaluation
+            from plexus.cli.shared import get_score_yaml_path
             import json
-            
+            import os
+
             logger.info(f"Running evaluation: {scorecard_name}/{score_name} (version: {score_version_id or 'champion'}, samples: {n_samples})")
-            
+
+            # If a specific version is specified, write it to local YAML first
+            if score_version_id:
+                logger.info(f"Writing score version {score_version_id} to local YAML before evaluation")
+                try:
+                    # Get the version configuration
+                    version_config = await self._get_score_version_config(score_version_id)
+                    if not version_config:
+                        raise RuntimeError(f"Could not retrieve configuration for score version {score_version_id}")
+
+                    # Write to local YAML file
+                    yaml_path = get_score_yaml_path(scorecard_name, score_name)
+                    os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
+
+                    with open(yaml_path, 'w') as f:
+                        f.write(version_config)
+
+                    logger.info(f"Successfully wrote version {score_version_id} to {yaml_path}")
+                except Exception as e:
+                    logger.error(f"Failed to write score version {score_version_id}: {e}")
+                    raise RuntimeError(f"Cannot run evaluation: failed to write score version {score_version_id}")
+
             # Run the evaluation using the shared runner
-            # Note: run_accuracy_evaluation doesn't currently support score_version parameter
-            # It evaluates the current champion version from the database
-            # TODO: Extend run_accuracy_evaluation to support specific score versions
+            # It will use the local YAML file we just wrote
             evaluation_result = await run_accuracy_evaluation(
                 scorecard_name=scorecard_name,
                 score_name=score_name,
                 number_of_samples=n_samples,
                 sampling_method="random",
                 fresh=True,
-                use_yaml=False  # Use database configuration, not local YAML
+                use_yaml=True  # Use local YAML configuration
             )
-            
-            # Log warning if a specific version was requested but can't be used yet
-            if score_version_id:
-                logger.warning(f"Score version {score_version_id} specified, but evaluation system doesn't support version-specific evaluation yet. Using champion version.")
-            
+
             # Return evaluation results as JSON - same format as MCP tool
             # This is token-efficient and contains all necessary information
             logger.info("Evaluation completed successfully")
             return json.dumps(evaluation_result, indent=2)
-                
+
         except Exception as e:
             logger.error(f"Error running evaluation for procedure: {e}", exc_info=True)
             error_result = {
@@ -1882,6 +1975,155 @@ Based on this data, you should prioritize examining error types with the highest
         except Exception as e:
             logger.error(f"Failed to retrieve evaluation results: {e}")
             return '{"error": "Failed to retrieve evaluation results"}'
+
+    async def _execute_test_phase(
+        self,
+        procedure_id: str,
+        procedure_info: 'ProcedureInfo',
+        experiment_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute the test phase: create ScoreVersions for all hypothesis nodes.
+
+        This method:
+        1. Gets all hypothesis nodes (non-root nodes)
+        2. Skips nodes that already have scoreVersionId in metadata
+        3. For each remaining node, uses TestPhaseAgent to create a ScoreVersion
+        4. Returns success/failure status with details
+
+        Args:
+            procedure_id: The procedure ID
+            procedure_info: ProcedureInfo with node details
+            experiment_context: Context dict with score info, docs, etc.
+
+        Returns:
+            Dict with success status and test results
+        """
+        try:
+            from plexus.dashboard.api.models.graph_node import GraphNode
+            from .test_phase_agent import TestPhaseAgent
+
+            # Get all hypothesis nodes (non-root nodes have parentNodeId)
+            all_nodes = GraphNode.list_by_procedure(procedure_id, self.client)
+            hypothesis_nodes = [n for n in all_nodes if n.parentNodeId is not None]
+
+            if not hypothesis_nodes:
+                logger.warning("No hypothesis nodes found for test phase")
+                return {
+                    "success": False,
+                    "error": "No hypothesis nodes found",
+                    "nodes_tested": 0
+                }
+
+            logger.info(f"Found {len(hypothesis_nodes)} hypothesis nodes to test")
+
+            # Filter out nodes that already have scoreVersionId
+            nodes_to_test = []
+            for node in hypothesis_nodes:
+                if self._node_has_score_version(node):
+                    logger.info(f"Node {node.id} already has ScoreVersion, skipping")
+                else:
+                    nodes_to_test.append(node)
+
+            if not nodes_to_test:
+                logger.info("All hypothesis nodes already have ScoreVersions")
+                return {
+                    "success": True,
+                    "message": "All hypothesis nodes already tested",
+                    "nodes_tested": 0,
+                    "nodes_skipped": len(hypothesis_nodes)
+                }
+
+            logger.info(f"Testing {len(nodes_to_test)} hypothesis nodes")
+
+            # Create TestPhaseAgent
+            test_agent = TestPhaseAgent(self.client)
+
+            # Get score version ID to use as baseline
+            # Priority: 1) experiment_context, 2) procedure.scoreVersionId, 3) champion version
+            score_version_id = experiment_context.get('score_version_id') or getattr(procedure_info.procedure, 'scoreVersionId', None)
+
+            if score_version_id:
+                logger.info(f"Using specified score version ID for baseline: {score_version_id}")
+
+            if not score_version_id:
+                # Use champion version as fallback - need to query for it
+                logger.info(f"Fetching champion version ID for score {procedure_info.procedure.scoreId}")
+                query = f"""
+                query GetScoreChampionVersion {{
+                    getScore(id: "{procedure_info.procedure.scoreId}") {{
+                        id
+                        championVersionId
+                    }}
+                }}
+                """
+                result = self.client.execute(query)
+                if result and 'getScore' in result and result['getScore']:
+                    score_version_id = result['getScore'].get('championVersionId')
+                    logger.info(f"Found champion version ID: {score_version_id}")
+
+            if not score_version_id:
+                return {
+                    "success": False,
+                    "error": "No score version ID available for baseline",
+                    "nodes_tested": 0
+                }
+
+            # Execute test phase for each hypothesis
+            test_results = []
+            for node in nodes_to_test:
+                logger.info(f"Testing hypothesis node {node.id}")
+
+                result = await test_agent.execute(
+                    hypothesis_node=node,
+                    score_version_id=score_version_id,
+                    procedure_context=experiment_context
+                )
+
+                test_results.append(result)
+
+                if result['success']:
+                    logger.info(f"✓ Successfully created ScoreVersion {result['score_version_id']} for node {node.id}")
+                else:
+                    logger.error(f"✗ Failed to create ScoreVersion for node {node.id}: {result.get('error')}")
+
+            # Clean up temp files
+            test_agent.cleanup()
+
+            # Check overall success
+            successful_count = sum(1 for r in test_results if r['success'])
+            failed_count = len(test_results) - successful_count
+
+            overall_success = failed_count == 0
+
+            return {
+                "success": overall_success,
+                "nodes_tested": len(nodes_to_test),
+                "nodes_successful": successful_count,
+                "nodes_failed": failed_count,
+                "results": test_results,
+                "message": f"Tested {len(nodes_to_test)} nodes: {successful_count} successful, {failed_count} failed"
+            }
+
+        except Exception as e:
+            logger.error(f"Error executing test phase: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "nodes_tested": 0
+            }
+
+    def _node_has_score_version(self, node) -> bool:
+        """Check if a GraphNode already has a scoreVersionId in metadata."""
+        if not node.metadata:
+            return False
+
+        try:
+            import json
+            metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+            return 'scoreVersionId' in metadata
+        except:
+            return False
 
     def _get_or_create_task_with_stages_for_procedure(
         self,
