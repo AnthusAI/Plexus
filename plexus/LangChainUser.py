@@ -37,6 +37,7 @@ class LangChainUser:
         model_name: Optional[str] = None
         base_model_name: Optional[str] = None
         reasoning_effort: Optional[str] = "low"
+        verbosity: Optional[str] = "medium"
         model_region: Optional[str] = None
         temperature: Optional[float] = 0
         top_p: Optional[float] = 0.03
@@ -180,14 +181,6 @@ class LangChainUser:
                     logging.error(f"AzureChatOpenAI init unexpected error: {type(e).__name__}: {e}")
                     raise
             else:  # ChatOpenAI
-                # Resolve reasoning effort (guard invalid values)
-                allowed_efforts = {"low", "medium", "high", "auto"}
-                effort = (params.reasoning_effort or "low").lower()
-                if effort not in allowed_efforts:
-                    logging.info(f"Invalid reasoning_effort '{params.reasoning_effort}', defaulting to 'low'")
-                    effort = "low"
-                reasoning = {"effort": effort}
-
                 chat_kwargs = {
                     "model": params.model_name,
                     "api_key": os.getenv("OPENAI_API_KEY"),
@@ -196,9 +189,23 @@ class LangChainUser:
                 if supports_reasoning:
                     # Use the Responses API for models that support reasoning
                     chat_kwargs["use_responses_api"] = True
-                    # Accumulate model_kwargs rather than replace later
-                    chat_kwargs.setdefault("model_kwargs", {})
-                    chat_kwargs["model_kwargs"]["reasoning"] = reasoning
+                    # Resolve reasoning effort (guard invalid values)
+                    allowed_efforts = {"low", "medium", "high", "auto"}
+                    effort = (params.reasoning_effort or "low").lower()
+                    if effort not in allowed_efforts:
+                        logging.info(f"Invalid reasoning_effort '{params.reasoning_effort}', defaulting to 'low'")
+                        effort = "low"
+                    # reasoning_effort is a top-level parameter, not in model_kwargs
+                    chat_kwargs["reasoning_effort"] = effort
+
+                    # Resolve verbosity (guard invalid values)
+                    allowed_verbosity = {"low", "medium", "high"}
+                    verbosity_val = (params.verbosity or "medium").lower()
+                    if verbosity_val not in allowed_verbosity:
+                        logging.info(f"Invalid verbosity '{params.verbosity}', defaulting to 'medium'")
+                        verbosity_val = "medium"
+                    # verbosity is a top-level parameter, not in model_kwargs
+                    chat_kwargs["verbosity"] = verbosity_val
                 else:
                     pass
                 if not is_gpt5 and params.top_p is not None:
