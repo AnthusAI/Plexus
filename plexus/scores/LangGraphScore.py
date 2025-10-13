@@ -131,6 +131,7 @@ class LangGraphScore(Score, LangChainUser):
         model_name: Optional[str] = None
         model_region: Optional[str] = None
         reasoning_effort: Optional[str] = "low"
+        verbosity: Optional[str] = "medium"
         temperature: Optional[float] = 0
         max_tokens: Optional[int] = 500
         logprobs: Optional[bool] = False

@@ -71,9 +71,10 @@ class ProcedureParameterParser:
                 logger.warning("Invalid YAML structure for parameter parsing")
                 return []
             
-            param_configs = yaml_data.get('configurable_parameters', [])
+            # Support both 'configurable_parameters' (old) and 'parameters' (new) keys
+            param_configs = yaml_data.get('configurable_parameters') or yaml_data.get('parameters', [])
             if not param_configs:
-                logger.debug("No configurable_parameters found in YAML")
+                logger.debug("No configurable_parameters or parameters found in YAML")
                 return []
             
             parameters = []
@@ -110,38 +111,50 @@ class ProcedureParameterParser:
     def extract_parameter_values(yaml_code: str) -> Dict[str, Any]:
         """
         Extract actual parameter values from YAML code by finding injected values.
-        
+
         This searches for patterns like: key: "{{parameter_name}}" or key: "actual_value"
         and attempts to extract the current values.
-        
+
         Args:
             yaml_code: The procedure YAML configuration with values injected
-            
+
         Returns:
             Dictionary mapping parameter names to their current values
         """
         values = {}
-        
+
         try:
-            # First, get parameter definitions to know what to look for
-            parameters = ProcedureParameterParser.parse_parameter_definitions(yaml_code)
-            
             # Parse the YAML
             yaml_data = yaml.safe_load(yaml_code)
             if not yaml_data or not isinstance(yaml_data, dict):
                 return values
-            
-            # For each parameter, try to find its value in the YAML structure
-            for param in parameters:
-                value = ProcedureParameterParser._find_parameter_value_in_yaml(
-                    yaml_data, param.name
-                )
-                if value is not None:
-                    values[param.name] = value
-                    logger.debug(f"Found value for parameter '{param.name}': {value}")
-            
+
+            # FIRST: Check if parameters are defined in the list format with 'value' fields
+            # This is the newer format where parameters have explicit values
+            param_list = yaml_data.get('parameters') or yaml_data.get('configurable_parameters', [])
+            if param_list and isinstance(param_list, list):
+                for param_obj in param_list:
+                    if isinstance(param_obj, dict) and 'name' in param_obj and 'value' in param_obj:
+                        param_name = param_obj['name']
+                        param_value = param_obj['value']
+                        if param_value is not None:
+                            values[param_name] = param_value
+                            logger.debug(f"Found value for parameter '{param_name}': {param_value}")
+
+            # SECOND: Fall back to searching the YAML structure for injected values
+            # This handles the older format where values are injected as {{parameter_name}}
+            if not values:
+                parameters = ProcedureParameterParser.parse_parameter_definitions(yaml_code)
+                for param in parameters:
+                    value = ProcedureParameterParser._find_parameter_value_in_yaml(
+                        yaml_data, param.name
+                    )
+                    if value is not None:
+                        values[param.name] = value
+                        logger.debug(f"Found value for parameter '{param.name}': {value}")
+
             return values
-            
+
         except Exception as e:
             logger.error(f"Error extracting parameter values: {e}")
             return values

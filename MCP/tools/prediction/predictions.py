@@ -29,25 +29,27 @@ def register_prediction_tools(mcp: FastMCP):
         no_cache: bool = False,
         yaml: bool = False,
         version: Optional[str] = None,
-        latest: bool = False
+        latest: bool = False,
+        yaml_path: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
         Run predictions on one or more items using a specific score configuration.
         This helps test score behavior and validate improvements.
-        
+
         Parameters:
         - scorecard_name: Name of the scorecard containing the score
         - score_name: Name of the specific score to run predictions with
         - item_id: ID of a single item to predict on (mutually exclusive with item_ids)
         - item_ids: Comma-separated list of item IDs to predict on (mutually exclusive with item_id)
-        - include_input: Whether to include the original input text and metadata in output (default: False)  
+        - include_input: Whether to include the original input text and metadata in output (default: False)
         - include_trace: Whether to include detailed execution trace for debugging (default: False)
         - output_format: Output format - "json" or "yaml" (default: "json")
         - no_cache: If True, disable local caching entirely (always fetch from API) (default: False)
         - yaml: If True, load only from local YAML files without API calls (default: False)
         - version: Specific score version ID to predict with (defaults to champion version)
         - latest: If True, use the most recent score version (overrides version parameter)
-        
+        - yaml_path: Path to a local YAML file to use for score configuration (overrides database)
+
         Returns:
         - Prediction results with scores, explanations, and optional input/trace data
         """
@@ -66,6 +68,12 @@ def register_prediction_tools(mcp: FastMCP):
                 return "Error: Cannot specify both no_cache and yaml. Use one or the other."
             if version and latest:
                 return "Error: Cannot use both version and latest options. Choose one."
+            if yaml_path and not yaml:
+                # Auto-enable yaml mode when yaml_path is provided
+                yaml = True
+                logger.info(f"Auto-enabling yaml mode because yaml_path was provided: {yaml_path}")
+            if yaml_path and not os.path.exists(yaml_path):
+                return f"Error: Specified yaml_path does not exist: {yaml_path}"
             
             # Try to import required modules directly
             try:
@@ -349,12 +357,42 @@ def register_prediction_tools(mcp: FastMCP):
 
                             # Defer imports to runtime to avoid heavy module import on server startup
                             if yaml:
-                                logger.info("Loading scorecard from YAML files for dependency resolution (CLI-compatible path)")
-                                from plexus.cli.evaluation.evaluations import load_scorecard_from_yaml_files
-                                scorecard_instance = load_scorecard_from_yaml_files(scorecard_name, score_names=[score_name])
-                                # Set yaml flag IMMEDIATELY after creation so it's honored during score processing
-                                scorecard_instance.yaml_only = True
-                                logger.info("Set scorecard_instance.yaml_only = True for local YAML processing")
+                                if yaml_path:
+                                    # Load from specific YAML file
+                                    logger.info(f"Loading score configuration from specific YAML file: {yaml_path}")
+                                    from plexus.scores.Scorecard import Scorecard
+
+                                    # Read YAML content
+                                    with open(yaml_path, 'r') as f:
+                                        yaml_content = f.read()
+
+                                    # Create a minimal scorecard with this score
+                                    # We need to construct a scorecard structure that contains this score
+                                    import yaml as yaml_module
+                                    score_config = yaml_module.safe_load(yaml_content)
+
+                                    # Build scorecard structure
+                                    scorecard_data = {
+                                        'name': scorecard_name,
+                                        'sections': [
+                                            {
+                                                'name': 'Custom',
+                                                'scores': [score_config]
+                                            }
+                                        ]
+                                    }
+
+                                    scorecard_instance = Scorecard(scorecard_data)
+                                    scorecard_instance.yaml_only = True
+                                    logger.info(f"Created scorecard instance from YAML file: {yaml_path}")
+                                else:
+                                    # Load from standard YAML files
+                                    logger.info("Loading scorecard from YAML files for dependency resolution (CLI-compatible path)")
+                                    from plexus.cli.evaluation.evaluations import load_scorecard_from_yaml_files
+                                    scorecard_instance = load_scorecard_from_yaml_files(scorecard_name, score_names=[score_name])
+                                    # Set yaml flag IMMEDIATELY after creation so it's honored during score processing
+                                    scorecard_instance.yaml_only = True
+                                    logger.info("Set scorecard_instance.yaml_only = True for local YAML processing")
                             else:
                                 logger.info("Loading scorecard from API for dependency resolution (CLI-compatible path)")
                                 from plexus.cli.evaluation.evaluations import load_scorecard_from_api
