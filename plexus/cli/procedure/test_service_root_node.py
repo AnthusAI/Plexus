@@ -168,7 +168,7 @@ class TestProcedureServiceRootNodeLogic:
             metadata = create_node_args[1]['metadata']
             placeholder_config = metadata['code']
             assert "placeholder" in placeholder_config
-            assert "Champion score configuration not available" in placeholder_config
+            assert "Score configuration not available" in placeholder_config
 
     @pytest.mark.asyncio
     async def test_idempotent_behavior_with_existing_root(self):
