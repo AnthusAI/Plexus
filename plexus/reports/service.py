@@ -440,6 +440,10 @@ def _generate_report_core(
             logger.warning(f"{log_prefix} Report account_id ({account_id}) differs from Configuration's accountId ({report_config_model.accountId}). Proceeding with Report's accountId.")
             # Keep the account_id provided to this function (originating from Task or CLI)
 
+        # Add account_id to run_parameters so blocks can access it
+        run_parameters['account_id'] = account_id
+        logger.info(f"{log_prefix} Added account_id to run_parameters: {account_id}")
+
         tracker.advance_stage() # Advance to next stage (Initializing Report Record)
 
         # === 2. Create Report Record ===
@@ -639,9 +643,9 @@ def _generate_report_core(
             # Final update to the ReportBlock record
             try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
-                
+
                 update_params = {
-                    'output': json.dumps(output_json if output_json is not None else {"status": "failed", "error": log_string}),
+                    'output': output_json if output_json is not None else json.dumps({"status": "failed", "error": log_string}),
                     'log': final_log_message_for_db,
                     'attachedFiles': existing_details_files_list, # Pass array directly without JSON conversion
                     'client': client
@@ -662,7 +666,7 @@ def _generate_report_core(
 
             if output_json is None and first_block_error_message is None:
                 first_block_error_message = log_string or f"Block {block_display_name} failed with unspecified error."
-            
+
             logger.info(f"{log_prefix} Completed processing for block {block_display_name} (ID: {current_report_block.id})")
             tracker.update(current_items=i + 1)
 
@@ -672,10 +676,13 @@ def _generate_report_core(
         # with their log.txt within that single loop.
         # No separate loop is needed here to create/update ReportBlock records from intermediate results.
         logger.info(f"{log_prefix} All block processing and ReportBlock record finalization completed in the main loop.")
-        
+
         tracker.advance_stage() # Advance to next stage (Finalizing Report)
 
-        # === 6. Finalize Report === (This stage was implicitly step 5 before)
+        # === 6. Finalize Report ===
+        # Report.output already contains the original markdown template (set at creation)
+        # ReportBlock records contain the individual block execution results
+        # Frontend will parse the template and fetch block results for display
         logger.info(f"{log_prefix} Report generation core logic finished.")
 
         if first_block_error_message:
