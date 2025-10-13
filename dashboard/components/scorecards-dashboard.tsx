@@ -49,6 +49,7 @@ import { observeTaskUpdates, observeTaskStageUpdates } from "@/utils/subscriptio
 import { AdHocFeedbackAnalysis } from "@/components/ui/ad-hoc-feedback-analysis"
 import { AdHocCostAnalysis } from "@/components/ui/ad-hoc-cost-analysis"
 import { motion, AnimatePresence } from 'framer-motion'
+import { FilterInput } from '@/components/FilterInput'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -123,6 +124,7 @@ export default function ScorecardsComponent({
     scoreId?: string;
     type: 'scorecard' | 'score';
   } | null>(null)
+  const [scorecardsFilter, setScorecardsFilter] = useState('')
   const router = useRouter()
   const pathname = usePathname()
   
@@ -1712,18 +1714,24 @@ export default function ScorecardsComponent({
           }}
         >
           <div className="space-y-3 w-full">
-            <div className="flex justify-end">
-              <Button 
-                onClick={handleCreate} 
-                variant="ghost" 
-                className="bg-card hover:bg-accent text-muted-foreground"
+            <div className="flex gap-2 items-center justify-between">
+              <FilterInput
+                placeholder="Filter..."
+                onFilterChange={setScorecardsFilter}
+              />
+              <Button
+                onClick={handleCreate}
+                variant="ghost"
+                className="bg-card hover:bg-accent text-muted-foreground whitespace-nowrap"
               >
                 New Scorecard
               </Button>
             </div>
             <div className="@container">
-              <ScorecardGrid 
-                scorecards={scorecards as (Schema['Scorecard']['type'] & { examples: string[] })[]}
+              <ScorecardGrid
+                scorecards={(scorecards as (Schema['Scorecard']['type'] & { examples: string[] })[]).filter(scorecard =>
+                  !scorecardsFilter || scorecard.name.toLowerCase().includes(scorecardsFilter.toLowerCase())
+                )}
                 scorecardScoreCounts={scorecardScoreCounts}
                 scorecardCountsLoading={scorecardCountsLoading}
                 selectedScorecardId={selectedScorecard?.id}
