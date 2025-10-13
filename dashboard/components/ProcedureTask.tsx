@@ -275,7 +275,7 @@ export default function ProcedureTask({
     startedAt: procedure.task?.startedAt, // Get from task
     estimatedCompletionAt: procedure.task?.estimatedCompletionAt, // Get from task
     completedAt: procedure.task?.completedAt, // Get from task
-    status: procedure.task?.status || 'PENDING', // Use task.status
+    status: (procedure.task?.status || 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     errorMessage: procedure.task?.errorMessage || procedure.errorMessage
   }
 

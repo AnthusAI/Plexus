@@ -218,7 +218,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         try {
           const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
           if (metadata && metadata.procedure_id) {
-            console.log(`[loadProcedures] Mapping task ${task.id} to procedure ${metadata.procedure_id}, stages: ${task.stages?.items?.length || 0}`)
+            console.log(`[loadProcedures] Mapping task ${task.id} to procedure ${metadata.procedure_id}, stages: ${(task.stages as any)?.items?.length || 0}`)
             procedureTaskMap.set(metadata.procedure_id, task)
           }
         } catch {
