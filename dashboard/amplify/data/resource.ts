@@ -417,6 +417,7 @@ const schema = a.schema({
             cost: a.json(), // Cost information including tokens, API calls, and monetary cost
             attachments: a.string().array(), // Array of file paths for trace and log files
             type: a.string(), // Type of score result: "prediction", "evaluation", etc.
+            status: a.string(), // Status of the score result (e.g. "pending", "synced", "error")
             itemId: a.string().required(),
             item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
