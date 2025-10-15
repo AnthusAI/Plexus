@@ -400,6 +400,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId"),
+            idx("accountId").sortKeys(["createdAt"]).name("byAccountAndCreatedAt"),
             idx("itemId"),
             idx("itemId").sortKeys(["scoreId"]).name("byItemScore"),
             idx("scoreId")
@@ -416,6 +417,7 @@ const schema = a.schema({
             cost: a.json(), // Cost information including tokens, API calls, and monetary cost
             attachments: a.string().array(), // Array of file paths for trace and log files
             type: a.string(), // Type of score result: "prediction", "evaluation", etc.
+            status: a.string(), // Status of the score result (e.g. "pending", "synced", "error")
             itemId: a.string().required(),
             item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
@@ -450,7 +452,8 @@ const schema = a.schema({
             index("scoreVersionId"),
             index("scoreId"),
             index("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
-            index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore")
+            index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
+            index("type").sortKeys(["createdAt"]).name("byTypeAndCreatedAt")
         ]),
 
     BatchJobScoringJob: a
