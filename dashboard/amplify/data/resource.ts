@@ -452,8 +452,9 @@ const schema = a.schema({
             index("scoreVersionId"),
             index("scoreId"),
             index("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
-            index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
-            index("type").sortKeys(["createdAt"]).name("byTypeAndCreatedAt")
+            index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore")
+            // TODO: Uncomment in next deployment after byItemScorecardScoreUpdated removal completes
+            // index("type").sortKeys(["createdAt"]).name("byTypeAndCreatedAt")
         ]),
 
     BatchJobScoringJob: a
