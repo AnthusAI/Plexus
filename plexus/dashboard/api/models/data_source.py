@@ -3,10 +3,10 @@ import os
 import logging
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 from plexus.dashboard.api.models.base import BaseModel
-from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
 
 if TYPE_CHECKING:
+    from plexus.dashboard.api.client import PlexusDashboardClient
     from plexus.dashboard.api.models.data_set import DataSet
 
 class DataSource(BaseModel):

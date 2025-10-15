@@ -10,7 +10,7 @@ from plexus.reports.blocks.score_info import ScoreInfo # Import for mocking late
 from plexus.dashboard.api.models.report import Report
 from plexus.dashboard.api.models.report_block import ReportBlock
 from plexus.dashboard.api.models.task import Task # Added for mocking
-from plexus.cli.task_progress_tracker import TaskProgressTracker # Added for mocking
+from plexus.cli.shared.task_progress_tracker import TaskProgressTracker # Added for mocking
 
 # Disable logging noise during tests
 logging.disable(logging.CRITICAL)
@@ -147,7 +147,8 @@ def test_generate_report_success(
     assert create_call_kwargs['reportConfigurationId'] == "test-config-1"
     assert create_call_kwargs['accountId'] == 'test-account-id'
     assert create_call_kwargs['name'].startswith(mock_report_config['name'])
-    assert create_call_kwargs['parameters'] == json.dumps({"param1": "value1"})
+    # Note: account_id is added to run_parameters by the service (line 444 in service.py)
+    assert create_call_kwargs['parameters'] == json.dumps({"param1": "value1", "account_id": "test-account-id"})
     assert create_call_kwargs['taskId'] == "task-123" # Check taskId is passed
     # Assert that status is NOT set during creation (it belongs to Task)
     assert 'status' not in create_call_kwargs
@@ -160,13 +161,14 @@ def test_generate_report_success(
     call1_args, call1_kwargs = mock_run_block.call_args_list[0]
     assert call1_kwargs['block_def']['class_name'] == "ScoreInfo"
     assert call1_kwargs['block_def']['config']['scoreId'] == "score-test-123"
-    assert call1_kwargs['report_params'] == {"param1": "value1"} # Check report params
+    # Note: account_id is added to report_params by the service (line 444 in service.py)
+    assert call1_kwargs['report_params'] == {"param1": "value1", "account_id": "test-account-id"}
     assert call1_kwargs['api_client'] == mock_client_instance
     # Check second call args
     call2_args, call2_kwargs = mock_run_block.call_args_list[1]
     assert call2_kwargs['block_def']['class_name'] == "ScoreInfo"
     assert call2_kwargs['block_def']['config']['scoreId'] == "score-test-456"
-    assert call2_kwargs['report_params'] == {"param1": "value1"}
+    assert call2_kwargs['report_params'] == {"param1": "value1", "account_id": "test-account-id"}
     assert call2_kwargs['api_client'] == mock_client_instance
 
     # 7. ReportBlock Creation

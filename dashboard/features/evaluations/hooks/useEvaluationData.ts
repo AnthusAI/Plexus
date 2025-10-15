@@ -25,6 +25,20 @@ import { observeRecentEvaluations } from '@/utils/data-operations';
 import { observeScoreResults } from '@/utils/amplify-helpers';
 import { isEqual } from 'lodash';
 
+// Helper to safely resolve stage items from LazyLoader or direct object
+const getStageItemsFromAny = (stages: any): TaskStageType[] => {
+  const resolved = getValueFromLazyLoader(stages as any);
+  if (resolved?.data?.items) {
+    return resolved.data.items as TaskStageType[];
+  }
+  if (stages && typeof stages === 'object') {
+    const dataItems = (stages as any).data?.items as TaskStageType[] | undefined;
+    const directItems = (stages as any).items as TaskStageType[] | undefined;
+    return (dataItems ?? directItems ?? []) as TaskStageType[];
+  }
+  return [] as TaskStageType[];
+};
+
 // Add type for score result
 type ScoreResult = {
   id: string;
@@ -143,6 +157,8 @@ export function useEvaluationData({
     }
 
     const updateTaskId = taskData.id;
+    
+    // Reduced logging
 
     // Store task data in map
     const taskToStore: AmplifyTask = {
@@ -183,11 +199,6 @@ export function useEvaluationData({
       taskMapRef.current.set(updateTaskId, taskToStore);
     }
     
-    console.log('Updated taskMap:', {
-      taskId: updateTaskId,
-      taskInMap: taskMapRef.current.has(updateTaskId),
-      taskData: taskMapRef.current.get(updateTaskId)
-    });
 
     // Update any evaluations that reference this task
     setEvaluations(prevEvaluations => {
@@ -198,19 +209,36 @@ export function useEvaluationData({
 
         if (task.id === updateTaskId) {
           hasUpdates = true;
+          
           // Get all stages for this task
           const stageItems = getTaskStageItems(task.id);
 
-          // Update the task with new data
+          // Only update if we have meaningful changes
+          // Don't override stage data if the task update doesn't have stages
+          const hasIncomingStages = getStageItemsFromAny(taskToStore.stages).length > 0;
+          const hasExistingTaskStages = getStageItemsFromAny(task.stages).length > 0;
+          const hasStageMapData = stageItems.length > 0;
+          
+          // Preserve existing task stages if:
+          // 1. The incoming task update has no stages AND
+          // 2. We have existing task stages OR we have stage map data
+          const shouldPreserveExistingTaskStages = !hasIncomingStages && hasExistingTaskStages;
+          const shouldUseStageMapData = !hasIncomingStages && !hasExistingTaskStages && hasStageMapData;
+          
+          console.log(`STAGE_TRACE: handleTaskUpdate eval ${evaluation.id} preserve=${shouldPreserveExistingTaskStages} useMap=${shouldUseStageMapData} existing=${hasExistingTaskStages ? getStageItemsFromAny(task.stages).length : 0} stageMap=${hasStageMapData ? stageItems.length : 0}`);
+
+          // Update the task with new data, but preserve stages intelligently
           const updatedTask: AmplifyTask = {
             ...task,
             ...taskToStore,
-            stages: {
-              data: {
-                items: stageItems
-              }
-            }
+            stages: shouldPreserveExistingTaskStages ? task.stages : 
+                   shouldUseStageMapData ? { data: { items: stageItems } } :
+                   hasIncomingStages ? taskToStore.stages : 
+                   task.stages // Fallback to existing
           };
+
+           const finalStageCount = getStageItemsFromAny(updatedTask.stages).length;
+          console.log(`STAGE_TRACE: handleTaskUpdate created updatedTask for ${updateTaskId} with ${finalStageCount} stages`);
 
           return {
             ...evaluation,
@@ -232,16 +260,11 @@ export function useEvaluationData({
     }
 
     const taskId = stageData.taskId;
+    
+    console.log(`STAGE_TRACE: handleStageUpdate received ${stageData.name}:${stageData.status} for task ${taskId} at ${new Date().toLocaleTimeString()}`);
 
     // Update stage in map
     updateTaskStages(taskId, stageData);
-
-    console.log('Updated stageMap:', {
-      taskId,
-      stageId: stageData.id,
-      stageCount: getTaskStagesSize(taskId),
-      stageData
-    });
 
     // Update any evaluations that reference this task
     setEvaluations(prevEvaluations => {
@@ -254,24 +277,32 @@ export function useEvaluationData({
           hasUpdates = true;
           // Get all stages for this task
           const stageItems = getTaskStageItems(task.id);
+          
+          console.log(`STAGE_TRACE: handleStageUpdate updating eval ${evaluation.id} (taskId: ${task.id}) with stages: ${stageItems.map(s => `${s.name}:${s.status}`).join(',')} at ${new Date().toLocaleTimeString()}`);
 
-          // Update existing task with new stages
+          // Update existing task with new stages - FORCE NEW OBJECT REFERENCES
           const updatedTask: AmplifyTask = {
             ...task,
             stages: {
               data: {
-                items: stageItems
+                items: [...stageItems] // Create new array reference
               }
             }
           };
 
-          return {
+          const updatedEvaluation = {
             ...evaluation,
             task: updatedTask
           };
+
+          return updatedEvaluation;
         }
         return evaluation;
       });
+
+      if (hasUpdates) {
+        console.log(`STAGE_TRACE: handleStageUpdate setting ${updatedEvaluations.length} evaluations`);
+      }
 
       return hasUpdates ? updatedEvaluations : prevEvaluations;
     });
@@ -300,22 +331,12 @@ export function useEvaluationData({
       selectedScore
     ).subscribe({
       next: async ({ items, isSynced }) => {
-        console.log('Received evaluations:', {
-          count: items.length,
-          firstItem: items[0] ? {
-            id: items[0].id,
-            type: items[0].type,
-            task: items[0].task
-          } : null,
-          filters: {
-            selectedScorecard,
-            selectedScore
-          }
-        });
+        // Process evaluations from subscription
 
         // Transform items and filter out nulls
         const transformedItems = items
-          .map(item => {
+          .map((item, index) => {
+            // CRITICAL FIX: Preserve existing stage data instead of overwriting it
             // Check if we have task data in our map
             if (item.taskId) {
               const taskData = taskMapRef.current.get(item.taskId);
@@ -333,14 +354,86 @@ export function useEvaluationData({
                 
                 // Update the item with our task data
                 item.task = taskData;
+                console.log(`🔍 TRACE_STAGES: Found task data for item ${index} - using taskMap data with ${stageItems.length} stages`);
+              } else {
+                // PRESERVE existing task data if we don't have fresh data
+                if (item.task && typeof item.task === 'object') {
+                  console.log(`🔍 TRACE_STAGES: No taskMap data for item ${index} - preserving existing task data`);
+                  // Keep the existing task data as-is, don't overwrite it
+                } else {
+                  console.log(`🔍 TRACE_STAGES: No task data found for item ${index} - will use transformEvaluation fallback`);
+                }
+              }
+            } else {
+              // Check if we can find task data using the evaluation ID as the task ID
+              // This might happen if the evaluation's taskId is null but the task exists
+              const taskDataByEvalId = taskMapRef.current.get(item.id);
+              if (taskDataByEvalId) {
+                // Get stages from stageMap - check both the evaluation ID and the actual task ID
+                let taskStages = stageMapRef.current.get(item.id);
+                if (!taskStages) {
+                  taskStages = stageMapRef.current.get(taskDataByEvalId.id);
+                }
+                const stageItems = taskStages ? Array.from(taskStages.values()) : [];
+                
+                // Add stages to task data
+                taskDataByEvalId.stages = {
+                  data: {
+                    items: stageItems
+                  }
+                };
+                
+                // Update the item with the fallback task data
+                item.task = taskDataByEvalId;
+                
+                // Also update the item's taskId to maintain consistency
+                item.taskId = taskDataByEvalId.id;
               }
             }
             
-            return transformEvaluation(item);
+            const transformed = transformEvaluation(item);
+            return transformed;
           })
           .filter((item): item is ProcessedEvaluation => item !== null);
 
-        setEvaluations(transformedItems);
+        console.log(`STAGE_TRACE: setEvaluations with ${transformedItems.length} items`);
+        
+        // CRITICAL FIX: Merge with existing evaluations to preserve stage data and names
+        setEvaluations(prevEvaluations => {
+          const merged = transformedItems.map(newEval => {
+            const existingEval = prevEvaluations.find(e => e.id === newEval.id);
+            
+            // If we have an existing evaluation with good stage data, preserve it
+            if (existingEval) {
+              const existingItems = getStageItemsFromAny(existingEval.task?.stages);
+              if (existingItems.length > 0) {
+              // Keep the existing stage data, but update other fields
+              const preservedStageData = { data: { items: existingItems } };
+              console.log(`🔍 TRACE_STAGES: Preserving existing stage data for ${newEval.id}: ${existingItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
+              
+              return {
+                ...newEval,
+                // Preserve scorecard/score names to avoid flicker if missing in new payload
+                scorecard: newEval.scorecard || existingEval.scorecard,
+                score: newEval.score || existingEval.score,
+                task: newEval.task ? {
+                  ...newEval.task,
+                  stages: preservedStageData as any
+                } : newEval.task
+              };
+              }
+            }
+            
+            return {
+              ...newEval,
+              // Preserve scorecard/score names to avoid flicker if missing in new payload
+              scorecard: newEval.scorecard || existingEval?.scorecard || newEval.scorecard,
+              score: newEval.score || existingEval?.score || newEval.score
+            };
+          });
+          
+          return merged;
+        });
         setIsLoading(false);
       },
       error: async (error) => {
@@ -368,7 +461,40 @@ export function useEvaluationData({
             .map(item => transformEvaluation(item))
             .filter((item): item is ProcessedEvaluation => item !== null);
             
-          setEvaluations(transformedItems);
+          // CRITICAL FIX: Merge with existing evaluations to preserve stage data and names (direct load version)
+          setEvaluations(prevEvaluations => {
+            const merged = transformedItems.map(newEval => {
+              const existingEval = prevEvaluations.find(e => e.id === newEval.id);
+              
+              // If we have an existing evaluation with good stage data, preserve it
+              if (existingEval) {
+                const existingItems = getStageItemsFromAny(existingEval.task?.stages);
+                if (existingItems.length > 0) {
+                // Keep the existing stage data, but update other fields
+                const preservedStageData = { data: { items: existingItems } };
+                console.log(`🔍 TRACE_STAGES: Preserving existing stage data (direct load) for ${newEval.id}: ${existingItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
+                
+                return {
+                  ...newEval,
+                  scorecard: newEval.scorecard || existingEval.scorecard,
+                  score: newEval.score || existingEval.score,
+                  task: newEval.task ? {
+                    ...newEval.task,
+                    stages: preservedStageData as any
+                  } : newEval.task
+                };
+                }
+              }
+              
+              return {
+                ...newEval,
+                scorecard: newEval.scorecard || existingEval?.scorecard || newEval.scorecard,
+                score: newEval.score || existingEval?.score || newEval.score
+              };
+            });
+            
+            return merged;
+          });
         } catch (directError) {
           console.error('Error loading evaluations directly:', directError);
           setError('Failed to load evaluations');
@@ -381,119 +507,365 @@ export function useEvaluationData({
     activeSubscriptionRef.current = evaluationSubscription;
     subscriptions.push(evaluationSubscription);
 
-    // Subscribe to evaluation creates
-    const evaluationCreateSubscription = (client.graphql({
-      query: EVALUATION_UPDATE_SUBSCRIPTION.replace('onUpdateEvaluation', 'onCreateEvaluation')
-    }) as unknown as { subscribe: Function }).subscribe({
-      next: ({ data }: { data?: { onCreateEvaluation: Schema['Evaluation']['type'] } }) => {
-        if (data?.onCreateEvaluation) {
-          console.log('Evaluation create received:', {
-            evaluationId: data.onCreateEvaluation.id,
-            type: data.onCreateEvaluation.type,
-            taskId: data.onCreateEvaluation.taskId,
-            hasTask: !!data.onCreateEvaluation.task
-          });
+    // Removed onCreateEvaluation subscription to avoid transient duplicates.
 
-          // If the evaluation doesn't have a task but has a taskId, check our taskMap
-          let evaluationWithTask = data.onCreateEvaluation;
-          if (!evaluationWithTask.task && evaluationWithTask.taskId) {
-            const taskData = taskMapRef.current.get(evaluationWithTask.taskId);
-            if (taskData) {
-              // Get stages from stageMap
-              const taskStages = evaluationWithTask.taskId ? 
-                stageMapRef.current.get(evaluationWithTask.taskId) : 
-                new Map<string, TaskStageType>();
-              const stageItems = taskStages ? Array.from(taskStages.values()) : [];
-              
-              // Create a Schema-compliant task
-              const schemaTask: Schema['Task']['type'] = {
-                id: taskData.id,
-                accountId: accountId!,
-                type: taskData.type,
-                status: taskData.status,
-                target: taskData.target,
-                command: taskData.command,
-                description: taskData.description,
-                metadata: taskData.metadata,
-                createdAt: taskData.createdAt || new Date().toISOString(),
-                startedAt: taskData.startedAt,
-                completedAt: taskData.completedAt,
-                estimatedCompletionAt: taskData.estimatedCompletionAt,
-                errorMessage: taskData.errorMessage,
-                errorDetails: taskData.errorDetails,
-                currentStageId: taskData.currentStageId,
-                // Add required lazy loaders
-                account: () => Promise.resolve({ data: null }),
-                currentStage: () => Promise.resolve({ data: null }),
-                stages: () => {
-                  // Get stages from stageMap
-                  const taskStages = evaluationWithTask.taskId ? 
-                    stageMapRef.current.get(evaluationWithTask.taskId) : 
-                    new Map<string, TaskStageType>();
-                  const stageItems = taskStages ? Array.from(taskStages.values()) : [];
-                  return Promise.resolve({ 
-                    data: stageItems.map(stage => ({
-                      id: stage.id,
-                      taskId: stage.taskId,
-                      name: stage.name,
-                      order: stage.order,
-                      status: stage.status,
-                      processedItems: stage.processedItems,
-                      totalItems: stage.totalItems,
-                      startedAt: stage.startedAt,
-                      completedAt: stage.completedAt,
-                      estimatedCompletionAt: stage.estimatedCompletionAt,
-                      statusMessage: stage.statusMessage,
-                      createdAt: stage.createdAt || new Date().toISOString(),
-                      updatedAt: stage.updatedAt || new Date().toISOString(),
-                      task: () => Promise.resolve({ data: schemaTask }),
-                      tasksAsCurrentStage: () => Promise.resolve({ data: [], nextToken: null })
-                    })) as Schema['TaskStage']['type'][],
-                    nextToken: null
-                  });
-                },
-                evaluation: () => Promise.resolve({ data: evaluationWithTask }),
-                scorecard: () => Promise.resolve({ data: null }),
-                score: () => Promise.resolve({ data: null }),
-                report: () => Promise.resolve({ data: null }),
-                updatedAt: new Date().toISOString()
-              };
-              
-              // Create a function that returns the task data
-              evaluationWithTask = {
-                ...evaluationWithTask,
-                task: () => Promise.resolve({ data: schemaTask })
-              };
-            }
-          }
-
-          const transformedEvaluation = transformEvaluation(evaluationWithTask);
-          if (transformedEvaluation) {
-            setEvaluations(prev => [transformedEvaluation, ...prev]);
-          }
-        }
-      },
-      error: (error: Error) => {
-        console.error('Error in evaluation create subscription:', error);
-      }
-    });
-    subscriptions.push(evaluationCreateSubscription);
-
-    // Subscribe to evaluation updates
+    // Subscribe to evaluation updates - TEMPORARILY RE-ENABLED FOR DEBUGGING
     const evaluationUpdateSubscription = (client.graphql({
       query: EVALUATION_UPDATE_SUBSCRIPTION
     }) as unknown as { subscribe: Function }).subscribe({
-      next: ({ data }: { data?: { onUpdateEvaluation: Schema['Evaluation']['type'] } }) => {
+      next: async ({ data }: { data?: { onUpdateEvaluation: Schema['Evaluation']['type'] } }) => {
         if (data?.onUpdateEvaluation) {
-          console.log('Evaluation update received:', {
-            evaluationId: data.onUpdateEvaluation.id,
-            type: data.onUpdateEvaluation.type,
-            taskId: data.onUpdateEvaluation.taskId,
-            hasTask: !!data.onUpdateEvaluation.task
-          });
 
-          // If the evaluation doesn't have a task but has a taskId, check our taskMap
+          // If we have scorecard/score IDs but no scorecard/score data, fetch them
+          const needsScorecard = data.onUpdateEvaluation.scorecardId && !data.onUpdateEvaluation.scorecard;
+          const needsScore = data.onUpdateEvaluation.scoreId && !data.onUpdateEvaluation.score;
+          
+          
+          if (needsScorecard || needsScore) {
+            
+            try {
+              // Fetch scorecard data if needed
+              if (needsScorecard) {
+                (client.graphql({
+                query: `query GetScorecard($id: ID!) {
+                  getScorecard(id: $id) {
+                    id
+                    name
+                  }
+                }`,
+                variables: { id: data.onUpdateEvaluation.scorecardId }
+              }) as Promise<any>).then((result: any) => {
+                if (result.data?.getScorecard) {
+                  // Update the evaluation with the scorecard data
+                  setEvaluations(prev => {
+                    const updated = prev.map(e => {
+                      if (e.id === data.onUpdateEvaluation.id) {
+                        const updatedEval = {
+                          ...e,
+                          scorecard: { 
+                            id: result.data.getScorecard.id, 
+                            name: result.data.getScorecard.name 
+                          }
+                        };
+                        return updatedEval;
+                      }
+                      return e;
+                    });
+                    return [...updated]; // Force new array reference
+                  });
+                }
+              }).catch((error: any) => {
+                console.error('Error fetching scorecard:', error);
+              });
+            }
+            
+            // Fetch score data if needed
+            if (needsScore) {
+              (client.graphql({
+                query: `query GetScore($id: ID!) {
+                  getScore(id: $id) {
+                    id
+                    name
+                  }
+                }`,
+                variables: { id: data.onUpdateEvaluation.scoreId }
+              }) as Promise<any>).then((result: any) => {
+                if (result.data?.getScore) {
+                  // Update the evaluation with the score data
+                  setEvaluations(prev => {
+                    const updated = prev.map(e => {
+                      if (e.id === data.onUpdateEvaluation.id) {
+                        const updatedEval = {
+                          ...e,
+                          score: { 
+                            id: result.data.getScore.id, 
+                            name: result.data.getScore.name 
+                          }
+                        };
+                        return updatedEval;
+                      }
+                      return e;
+                    });
+                    return [...updated]; // Force new array reference
+                  });
+                }
+              }).catch((error: any) => {
+                console.error('Error fetching score:', error);
+              });
+            }
+            } catch (fetchError) {
+              console.error('Error in scorecard/score fetching:', fetchError);
+            }
+          }
+
+          // Always fetch the complete Task record with nested TaskStage information
           let evaluationWithTask = data.onUpdateEvaluation;
+          if (evaluationWithTask.taskId) {
+            console.log('📋 DEBUG: Fetching complete Task record with stages for taskId:', evaluationWithTask.taskId);
+            
+            // Fetch the complete task record
+            try {
+              const taskResponse = await (client.models.Task.get as any)({ 
+                id: evaluationWithTask.taskId
+              });
+              
+              if (taskResponse?.data) {
+                console.log('📋 DEBUG: Retrieved complete Task record:', {
+                  taskId: taskResponse.data.id,
+                  taskStatus: taskResponse.data.status,
+                  rawStages: taskResponse.data.stages,
+                  stagesIsFunction: typeof taskResponse.data.stages === 'function'
+                });
+                
+                // Use the Task -> stages relationship approach that the user proved works
+                console.log('📋 DEBUG: Querying TaskStages via Task relationship for update - taskId:', taskResponse.data.id);
+                let stageItems: any[] = [];
+                
+                try {
+                  // Use the approach that works: get Task with stages relationship
+                  const taskWithStagesResponse = await client.graphql({
+                    query: `
+                      query GetTaskWithStages($id: ID!) {
+                        getTask(id: $id) {
+                          id
+                          stages {
+                            items {
+                              id
+                              name
+                              order
+                              status
+                              statusMessage
+                              startedAt
+                              completedAt
+                              estimatedCompletionAt
+                              processedItems
+                              totalItems
+                              taskId
+                              createdAt
+                              updatedAt
+                            }
+                          }
+                        }
+                      }
+                    `,
+                    variables: { id: taskResponse.data!.id }
+                  }) as any;
+                  
+                  console.log('🔍 TRACE_STAGES: Task->stages relationship query result for update:', {
+                    taskId: taskResponse.data.id,
+                    response: taskWithStagesResponse,
+                    hasData: !!taskWithStagesResponse?.data?.getTask,
+                    stageCount: taskWithStagesResponse?.data?.getTask?.stages?.items?.length || 0,
+                    stages: taskWithStagesResponse?.data?.getTask?.stages?.items?.map((s: any) => ({ 
+                      id: s.id,
+                      name: s.name, 
+                      status: s.status,
+                      processedItems: s.processedItems,
+                      totalItems: s.totalItems
+                    })) || []
+                  });
+                  
+                  if (taskWithStagesResponse?.data?.getTask?.stages?.items && taskWithStagesResponse.data.getTask.stages.items.length > 0) {
+                    stageItems = taskWithStagesResponse.data.getTask.stages.items;
+                    console.log('📋 DEBUG: Successfully retrieved stages via Task relationship for update!');
+                  }
+                } catch (taskStagesError) {
+                  console.warn('Failed to query TaskStages via Task relationship for update:', taskStagesError);
+                }
+                
+                // Fallback: Try the LazyLoader approach if direct query didn't work
+                if (stageItems.length === 0 && taskResponse.data.stages && typeof taskResponse.data.stages === 'function') {
+                  try {
+                    console.log('📋 DEBUG: Fallback - Resolving stages LazyLoader for update...');
+                    const stagesResponse = await taskResponse.data.stages();
+                    console.log('📋 DEBUG: Raw stagesResponse for update:', stagesResponse);
+                    
+                    if (stagesResponse?.data && stagesResponse.data.length > 0) {
+                      // If data is a direct array (not {items: []})
+                      stageItems = stagesResponse.data;
+                      console.log('📋 DEBUG: Resolved stages for update:', {
+                        stageCount: stageItems.length,
+                        stages: stageItems.map(s => ({ 
+                          name: s.name, 
+                          status: s.status,
+                          processedItems: s.processedItems,
+                          totalItems: s.totalItems
+                        }))
+                      });
+                    } else if ((stagesResponse?.data as any)?.items && (stagesResponse.data as any).items.length > 0) {
+                      // If data is wrapped in {items: []}
+                      stageItems = (stagesResponse.data as any).items;
+                      console.log('📋 DEBUG: Resolved stages for update (items format):', {
+                        stageCount: stageItems.length,
+                        stages: stageItems.map(s => ({ 
+                          name: s.name, 
+                          status: s.status,
+                          processedItems: s.processedItems,
+                          totalItems: s.totalItems
+                        }))
+                      });
+                    } else {
+                      console.log('📋 DEBUG: No stages found yet for update - likely timing issue. Will retry in 1 second...', {
+                        taskId: taskResponse.data.id,
+                        taskStatus: taskResponse.data.status,
+                        responseData: stagesResponse?.data
+                      });
+                      
+                      // Retry after a short delay in case stages are created after the task
+                      setTimeout(async () => {
+                        try {
+                          console.log('📋 DEBUG: Retrying stages fetch for update...');
+                          const retryStagesResponse = taskResponse.data ? await (taskResponse.data as any).stages() : null;
+                          if (retryStagesResponse?.data && retryStagesResponse.data.length > 0) {
+                            const retryStageItems = retryStagesResponse.data;
+                            console.log('📋 DEBUG: Retry successful - found stages for update:', {
+                              stageCount: retryStageItems.length,
+                              stages: retryStageItems.map((s: any) => ({ 
+                                name: s.name, 
+                                status: s.status 
+                              }))
+                            });
+                            
+                            // Update the stage maps if we have task data
+                            if (taskResponse.data) {
+                              const taskStages = getTaskStages(taskResponse.data.id);
+                              taskStages.clear();
+                              retryStageItems.forEach((stage: any) => {
+                                taskStages.set(stage.id, {
+                                  id: stage.id,
+                                  taskId: stage.taskId || taskResponse.data!.id,
+                                  name: stage.name,
+                                  order: stage.order,
+                                  status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                                  processedItems: stage.processedItems || undefined,
+                                  totalItems: stage.totalItems || undefined,
+                                  startedAt: stage.startedAt || undefined,
+                                  completedAt: stage.completedAt || undefined,
+                                  estimatedCompletionAt: stage.estimatedCompletionAt || undefined,
+                                  statusMessage: stage.statusMessage || undefined,
+                                  createdAt: stage.createdAt,
+                                  updatedAt: stage.updatedAt
+                                });
+                              });
+                              
+                              // Trigger handleTaskUpdate to refresh the UI
+                              handleTaskUpdate({
+                                id: taskResponse.data.id,
+                                status: taskResponse.data.status,
+                                stages: { items: retryStageItems }
+                              });
+                            }
+                          } else {
+                            console.log('📋 DEBUG: Retry still found no stages for update');
+                          }
+                        } catch (retryError) {
+                          console.warn('📋 DEBUG: Retry failed for stages fetch:', retryError);
+                        }
+                      }, 1000);
+                    }
+                  } catch (stagesError) {
+                    console.warn('Failed to resolve stages LazyLoader for update:', stagesError);
+                    console.log('📋 DEBUG: stages function details:', {
+                      stagesType: typeof taskResponse.data.stages,
+                      stagesFunction: taskResponse.data.stages.toString().substring(0, 200)
+                    });
+                  }
+                }
+                
+                // Update our task and stage maps with the fresh data
+                const taskToStore: AmplifyTask = {
+                  id: taskResponse.data.id,
+                  type: taskResponse.data.type,
+                  status: taskResponse.data.status,
+                  target: taskResponse.data.target,
+                  command: taskResponse.data.command,
+                  description: taskResponse.data.description,
+                  metadata: taskResponse.data.metadata,
+                  createdAt: taskResponse.data.createdAt,
+                  startedAt: taskResponse.data.startedAt,
+                  completedAt: taskResponse.data.completedAt,
+                  estimatedCompletionAt: taskResponse.data.estimatedCompletionAt,
+                  errorMessage: taskResponse.data.errorMessage,
+                  errorDetails: taskResponse.data.errorDetails,
+                  currentStageId: taskResponse.data.currentStageId,
+                  stages: {
+                    data: {
+                      items: stageItems
+                    }
+                  }
+                };
+                
+                // Store in taskMap
+                taskMapRef.current.set(taskResponse.data.id, taskToStore);
+                
+                // Update stage map with the latest stage data
+                if (stageItems.length > 0 && taskResponse.data) {
+                  const taskStages = getTaskStages(taskResponse.data.id);
+                  taskStages.clear(); // Clear old stages
+                  stageItems.forEach(stage => {
+                    taskStages.set(stage.id, {
+                      id: stage.id,
+                      taskId: stage.taskId || taskResponse.data!.id,
+                      name: stage.name,
+                      order: stage.order,
+                      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                      processedItems: stage.processedItems || undefined,
+                      totalItems: stage.totalItems || undefined,
+                      startedAt: stage.startedAt || undefined,
+                      completedAt: stage.completedAt || undefined,
+                      estimatedCompletionAt: stage.estimatedCompletionAt || undefined,
+                      statusMessage: stage.statusMessage || undefined,
+                      createdAt: stage.createdAt,
+                      updatedAt: stage.updatedAt
+                    });
+                  });
+                }
+                
+                // Create a direct task object with stages for EvaluationCard compatibility
+                const directTaskWithStages = {
+                  ...taskToStore,
+                  stages: {
+                    data: {
+                      items: stageItems.map(stage => ({
+                        id: stage.id,
+                        taskId: stage.taskId,
+                        name: stage.name,
+                        order: stage.order,
+                        status: stage.status,
+                        processedItems: stage.processedItems,
+                        totalItems: stage.totalItems,
+                        startedAt: stage.startedAt,
+                        completedAt: stage.completedAt,
+                        estimatedCompletionAt: stage.estimatedCompletionAt,
+                        statusMessage: stage.statusMessage,
+                        createdAt: stage.createdAt,
+                        updatedAt: stage.updatedAt
+                      }))
+                    }
+                  }
+                };
+                
+                // Assign the direct task object to evaluation (cast to satisfy TypeScript)
+                evaluationWithTask = {
+                  ...evaluationWithTask,
+                  task: directTaskWithStages as any
+                };
+                
+                console.log('🔍 TRACE_STAGES: About to transform evaluation with fetched task (UPDATE):', {
+                  evaluationId: evaluationWithTask.id,
+                  hasTask: !!evaluationWithTask.task,
+                  taskId: (evaluationWithTask.task as any)?.id,
+                  taskStages: (evaluationWithTask.task as any)?.stages,
+                  taskStageCount: (evaluationWithTask.task as any)?.stages?.data?.items?.length || 0
+                });
+              }
+            } catch (taskFetchError) {
+              console.warn('Failed to fetch complete Task record, falling back to taskMap:', taskFetchError);
+              // Fall back to existing logic if task fetch fails
+            }
+          }
+          
+          // Fallback: If the evaluation doesn't have a task but has a taskId, check our taskMap
           if (!evaluationWithTask.task && evaluationWithTask.taskId) {
             const taskData = taskMapRef.current.get(evaluationWithTask.taskId);
             if (taskData) {
@@ -557,15 +929,60 @@ export function useEvaluationData({
                 updatedAt: new Date().toISOString()
               };
               
-              // Create a function that returns the task data
+              // Create a direct task object with stages for EvaluationCard compatibility  
+              const directTaskWithStages = {
+                ...taskData,
+                stages: {
+                  data: {
+                    items: stageItems.map(stage => ({
+                      id: stage.id,
+                      taskId: stage.taskId,
+                      name: stage.name,
+                      order: stage.order,
+                      status: stage.status,
+                      processedItems: stage.processedItems,
+                      totalItems: stage.totalItems,
+                      startedAt: stage.startedAt,
+                      completedAt: stage.completedAt,
+                      estimatedCompletionAt: stage.estimatedCompletionAt,
+                      statusMessage: stage.statusMessage,
+                      createdAt: stage.createdAt,
+                      updatedAt: stage.updatedAt
+                    }))
+                  }
+                }
+              };
+              
+              // Assign the direct task object to evaluation (cast to satisfy TypeScript)
               evaluationWithTask = {
                 ...evaluationWithTask,
-                task: () => Promise.resolve({ data: schemaTask })
+                task: directTaskWithStages as any
               };
             }
           }
 
+          console.log('📋 DEBUG: Before transformEvaluation (UPDATE) - evaluationWithTask.task details:', {
+            evaluationId: evaluationWithTask.id,
+            taskId: (evaluationWithTask.task as any)?.id,
+            taskStages: (evaluationWithTask.task as any)?.stages,
+            taskStagesData: (evaluationWithTask.task as any)?.stages?.data,
+            taskStagesItems: (evaluationWithTask.task as any)?.stages?.data?.items,
+            stageCount: (evaluationWithTask.task as any)?.stages?.data?.items?.length || 0,
+            firstStage: (evaluationWithTask.task as any)?.stages?.data?.items?.[0]
+          });
+
           const transformedEvaluation = transformEvaluation(evaluationWithTask);
+          
+          console.log('📋 DEBUG: After transformEvaluation (UPDATE):', {
+            evaluationId: evaluationWithTask.id,
+            hadTask: !!evaluationWithTask.task,
+            hasTransformedTask: !!transformedEvaluation?.task,
+            transformedTaskId: transformedEvaluation?.task?.id,
+            transformedTaskStages: transformedEvaluation?.task?.stages,
+            transformedStageCount: getValueFromLazyLoader(transformedEvaluation?.task?.stages)?.data?.items?.length || 0,
+            transformedStageItems: getValueFromLazyLoader(transformedEvaluation?.task?.stages)?.data?.items?.map((s: any) => ({ name: s.name, status: s.status })) || []
+          });
+          
           if (transformedEvaluation) {
             // Check if this evaluation is now running and should be subscribed to
             const isNowRunning = 
@@ -585,24 +1002,70 @@ export function useEvaluationData({
             };
 
             setEvaluations(prev => {
-              const updatedEvaluations = prev.map(e => 
-                e.id === transformedEvaluation.id ? transformedEvaluation : e
-              );
+              // Find existing evaluation
+              const existingEval = prev.find(e => e.id === transformedEvaluation.id);
+              if (!existingEval) {
+                console.log(`STAGE_TRACE: Evaluation update for non-existent eval ${transformedEvaluation.id}`);
+                return prev;
+              }
+
+              // Check if this is a meaningful update by comparing key fields
+              const isMeaningfulUpdate = 
+                existingEval.status !== transformedEvaluation.status ||
+                existingEval.accuracy !== transformedEvaluation.accuracy ||
+                existingEval.processedItems !== transformedEvaluation.processedItems ||
+                existingEval.totalItems !== transformedEvaluation.totalItems;
+
+              if (!isMeaningfulUpdate) {
+                console.log(`STAGE_TRACE: Skipping non-meaningful update for eval ${transformedEvaluation.id}`);
+                return prev;
+              }
+
+              console.log(`STAGE_TRACE: Processing meaningful update for eval ${transformedEvaluation.id}`);
+
+              const updatedEvaluations = prev.map(e => {
+                if (e.id === transformedEvaluation.id) {
+                  // Preserve existing task data if the update doesn't contain good task information
+                  const shouldPreserveExistingTask = !transformedEvaluation.task && !!e.task;
+                  const shouldPreserveExistingTaskStages = Boolean(transformedEvaluation.task) && 
+                    Boolean(e.task) &&
+                    (getStageItemsFromAny(transformedEvaluation.task?.stages).length === 0) &&
+                    (getStageItemsFromAny(e.task?.stages).length > 0);
+
+                  console.log(`STAGE_TRACE: Evaluation update preserve=${shouldPreserveExistingTask} preserveStages=${shouldPreserveExistingTaskStages} for ${transformedEvaluation.id}`);
+
+                  // Preserve existing score results and scorecard/score names when updating evaluation
+                  const updatedEval: ProcessedEvaluation = {
+                    ...transformedEvaluation,
+                    scoreResults: e.scoreResults || transformedEvaluation.scoreResults,
+                    scorecard: transformedEvaluation.scorecard || e.scorecard,
+                    score: transformedEvaluation.score || e.score,
+                    // Preserve task data if needed
+                    task: shouldPreserveExistingTask ? e.task :
+                          shouldPreserveExistingTaskStages ? ({
+                            ...(transformedEvaluation.task as AmplifyTask),
+                            stages: e.task!.stages
+                          } as AmplifyTask) : transformedEvaluation.task
+                  };
+
+                  const updatedItems = getStageItemsFromAny(updatedEval.task?.stages);
+                  if (updatedItems.length > 0) {
+                    console.log(`STAGE_TRACE: Evaluation update preserved ${updatedEval.id} with ${updatedItems.length} stages: ${updatedItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
+                  } else {
+                    console.log(`STAGE_TRACE: Evaluation update ${updatedEval.id} has no stages after preservation`);
+                  }
+
+                  return updatedEval;
+                }
+                return e;
+              });
 
               // If this evaluation is now running and is the most recent, set up subscription
-              if (isNowRunning && isMostRecent(updatedEvaluations)) {
+              if (isNowRunning && isMostRecent(updatedEvaluations as ProcessedEvaluation[])) {
                 const scoreResults = getValueFromLazyLoader(transformedEvaluation.scoreResults);
-                console.log('Setting up score results subscription for evaluation:', {
-                  evaluationId: transformedEvaluation.id,
-                  currentScoreResultsCount: scoreResults?.length ?? 0,
-                  taskStatus: getValueFromLazyLoader(transformedEvaluation.task)?.status,
-                  evaluationStatus: transformedEvaluation.status,
-                  isNewestEvaluation: transformedEvaluation === updatedEvaluations[0]
-                });
 
                 // Clean up existing subscription if any
                 if (activeSubscriptionRef.current) {
-                  console.log('Cleaning up existing subscription');
                   activeSubscriptionRef.current.unsubscribe();
                   activeSubscriptionRef.current = null;
                 }
@@ -715,31 +1178,20 @@ export function useEvaluationData({
                 subscriptions.push({ unsubscribe });
               }
 
+              const finalEval = updatedEvaluations.find(e => e.id === transformedEvaluation.id);
+              const finalItems = getStageItemsFromAny(finalEval?.task?.stages);
+              if (finalItems.length > 0) {
+                console.log(`STAGE_TRACE: setEvaluations final eval ${transformedEvaluation.id} has ${finalItems.length} stages`);
+              } else {
+                console.log(`STAGE_TRACE: setEvaluations final eval ${transformedEvaluation.id} has no stages`);
+              }
+
               return updatedEvaluations;
             });
           }
 
-          console.log('Checking if should subscribe to score results:', {
-            evaluationId: data.onUpdateEvaluation.id,
-            status: data.onUpdateEvaluation.status,
-            taskStatus: typeof data.onUpdateEvaluation.task === 'function' 
-              ? null 
-              : (data.onUpdateEvaluation.task as any)?.status,
-            hasExistingSubscription: !!activeSubscriptionRef.current
-          });
 
-          // After setting up new subscription
-          console.log('Score results subscription set up:', {
-            evaluationId: data.onUpdateEvaluation.id,
-            subscriptionTime: new Date().toISOString()
-          });
 
-          // When receiving score results
-          console.log('Score results received:', {
-            evaluationId: data.onUpdateEvaluation.id,
-            hasScoreResults: !!data.onUpdateEvaluation.scoreResults,
-            timestamp: new Date().toISOString()
-          });
         }
       },
       error: (error: Error) => {
@@ -768,12 +1220,21 @@ export function useEvaluationData({
       query: TASK_STAGE_UPDATE_SUBSCRIPTION
     }) as unknown as { subscribe: Function }).subscribe({
       next: ({ data }: { data?: { onUpdateTaskStage: any } }) => {
+    if (data?.onUpdateTaskStage) {
+          const stage = data.onUpdateTaskStage;
+          console.log(`STAGE_TRACE: Stage subscription received ${stage.name}:${stage.status} for task ${stage.taskId} at ${new Date().toLocaleTimeString()}`);
+        } else {
+          console.log(`STAGE_TRACE: Stage subscription received no data at ${new Date().toLocaleTimeString()}`);
+        }
+        
         if (data?.onUpdateTaskStage) {
           handleStageUpdate(data.onUpdateTaskStage);
+        } else {
+          console.warn('Stage subscription received but no onUpdateTaskStage data:', data);
         }
       },
       error: (error: Error) => {
-        console.error('Error in task stage update subscription:', error);
+console.error('STAGE_TRACE: Error in task stage update subscription:', error.message);
       }
     });
     subscriptions.push(stageSubscription);
@@ -807,17 +1268,20 @@ export function useEvaluationData({
       filterValuesRef.current.selectedScore
     ).subscribe({
       next: async ({ items, isSynced }) => {
-        console.log('Refetched evaluations:', {
-          count: items.length,
-          filters: {
-            selectedScorecard: filterValuesRef.current.selectedScorecard,
-            selectedScore: filterValuesRef.current.selectedScore
-          }
-        });
 
         // Transform items and filter out nulls
         const transformedItems = items
-          .map(item => {
+          .map((item, index) => {
+            console.log(`🔍 TRACE_STAGES: Processing item ${index} (${item.id}):`, {
+              hasTaskId: !!item.taskId,
+              taskId: item.taskId,
+              hasTaskInMap: !!taskMapRef.current.get(item.taskId || ''),
+              itemTaskBefore: item.task,
+              mapSize: taskMapRef.current.size,
+              availableTaskIds: Array.from(taskMapRef.current.keys()),
+              requestedTaskId: item.taskId
+            });
+            
             // Check if we have task data in our map
             if (item.taskId) {
               const taskData = taskMapRef.current.get(item.taskId);
@@ -825,6 +1289,12 @@ export function useEvaluationData({
                 // Get stages from stageMap
                 const taskStages = stageMapRef.current.get(item.taskId);
                 const stageItems = taskStages ? Array.from(taskStages.values()) : [];
+                
+                console.log(`🔍 TRACE_STAGES: Found task data for item ${index}:`, {
+                  taskId: item.taskId,
+                  stageCount: stageItems.length,
+                  taskDataId: taskData.id
+                });
                 
                 // Add stages to task data
                 taskData.stages = {
@@ -835,14 +1305,108 @@ export function useEvaluationData({
                 
                 // Update the item with our task data
                 item.task = taskData;
+              } else {
+                console.log(`🔍 TRACE_STAGES: No task data found for item ${index}:`, {
+                  taskId: item.taskId,
+                  availableTaskIds: Array.from(taskMapRef.current.keys())
+                });
+              }
+            } else {
+              console.log(`🔍 TRACE_STAGES: Item ${index} has no taskId`);
+              
+              // Check if we can find task data using the evaluation ID as the task ID
+              // This might happen if the evaluation's taskId is null but the task exists
+              const taskDataByEvalId = taskMapRef.current.get(item.id);
+              if (taskDataByEvalId) {
+                console.log(`🔍 TRACE_STAGES: Found task data using evaluation ID for item ${index}:`, {
+                  evaluationId: item.id,
+                  taskDataId: taskDataByEvalId.id,
+                  stageMapHasEvalId: !!stageMapRef.current.get(item.id),
+                  stageMapHasTaskId: !!stageMapRef.current.get(taskDataByEvalId.id)
+                });
+                
+                // Get stages from stageMap - check both the evaluation ID and the actual task ID
+                let taskStages = stageMapRef.current.get(item.id);
+                if (!taskStages) {
+                  taskStages = stageMapRef.current.get(taskDataByEvalId.id);
+                }
+                const stageItems = taskStages ? Array.from(taskStages.values()) : [];
+                
+                console.log(`🔍 TRACE_STAGES: Using fallback task data for item ${index}:`, {
+                  evaluationId: item.id,
+                  taskId: taskDataByEvalId.id,
+                  stageCount: stageItems.length
+                });
+                
+                // Add stages to task data
+                taskDataByEvalId.stages = {
+                  data: {
+                    items: stageItems
+                  }
+                };
+                
+                // Update the item with the fallback task data
+                item.task = taskDataByEvalId;
+                
+                // Also update the item's taskId to maintain consistency
+                item.taskId = taskDataByEvalId.id;
               }
             }
             
-            return transformEvaluation(item);
+            const transformed = transformEvaluation(item);
+            
+            console.log(`🔍 TRACE_STAGES: After transformEvaluation for item ${index}:`, {
+              hasTask: !!transformed?.task,
+              taskId: transformed?.task?.id,
+              taskStageCount: getStageItemsFromAny(transformed?.task?.stages).length || 0
+            });
+            
+            return transformed;
           })
           .filter((item): item is ProcessedEvaluation => item !== null);
 
-        setEvaluations(transformedItems);
+        console.log('🔍 TRACE_STAGES: About to setEvaluations with transformedItems:', {
+          itemCount: transformedItems.length,
+          firstItemId: transformedItems[0]?.id,
+          firstItemTask: transformedItems[0]?.task,
+          firstItemTaskId: transformedItems[0]?.task?.id,
+          firstItemTaskStages: getStageItemsFromAny(transformedItems[0]?.task?.stages).length || 0
+        });
+        
+          // CRITICAL FIX: Merge with existing evaluations to preserve stage data and names (refetch version)
+        setEvaluations(prevEvaluations => {
+          const merged = transformedItems.map(newEval => {
+            const existingEval = prevEvaluations.find(e => e.id === newEval.id);
+            
+            // If we have an existing evaluation with good stage data, preserve it
+            if (existingEval) {
+              const existingItems = getStageItemsFromAny(existingEval.task?.stages);
+              if (existingItems.length > 0) {
+              // Keep the existing stage data, but update other fields
+              const preservedStageData = { data: { items: existingItems } };
+              console.log(`🔍 TRACE_STAGES: Preserving existing stage data (refetch) for ${newEval.id}: ${existingItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
+              
+              return {
+                ...newEval,
+                  scorecard: newEval.scorecard || existingEval.scorecard,
+                  score: newEval.score || existingEval.score,
+                task: newEval.task ? {
+                  ...newEval.task,
+                  stages: preservedStageData as any
+                } : newEval.task
+              };
+              }
+            }
+            
+              return {
+                ...newEval,
+                scorecard: newEval.scorecard || existingEval?.scorecard || newEval.scorecard,
+                score: newEval.score || existingEval?.score || newEval.score
+              };
+          });
+          
+          return merged;
+        });
         setIsLoading(false);
       },
       error: (error) => {
@@ -871,7 +1435,40 @@ export function useEvaluationData({
               .map(item => transformEvaluation(item))
               .filter((item): item is ProcessedEvaluation => item !== null);
               
-            setEvaluations(transformedItems);
+          // CRITICAL FIX: Merge with existing evaluations to preserve stage data and names (refetch fallback version)
+            setEvaluations(prevEvaluations => {
+              const merged = transformedItems.map(newEval => {
+                const existingEval = prevEvaluations.find(e => e.id === newEval.id);
+                
+                // If we have an existing evaluation with good stage data, preserve it
+            if (existingEval) {
+              const existingItems = getStageItemsFromAny(existingEval.task?.stages);
+              if (existingItems.length > 0) {
+                  // Keep the existing stage data, but update other fields
+              const preservedStageData = { data: { items: existingItems } };
+              console.log(`🔍 TRACE_STAGES: Preserving existing stage data (refetch fallback) for ${newEval.id}: ${existingItems.map((s: TaskStageType) => `${s.name}:${s.status}`).join(',')}`);
+                  
+                  return {
+                    ...newEval,
+                  scorecard: newEval.scorecard || existingEval.scorecard,
+                  score: newEval.score || existingEval.score,
+                    task: newEval.task ? {
+                      ...newEval.task,
+                  stages: preservedStageData as any
+                    } : newEval.task
+                  };
+              }
+                }
+                
+              return {
+                ...newEval,
+                scorecard: newEval.scorecard || existingEval?.scorecard || newEval.scorecard,
+                score: newEval.score || existingEval?.score || newEval.score
+              };
+              });
+              
+              return merged;
+            });
           } catch (directError) {
             console.error('Error loading evaluations directly:', directError);
             setError('Failed to load evaluations');

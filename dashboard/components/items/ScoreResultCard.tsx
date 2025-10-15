@@ -8,6 +8,7 @@ import { CardButton } from '@/components/CardButton'
 import { Badge } from '@/components/ui/badge'
 import { Timestamp } from '@/components/ui/timestamp'
 import ReactMarkdown from 'react-markdown'
+import { formatConfidence } from '@/lib/confidence-formatting'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
@@ -287,7 +288,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
               <Badge variant="secondary">{scoreResult.value}</Badge>
               {scoreResult.confidence !== null && scoreResult.confidence !== undefined && (
                 <span className="text-xs text-muted-foreground">
-                  {Math.round((scoreResult.confidence || 0) * 100)}% confidence
+                  {formatConfidence(scoreResult.confidence || 0)} confidence
                 </span>
               )}
             </div>

@@ -33,7 +33,7 @@ from plexus.analysis.topics.transformer import (
     transform_transcripts_itemize,
     inspect_data # If we decide to allow inspection via block
 )
-from plexus.analysis.topics.analyzer import analyze_topics
+# Lazy import: from plexus.analysis.topics.analyzer import analyze_topics  # Avoid loading PyTorch at startup
 from plexus.dashboard.api.models.report_block import ReportBlock # For type hinting if needed
 from plexus.processors.ProcessorFactory import ProcessorFactory
 from plexus.reports.s3_utils import download_report_block_file
@@ -585,6 +585,9 @@ class TopicAnalysis(BaseReportBlock):
                 self._log(f"🔥 REPR_CONFIG_DEBUG: openai_api_key available = {bool(openai_api_key)}")
                 self._log(f"🔥 REPR_CONFIG_DEBUG: fine_tuning_config = {self.fine_tuning_config}")
                 self._log(f"🔥 REPR_CONFIG_DEBUG: representation_prompt length = {len(self.representation_prompt)}")
+                
+                # Lazy import to avoid loading PyTorch unless actually needed
+                from plexus.analysis.topics.analyzer import analyze_topics
                 
                 analysis_results = await asyncio.to_thread(
                     analyze_topics,
@@ -1237,7 +1240,7 @@ class TopicAnalysis(BaseReportBlock):
         """
         try:
             from langchain_openai import ChatOpenAI
-            from langchain.prompts import ChatPromptTemplate
+            from langchain_core.prompts import ChatPromptTemplate
             
             # Check if we have an API key
             if not openai_api_key:

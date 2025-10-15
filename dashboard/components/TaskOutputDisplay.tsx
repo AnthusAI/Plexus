@@ -43,17 +43,6 @@ export const TaskOutputDisplay: React.FC<TaskOutputDisplayProps> = ({
   variant = 'detail',
   className = ''
 }) => {
-  // Debug logging to see what data we're receiving
-  console.log('TaskOutputDisplay received:', {
-    output: output ? `${output.substring(0, 100)}...` : null,
-    outputLength: output?.length,
-    attachedFiles,
-    stdout: stdout ? `${stdout.substring(0, 50)}...` : null,
-    stderr: stderr ? `${stderr.substring(0, 50)}...` : null,
-    command,
-    taskType,
-    variant
-  });
   
   // stderr is expanded by default if it has content, collapsed otherwise
   const [showStderr, setShowStderr] = useState(!!stderr);

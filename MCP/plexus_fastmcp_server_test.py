@@ -42,13 +42,21 @@ class TestPlexusFastmcpServer(unittest.TestCase):
             "https://plexus.anth.us/lab/items"
         )
     
-    @patch.dict(os.environ, {})
     def test_get_plexus_url_default_base(self):
         """Test URL construction with default base URL when env var is missing"""
-        self.assertEqual(
-            get_plexus_url("lab/items"), 
-            "https://capacity-plexus.anth.us/lab/items"
-        )
+        # Temporarily remove PLEXUS_APP_URL to test default behavior
+        original_value = os.environ.get('PLEXUS_APP_URL')
+        if 'PLEXUS_APP_URL' in os.environ:
+            del os.environ['PLEXUS_APP_URL']
+        try:
+            self.assertEqual(
+                get_plexus_url("lab/items"), 
+                "https://plexus.anth.us/lab/items"
+            )
+        finally:
+            # Restore original value
+            if original_value is not None:
+                os.environ['PLEXUS_APP_URL'] = original_value
     
     @patch.dict(os.environ, {"PLEXUS_APP_URL": "https://plexus.anth.us"})
     def test_get_report_url(self):

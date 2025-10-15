@@ -133,11 +133,11 @@ describe('PublicEvaluation Component', () => {
       id: 'test-id',
       type: 'TEST',
       accuracy: 85,
-      metrics: {
-        precision: 80,
-        sensitivity: 75,
-        specificity: 90
-      },
+      metrics: [
+        { name: 'Precision', value: 80, unit: '%', maximum: 100, priority: false },
+        { name: 'Sensitivity', value: 75, unit: '%', maximum: 100, priority: false },
+        { name: 'Specificity', value: 90, unit: '%', maximum: 100, priority: false }
+      ],
       scorecard: { name: 'Test Scorecard', id: 'scorecard-id' },
       score: { name: 'Test Score', id: 'score-id' },
       processedItems: 80,
@@ -349,11 +349,11 @@ describe('PublicEvaluation Component', () => {
       id: 'test-id',
       type: 'TEST',
       accuracy: 85,
-      metrics: {
-        precision: 80,
-        sensitivity: 75,
-        specificity: 90
-      },
+      metrics: [
+        { name: 'Precision', value: 80, unit: '%', maximum: 100, priority: false },
+        { name: 'Sensitivity', value: 75, unit: '%', maximum: 100, priority: false },
+        { name: 'Specificity', value: 90, unit: '%', maximum: 100, priority: false }
+      ],
       scorecard: { name: 'Test Scorecard', id: 'scorecard-id' },
       score: { name: 'Test Score', id: 'score-id' },
       processedItems: 80,

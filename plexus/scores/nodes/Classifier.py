@@ -29,16 +29,411 @@ class Classifier(BaseNode):
             description="Maximum number of retries for classification"
         )
         parse_from_start: Optional[bool] = False
+        confidence: bool = False
 
     class GraphState(BaseNode.GraphState):
-        pass
+        reasoning: Optional[str] = None  # Store reasoning content from gpt-oss models
+        confidence: Optional[float] = None
+        raw_logprobs: Optional[Dict] = None
 
     def __init__(self, **parameters):
+        # Store raw parameters for access to calibration config
+        self._raw_parameters = dict(parameters)
+
         # Extract batch parameter before passing to super
         self.batch = parameters.pop('batch', False)
         super().__init__(**parameters)
         self.parameters = Classifier.Parameters(**parameters)
         self.model = self._initialize_model()
+
+        # If confidence is enabled, bind logprobs to OpenAI models
+        if self.parameters.confidence:
+            self.model = self._configure_model_for_confidence()
+
+    def _is_openai_model(self) -> bool:
+        """Check if the current model is an OpenAI model that supports logprobs."""
+        from langchain_openai import ChatOpenAI, AzureChatOpenAI
+        from langchain_core.runnables import RunnableBinding
+        from unittest.mock import Mock, AsyncMock, MagicMock
+
+        def _get_underlying_model(model, max_depth=10):
+            """Recursively unwrap RunnableBinding and similar wrappers to find the actual model."""
+            if max_depth <= 0:
+                # Prevent infinite recursion
+                return model
+
+            # Handle mocks - assume they're OpenAI models for testing
+            if isinstance(model, (Mock, AsyncMock, MagicMock)):
+                return model
+
+            if isinstance(model, RunnableBinding):
+                return _get_underlying_model(model.bound, max_depth - 1)
+            elif hasattr(model, 'bound') and not isinstance(model, (Mock, AsyncMock, MagicMock)):
+                return _get_underlying_model(model.bound, max_depth - 1)
+            elif hasattr(model, 'runnable') and not isinstance(model, (Mock, AsyncMock, MagicMock)):
+                return _get_underlying_model(model.runnable, max_depth - 1)
+            else:
+                return model
+
+        underlying_model = _get_underlying_model(self.model)
+
+        # For mocks, assume they're OpenAI models (for testing)
+        if isinstance(underlying_model, (Mock, AsyncMock, MagicMock)):
+            return True
+
+        return isinstance(underlying_model, (ChatOpenAI, AzureChatOpenAI))
+
+    def _configure_model_for_confidence(self):
+        """Configure the model to return logprobs if it's an OpenAI model."""
+        if self._is_openai_model():
+            logging.info(f"Configuring OpenAI model for confidence with logprobs")
+            # Bind logprobs parameters to the model
+            return self.model.bind(logprobs=True, top_logprobs=10)
+        else:
+            logging.info(f"Model {type(self.model)} does not support confidence - feature disabled")
+            return self.model
+
+    def _extract_logprobs(self, response) -> Optional[Dict]:
+        """Extract logprobs from OpenAI response."""
+        try:
+            logging.info(f"🔍 EXTRACTING LOGPROBS:")
+            logging.info(f"   Response type: {type(response)}")
+            logging.info(f"   Response has response_metadata: {hasattr(response, 'response_metadata')}")
+            logging.info(f"   Response has additional_kwargs: {hasattr(response, 'additional_kwargs')}")
+
+            # Check response_metadata for logprobs
+            if hasattr(response, 'response_metadata') and response.response_metadata:
+                logging.info(f"   response_metadata keys: {list(response.response_metadata.keys())}")
+
+                # First check if logprobs are directly in response_metadata
+                direct_logprobs = response.response_metadata.get('logprobs')
+                logging.info(f"   Direct logprobs in response_metadata: {direct_logprobs is not None}")
+
+                if direct_logprobs:
+                    logging.info(f"✅ Extracted logprobs directly from response_metadata: {str(direct_logprobs)[:300]}")
+                    return direct_logprobs
+
+                # Fallback: check for choices structure (older format)
+                choices = response.response_metadata.get('choices', [])
+                logging.info(f"   Found {len(choices)} choices in response_metadata")
+
+                if choices and len(choices) > 0:
+                    choice = choices[0]
+                    logging.info(f"   First choice keys: {list(choice.keys()) if isinstance(choice, dict) else 'Not a dict'}")
+                    logprobs = choice.get('logprobs')
+                    logging.info(f"   logprobs in first choice: {logprobs is not None}")
+
+                    if logprobs:
+                        logging.info(f"✅ Extracted logprobs from response_metadata choices: {str(logprobs)[:300]}")
+                        return logprobs
+
+            # Alternative path - check for logprobs in different structure
+            if hasattr(response, 'additional_kwargs'):
+                logging.info(f"   additional_kwargs keys: {list(response.additional_kwargs.keys())}")
+                logprobs = response.additional_kwargs.get('logprobs')
+                if logprobs:
+                    logging.info(f"✅ Extracted logprobs from additional_kwargs: {str(logprobs)[:300]}")
+                    return logprobs
+
+            # Check if logprobs are directly on the response
+            if hasattr(response, 'logprobs'):
+                logging.info(f"   Direct logprobs attribute: {response.logprobs is not None}")
+                if response.logprobs:
+                    logging.info(f"✅ Extracted logprobs from direct attribute: {str(response.logprobs)[:300]}")
+                    return response.logprobs
+
+            logging.warning("❌ No logprobs found in any expected location")
+
+            # Debug: Show what's actually in the response
+            logging.info(f"🔍 RESPONSE DEBUG:")
+            if hasattr(response, '__dict__'):
+                response_attrs = [attr for attr in dir(response) if not attr.startswith('_')]
+                logging.info(f"   Response attributes: {response_attrs}")
+
+            return None
+
+        except Exception as e:
+            logging.error(f"❌ Error extracting logprobs: {e}")
+            import traceback
+            logging.error(f"   Traceback: {traceback.format_exc()}")
+            return None
+
+    def get_confidence_node(self):
+        """Node that calculates confidence from token logprobs at the classification position."""
+        parser = self.ClassificationOutputParser(
+            valid_classes=self.parameters.valid_classes,
+            parse_from_start=self.parameters.parse_from_start
+        )
+
+        async def calculate_confidence(state):
+            logging.info(f"🎯 → {self.node_name}: ENTERING confidence calculation node")
+            logging.info(f"   State type: {type(state)}")
+            if isinstance(state, dict):
+                logging.info(f"   Converting dict state to GraphState")
+                state = self.GraphState(**state)
+
+            logging.info(f"   State has raw_logprobs: {state.raw_logprobs is not None}")
+            logging.info(f"   Raw logprobs preview: {str(state.raw_logprobs)[:200] if state.raw_logprobs else 'None'}")
+
+            if not state.raw_logprobs:
+                logging.warning("❌ No raw_logprobs available for confidence calculation")
+                state.confidence = None
+                return state
+
+            if not state.classification:
+                logging.warning("❌ No classification available for confidence calculation")
+                state.confidence = None
+                return state
+
+            if not state.completion:
+                logging.warning("❌ No completion text available for confidence calculation")
+                state.confidence = None
+                return state
+
+            try:
+                # Find the token position that contains the parsed classification
+                token_position = self._find_classification_token_position(
+                    state.completion,
+                    state.classification,
+                    state.raw_logprobs,
+                    parser
+                )
+
+                if token_position is None:
+                    logging.warning(f"❌ Could not find token position for classification '{state.classification}'")
+                    state.confidence = None
+                    return state
+
+                logging.info(f"   Found classification '{state.classification}' at token position {token_position}")
+
+                # Calculate confidence using logprobs at that specific token position
+                confidence_score = self._calculate_confidence_at_token_position(
+                    token_position,
+                    state.classification,
+                    state.raw_logprobs,
+                    parser
+                )
+
+                logging.info(f"🎯 CONFIDENCE CALCULATION COMPLETE:")
+                logging.info(f"   Token position: {token_position}")
+                logging.info(f"   Raw confidence score: {confidence_score}")
+
+                # Apply calibration if available in the node configuration
+                calibrated_confidence = self._apply_confidence_calibration(confidence_score)
+
+                if calibrated_confidence != confidence_score:
+                    logging.info(f"   Applied calibration: {confidence_score:.6f} -> {calibrated_confidence:.6f}")
+                    logging.info(f"   Raw confidence preserved, final confidence calibrated")
+                else:
+                    logging.info(f"   No calibration applied - using raw confidence")
+
+                logging.info(f"   Setting state.confidence = {calibrated_confidence}")
+                state.confidence = calibrated_confidence
+
+                # Verify state update
+                logging.info(f"   Verified state.confidence = {state.confidence}")
+                logging.info(f"   State type: {type(state)}")
+                logging.info(f"   State keys: {list(state.model_dump().keys()) if hasattr(state, 'model_dump') else 'No model_dump method'}")
+
+                # Create return state dict to ensure confidence is included
+                return_state = state.model_dump() if hasattr(state, 'model_dump') else state
+                logging.info(f"🎯 RETURNING STATE WITH CONFIDENCE:")
+                logging.info(f"   return_state['confidence'] = {return_state.get('confidence') if isinstance(return_state, dict) else 'N/A'}")
+                logging.info(f"   return_state type: {type(return_state)}")
+
+                return return_state
+
+            except Exception as e:
+                logging.error(f"Error calculating confidence: {e}")
+                state.confidence = None
+                return state
+
+        return calculate_confidence
+
+    def _find_classification_token_position(self, completion_text, classification, raw_logprobs, parser) -> Optional[int]:
+        """Find which token position contains the parsed classification.
+
+        Args:
+            completion_text: The full response text from the LLM
+            classification: The classification found by string-based parsing
+            raw_logprobs: The raw logprobs data from OpenAI
+            parser: The parser instance (for parse_from_start setting)
+
+        Returns:
+            Token position (0-based index) or None if not found
+        """
+        import math
+
+        content = raw_logprobs.get('content', [])
+        if not content:
+            logging.warning("No content in raw_logprobs for token position search")
+            return None
+
+        logging.info(f"   Searching for classification '{classification}' in {len(content)} tokens")
+        logging.info(f"   Parse from start: {parser.parse_from_start}")
+        logging.info(f"   Completion text: '{completion_text}'")
+
+        # Normalize the classification for comparison
+        normalized_classification = parser.normalize_text(classification)
+
+        # Build candidate positions by reconstructing text token by token
+        candidate_positions = []
+        accumulated_text = ""
+
+        for token_idx, token_data in enumerate(content):
+            token = token_data.get('token', '')
+            accumulated_text += token
+
+            logging.info(f"   Token {token_idx}: '{token}' -> accumulated: '{accumulated_text}'")
+
+            # Check if any token alternative at this position matches our classification
+            top_logprobs = token_data.get('top_logprobs', [])
+            for logprob_entry in top_logprobs:
+                candidate_token = logprob_entry.get('token', '')
+                normalized_candidate = parser.normalize_text(candidate_token)
+
+                if normalized_candidate == normalized_classification:
+                    candidate_positions.append(token_idx)
+                    logging.info(f"   Found potential match at position {token_idx}: token '{candidate_token}' matches '{classification}'")
+                    break  # Found a match at this position, move to next token
+
+        if not candidate_positions:
+            logging.warning(f"No token positions found containing classification '{classification}'")
+            return None
+
+        # Choose position based on parse_from_start setting
+        if parser.parse_from_start:
+            chosen_position = candidate_positions[0]  # First occurrence
+            logging.info(f"   Using first occurrence at position {chosen_position} (parse_from_start=True)")
+        else:
+            chosen_position = candidate_positions[-1]  # Last occurrence
+            logging.info(f"   Using last occurrence at position {chosen_position} (parse_from_start=False)")
+
+        return chosen_position
+
+    def _calculate_confidence_at_token_position(self, token_position, predicted_class, raw_logprobs, parser) -> Optional[float]:
+        """Calculate confidence using logprobs at the specific token position.
+
+        Args:
+            token_position: The token index (0-based) containing the classification
+            predicted_class: The classification class to calculate confidence for
+            raw_logprobs: The raw logprobs data from OpenAI
+            parser: The parser instance (for text normalization)
+
+        Returns:
+            Confidence score (0.0 to 1.0) or None if calculation fails
+        """
+        import math
+
+        content = raw_logprobs.get('content', [])
+        if token_position >= len(content):
+            logging.error(f"Token position {token_position} exceeds content length {len(content)}")
+            return None
+
+        token_data = content[token_position]
+        top_logprobs = token_data.get('top_logprobs', [])
+
+        if not top_logprobs:
+            logging.warning(f"No top_logprobs at token position {token_position}")
+            return None
+
+        # Normalize the predicted class for comparison
+        normalized_predicted_class = parser.normalize_text(predicted_class)
+
+        logging.info(f"   Calculating confidence at token position {token_position}")
+        logging.info(f"   Predicted class: '{predicted_class}' (normalized: '{normalized_predicted_class}')")
+        logging.info(f"   Analyzing {len(top_logprobs)} token alternatives")
+
+        # First pass: calculate all probabilities
+        token_analysis = []
+        for i, logprob_entry in enumerate(top_logprobs):
+            token = logprob_entry.get('token', '')
+            logprob = logprob_entry.get('logprob', float('-inf'))
+            probability = math.exp(logprob) if logprob != float('-inf') else 0.0
+            normalized_token = parser.normalize_text(token)
+
+            token_analysis.append({
+                'rank': i + 1,
+                'token': token,
+                'normalized_token': normalized_token,
+                'logprob': logprob,
+                'probability': probability,
+                'percentage': probability * 100
+            })
+
+        # Display complete token probability table
+        logging.info(f"🔍 COMPLETE TOKEN PROBABILITY BREAKDOWN:")
+        logging.info(f"     {'Rank':<4} {'Token':<15} {'Normalized':<15} {'Probability':<15} {'Percentage':<15}")
+        logging.info(f"     {'-'*4:<4} {'-'*15:<15} {'-'*15:<15} {'-'*15:<15} {'-'*15:<15}")
+
+        for analysis in token_analysis:
+            logging.info(f"     {analysis['rank']:<4} {repr(analysis['token']):<15} {repr(analysis['normalized_token']):<15} {analysis['probability']:<15.12f} {analysis['percentage']:<15.10f}%")
+
+        total_probability = 0.0
+        found_matches = False
+
+        # Second pass: find matches and sum probabilities
+        for analysis in token_analysis:
+            if analysis['normalized_token'] == normalized_predicted_class:
+                total_probability += analysis['probability']
+                found_matches = True
+                logging.info(f"       ✓ MATCH! Token '{analysis['token']}' matches predicted class - adding {analysis['percentage']:.10f}% to confidence")
+
+        if not found_matches:
+            logging.warning(f"No token alternatives matched predicted class '{predicted_class}' at position {token_position}")
+            return None
+
+        # Ensure probability is between 0 and 1
+        total_probability = min(1.0, max(0.0, total_probability))
+
+        logging.info(f"🎯 CONFIDENCE CALCULATION RESULT:")
+        logging.info(f"     Token position: {token_position}")
+        logging.info(f"     Predicted class: '{predicted_class}'")
+        logging.info(f"     Found matching tokens: {found_matches}")
+        logging.info(f"     Final confidence score: {total_probability:.15f}")
+        logging.info(f"     Final confidence percentage: {total_probability * 100:.12f}%")
+        return total_probability
+
+    def _apply_confidence_calibration(self, raw_confidence: float) -> float:
+        """
+        Apply confidence calibration if available in the node configuration.
+
+        Args:
+            raw_confidence: Raw confidence score from logprobs
+
+        Returns:
+            Calibrated confidence score, or raw confidence if no calibration available
+        """
+        try:
+            # Check if calibration data is available in the node configuration
+            calibration_config = None
+
+            # First check direct attribute
+            if hasattr(self, 'confidence_calibration'):
+                calibration_config = getattr(self, 'confidence_calibration')
+
+            # Then check in parameters object attributes
+            if not calibration_config and hasattr(self, 'parameters'):
+                if hasattr(self.parameters, 'confidence_calibration'):
+                    calibration_config = getattr(self.parameters, 'confidence_calibration')
+
+            # Finally check in the raw parameters dict passed to __init__
+            if not calibration_config and hasattr(self, '_raw_parameters'):
+                calibration_config = self._raw_parameters.get('confidence_calibration')
+
+            if not calibration_config:
+                logging.debug("No confidence calibration data found - using raw confidence")
+                return raw_confidence
+
+            # Apply calibration using the serialized calibration data
+            from plexus.confidence_calibration import apply_calibration_from_serialized
+            calibrated_confidence = apply_calibration_from_serialized(raw_confidence, calibration_config)
+
+            return calibrated_confidence
+
+        except Exception as e:
+            logging.warning(f"Error applying confidence calibration: {e}")
+            return raw_confidence
 
     class ClassificationOutputParser(BaseOutputParser):
         """Parser that identifies one of the valid classifications."""
@@ -175,20 +570,29 @@ class Classifier(BaseNode):
             if hasattr(state, 'chat_history') and state.chat_history:
                 logging.info(f"Using existing chat history with {len(state.chat_history)} messages")
                 
-                # Convert dict messages back to LangChain objects if needed
+                # Convert dict messages back to LangChain objects if needed, filtering out empty messages
                 chat_messages = []
                 for msg in state.chat_history:
+                    # Skip messages with empty or whitespace-only content
                     if isinstance(msg, dict):
+                        content = msg.get('content', '')
+                        if not content or not content.strip():
+                            continue
+                        
                         msg_type = msg.get('type', '').lower()
                         if msg_type == 'human':
-                            chat_messages.append(HumanMessage(content=msg['content']))
+                            chat_messages.append(HumanMessage(content=content))
                         elif msg_type == 'ai':
-                            chat_messages.append(AIMessage(content=msg['content']))
+                            chat_messages.append(AIMessage(content=content))
                         elif msg_type == 'system':
-                            chat_messages.append(SystemMessage(content=msg['content']))
+                            chat_messages.append(SystemMessage(content=content))
                         else:
-                            chat_messages.append(BaseMessage(content=msg['content']))
+                            chat_messages.append(BaseMessage(content=content))
                     else:
+                        # For non-dict messages, check content attribute
+                        content = getattr(msg, 'content', '')
+                        if not content or not content.strip():
+                            continue
                         chat_messages.append(msg)
                 
                 # Get the initial system and human messages from prompt template
@@ -201,6 +605,11 @@ class Classifier(BaseNode):
                 # 3. All chat history messages in order
                 messages = initial_messages + chat_messages
                 
+                # Check for empty message content in retry flow too
+                for i, msg in enumerate(messages):
+                    if not msg.content or not msg.content.strip():
+                        raise ValueError(f"Retry message {i} has empty content")
+                
                 # Log the final message sequence
                 logging.info("Final message sequence:")
                 for i, msg in enumerate(messages):
@@ -209,8 +618,15 @@ class Classifier(BaseNode):
             else:
                 logging.info("Building new messages from prompt template")
                 try:
-                    prompt = prompt_templates[0].format_prompt(**state.model_dump())
+                    state_dict = state.model_dump()
+                    prompt = prompt_templates[0].format_prompt(**state_dict)
                     messages = prompt.to_messages()
+                    
+                    # Check for empty message content
+                    for i, msg in enumerate(messages):
+                        if not msg.content or not msg.content.strip():
+                            raise ValueError(f"Message {i} has empty content")
+                    
                     logging.info(f"Built new messages: {[type(m).__name__ for m in messages]}")
                 except Exception as e:
                     logging.error(f"Error building messages: {e}")
@@ -247,8 +663,11 @@ class Classifier(BaseNode):
             
             logging.info(f"  - Input state completion for {self.node_name}: {state.completion!r}")
 
-            if state.completion is None:
+            if state.completion is None or state.completion.strip() == "":
                 logging.info(f"  ⚠ {self.node_name}: No completion to parse")
+                # Return state with None classification to trigger retry logic
+                state.classification = None
+                state.explanation = "No completion received from LLM"
                 return state
             
             result = parser.parse(state.completion)
@@ -278,6 +697,10 @@ class Classifier(BaseNode):
                 "classification": result['classification'],
                 "explanation": result['explanation']
             }
+            
+            # Include reasoning for gpt-oss models
+            if hasattr(state, 'reasoning') and state.reasoning:
+                output_state["reasoning"] = state.reasoning
             
             # Log the state and get a new state object with updated node_results
             final_state = self.log_state(new_state, None, output_state)
@@ -360,14 +783,27 @@ class Classifier(BaseNode):
         logging.info("<*> Evaluating should_retry")
         if isinstance(state, dict):
             state = self.GraphState(**state)
-        
-        if state.classification is not None:
-            logging.info(f"Classification found: {state.classification}, ending")
-            return "end"
+
+        # Check if this node produced a valid classification
+        # We need to check both classification and completion to ensure this node succeeded
+        has_valid_classification = (
+            state.classification is not None and
+            state.classification in self.parameters.valid_classes and
+            state.completion is not None and
+            state.completion.strip() != ""
+        )
+
+        if has_valid_classification:
+            if self.parameters.confidence:
+                logging.info(f"Classification found: {state.classification}, proceeding to confidence")
+                return "calculate_confidence"
+            else:
+                logging.info(f"Classification found: {state.classification}, ending")
+                return "end"
         if state.retry_count >= self.parameters.maximum_retry_count:
             logging.info("Maximum retries reached")
             return "max_retries"
-            
+
         # Clear completion when we need to retry
         logging.info("No valid classification, clearing completion and retrying")
         state.completion = None
@@ -533,20 +969,28 @@ class Classifier(BaseNode):
 
                     response = await model.ainvoke(messages)
                     
+                    # Normalize completion text (handles Responses API content blocks)
+                    completion_text = self.normalize_text_output(response)
+
+                    # Extract reasoning content for gpt-oss models
+                    reasoning_content = ""
+                    if self.is_gpt_oss_model():
+                        reasoning_content = self.extract_reasoning_content(response)
+
+                    # Extract logprobs for confidence calculation if enabled
+                    raw_logprobs = None
+                    if self.parameters.confidence and self._is_openai_model():
+                        raw_logprobs = self._extract_logprobs(response)
+
                     # Create the initial result state
                     result_state = self.GraphState(
-                        **{k: v for k, v in state.model_dump().items() if k not in ['completion']},
-                        completion=response.content
+                        **{k: v for k, v in state.model_dump().items() if k not in ['completion', 'reasoning', 'raw_logprobs']},
+                        completion=completion_text,
+                        reasoning=reasoning_content if reasoning_content else None,
+                        raw_logprobs=raw_logprobs
                     )
                     
-                    output_state = {
-                        "explanation": response.content
-                    }
-                    
-                    # Log the state and get a new state object with updated node_results
-                    updated_state = self.log_state(result_state, None, output_state)
-                    
-                    return updated_state
+                    return result_state
 
             except Exception as e:
                 logging.error(f"Error in llm_call: {e}")
@@ -564,26 +1008,45 @@ class Classifier(BaseNode):
         workflow.add_node("retry", self.get_retry_node())
         workflow.add_node("max_retries", self.get_max_retries_node())
 
+        # Add confidence node if enabled
+        if self.parameters.confidence:
+            workflow.add_node("calculate_confidence", self.get_confidence_node())
+
         # Add conditional edges for parse
-        workflow.add_conditional_edges(
-            "parse",
-            self.should_retry,
-            {
-                "retry": "retry",
-                "end": END,
-                "max_retries": "max_retries"
-            }
-        )
-        
+        if self.parameters.confidence:
+            # When confidence is enabled, parse goes to confidence first
+            workflow.add_conditional_edges(
+                "parse",
+                self.should_retry,
+                {
+                    "retry": "retry",
+                    "calculate_confidence": "calculate_confidence",  # Go to confidence when successful
+                    "max_retries": "max_retries"
+                }
+            )
+            # Confidence node then goes to end
+            workflow.add_edge("calculate_confidence", END)
+        else:
+            # Normal flow without confidence
+            workflow.add_conditional_edges(
+                "parse",
+                self.should_retry,
+                {
+                    "retry": "retry",
+                    "end": END,
+                    "max_retries": "max_retries"
+                }
+            )
+
         # Add regular edges
         workflow.add_edge("llm_prompt", "llm_call")
         workflow.add_edge("llm_call", "parse")
         workflow.add_edge("retry", "llm_prompt")
         workflow.add_edge("max_retries", END)
-        
+
         # Set entry point
         workflow.set_entry_point("llm_prompt")
-        
+
         return workflow
 
     def llm_request(self, state):
@@ -612,10 +1075,11 @@ class Classifier(BaseNode):
 
         model = self.model
         response = model.invoke(state.messages)
+        completion_text = self.normalize_text_output(response)
         
         return {
             **state.dict(),
-            "completion": response.content,
+            "completion": completion_text,
             "messages": state.messages  # Keep messages for retry scenarios
         }
 

@@ -295,6 +295,7 @@ def test_create_dataset_rows_structure():
             'IDs',
             'metadata',
             'text',
+            'call_date',
             'Test Score',
             'Test Score comment',
             'Test Score edit comment'
@@ -305,16 +306,16 @@ def test_create_dataset_rows_structure():
 
 def test_create_dataset_rows_with_data():
     """Test that _create_dataset_rows creates correct data with actual feedback items."""
-    
+
     # Mock the network calls to avoid actual API requests
     with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
          patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
-        
+
         # Mock client and account resolution
         mock_client = Mock()
         mock_create_client.return_value = mock_client
         mock_resolve_account.return_value = 'test-account-id'
-        
+
         params = {
             'scorecard': 'test_scorecard',
             'score': 'test_score',
@@ -322,7 +323,7 @@ def test_create_dataset_rows_with_data():
             'limit': 100
         }
         feedback_items = FeedbackItems(**params)
-        
+
         # Create mock feedback item
         mock_item = Mock()
         mock_item.id = 'item-123'
@@ -332,11 +333,12 @@ def test_create_dataset_rows_with_data():
         mock_item.updatedAt = '2024-01-01T00:00:00Z'
         mock_item.metadata = None
         mock_item.identifiers = None
-        
+
         mock_feedback_item = Mock()
         mock_feedback_item.id = 'feedback-789'
         mock_feedback_item.itemId = 'item-123'
         mock_feedback_item.item = mock_item
+        mock_feedback_item.initialAnswerValue = 'No'
         mock_feedback_item.finalAnswerValue = 'Yes'
         mock_feedback_item.editCommentValue = 'This is an edit comment'
         mock_feedback_item.initialCommentValue = 'Initial comment'
@@ -363,6 +365,7 @@ def test_create_dataset_rows_with_data():
             'IDs',
             'metadata', 
             'text',
+            'call_date',
             'Test Score',
             'Test Score comment',
             'Test Score edit comment'
@@ -422,6 +425,7 @@ def test_create_dataset_rows_comment_logic():
         mock_feedback_item1.id = 'feedback-1'
         mock_feedback_item1.itemId = 'item-1'
         mock_feedback_item1.item = mock_item1
+        mock_feedback_item1.initialAnswerValue = 'Yes'
         mock_feedback_item1.finalAnswerValue = 'Yes'
         mock_feedback_item1.editCommentValue = 'agree'
         mock_feedback_item1.initialCommentValue = 'Original explanation'
@@ -451,6 +455,7 @@ def test_create_dataset_rows_comment_logic():
         mock_feedback_item2.id = 'feedback-2'
         mock_feedback_item2.itemId = 'item-2'
         mock_feedback_item2.item = mock_item2
+        mock_feedback_item2.initialAnswerValue = 'Yes'
         mock_feedback_item2.finalAnswerValue = 'No'
         mock_feedback_item2.editCommentValue = 'Actually this should be No'
         mock_feedback_item2.initialCommentValue = 'Original explanation'
@@ -499,6 +504,7 @@ def test_create_dataset_rows_handles_missing_edit_comment():
         mock_feedback_item.id = 'feedback-123'
         mock_feedback_item.itemId = 'item-123'
         mock_feedback_item.item = mock_item
+        mock_feedback_item.initialAnswerValue = 'No'
         mock_feedback_item.finalAnswerValue = 'Yes'
         mock_feedback_item.editCommentValue = None  # No edit comment
         mock_feedback_item.initialCommentValue = 'Initial comment'
@@ -514,3 +520,223 @@ def test_create_dataset_rows_handles_missing_edit_comment():
         assert row['Test Score edit comment'] == ''
         # Should fall back to final comment when no edit comment
         assert row['Test Score comment'] == 'Final comment'
+
+
+def test_column_mappings_parameter():
+    """Test the column_mappings parameter validation and usage."""
+    
+    # Mock the network calls to avoid actual API requests
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+        
+        # Mock client and account resolution
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_resolve_account.return_value = 'test-account-id'
+        
+        # Test valid column mappings
+        valid_params = {
+            'scorecard': 'test_scorecard',
+            'score': 'test_score',
+            'days': 14,
+            'column_mappings': {
+                'Original Score': 'New Score Name',
+                'Another Score': 'Another New Name'
+            }
+        }
+        feedback_items = FeedbackItems(**valid_params)
+        assert feedback_items is not None
+        assert feedback_items.parameters.column_mappings == {
+            'Original Score': 'New Score Name',
+            'Another Score': 'Another New Name'
+        }
+        
+        # Test None column mappings (should be allowed)
+        params_none_mappings = {
+            'scorecard': 'test_scorecard',
+            'score': 'test_score',
+            'days': 14,
+            'column_mappings': None
+        }
+        feedback_items_none = FeedbackItems(**params_none_mappings)
+        assert feedback_items_none is not None
+        assert feedback_items_none.parameters.column_mappings is None
+        
+        # Test empty column mappings (should be allowed)
+        params_empty_mappings = {
+            'scorecard': 'test_scorecard',
+            'score': 'test_score',
+            'days': 14,
+            'column_mappings': {}
+        }
+        feedback_items_empty = FeedbackItems(**params_empty_mappings)
+        assert feedback_items_empty is not None
+        assert feedback_items_empty.parameters.column_mappings == {}
+
+
+def test_column_mappings_applied_to_dataset():
+    """Test that column mappings are correctly applied when creating dataset rows."""
+    
+    # Mock the network calls to avoid actual API requests
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+        
+        # Mock client and account resolution
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_resolve_account.return_value = 'test-account-id'
+        
+        # Test with column mapping
+        params_with_mapping = {
+            'scorecard': 'test_scorecard',
+            'score': 'test_score',
+            'days': 14,
+            'column_mappings': {
+                'Original Score': 'Mapped Score Name'
+            }
+        }
+        feedback_items = FeedbackItems(**params_with_mapping)
+        
+        # Create mock feedback item
+        mock_item = Mock()
+        mock_item.id = 'item-123'
+        mock_item.text = 'This is a test transcript'
+        mock_item.externalId = 'ext-456'
+        mock_item.createdAt = '2024-01-01T00:00:00Z'
+        mock_item.updatedAt = '2024-01-01T00:00:00Z'
+        mock_item.metadata = None
+        mock_item.identifiers = None
+        
+        mock_feedback_item = Mock()
+        mock_feedback_item.id = 'feedback-789'
+        mock_feedback_item.itemId = 'item-123'
+        mock_feedback_item.item = mock_item
+        mock_feedback_item.initialAnswerValue = 'No'
+        mock_feedback_item.finalAnswerValue = 'Yes'
+        mock_feedback_item.editCommentValue = 'This is an edit comment'
+        mock_feedback_item.initialCommentValue = 'Initial comment'
+        mock_feedback_item.finalCommentValue = 'Final comment'
+        mock_feedback_item.scorecardId = 'scorecard-123'
+        mock_feedback_item.scoreId = 'score-456'
+        mock_feedback_item.accountId = 'account-789'
+        mock_feedback_item.createdAt = '2024-01-01T00:00:00Z'
+        mock_feedback_item.updatedAt = '2024-01-01T00:00:00Z'
+        mock_feedback_item.editedAt = '2024-01-01T01:00:00Z'
+        mock_feedback_item.editorName = 'Test Editor'
+        mock_feedback_item.isAgreement = False
+        mock_feedback_item.cacheKey = 'cache-key-123'
+
+        # Test mapping applied when score name matches
+        df_mapped = feedback_items._create_dataset_rows([mock_feedback_item], "Original Score")
+        
+        # Verify mapped column names are used
+        expected_columns_mapped = [
+            'content_id',
+            'feedback_item_id',
+            'IDs',
+            'metadata',
+            'text',
+            'call_date',
+            'Mapped Score Name',  # Should be mapped
+            'Mapped Score Name comment',  # Should be mapped
+            'Mapped Score Name edit comment'  # Should be mapped
+        ]
+        assert list(df_mapped.columns) == expected_columns_mapped
+        
+        # Verify data is still correct
+        row_mapped = df_mapped.iloc[0]
+        assert row_mapped['Mapped Score Name'] == 'Yes'
+        assert row_mapped['Mapped Score Name comment'] == 'This is an edit comment'
+        assert row_mapped['Mapped Score Name edit comment'] == 'This is an edit comment'
+        
+        # Test no mapping applied when score name doesn't match
+        df_unmapped = feedback_items._create_dataset_rows([mock_feedback_item], "Different Score")
+        
+        # Verify original column names are used when no mapping exists
+        expected_columns_unmapped = [
+            'content_id',
+            'feedback_item_id',
+            'IDs',
+            'metadata',
+            'text',
+            'call_date',
+            'Different Score',  # Should NOT be mapped
+            'Different Score comment',  # Should NOT be mapped
+            'Different Score edit comment'  # Should NOT be mapped
+        ]
+        assert list(df_unmapped.columns) == expected_columns_unmapped
+
+
+def test_column_mappings_with_empty_dataset():
+    """Test that column mappings work correctly with empty datasets."""
+    
+    # Mock the network calls to avoid actual API requests
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+        
+        # Mock client and account resolution
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_resolve_account.return_value = 'test-account-id'
+        
+        # Test with column mapping
+        params_with_mapping = {
+            'scorecard': 'test_scorecard',
+            'score': 'test_score',
+            'days': 14,
+            'column_mappings': {
+                'Test Score': 'Mapped Test Score'
+            }
+        }
+        feedback_items = FeedbackItems(**params_with_mapping)
+        
+        # Test with empty feedback items list
+        df_empty = feedback_items._create_dataset_rows([], "Test Score")
+        
+        # Verify mapped column names are used even with empty dataset
+        expected_columns = [
+            'content_id',
+            'feedback_item_id',
+            'IDs',
+            'metadata',
+            'text',
+            'call_date',
+            'Mapped Test Score',
+            'Mapped Test Score comment',
+            'Mapped Test Score edit comment'
+        ]
+        assert list(df_empty.columns) == expected_columns
+        assert len(df_empty) == 0
+
+
+def test_column_mappings_case_sensitivity():
+    """Test that column mappings are case-sensitive."""
+    
+    # Mock the network calls to avoid actual API requests
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+        
+        # Mock client and account resolution
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_resolve_account.return_value = 'test-account-id'
+        
+        # Test with case-sensitive mapping
+        params_with_mapping = {
+            'scorecard': 'test_scorecard',
+            'score': 'test_score',
+            'days': 14,
+            'column_mappings': {
+                'Test Score': 'Mapped Score'  # Exact case match
+            }
+        }
+        feedback_items = FeedbackItems(**params_with_mapping)
+        
+        # Test exact case match - should apply mapping
+        df_exact = feedback_items._create_dataset_rows([], "Test Score")
+        assert 'Mapped Score' in df_exact.columns
+        
+        # Test different case - should NOT apply mapping
+        df_different_case = feedback_items._create_dataset_rows([], "test score")
+        assert 'test score' in df_different_case.columns
+        assert 'Mapped Score' not in df_different_case.columns

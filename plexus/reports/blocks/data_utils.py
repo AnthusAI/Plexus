@@ -14,7 +14,7 @@ from botocore.exceptions import NoCredentialsError
 
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.data_source import DataSource
-from plexus.cli.identifier_resolution import resolve_data_source
+from plexus.cli.shared.identifier_resolution import resolve_data_source
 
 logger = logging.getLogger(__name__)
 

@@ -55,7 +55,7 @@ Error Handling:
 """
 
 import os
-from typing import Optional, Dict, Any, Tuple, TYPE_CHECKING
+from typing import Optional, Dict, Any, Tuple, List, TYPE_CHECKING
 from dataclasses import dataclass
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
@@ -66,27 +66,19 @@ import time
 from datetime import datetime, timezone
 import logging
 from plexus.utils import truncate_dict_strings_inner
-logging.basicConfig(level=logging.DEBUG)
-
-# Configure GQL loggers to show output
-gql_logger = logging.getLogger('gql')
-gql_logger.setLevel(logging.DEBUG)
-gql_logger.propagate = True
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-stream_handler.setFormatter(formatter)
-gql_logger.addHandler(stream_handler)
-
-# Disable noisy transport logging
+# Configure minimal logging for GraphQL operations
+# Only show warnings and errors from external libraries
 transport_logger = logging.getLogger('gql.transport')
 transport_logger.setLevel(logging.WARNING)
 transport_logger.propagate = False
 
-# Disable noisy requests logging
 requests_logger = logging.getLogger('urllib3')
 requests_logger.setLevel(logging.WARNING)
 requests_logger.propagate = False
+
+gql_logger = logging.getLogger('gql')
+gql_logger.setLevel(logging.WARNING)
+gql_logger.propagate = False
 
 if TYPE_CHECKING:
     from .models.scoring_job import ScoringJob
@@ -333,6 +325,35 @@ class _BaseAPIClient:
                 continue
             
         return None
+    
+    def load_score_configuration(self, scorecard_identifier: str, score_name: str, 
+                                use_cache: bool = False, yaml_only: bool = False):
+        """
+        Load a score configuration using the standardized Score.load() method.
+        
+        This provides a convenient way for dashboard clients to load score configurations
+        using the same DRY, tested logic used throughout the system.
+        
+        Args:
+            scorecard_identifier: Scorecard identifier (ID, key, name, etc.)
+            score_name: Name of the score to load
+            use_cache: Whether to use cached YAML files (default: False for fresh API data)
+            yaml_only: Whether to restrict to YAML-only loading (default: False)
+            
+        Returns:
+            Score instance with loaded configuration
+            
+        Raises:
+            ValueError: If the score cannot be loaded
+        """
+        from plexus.scores.Score import Score
+        
+        return Score.load(
+            scorecard_identifier=scorecard_identifier,
+            score_name=score_name,
+            use_cache=use_cache,
+            yaml_only=yaml_only
+        )
 
     def log_score(
         self, 
@@ -833,3 +854,211 @@ class PlexusDashboardClient(_BaseAPIClient):
             scorecard_key=scorecard_key,
             score_name=score_name
         ))
+    
+    # Chat-related methods for GraphQL chat system
+    async def create_chat_session(self, session_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new chat session."""
+        mutation = '''
+        mutation CreateChatSession($input: CreateChatSessionInput!) {
+            createChatSession(input: $input) {
+                id
+                accountId
+                scorecardId
+                scoreId
+                procedureId
+                name
+                category
+                status
+                metadata
+                createdAt
+                updatedAt
+            }
+        }
+        '''
+        
+        variables = {"input": session_data}
+        result = await self._execute_query(mutation, variables)
+        return result['createChatSession']
+    
+    async def create_chat_message(self, message_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new chat message."""
+        mutation = '''
+        mutation CreateChatMessage($input: CreateChatMessageInput!) {
+            createChatMessage(input: $input) {
+                id
+                sessionId
+                procedureId
+                role
+                content
+                metadata
+                createdAt
+            }
+        }
+        '''
+        
+        variables = {"input": message_data}
+        result = await self._execute_query(mutation, variables)
+        return result['createChatMessage']
+    
+    async def update_chat_session(self, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing chat session."""
+        mutation = '''
+        mutation UpdateChatSession($input: UpdateChatSessionInput!) {
+            updateChatSession(input: $input) {
+                id
+                accountId
+                scorecardId
+                scoreId
+                procedureId
+                status
+                metadata
+                createdAt
+                updatedAt
+            }
+        }
+        '''
+        
+        variables = {"input": update_data}
+        result = await self._execute_query(mutation, variables)
+        return result['updateChatSession']
+    
+    async def get_chat_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get a chat session by ID."""
+        query = '''
+        query GetChatSession($id: ID!) {
+            getChatSession(id: $id) {
+                id
+                accountId
+                scorecardId
+                scoreId
+                procedureId
+                status
+                metadata
+                createdAt
+                updatedAt
+            }
+        }
+        '''
+        
+        variables = {"id": session_id}
+        result = await self._execute_query(query, variables)
+        return result.get('getChatSession')
+    
+    async def list_chat_messages(
+        self, 
+        session_id: str = None, 
+        experiment_id: str = None, 
+        limit: int = 50,
+        sort_by: str = 'createdAt'
+    ) -> List[Dict[str, Any]]:
+        """List chat messages for a session or experiment."""
+        if experiment_id:
+            # Query by experiment GSI for chronological order
+            query = '''
+            query ListChatMessagesByExperiment($procedureId: String!, $limit: Int, $sortDirection: ModelSortDirection) {
+                listChatMessages(
+                    filter: { procedureId: { eq: $procedureId } }
+                    limit: $limit
+                    sortDirection: $sortDirection
+                ) {
+                    items {
+                        id
+                        sessionId
+                        procedureId
+                        role
+                        content
+                        metadata
+                        createdAt
+                    }
+                }
+            }
+            '''
+            variables = {
+                "procedureId": experiment_id,
+                "limit": limit,
+                "sortDirection": "ASC" if sort_by == 'createdAt' else "DESC"
+            }
+        else:
+            # Query by session
+            query = '''
+            query ListChatMessagesBySession($sessionId: String!, $limit: Int) {
+                listChatMessages(
+                    filter: { sessionId: { eq: $sessionId } }
+                    limit: $limit
+                    sortDirection: ASC
+                ) {
+                    items {
+                        id
+                        sessionId
+                        procedureId
+                        role
+                        content
+                        metadata
+                        createdAt
+                    }
+                }
+            }
+            '''
+            variables = {"sessionId": session_id, "limit": limit}
+        
+        result = await self._execute_query(query, variables)
+        return result['listChatMessages']['items']
+    
+    async def list_chat_sessions(
+        self, 
+        account_id: str = None, 
+        experiment_id: str = None, 
+        limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """List chat sessions for an account or experiment."""
+        if experiment_id:
+            # Query by experiment GSI
+            query = '''
+            query ListChatSessionsByExperiment($procedureId: String!, $limit: Int) {
+                listChatSessions(
+                    filter: { procedureId: { eq: $procedureId } }
+                    limit: $limit
+                    sortDirection: DESC
+                ) {
+                    items {
+                        id
+                        accountId
+                        scorecardId
+                        scoreId
+                        procedureId
+                        status
+                        metadata
+                        createdAt
+                        updatedAt
+                    }
+                }
+            }
+            '''
+            variables = {"procedureId": experiment_id, "limit": limit}
+        else:
+            # Query by account
+            query = '''
+            query ListChatSessionsByAccount($accountId: String!, $limit: Int) {
+                listChatSessions(
+                    filter: { accountId: { eq: $accountId } }
+                    limit: $limit
+                    sortDirection: DESC
+                ) {
+                    items {
+                        id
+                        accountId
+                        scorecardId
+                        scoreId
+                        procedureId
+                        status
+                        metadata
+                        createdAt
+                        updatedAt
+                    }
+                }
+            }
+            '''
+            variables = {"accountId": account_id, "limit": limit}
+        
+        result = await self._execute_query(query, variables)
+        return result['listChatSessions']['items']

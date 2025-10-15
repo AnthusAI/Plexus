@@ -48,6 +48,101 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
   // Use a meaningful name, ignoring generic block names
   const title = (props.name && !props.name.startsWith('block_')) ? props.name : 'Feedback Analysis';
 
+  // Check if this is "all scorecards" mode
+  if ((feedbackData as any).mode === 'all_scorecards') {
+    const allScorecardsData = feedbackData as any;
+    const scorecards = allScorecardsData.scorecards || [];
+
+    // State to track which scorecard is currently expanded
+    const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
+
+    return (
+      <div className="space-y-8">
+        {/* Summary header */}
+        <div className="p-4 bg-muted/30 rounded-lg">
+          <h3 className="text-lg font-semibold mb-2">{title}</h3>
+          {allScorecardsData.block_description && (
+            <p className="text-sm text-muted-foreground mb-2">{allScorecardsData.block_description}</p>
+          )}
+          <div className="text-sm space-y-1">
+            <p><strong>Total scorecards analyzed:</strong> {allScorecardsData.total_scorecards_analyzed || scorecards.length}</p>
+            {allScorecardsData.total_scorecards_filtered !== undefined && allScorecardsData.total_scorecards_filtered > 0 && (
+              <p><strong>Scorecards filtered (no data):</strong> {allScorecardsData.total_scorecards_filtered}</p>
+            )}
+            {allScorecardsData.date_range && (
+              <p><strong>Date range:</strong> {new Date(allScorecardsData.date_range.start).toLocaleDateString()} - {new Date(allScorecardsData.date_range.end).toLocaleDateString()}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Render each scorecard with collapsible details */}
+        {scorecards.length === 0 ? (
+          <p className="text-muted-foreground">No scorecards found.</p>
+        ) : (
+          <div className="space-y-2">
+            {scorecards.map((scorecardData: any, index: number) => {
+              const scorecardId = scorecardData.scorecard_id || index.toString();
+              const isExpanded = expandedScorecardId === scorecardId;
+
+              return (
+                <div key={scorecardId} className="border rounded-lg">
+                  {/* Collapsed summary view */}
+                  <button
+                    onClick={() => setExpandedScorecardId(isExpanded ? null : scorecardId)}
+                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/30 transition-colors text-left"
+                  >
+                    <div className="flex-1 flex items-center gap-4">
+                      <span className="text-sm text-muted-foreground font-mono">#{scorecardData.rank || index + 1}</span>
+                      <span className="font-semibold">{scorecardData.scorecard_name || scorecardData.scorecard_id}</span>
+                      <div className="flex gap-4 text-sm">
+                        <span className="text-muted-foreground">
+                          AC1: <span className="font-medium text-foreground">{scorecardData.overall_ac1?.toFixed(3) || 'N/A'}</span>
+                        </span>
+                        <span className="text-muted-foreground">
+                          Items: <span className="font-medium text-foreground">{scorecardData.total_items || 0}</span>
+                        </span>
+                        <span className="text-muted-foreground">
+                          Accuracy: <span className="font-medium text-foreground">{scorecardData.accuracy ? `${scorecardData.accuracy.toFixed(1)}%` : 'N/A'}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <svg
+                      className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Expanded detailed view - only rendered when expanded */}
+                  {isExpanded && (
+                    <div className="px-4 py-4 border-t">
+                      <FeedbackAnalysisDisplay
+                        data={scorecardData}
+                        showHeader={false}
+                        showDateRange={false}
+                        showPrecisionRecall={false}
+                        attachedFiles={props.attachedFiles}
+                        log={props.log}
+                        rawOutput={typeof props.output === 'string' ? props.output : undefined}
+                        id={`${props.id}-${index}`}
+                        position={props.position}
+                        config={props.config}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Single scorecard mode
   return (
     <FeedbackAnalysisDisplay
       data={feedbackData}

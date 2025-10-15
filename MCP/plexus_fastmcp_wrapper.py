@@ -24,13 +24,11 @@ class StderrArgumentParser(argparse.ArgumentParser):
         sys.exit(status)
 
 def parse_args():
-    """Parse command line arguments with support for --env-file."""
+    """Parse command line arguments."""
     parser = StderrArgumentParser(description="Plexus FastMCP Server Wrapper")
     parser.add_argument("--host", default="localhost", help="Host (passed to server)")
     parser.add_argument("--port", type=int, default=8000, help="Port (passed to server)")
     parser.add_argument("--transport", default="stdio", choices=["stdio", "sse"], help="Transport (passed to server)")
-    parser.add_argument("--env-dir", help="Directory containing the .env file (passed to server)")
-    parser.add_argument("--env-file", help="Direct path to the .env file to load")
     parser.add_argument("--target-cwd", help="Working directory for the server process")
     parser.add_argument("--python-path", help="Path to Python interpreter to use for running the server")
     return parser.parse_known_args()
@@ -72,33 +70,15 @@ def main():
         # Prepare arguments for the server process
         server_args = []
         
-        # Handle the --env-file argument (wrapper-specific)
-        env_file_path = None
-        if args.env_file:
-            env_file_path = os.path.abspath(args.env_file)
-            env_dir = os.path.dirname(env_file_path)
-            print(f"wrapper: Using specified .env file: {env_file_path}", file=sys.stderr)
-            # Convert --env-file to --env-dir for the server
-            server_args.extend(["--env-dir", env_dir])
-        elif not args.env_dir:
-            print("\n", file=sys.stderr)
-            print("===================== IMPORTANT =====================", file=sys.stderr)
-            print("No --env-file or --env-dir specified. API credentials may be missing.", file=sys.stderr)
-            print("If the server fails to find credentials, update your", file=sys.stderr)
-            print("Claude desktop config to include:", file=sys.stderr)
-            print('  "--env-file", "/path/to/your/.env"', file=sys.stderr)
-            print("=====================================================", file=sys.stderr)
-            print("\n", file=sys.stderr)
+        # Note: Plexus now uses config files and environment variables for credentials
         
-        # Pass through all known arguments except --env-file
+        # Pass through all known arguments
         if args.host:
             server_args.extend(["--host", args.host])
         if args.port:
             server_args.extend(["--port", str(args.port)])
         if args.transport:
             server_args.extend(["--transport", args.transport])
-        if args.env_dir:
-            server_args.extend(["--env-dir", args.env_dir])
         
         # Add any unknown arguments
         server_args.extend(unknown_args)
@@ -106,41 +86,18 @@ def main():
         # Set environment variables
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        env["MCP_STDIO_TRANSPORT"] = "1"  # Signal stdio transport to disable Rich
         
-        # Try to properly load environment variables from the specified .env file
-        if env_file_path:
-            if os.path.isfile(env_file_path):
-                try:
-                    print(f"wrapper: loading environment from {env_file_path}", file=sys.stderr)
-                    loaded_vars = []
-                    with open(env_file_path, 'r') as f:
-                        for line in f:
-                            line = line.strip()
-                            if line and not line.startswith('#'):
-                                try:
-                                    key, value = line.split('=', 1)
-                                    key = key.strip()
-                                    value = value.strip().strip("'").strip('"')
-                                    if key and value:
-                                        env[key] = value
-                                        loaded_vars.append(key)
-                                except ValueError:
-                                    # Skip malformed lines
-                                    pass
-                    print(f"wrapper: loaded {len(loaded_vars)} variables", file=sys.stderr)
-                    
-                    # Check for specific Plexus variables
-                    plexus_vars = ['PLEXUS_API_URL', 'PLEXUS_API_KEY']
-                    for var_name in plexus_vars:
-                        if var_name in env:
-                            print(f"wrapper: found {var_name} in environment", file=sys.stderr)
-                        else:
-                            print(f"wrapper: {var_name} NOT FOUND in environment", file=sys.stderr)
-                except Exception as e:
-                    print(f"wrapper WARNING: error loading .env file: {e}", file=sys.stderr)
-            else:
-                print(f"wrapper ERROR: Specified .env file not found: {env_file_path}", file=sys.stderr)
-                print("Please provide the correct path to your .env file using --env-file", file=sys.stderr)
+        # Disable Rich for stdio transport
+        env["RICH_NO_COLOR"] = "1"
+        env["RICH_CONSOLE_NO_COLOR"] = "1"
+        env["RICH_TRACEBACKS_NO_COLOR"] = "1"
+        env["RICH_FORCE_TERMINAL"] = "0"
+        env["RICH_DISABLE"] = "1"
+        env["TERM"] = "dumb"
+        
+        # Credentials are now handled by Plexus config files and environment variables
+        # No need for manual .env file loading in the wrapper
         
         # Check and log any accidental stdout output
         stdout_captured = temp_stdout.getvalue()

@@ -1,5 +1,5 @@
 import pytest
-from plexus.cli.TaskTargeting import TaskTargetPattern, TaskTargetMatcher
+from plexus.cli.shared.TaskTargeting import TaskTargetPattern, TaskTargetMatcher
 
 def test_task_target_pattern_validation():
     # Valid patterns

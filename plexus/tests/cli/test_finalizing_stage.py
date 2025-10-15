@@ -2,7 +2,7 @@ import time
 import logging
 import os
 import threading # Import the real threading module
-from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
+from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageConfig
 from unittest.mock import patch, MagicMock
 
 # Configure logging

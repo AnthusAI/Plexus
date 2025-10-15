@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 // Import the setup file for its side effects
 import "@/components/blocks/registrySetup";
-import { motion, AnimatePresence } from "framer-motion" 
+import { motion, AnimatePresence } from "framer-motion"
 import type { Schema } from "@/amplify/data/resource"
 import { Button } from "@/components/ui/button"
+import { FilterInput } from "@/components/FilterInput"
 import { X, MoreHorizontal, Trash2, Share, Pencil, Settings } from "lucide-react"
 import {
   DropdownMenu,
@@ -556,6 +557,7 @@ export default function ReportsDashboard({
   const [subscriptions, setSubscriptions] = useState<{ unsubscribe: () => void }[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const [reportsFilter, setReportsFilter] = useState('');
   
   // Ref map to track report elements for scroll-to-view functionality
   const reportRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -1309,28 +1311,30 @@ export default function ReportsDashboard({
     <div className="@container flex flex-col h-full p-3 overflow-hidden">
       {/* Fixed header */}
       <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
-        <div className="@[600px]:flex-grow w-full">
-          <div className="flex flex-col gap-2">
-            <ReportConfigurationSelector
-              selectedReportConfiguration={selectedReportConfiguration}
-              setSelectedReportConfiguration={setSelectedReportConfiguration}
-            />
-            {error && <p className="text-xs text-destructive">{error}</p>}
-          </div>
+        <div className="flex gap-2 items-center flex-wrap">
+          <ReportConfigurationSelector
+            selectedReportConfiguration={selectedReportConfiguration}
+            setSelectedReportConfiguration={setSelectedReportConfiguration}
+          />
+          <FilterInput
+            placeholder="Filter..."
+            onFilterChange={setReportsFilter}
+          />
         </div>
-        
+
         {/* Buttons on top right */}
         <div className="flex-shrink-0 flex gap-2">
-          <Button 
+          <Button
             onClick={() => router.push('/lab/reports/edit')}
             variant="ghost"
-            className="bg-card hover:bg-accent text-muted-foreground"
+            className="bg-card hover:bg-accent text-muted-foreground whitespace-nowrap"
           >
             <Pencil className="mr-2 h-4 w-4"/> Edit Configurations
           </Button>
           <RunReportButton />
         </div>
       </div>
+      {error && <p className="text-xs text-destructive pb-2">{error}</p>}
 
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Content area - uses the same base structure */}
@@ -1378,7 +1382,11 @@ export default function ReportsDashboard({
                       }}
                     >
                       <AnimatePresence mode="popLayout">
-                        {reports.map((report) => {
+                        {reports
+                          .filter(report =>
+                            !reportsFilter || (report.name && report.name.toLowerCase().includes(reportsFilter.toLowerCase()))
+                          )
+                          .map((report) => {
                           const clickHandler = getReportClickHandler(report.id);
                           
                           // Safely extract stages (reuse the same approach as above)

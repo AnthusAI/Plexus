@@ -33,7 +33,7 @@ export function LabelBadgeComparison({
       >
         {predictedLabel}
       </Badge>
-      {!isCorrect && (
+      {!isCorrect && predictedLabel !== actualLabel && (
         <>
           <ArrowRight className="h-5 w-5 text-muted-foreground" />
           <Badge

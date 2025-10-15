@@ -221,7 +221,17 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           throw new Error('No sections found in scorecard')
         }
         
-        const defaultSection = sections[0]
+        // Check if a specific section was requested via URL parameter
+        const urlParams = new URLSearchParams(window.location.search)
+        const requestedSectionId = urlParams.get('sectionId')
+        
+        let defaultSection = sections[0]
+        if (requestedSectionId) {
+          const foundSection = sections.find(s => s.id === requestedSectionId)
+          if (foundSection) {
+            defaultSection = foundSection
+          }
+        }
         setSection(defaultSection)
         
         const scores = await listScores(defaultSection.id)

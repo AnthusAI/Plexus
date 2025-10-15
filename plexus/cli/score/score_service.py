@@ -34,7 +34,7 @@ class ScoreService:
     def _create_client(self):
         """Create a PlexusDashboardClient instance."""
         try:
-            from plexus.cli.client_utils import create_client as create_dashboard_client
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
             return create_dashboard_client()
         except ImportError as e:
             logger.error(f"Failed to import Plexus client modules: {e}")
@@ -75,7 +75,7 @@ class ScoreService:
             Scorecard ID string or None if not found
         """
         try:
-            from plexus.cli.identifier_resolution import resolve_scorecard_identifier
+            from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
             return resolve_scorecard_identifier(self.client, identifier)
         except ImportError as e:
             logger.error(f"Failed to import scorecard resolution functions: {e}")
