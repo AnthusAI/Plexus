@@ -20,6 +20,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "pytest-watch==4.2.0",
     "pytest-asyncio==0.23.5",
+    "python-statemachine>=2.5.0",
     "pandas==2.1.4",
     "openai>=1.35.10",
     "tenacity==8.2.3",
@@ -46,12 +47,13 @@ dependencies = [
     "imblearn==0.0",
     "shap==0.45.1",
     "contractions==0.1.73",
-    "langchain>=0.2.11",
-    "langchain-core>=0.2.38",
-    "langchain-community>=0.2.6",
-    "langgraph==0.2.60",
-    "langchain-aws>=0.1.9",
+    "langchain>=0.3.25",
+    "langchain-core>=0.3.70",
+    "langchain-community>=0.3.24",
+    "langgraph==0.6.7",
+    "langchain-aws>=0.2.23",
     "langchain-openai>=0.1.14",
+    "langchain-ollama>=0.3.6",
     "langchain-google-vertexai>=1.0.6",
     "langchain-anthropic>=0.3.10",
     "langgraph-checkpoint-postgres==2.0.9",
@@ -76,7 +78,7 @@ dependencies = [
 ]
 
 [project.scripts]
-plexus = "plexus.cli.CommandLineInterface:main"
+plexus = "plexus.cli.shared.CommandLineInterface:main"
 plexus-dashboard = "plexus.dashboard.cli:cli"
 
 [tool.setuptools]

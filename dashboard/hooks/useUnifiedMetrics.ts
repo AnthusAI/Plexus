@@ -424,7 +424,6 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
 
     // Set up new 30-second refresh timer
     const refreshTimer = setInterval(() => {
-      console.log('🔄 useUnifiedMetrics: Auto-refresh triggered', { configKey })
       fetchMetricsInBackground()
     }, 30000) // 30 seconds
 
@@ -639,12 +638,6 @@ export function useEvaluationTaskMetrics(): UseUnifiedMetricsResult {
       items: {
         type: 'tasks' as const,
         taskType: 'evaluation', // Filter for evaluation-related tasks
-        accountId: '', // Will be filled by the hook
-      },
-      // For score results, we track score results with evaluation type
-      scoreResults: {
-        type: 'scoreResults' as const,
-        scoreResultType: 'evaluation',
         accountId: '', // Will be filled by the hook
       }
     },

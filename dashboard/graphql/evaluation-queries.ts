@@ -75,6 +75,19 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
           trace
           itemId
           createdAt
+          item {
+            id
+            externalId
+            identifiers
+            itemIdentifiers {
+              items {
+                name
+                value
+                url
+                position
+              }
+            }
+          }
         }
         nextToken
       }

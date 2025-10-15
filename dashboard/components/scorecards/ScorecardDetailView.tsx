@@ -22,6 +22,7 @@ export interface ScorecardDetailData {
           name: string
           key: string
           description: string
+          guidelines?: string
           order: number
           type: string
           configuration: any

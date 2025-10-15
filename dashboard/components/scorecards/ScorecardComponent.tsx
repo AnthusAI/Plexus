@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube, MessageCircleMore } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube, MessageCircleMore, Coins, Expand } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -26,16 +26,25 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useAccount } from '@/app/contexts/AccountContext'
 import { TestItemDialog } from './test-item-dialog'
+import Editor from "@monaco-editor/react"
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from "@/lib/monaco-theme"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
+import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
+import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 
 export interface ScorecardData {
   id: string
   name: string
   key: string
   description: string
+  guidelines?: string
   type: string
   order: number
   externalId?: string
   scoreCount?: number
+  isCountLoading?: boolean
   icon?: React.ReactNode
   examples?: string[]
   sections?: {
@@ -49,6 +58,7 @@ export interface ScorecardData {
           name: string
           key: string
           description: string
+          guidelines?: string
           order: number
           type: string
         }>
@@ -62,6 +72,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onEdit?: () => void
   onViewData?: () => void
   onFeedbackAnalysis?: () => void
+  onCostAnalysis?: () => void
   isSelected?: boolean
   onClick?: () => void
   isFullWidth?: boolean
@@ -76,6 +87,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
   onTaskCreated?: (task: any) => void
+  onCreateScore?: (sectionId: string) => void
 }
 
 const GridContent = React.memo(({ 
@@ -85,8 +97,22 @@ const GridContent = React.memo(({
   score: ScorecardData
   isSelected?: boolean
 }) => {
-  const scoreCount = score.scoreCount || 0
-  const scoreText = scoreCount === 1 ? 'Score' : 'Scores'
+  const scoreCount = score.scoreCount
+  const isCountLoading = score.isCountLoading || false
+  const hasLoadedCount = scoreCount !== undefined
+
+  // Determine display text and styling
+  let displayText: string
+  let textColor: string
+
+  if (!hasLoadedCount) {
+    displayText = "- Scores"
+    textColor = "text-muted-foreground" // Dim when unknown
+  } else {
+    const scoreText = scoreCount === 1 ? 'Score' : 'Scores'
+    displayText = `${scoreCount} ${scoreText}`
+    textColor = "text-foreground" // Normal foreground when loaded
+  }
 
   return (
     <div className="flex justify-between items-start w-full">
@@ -96,7 +122,9 @@ const GridContent = React.memo(({
           <IdCard className="h-3 w-3" />
           <span>{score.externalId || '-'}</span>
         </div>
-        <div className="text-sm text-muted-foreground">{scoreCount} {scoreText}</div>
+        <div className={`text-sm ${textColor}`}>
+          <span>{displayText}</span>
+        </div>
       </div>
       <div className="flex flex-col items-center gap-1">
         <div className="text-muted-foreground">
@@ -115,6 +143,7 @@ interface DetailContentProps {
   onClose?: () => void
   onViewData?: () => void
   onFeedbackAnalysis?: () => void
+  onCostAnalysis?: () => void
   onEdit?: () => void
   onEditChange?: (changes: Partial<ScorecardData>) => void
   onAddSection?: () => void
@@ -130,6 +159,16 @@ interface DetailContentProps {
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
   onTaskCreated?: (task: any) => void
+  onCreateScore?: (sectionId: string) => void
+  onOpenGuidelinesEditor?: () => void
+  onStartInlineEdit?: () => void
+  isGuidelinesEditing?: boolean
+  guidelinesEditValue?: string
+  hasGuidelinesChanges?: boolean
+  isSavingGuidelines?: boolean
+  onGuidelinesChange?: (value: string) => void
+  onSaveGuidelines?: () => void
+  onCancelGuidelinesEdit?: () => void
 }
 
 export const DetailContent = React.memo(function DetailContent({
@@ -139,6 +178,7 @@ export const DetailContent = React.memo(function DetailContent({
   onClose,
   onViewData,
   onFeedbackAnalysis,
+  onCostAnalysis,
   onEditChange,
   onAddSection,
   onMoveSection,
@@ -152,11 +192,21 @@ export const DetailContent = React.memo(function DetailContent({
   onEditItem,
   shouldExpandExamples,
   onExamplesExpanded,
-  onTaskCreated
+  onTaskCreated,
+  onOpenGuidelinesEditor,
+  onStartInlineEdit,
+  isGuidelinesEditing,
+  guidelinesEditValue,
+  hasGuidelinesChanges,
+  isSavingGuidelines,
+  onGuidelinesChange,
+  onSaveGuidelines,
+  onCancelGuidelinesEdit
 }: DetailContentProps) {
   const { selectedAccount } = useAccount()
   const [sectionNameChanges, setSectionNameChanges] = React.useState<Record<string, string>>({})
   const [isExamplesExpanded, setIsExamplesExpanded] = React.useState(false)
+  const [isGuidelinesExpanded, setIsGuidelinesExpanded] = React.useState(false)
   const [isAddingByExternalId, setIsAddingByExternalId] = React.useState(false)
   const [externalIdSearch, setExternalIdSearch] = React.useState("")
   const [searchResults, setSearchResults] = React.useState<Array<{id: string, externalId: string, description?: string}>>([])
@@ -495,41 +545,13 @@ export const DetailContent = React.memo(function DetailContent({
 
   return (
     <div className="w-full flex flex-col min-h-0">
-      <div className="flex justify-between items-start w-full">
-        <div className="space-y-2 flex-1">
-          <div className="flex items-center gap-2 mb-3">
-            <ListChecks className="h-5 w-5 text-foreground" />
-            <span className="text-lg font-semibold">Scorecard</span>
-          </div>
-          <Input
-            value={score.name}
-            onChange={(e) => onEditChange?.({ name: e.target.value })}
-            className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
-                     placeholder:text-muted-foreground rounded-md"
-            placeholder="Scorecard Name"
-          />
-          <div className="flex gap-4 w-full">
-            <Input
-              value={score.key}
-              onChange={(e) => onEditChange?.({ key: e.target.value })}
-              className="font-mono bg-background border-0 px-2 h-auto flex-1
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
-              placeholder="scorecard-key"
-            />
-            <Input
-              value={score.externalId ?? ''}
-              onChange={(e) => onEditChange?.({ externalId: e.target.value })}
-              className="font-mono bg-background border-0 px-2 h-auto flex-1
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
-              placeholder="External ID"
-            />
-          </div>
-          <p className="text-sm text-muted-foreground">{score.description}</p>
+      {/* Header with title and actions */}
+      <div className="flex justify-between items-center w-full mb-3">
+        <div className="flex items-center gap-2">
+          <ListChecks className="h-5 w-5 text-foreground" />
+          <span className="text-lg font-semibold">Scorecard</span>
         </div>
-        <div className="flex gap-2 ml-4">
+        <div className="flex gap-2">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <div onClick={(e) => e.stopPropagation()}>
@@ -568,6 +590,17 @@ export const DetailContent = React.memo(function DetailContent({
                     Analyze Feedback
                   </DropdownMenu.Item>
                 )}
+                {onCostAnalysis && (
+                  <DropdownMenu.Item 
+                    className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    onSelect={() => {
+                      onCostAnalysis();
+                    }}
+                  >
+                    <Coins className="mr-2 h-4 w-4" />
+                    Analyze Cost
+                  </DropdownMenu.Item>
+                )}
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
@@ -588,6 +621,25 @@ export const DetailContent = React.memo(function DetailContent({
         </div>
       </div>
 
+      {/* Full-width header info */}
+      <div className="w-full">
+        <ScoreHeaderInfo
+          data={{
+            name: score.name || '',
+            description: score.description || '',
+            key: score.key || '',
+            externalId: score.externalId || ''
+          }}
+          onChange={(changes: Partial<ScoreHeaderData>) => {
+            onEditChange?.(changes);
+          }}
+          namePlaceholder="Scorecard Name"
+          descriptionPlaceholder="No description"
+          keyPlaceholder="scorecard-key"
+          externalIdPlaceholder="External ID"
+        />
+      </div>
+
       {hasChanges && (
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
@@ -597,11 +649,28 @@ export const DetailContent = React.memo(function DetailContent({
 
       <div className="flex-1 overflow-y-auto mt-6 w-full">
         <div className="space-y-6 w-full">
+
+
+          {/* Guidelines Section */}
+          <GuidelinesEditor
+            guidelines={isGuidelinesEditing ? guidelinesEditValue : score.guidelines}
+            isEditing={isGuidelinesEditing}
+            isExpanded={isGuidelinesExpanded}
+            onToggleExpanded={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
+            onStartInlineEdit={onStartInlineEdit}
+            onOpenFullscreenEditor={onOpenGuidelinesEditor}
+            onGuidelinesChange={onGuidelinesChange}
+            onSaveGuidelines={onSaveGuidelines}
+            onCancelEdit={onCancelGuidelinesEdit}
+            hasChanges={hasGuidelinesChanges}
+            isSaving={isSavingGuidelines}
+          />
+
           <div>
             <div className="flex justify-between items-center mb-2">
               <div className="flex items-center">
                 <h3 
-                  className="text-lg font-semibold cursor-pointer flex items-center"
+                  className="text-sm font-medium cursor-pointer flex items-center"
                   onClick={() => setIsExamplesExpanded(!isExamplesExpanded)}
                 >
                   Example Items
@@ -800,7 +869,30 @@ export const DetailContent = React.memo(function DetailContent({
             )}
           </div>
 
-          {score.sections?.items?.map((section, index) => {
+          {!score.sections ? (
+            // Loading state when sections haven't been loaded yet
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">Loading sections...</div>
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="space-y-3">
+                  <div className="h-6 bg-muted animate-pulse rounded"></div>
+                  <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4">
+                    {Array.from({ length: 3 }).map((_, j) => (
+                      <div key={j} className="h-24 bg-muted animate-pulse rounded"></div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : score.sections.items.length === 0 ? (
+            // Empty state when no sections exist
+            <div className="text-center py-8 text-muted-foreground">
+              <ListChecks className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No sections found</p>
+            </div>
+          ) : (
+            // Normal rendering when sections are loaded
+            score.sections.items.map((section, index) => {
             // Process scores for this section
             const processedScores = section.scores?.items?.map((score) => ({
               id: score.id,
@@ -809,6 +901,7 @@ export const DetailContent = React.memo(function DetailContent({
               type: score.type,
               order: score.order,
               key: score.key || '',
+              externalId: (score as any).externalId || score.id,
               icon: <ListCheck className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
             })) || [];
             
@@ -839,7 +932,12 @@ export const DetailContent = React.memo(function DetailContent({
                     <CardButton
                       icon={Plus}
                       label="Create Score"
-                      onClick={() => {}}
+                      onClick={() => {
+                        // Navigate to score creation page
+                        if (typeof window !== 'undefined') {
+                          window.location.href = `/scorecards/${score.id}/scores/new/edit?sectionId=${section.id}`
+                        }
+                      }}
                     />
                   </div>
                 </div>
@@ -890,7 +988,7 @@ export const DetailContent = React.memo(function DetailContent({
                 </div>
               </div>
             );
-          })}
+          }))}
           <div className="flex justify-end w-full">
             <CardButton
               icon={Plus}
@@ -940,6 +1038,7 @@ export default function ScorecardComponent({
   onEdit, 
   onViewData, 
   onFeedbackAnalysis,
+  onCostAnalysis,
   variant = 'grid', 
   isSelected,
   onClick,
@@ -959,21 +1058,130 @@ export default function ScorecardComponent({
 }: ScorecardComponentProps) {
   const [editedScore, setEditedScore] = React.useState<ScorecardData>(score)
   const [hasChanges, setHasChanges] = React.useState(false)
+  const [isGuidelinesFullscreen, setIsGuidelinesFullscreen] = React.useState(false)
+  const [isGuidelinesEditing, setIsGuidelinesEditing] = React.useState(false)
+  const [guidelinesEditValue, setGuidelinesEditValue] = React.useState('')
+  const [hasGuidelinesChanges, setHasGuidelinesChanges] = React.useState(false)
+  const [isSavingGuidelines, setIsSavingGuidelines] = React.useState(false)
+  const previewRef = React.useRef<HTMLDivElement>(null)
+  const editorRef = React.useRef<any>(null)
 
   React.useEffect(() => {
+    console.log('🔍 ScorecardComponent received score:', {
+      id: score.id,
+      name: score.name,
+      guidelines: score.guidelines,
+      guidelinesType: typeof score.guidelines,
+      guidelinesLength: score.guidelines?.length,
+      hasGuidelines: 'guidelines' in score,
+      allScoreFields: Object.keys(score)
+    });
     setEditedScore(score)
   }, [score])
 
   const handleEditChange = (changes: Partial<ScorecardData>) => {
     setEditedScore(prev => {
       const updated = { ...prev, ...changes }
-      // Only set hasChanges if name, key, or externalId were changed
-      if ('name' in changes || 'key' in changes || 'externalId' in changes || 'examples' in changes) {
+      // Only set hasChanges if name, key, externalId, or guidelines were changed
+      if ('name' in changes || 'key' in changes || 'externalId' in changes || 'examples' in changes || 'guidelines' in changes) {
         setHasChanges(true)
       }
       return updated
     })
   }
+
+  const handleOpenGuidelinesEditor = () => {
+    setGuidelinesEditValue(editedScore.guidelines || '')
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesFullscreen(true)
+  }
+
+  const handleStartInlineEdit = () => {
+    setGuidelinesEditValue(editedScore.guidelines || '')
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesEditing(true)
+  }
+
+  const handleSaveGuidelines = async () => {
+    if (isSavingGuidelines) return; // Prevent double-clicks
+    
+    try {
+      setIsSavingGuidelines(true);
+      console.log('🔧 handleSaveGuidelines called - Saving guidelines:', {
+        scorecardId: editedScore.id,
+        scorecardName: editedScore.name,
+        guidelines: guidelinesEditValue,
+        guidelinesLength: guidelinesEditValue.length,
+        source: 'handleSaveGuidelines function'
+      });
+
+      // First, save to database via amplify client
+      console.log('🔧 Updating scorecard in database...');
+      await amplifyClient.Scorecard.update({
+        id: editedScore.id,
+        guidelines: guidelinesEditValue
+      });
+      console.log('🔧 Database update completed');
+
+      // Update the local editedScore with the new guidelines
+      handleEditChange({ guidelines: guidelinesEditValue })
+      setIsGuidelinesFullscreen(false)
+      setIsGuidelinesEditing(false)
+      setHasGuidelinesChanges(false)
+      
+      // Auto-save if there's an onSave handler (this will refresh the data)
+      if (onSave) {
+        console.log('🔧 Calling onSave handler...');
+        await onSave()
+        console.log('🔧 onSave completed');
+      }
+      
+      toast.success('Guidelines saved successfully')
+    } catch (error) {
+      console.error('Error saving guidelines:', error)
+      toast.error('Failed to save guidelines')
+    } finally {
+      setIsSavingGuidelines(false);
+    }
+  }
+
+  const handleCancelGuidelinesEdit = () => {
+    setGuidelinesEditValue(editedScore.guidelines || '')
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesFullscreen(false)
+    setIsGuidelinesEditing(false)
+    // Clear refs when closing
+    editorRef.current = null
+  }
+
+  const handleGuidelinesChange = (value: string | undefined) => {
+    setGuidelinesEditValue(value || '')
+    setHasGuidelinesChanges((value || '') !== (editedScore.guidelines || ''))
+  }
+
+  // Synchronized scrolling handler
+  const handleEditorScroll = React.useCallback(() => {
+    if (!editorRef.current || !previewRef.current) return
+    
+    const editor = editorRef.current
+    const preview = previewRef.current
+    
+    // Get scroll position as percentage of total scrollable height
+    const scrollTop = editor.getScrollTop()
+    const scrollHeight = editor.getScrollHeight()
+    const clientHeight = editor.getLayoutInfo().height
+    const maxScroll = scrollHeight - clientHeight
+    
+    if (maxScroll <= 0) return
+    
+    const scrollPercentage = scrollTop / maxScroll
+    
+    // Apply the same scroll percentage to preview
+    const previewMaxScroll = preview.scrollHeight - preview.clientHeight
+    if (previewMaxScroll > 0) {
+      preview.scrollTop = scrollPercentage * previewMaxScroll
+    }
+  }, [])
 
   const handleAddSection = () => {
     const maxOrder = Math.max(0, ...(editedScore.sections?.items || []).map(s => s.order))
@@ -1097,6 +1305,7 @@ export default function ScorecardComponent({
               onClose={onClose}
               onViewData={onViewData}
               onFeedbackAnalysis={onFeedbackAnalysis}
+              onCostAnalysis={onCostAnalysis}
               onEditChange={handleEditChange}
               onAddSection={handleAddSection}
               onMoveSection={handleMoveSection}
@@ -1111,10 +1320,154 @@ export default function ScorecardComponent({
               shouldExpandExamples={shouldExpandExamples}
               onExamplesExpanded={onExamplesExpanded}
               onTaskCreated={onTaskCreated}
+              onOpenGuidelinesEditor={handleOpenGuidelinesEditor}
+              onStartInlineEdit={handleStartInlineEdit}
+              isGuidelinesEditing={isGuidelinesEditing}
+              guidelinesEditValue={guidelinesEditValue}
+              hasGuidelinesChanges={hasGuidelinesChanges}
+              isSavingGuidelines={isSavingGuidelines}
+              onGuidelinesChange={handleGuidelinesChange}
+              onSaveGuidelines={handleSaveGuidelines}
+              onCancelGuidelinesEdit={handleCancelGuidelinesEdit}
             />
           )}
         </div>
       </div>
+
+      {/* Fullscreen Guidelines Editor */}
+      {isGuidelinesFullscreen && (
+        <div className="fixed inset-0 z-50 bg-card">
+          <div className="flex flex-col h-full p-4">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-muted-foreground" />
+                <h2 className="text-lg font-semibold">Guidelines - {editedScore.name}</h2>
+              </div>
+              <CardButton
+                icon={X}
+                onClick={hasGuidelinesChanges ? handleCancelGuidelinesEdit : () => setIsGuidelinesFullscreen(false)}
+                aria-label="Close"
+              />
+            </div>
+
+            {/* Split Editor and Preview - Two rounded rectangles */}
+            <div className="flex-1 flex gap-4 overflow-hidden">
+              {/* Editor Card */}
+              <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
+                <div className="px-4 py-2 bg-card-selected text-sm font-medium text-muted-foreground">
+                  Markdown Editor
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <Editor
+                    height="100%"
+                    defaultLanguage="markdown"
+                    value={guidelinesEditValue}
+                    onChange={handleGuidelinesChange}
+                    onMount={(editor, monaco) => {
+                      // Store editor reference for scroll synchronization
+                      editorRef.current = editor
+                      
+                      // Configure Monaco editor
+                      defineCustomMonacoThemes(monaco)
+                      applyMonacoTheme(monaco)
+                      setupMonacoThemeWatcher(monaco)
+                      
+                      // Set up scroll synchronization
+                      editor.onDidScrollChange(handleEditorScroll)
+                    }}
+                    options={{
+                      ...getCommonMonacoOptions(),
+                      wordWrap: 'on',
+                      lineNumbers: 'off',
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 14,
+                      tabSize: 2,
+                      insertSpaces: true,
+                      automaticLayout: true,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Preview Card */}
+              <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
+                <div className="px-4 py-2 bg-card-selected text-sm font-medium text-muted-foreground">
+                  Preview
+                </div>
+                <div ref={previewRef} className="flex-1 overflow-y-auto p-4">
+                  {guidelinesEditValue ? (
+                    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        components={{
+                          // Customize components for better styling
+                          p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                          ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                          ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                          pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                          h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                        }}
+                      >
+                        {guidelinesEditValue}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                      Start typing to see preview...
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer with save/cancel buttons if changes exist */}
+            {hasGuidelinesChanges && (
+              <div className="flex justify-end items-center gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelGuidelinesEdit}
+                  disabled={isSavingGuidelines}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveGuidelines}
+                  disabled={isSavingGuidelines}
+                >
+                  {isSavingGuidelines ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full mr-2" />
+                      Saving Guidelines...
+                    </>
+                  ) : (
+                    'Save Guidelines'
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Guidelines Editor */}
+      <FullscreenGuidelinesEditor
+        isOpen={isGuidelinesFullscreen}
+        title={`Guidelines - ${editedScore.name}`}
+        value={guidelinesEditValue}
+        onChange={handleGuidelinesChange}
+        onSave={handleSaveGuidelines}
+        onCancel={handleCancelGuidelinesEdit}
+        hasChanges={hasGuidelinesChanges}
+        isSaving={isSavingGuidelines}
+      />
     </div>
   )
 } 

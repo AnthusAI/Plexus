@@ -34,7 +34,7 @@ class SQLiteCache:
 
         # Use an absolute path to avoid ambiguity
         abs_db_path = os.path.abspath(self.db_path)
-        logger.info(f"Initializing SQLite cache at {abs_db_path}")
+        logger.debug(f"Initializing SQLite cache at {abs_db_path}")
         self.conn = sqlite3.connect(abs_db_path)
         self.create_table()
 

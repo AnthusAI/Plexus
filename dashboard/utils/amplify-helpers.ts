@@ -342,6 +342,7 @@ export function observeScoreResults(client: any, evaluationId: string) {
   console.log('Setting up score results subscription for evaluation:', evaluationId)
   
   const subscriptions: { unsubscribe: () => void }[] = []
+  let fetchTimer: any = null
 
   return {
     subscribe: (handlers: {
@@ -356,6 +357,36 @@ export function observeScoreResults(client: any, evaluationId: string) {
           let allData: Schema['ScoreResult']['type'][] = []
           let nextToken: string | null = null
           let pageCount = 0
+          const query = `
+            query ($evaluationId: String!, $limit: Int, $nextToken: String) {
+              listScoreResultByEvaluationId(
+                evaluationId: $evaluationId
+                limit: $limit
+                nextToken: $nextToken
+              ) {
+                items {
+                  id
+                  value
+                  explanation
+                  confidence
+                  metadata
+                  trace
+                  correct
+                  type
+                  itemId
+                  evaluationId
+                  createdAt
+                  feedbackItemId
+                  feedbackItem { id editCommentValue initialAnswerValue finalAnswerValue editorName editedAt }
+                  item {
+                    id
+                    itemIdentifiers { items { name value url position } }
+                  }
+                }
+                nextToken
+              }
+            }
+          `;
           
           do {
             pageCount++
@@ -365,52 +396,27 @@ export function observeScoreResults(client: any, evaluationId: string) {
               evaluationId
             })
 
-            const response: {
-              data: Schema['ScoreResult']['type'][]
-              nextToken: string | null
-            } = await client.models.ScoreResult.listScoreResultByEvaluationId({
-              evaluationId,
-              limit: 10000,
-              nextToken,
-              selectionSet: `
-                id
-                value
-                confidence
-                metadata
-                explanation
-                correct
-                itemId
-                accountId
-                scoringJobId
-                evaluationId
-                scorecardId
-                createdAt
-                feedbackItem {
-                  id
-                  editCommentValue
-                  initialAnswerValue
-                  finalAnswerValue
-                  editorName
-                  editedAt
-                }
-              `
-            })
+            const response = await client.graphql({
+              query,
+              variables: { evaluationId, limit: 1000, nextToken }
+            }) as any;
+            const respData = response?.data?.listScoreResultByEvaluationId;
+            const items: Schema['ScoreResult']['type'][] = respData?.items || []
+            const pageNextToken: string | null = respData?.nextToken || null
             
-            const pageSize = response?.data?.length || 0
+            const pageSize = items.length || 0
             console.log('Received page response:', {
               pageNumber: pageCount,
               pageSize,
-              hasNextToken: !!response.nextToken,
-              nextToken: response.nextToken,
-              firstId: response.data?.[0]?.id,
-              lastId: response.data?.[pageSize - 1]?.id
+              hasNextToken: !!pageNextToken,
+              nextToken: pageNextToken,
+              firstId: items?.[0]?.id,
+              lastId: items?.[pageSize - 1]?.id
             })
             
-            if (response?.data) {
-              allData = [...allData, ...response.data]
-            }
+            allData = [...allData, ...items]
             
-            nextToken = response.nextToken
+            nextToken = pageNextToken
             
             console.log('Pagination status:', {
               pageNumber: pageCount,
@@ -420,8 +426,12 @@ export function observeScoreResults(client: any, evaluationId: string) {
             })
           } while (nextToken)
 
-          // Sort all results in memory
-          const sortedData = [...allData].sort((a, b) => {
+          // Dedupe by id and sort by createdAt desc to avoid duplicates across pages
+          const uniqueMap = new Map<string, Schema['ScoreResult']['type']>()
+          for (const r of allData) {
+            if (r && r.id) uniqueMap.set(r.id, r)
+          }
+          const sortedData = Array.from(uniqueMap.values()).sort((a, b) => {
             const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             return bDate - aDate;
@@ -450,14 +460,26 @@ export function observeScoreResults(client: any, evaluationId: string) {
         }
       }
 
+      const scheduleFetch = () => {
+        if (fetchTimer) return
+        fetchTimer = setTimeout(() => {
+          fetchTimer = null
+          fetchLatestData()
+        }, 300)
+      }
+
       // Get initial data
       fetchLatestData()
 
       // Subscribe to create events
       const createSub = client.models.ScoreResult.onCreate().subscribe({
-        next: () => {
-          console.log('ScoreResult onCreate triggered, fetching latest data')
-          fetchLatestData()
+        next: (evt: any) => {
+          try {
+            const ev = evt?.data?.onCreateScoreResult || evt?.data || evt
+            if (!ev || (ev.evaluationId && ev.evaluationId !== evaluationId)) return
+          } catch {}
+          console.log('ScoreResult onCreate triggered (matching eval), scheduling fetch')
+          scheduleFetch()
         },
         error: (error: Error) => {
           console.error('ScoreResult onCreate error:', error)
@@ -468,9 +490,13 @@ export function observeScoreResults(client: any, evaluationId: string) {
 
       // Subscribe to update events
       const updateSub = client.models.ScoreResult.onUpdate().subscribe({
-        next: () => {
-          console.log('ScoreResult onUpdate triggered, fetching latest data')
-          fetchLatestData()
+        next: (evt: any) => {
+          try {
+            const ev = evt?.data?.onUpdateScoreResult || evt?.data || evt
+            if (!ev || (ev.evaluationId && ev.evaluationId !== evaluationId)) return
+          } catch {}
+          console.log('ScoreResult onUpdate triggered (matching eval), scheduling fetch')
+          scheduleFetch()
         },
         error: (error: Error) => {
           console.error('ScoreResult onUpdate error:', error)
@@ -481,9 +507,13 @@ export function observeScoreResults(client: any, evaluationId: string) {
 
       // Subscribe to delete events
       const deleteSub = client.models.ScoreResult.onDelete().subscribe({
-        next: () => {
-          console.log('ScoreResult onDelete triggered, fetching latest data')
-          fetchLatestData()
+        next: (evt: any) => {
+          try {
+            const ev = evt?.data?.onDeleteScoreResult || evt?.data || evt
+            if (!ev || (ev.evaluationId && ev.evaluationId !== evaluationId)) return
+          } catch {}
+          console.log('ScoreResult onDelete triggered (matching eval), scheduling fetch')
+          scheduleFetch()
         },
         error: (error: Error) => {
           console.error('ScoreResult onDelete error:', error)
@@ -495,6 +525,10 @@ export function observeScoreResults(client: any, evaluationId: string) {
       return {
         unsubscribe: () => {
           subscriptions.forEach(sub => sub.unsubscribe())
+          if (fetchTimer) {
+            clearTimeout(fetchTimer)
+            fetchTimer = null
+          }
         }
       }
     }

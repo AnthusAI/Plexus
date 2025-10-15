@@ -24,7 +24,21 @@ const mockResults = [
       human_label: 'Appointment Scheduling',
       correct: true
     },
-    itemId: null,
+    itemId: 'item_abc123def456',
+    itemIdentifiers: [
+      {
+        name: 'form',
+        value: '453460',
+      },
+      {
+        name: 'session',
+        value: 'XCC18834SCRUFF',
+      },
+      {
+        name: 'ID',
+        value: 'item_abc123def456',
+      }
+    ],
     trace: null
   },
   {
@@ -36,7 +50,19 @@ const mockResults = [
       human_label: 'Appointment Scheduling',
       correct: false
     },
-    itemId: null,
+    itemId: 'item_xyz789ghi012',
+    itemIdentifiers: [
+      {
+        name: 'form',
+        value: '789012',
+        url: 'https://example.com/forms/789012',
+      },
+      {
+        name: 'report',
+        value: '2090346',
+        url: 'https://example.com/reports/2090346',
+      }
+    ],
     trace: null
   },
   {
@@ -48,7 +74,7 @@ const mockResults = [
       human_label: 'Medical Question',
       correct: true
     },
-    itemId: null,
+    itemId: 'item_simple_id_only',
     trace: null
   },
 ]

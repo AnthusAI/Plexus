@@ -305,11 +305,93 @@ The resulting dataset will contain these columns:
 - Comment columns: `{Score Name} comment` for each score
 - Confidence columns: `{Score Name} confidence` for scores with confidence values
 
+## FeedbackItems Data Cache
+
+The `FeedbackItems` class provides an alternative approach for loading datasets from feedback items rather than raw database queries. This is particularly useful for training models on human-corrected data.
+
+### Basic FeedbackItems Configuration
+
+```yaml
+class: FeedbackItems
+scorecard: 1438                    # Scorecard identifier (name, key, ID, or external ID)
+score: "Agent Misrepresentation"   # Score identifier (name, key, ID, or external ID)
+days: 30                          # Number of days back to search for feedback items
+limit: 100                       # Maximum total number of items in dataset
+```
+
+### FeedbackItems Parameters
+
+```yaml
+class: FeedbackItems
+scorecard: 1438
+score: "Quality Score"
+days: 14                          # Required: Number of days back to search
+limit: 500                       # Optional: Maximum total items
+limit_per_cell: 50               # Optional: Maximum items per confusion matrix cell
+initial_value: "No"              # Optional: Filter by original AI prediction
+final_value: "Yes"               # Optional: Filter by corrected human value
+identifier_extractor: "CallCriteriaIdentifierExtractor"  # Optional: Client-specific ID extractor
+```
+
+### Column Mappings
+
+Use `column_mappings` to rename score columns in the resulting dataset. This is particularly useful when creating datasets for new scores that need to match existing column names.
+
+```yaml
+class: FeedbackItems
+scorecard: 1438
+score: "Agent Misrepresentation"
+days: 30
+limit: 100
+column_mappings:
+  "Agent Misrepresentation": "Agent Misrepresentation - With Confidence"
+  "Quality Score": "Enhanced Quality Score"
+```
+
+**Column Mapping Features:**
+- Maps original score names to new column names
+- Applies to score column, comment column, and edit comment column
+- Case-sensitive matching
+- Only applies when score name exactly matches mapping key
+
+**Example Output:**
+- Without mapping: `Agent Misrepresentation`, `Agent Misrepresentation comment`, `Agent Misrepresentation edit comment`
+- With mapping: `Agent Misrepresentation - With Confidence`, `Agent Misrepresentation - With Confidence comment`, `Agent Misrepresentation - With Confidence edit comment`
+
+### FeedbackItems vs CallCriteriaDBCache
+
+**Use FeedbackItems when:**
+- You want to train on human-corrected feedback data
+- You need column renaming capabilities
+- You want confusion matrix sampling (prioritizes disagreements)
+- You need edit comments and human corrections
+
+**Use CallCriteriaDBCache when:**
+- You need raw database queries with complex filtering
+- You want to work with original AI predictions
+- You need custom SQL queries
+- You're working with large datasets that don't fit in memory
+
+### FeedbackItems Output Dataset Structure
+
+The FeedbackItems class creates datasets with these columns:
+- `content_id`: DynamoDB item ID
+- `feedback_item_id`: Unique feedback item identifier
+- `IDs`: JSON array of item identifiers
+- `metadata`: JSON string with feedback and item metadata
+- `text`: Call transcript content
+- `call_date`: Extracted call date (if available)
+- `{score_name}`: Final answer value (human-corrected)
+- `{score_name} comment`: Determined comment using complex logic
+- `{score_name} edit comment`: Direct edit comment from feedback
+
 ## Best Practices
 
 1. **Use specific date ranges** to ensure reproducible datasets
 2. **Include quality filters** like `minimum_calibration_count` and `bad_call: false`
 3. **Limit result sets** with `number` to avoid memory issues
-4. **Use column mappings** when you have external labels to incorporate
+4. **Use column mappings** when you have external labels to incorporate or need to rename columns
 5. **Test with small numbers first** before running large queries
 6. **Combine multiple approaches** - use queries for broad criteria and searches for specific examples
+7. **Use FeedbackItems for training** - human corrections provide better ground truth than original AI predictions
+8. **Use column mappings** when creating datasets for new scores that need to match existing naming conventions

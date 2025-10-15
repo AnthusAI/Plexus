@@ -50,17 +50,17 @@ export const useFeedbackItemsByAnswers = () => {
       
       const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt({
         accountId: filter.accountId,
-        scorecardIdScoreIdUpdatedAt: {
+        scorecardIdScoreIdEditedAt: {
           between: [
             {
               scorecardId: filter.scorecardId,
               scoreId: filter.scoreId,
-              updatedAt: startDate.toISOString()
+              editedAt: startDate.toISOString()
             },
             {
               scorecardId: filter.scorecardId,
               scoreId: filter.scoreId,
-              updatedAt: endDate.toISOString()
+              editedAt: endDate.toISOString()
             }
           ]
         },

@@ -1,7 +1,10 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Clock, PanelLeftOpen, PanelLeftClose, Edit } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -9,14 +12,17 @@ import {
   DropdownMenu as ShadcnDropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ScoreSidebarVersionHistory } from '@/components/ui/score-sidebar-version-history'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { generateClient } from 'aws-amplify/api'
 import { toast } from 'sonner'
-import { ScoreVersionHistory } from './score-version-history'
+
 import type { GraphQLResult } from '@aws-amplify/api'
 import Editor, { Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
@@ -29,6 +35,9 @@ import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
+import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
+import { Timestamp } from "@/components/ui/timestamp"
+import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 
 const client = generateClient();
 
@@ -36,6 +45,7 @@ export interface ScoreData {
   id: string
   name: string
   description: string
+  guidelines?: string
   type: string
   order: number
   externalId?: string
@@ -46,10 +56,11 @@ export interface ScoreData {
   isDisabled?: boolean // Whether the score is disabled
 }
 
-interface ScoreVersion {
+export interface ScoreVersion {
   id: string
   scoreId: string
   configuration: string // YAML string
+  guidelines?: string
   isFeatured: boolean
   isChampion?: boolean
   note?: string
@@ -96,6 +107,7 @@ interface GetScoreResponse {
     name: string
     externalId?: string
     championVersionId?: string
+    description?: string
   }
 }
 
@@ -109,12 +121,16 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   isFullWidth?: boolean
   onSave?: () => void
   onFeedbackAnalysis?: () => void
+  onCostAnalysis?: () => void
+  onDelete?: () => void
   exampleItems?: Array<{
     id: string
     displayValue: string
   }>
   scorecardName?: string
   onTaskCreated?: (task: any) => void
+  initialSelectedVersionId?: string | null
+  onVersionSelect?: (versionId: string) => void
 }
 
 interface DetailContentProps {
@@ -126,6 +142,8 @@ interface DetailContentProps {
   onSave?: () => void
   onCancel?: () => void
   onFeedbackAnalysis?: () => void
+  onCostAnalysis?: () => void
+  onDelete?: () => void
   hasChanges?: boolean
   versions?: ScoreVersion[]
   championVersionId?: string
@@ -144,6 +162,18 @@ interface DetailContentProps {
   selectedAccount?: { id: string } | null
   scorecardName?: string
   onTaskCreated?: (task: any) => void
+  // Guidelines editing props
+  isGuidelinesExpanded?: boolean
+  onToggleGuidelinesExpanded?: () => void
+  isGuidelinesEditing?: boolean
+  guidelinesEditValue?: string
+  hasGuidelinesChanges?: boolean
+  isSavingGuidelines?: boolean
+  onStartInlineEdit?: () => void
+  onOpenGuidelinesEditor?: () => void
+  onGuidelinesChange?: (value: string) => void
+  onSaveGuidelines?: () => void
+  onCancelGuidelinesEdit?: () => void
 }
 
 const GridContent = React.memo(({ 
@@ -154,16 +184,22 @@ const GridContent = React.memo(({
   isSelected?: boolean
 }) => {
   // Pre-compute all displayed values in a single operation before rendering
-  // This ensures React renders them in the same cycle
+  // This ensures React renders them in the same cycle and prevents flickering
+  // Use only the Score record data, never fetch additional data for grid view
   const displayData = React.useMemo(() => ({
     name: score.name,
-    description: score.description || ''
-  }), [score.name, score.description]);
+    description: score.description || '',
+    externalId: score.externalId || score.id
+  }), [score.name, score.description, score.externalId, score.id]);
   
   return (
     <div className="flex justify-between items-start">
-      <div className="space-y-2 min-h-[4.5rem]">
+      <div className="space-y-1.5">
         <div className="font-medium">{displayData.name}</div>
+        <div className="text-sm text-muted-foreground flex items-center gap-1">
+          <IdCard className="h-3 w-3" />
+          <span>{displayData.externalId}</span>
+        </div>
         <div className="text-sm">{displayData.description}</div>
       </div>
       {score.icon && (
@@ -248,6 +284,8 @@ const DetailContent = React.memo(({
   onSave,
   onCancel,
   onFeedbackAnalysis,
+  onCostAnalysis,
+  onDelete,
   hasChanges,
   versions,
   championVersionId,
@@ -263,6 +301,18 @@ const DetailContent = React.memo(({
   selectedAccount,
   scorecardName,
   onTaskCreated,
+  // Guidelines editing props
+  isGuidelinesExpanded = false,
+  onToggleGuidelinesExpanded,
+  isGuidelinesEditing = false,
+  guidelinesEditValue = '',
+  hasGuidelinesChanges = false,
+  isSavingGuidelines = false,
+  onStartInlineEdit,
+  onOpenGuidelinesEditor,
+  onGuidelinesChange,
+  onSaveGuidelines,
+  onCancelGuidelinesEdit,
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -270,11 +320,22 @@ const DetailContent = React.memo(({
   )
   
   // Parse YAML configuration if available, otherwise create default YAML
-  const defaultYaml = stringifyYaml({
-    name: score.name,
-    externalId: score.externalId,
-    key: score.key
-  })
+  const defaultYamlObj: Record<string, any> = {
+    name: score.name
+  };
+  
+  // Only add fields that have values to avoid "key: null" in YAML
+  if (score.externalId && score.externalId !== '') {
+    defaultYamlObj.externalId = score.externalId;
+  }
+  if (score.key && score.key !== '') {
+    defaultYamlObj.key = score.key;
+  }
+  if (score.description && score.description !== '') {
+    defaultYamlObj.description = score.description;
+  }
+  
+  const defaultYaml = stringifyYaml(defaultYamlObj)
   
   // Track the current configuration in local state
   const [currentConfig, setCurrentConfig] = React.useState(currentVersion?.configuration || defaultYaml)
@@ -290,7 +351,7 @@ const DetailContent = React.memo(({
   })
   const handleLintMessageClick = useLintMessageHandler(jumpToLine)
   
-  // Let ScoreVersionHistory component handle its own featured filtering with smart defaults
+
   
   // Reset isEditing when resetEditingCounter changes
   React.useEffect(() => {
@@ -326,14 +387,17 @@ const DetailContent = React.memo(({
       return {
         ...parsed,
         // Ensure we always have externalId in our parsed config regardless of format in YAML
-        externalId: externalIdValue
+        externalId: externalIdValue,
+        // Fall back to score's description if not present in version configuration
+        description: parsed.description !== undefined ? parsed.description : score.description
       };
     } catch (error) {
       console.error('Error parsing YAML:', error)
       return { 
         name: score.name, 
         externalId: score.externalId,
-        key: score.key
+        key: score.key,
+        description: score.description
       }
     }
   }, [currentConfig, score])
@@ -378,7 +442,13 @@ const DetailContent = React.memo(({
           if ('id' in parsed) delete parsed.id;
         }
       } else {
-        parsed[field] = value;
+        // Only set the field if the value is not empty/null to avoid "key: null" in YAML
+        if (value !== null && value !== undefined && value !== '') {
+          parsed[field] = value;
+        } else {
+          // Remove the field entirely if it's empty/null
+          delete parsed[field];
+        }
       }
       
       // Update the configuration
@@ -452,6 +522,8 @@ const DetailContent = React.memo(({
   
   // Add state for test score dialog
   const [isTestDialogOpen, setIsTestDialogOpen] = React.useState(false);
+  
+
   
   // Detect mobile devices on component mount
   React.useEffect(() => {
@@ -589,475 +661,585 @@ const DetailContent = React.memo(({
     }
   };
 
+
+
+  // Add sidebar state
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false)
+  const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+  const [isGuidelinesInlineEdit, setIsGuidelinesInlineEdit] = React.useState(false)
+  const [fullscreenActiveTab, setFullscreenActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+  const [newVersionNote, setNewVersionNote] = React.useState('')
+
+  // Sort versions by creation date (newest first)
+  const sortedVersions = React.useMemo(() => {
+    if (!versions) return []
+    return [...versions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  }, [versions])
+
+  // Find champion version
+  const championVersion = React.useMemo(() => {
+    if (!versions) return undefined
+    return versions.find(v => v.id === championVersionId)
+  }, [versions, championVersionId])
+
+  // Get currently selected version or champion
+  const selectedVersion = React.useMemo(() => {
+    if (!versions) return undefined
+    if (selectedVersionId) {
+      return versions.find(v => v.id === selectedVersionId)
+    }
+    return championVersion
+  }, [selectedVersionId, championVersion, versions])
+
+
+
+  // Guidelines handlers (moved up for sidebar use)
+  const handleStartInlineEdit = () => {
+    onStartInlineEdit?.()
+  }
+
+  const handleOpenGuidelinesEditor = () => {
+    onOpenGuidelinesEditor?.()
+  }
+
   return (
     <div className={cn(
-      "w-full flex flex-col overflow-y-auto max-h-full",
+      "w-full h-full flex flex-col",
       isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
     )}>
-      {/* Hide the header section when in fullscreen mode */}
+      {/* Description Section - Above sidebar, not versioned */}
       {!isEditorFullscreen && (
-        <div className="flex justify-between items-start w-full">
-          <div className="space-y-2 flex-1">
-            <div className="flex items-center gap-2 mb-3">
-              <ListCheck className="h-5 w-5 text-foreground" />
-              <span className="text-lg font-semibold">Score</span>
-            </div>
-            <Input
-              value={parsedConfig.name || ''}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                handleFormChange('name', e.target.value)
-              }
-              onFocus={() => setIsEditing(true)}
-              className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
-              placeholder="Score Name"
-            />
-            <div className="flex gap-2 w-full">
-              <Input
-                value={parsedConfig.key || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                  handleFormChange('key', e.target.value)
-                }
-                onFocus={() => setIsEditing(true)}
-                className="font-mono bg-background border-0 px-2 h-auto flex-1
-                         focus-visible:ring-0 focus-visible:ring-offset-0 
-                         placeholder:text-muted-foreground rounded-md"
-                placeholder="score-key"
-              />
-              <Input
-                value={parsedConfig.externalId || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                  handleFormChange('externalId', e.target.value)
-                }
-                onFocus={() => setIsEditing(true)}
-                className="font-mono bg-background border-0 px-2 h-auto flex-1
-                         focus-visible:ring-0 focus-visible:ring-offset-0 
-                         placeholder:text-muted-foreground rounded-md"
-                placeholder="External ID"
-              />
-            </div>
-            <div className="flex items-center space-x-2 pt-2">
-              <Checkbox
-                id="isDisabled"
-                checked={parsedConfig.isDisabled || false}
-                onCheckedChange={(checked) => 
-                  handleFormChange('isDisabled', checked as boolean)
-                }
-              />
-              <label
-                htmlFor="isDisabled"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Disabled
-              </label>
-            </div>
-            <textarea
-              value={versionNote}
-              onChange={handleNoteChange}
-              placeholder="Add a note about this version..."
-              className="w-full px-2 py-1.5 rounded-md bg-background border-0 text-sm resize-none
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground"
-              rows={2}
-            />
-          </div>
-          <div className="flex gap-2 ml-4">
-            <ShadcnDropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
-                  aria-label="More options"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleTestScore}>
-                  <TestTube className="mr-2 h-4 w-4" />
-                  Test
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateAccuracy}>
-                  <FlaskConical className="mr-2 h-4 w-4" />
-                  Evaluate Accuracy
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateConsistency}>
-                  <FlaskRound className="mr-2 h-4 w-4" />
-                  Evaluate Consistency
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateAlignment}>
-                  <TestTubes className="mr-2 h-4 w-4" />
-                  Evaluate Alignment
-                </DropdownMenuItem>
-                {onFeedbackAnalysis && (
-                  <DropdownMenuItem onClick={onFeedbackAnalysis}>
-                    <MessageCircleMore className="mr-2 h-4 w-4" />
-                    Analyze Feedback
-                  </DropdownMenuItem>
+        <div className="border-border">
+          <div className="space-y-3 mb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ListCheck className="h-5 w-5 text-foreground" />
+                <span className="text-lg font-semibold">Score</span>
+              </div>
+              <div className="flex gap-2">
+                <ShadcnDropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                      aria-label="More options"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleTestScore}>
+                      <TestTube className="mr-2 h-4 w-4" />
+                      Test
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleEvaluateAccuracy}>
+                      <FlaskConical className="mr-2 h-4 w-4" />
+                      Evaluate Accuracy
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleEvaluateConsistency}>
+                      <FlaskRound className="mr-2 h-4 w-4" />
+                      Evaluate Consistency
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleEvaluateAlignment}>
+                      <TestTubes className="mr-2 h-4 w-4" />
+                      Evaluate Alignment
+                    </DropdownMenuItem>
+                    {onFeedbackAnalysis && (
+                      <DropdownMenuItem onClick={onFeedbackAnalysis}>
+                        <MessageCircleMore className="mr-2 h-4 w-4" />
+                        Analyze Feedback
+                      </DropdownMenuItem>
+                    )}
+                    {onCostAnalysis && (
+                      <DropdownMenuItem onClick={onCostAnalysis}>
+                        <Coins className="mr-2 h-4 w-4" />
+                        Analyze Cost
+                      </DropdownMenuItem>
+                    )}
+                    {onDelete && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          onClick={onDelete}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Score
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </ShadcnDropdownMenu>
+                {onToggleFullWidth && (
+                  <CardButton
+                    icon={isFullWidth ? Columns2 : Square}
+                    onClick={onToggleFullWidth}
+                    aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
+                  />
                 )}
-              </DropdownMenuContent>
-            </ShadcnDropdownMenu>
-            {onToggleFullWidth && (
-              <CardButton
-                icon={isFullWidth ? Columns2 : Square}
-                onClick={onToggleFullWidth}
-                aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
-              />
-            )}
-            {onClose && (
-              <CardButton
-                icon={X}
-                onClick={onClose}
-                aria-label="Close"
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Configuration Label with Fullscreen Toggle */}
-      <div className={cn(
-        "mt-6 flex items-center justify-between",
-        isEditorFullscreen && "mt-0 mb-2"
-      )}>
-        <div className="flex items-center gap-2">
-          {!isEditorFullscreen && (
-            <>
-              <FileCode className="h-4 w-4 text-foreground" />
-              <span className="text-sm font-medium">Configuration</span>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {isEditorFullscreen && (
-            <ShadcnDropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
-                  aria-label="More options"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleTestScore}>
-                  <TestTube className="mr-2 h-4 w-4" />
-                  Test
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateAccuracy}>
-                  <FlaskConical className="mr-2 h-4 w-4" />
-                  Evaluate Accuracy
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateConsistency}>
-                  <FlaskRound className="mr-2 h-4 w-4" />
-                  Evaluate Consistency
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleEvaluateAlignment}>
-                  <TestTubes className="mr-2 h-4 w-4" />
-                  Evaluate Alignment
-                </DropdownMenuItem>
-                {onFeedbackAnalysis && (
-                  <DropdownMenuItem onClick={onFeedbackAnalysis}>
-                    <MessageCircleMore className="mr-2 h-4 w-4" />
-                    Analyze Feedback
-                  </DropdownMenuItem>
+                {onClose && (
+                  <CardButton
+                    icon={X}
+                    onClick={onClose}
+                    aria-label="Close"
+                  />
                 )}
-              </DropdownMenuContent>
-            </ShadcnDropdownMenu>
-          )}
-          <CardButton
-            icon={isEditorFullscreen ? Shrink : Expand}
-            onClick={() => setIsEditorFullscreen(!isEditorFullscreen)}
-            aria-label={isEditorFullscreen ? 'Exit fullscreen' : 'Fullscreen editor'}
-          />
-        </div>
-      </div>
-
-      {/* YAML Editor - Fixed height so content below is visible */}
-      <div className={cn(
-        "flex flex-col",
-        isEditorFullscreen ? "mt-2 flex-1 min-h-0" : "mt-2"
-      )} style={{ transition: 'none' }}>
-                  {!isEditorFullscreen ? (
-          // Normal mode: fixed height container
-          <div className="h-[400px] bg-background rounded-lg overflow-hidden relative">
-            <Editor
-              height="100%"
-              defaultLanguage="yaml"
-              value={currentConfig}
-              key={`editor-${selectedVersionId || championVersionId}`}
-              onMount={(editor, monaco) => {
-                // Store the editor instance
-                editorInstanceRef.current = editor;
-                
-                // Store the Monaco instance
-                monacoRef.current = monaco;
-                
-                // Configure YAML language support with enhanced syntax highlighting
-                console.log('Configuring YAML language support...');
-                configureYamlLanguage(monaco);
-                
-                // Apply our custom theme when the editor mounts
-                console.log('Applying Monaco themes...');
-                defineCustomMonacoThemes(monaco);
-                applyMonacoTheme(monaco);
-                
-                // Set up YAML linting integration
-                setupMonacoIntegration(editor, monaco);
-                
-                // Debug: Check if YAML language is registered
-                const registeredLanguages = monaco.languages.getLanguages();
-                const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
-                console.log('YAML language registered:', yamlLang ? 'YES' : 'NO');
-                if (yamlLang) {
-                  console.log('YAML language details:', yamlLang);
-                }
-                
-                // Force immediate layout to ensure correct sizing
-                editor.layout();
-                
-                // Add error handling for iPad-specific issues
-                window.addEventListener('error', (event) => {
-                  if (event.message === 'Canceled: Canceled' || 
-                      event.error?.message === 'Canceled: Canceled') {
-                    event.preventDefault();
-                    return true; // Prevent the error from propagating
-                  }
-                  return false;
+              </div>
+            </div>
+            <ScoreHeaderInfo
+              data={{
+                name: parsedConfig.name || '',
+                description: parsedConfig.description || '',
+                key: parsedConfig.key || '',
+                externalId: parsedConfig.externalId || ''
+              }}
+              onChange={(changes: Partial<ScoreHeaderData>) => {
+                setIsEditing(true);
+                Object.entries(changes).forEach(([field, value]) => {
+                  handleFormChange(field, value);
                 });
               }}
-              onChange={(value) => {
-                if (!value) return;
-                
-                // Run YAML validation and show indentation errors
-                if (monacoRef.current && editorInstanceRef.current) {
-                  const model = editorInstanceRef.current.getModel();
-                  if (model) {
-                    const markers = validateYamlIndentation(monacoRef.current, model);
-                    monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
-                  }
-                }
-                
-                try {
-                  // Set editing flag to prevent useEffect from overriding our changes
-                  setIsEditing(true);
-                  
-                  // Parse YAML to validate it and get values for form
-                  const parsed = parseYaml(value)
-                  
-                  // Extract external ID from all possible formats
-                  const externalIdValue = parsed.externalId !== undefined ? 
-                    parsed.externalId : 
-                    (parsed.external_id !== undefined ? parsed.external_id : 
-                     (parsed.id !== undefined ? parsed.id : undefined));
-
-                  
-                  // Update our local state
-                  setCurrentConfig(value);
-                  
-                  // Pass the updated configuration to the parent
-                  onEditChange?.({
-                    name: parsed.name,
-                    externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
-                    key: parsed.key,
-                    description: parsed.description,
-                    configuration: value, // Store the original YAML string
-                    isDisabled: parsed.isDisabled
-                  });
-                } catch (error) {
-                  // Handle cancellation errors gracefully
-                  if (error instanceof Error && 
-                      (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
-                    return; // Just ignore the error
-                  }
-                  
-                  // Ignore other parse errors while typing
-                }
-              }}
-              options={getCommonMonacoOptions(isMobileDevice)}
-            />
-          </div>
-        ) : (
-          // Fullscreen mode: 2-column layout with editor on left and linter on right
-          <div className="flex gap-4 h-full">
-            {/* Monaco Editor - 2/3 width */}
-            <div className="flex-[2] bg-background rounded-lg overflow-hidden relative">
-              <Editor
-                height="100%"
-                defaultLanguage="yaml"
-                value={currentConfig}
-                key={`editor-${selectedVersionId || championVersionId}`}
-                onMount={(editor, monaco) => {
-                  // Store the editor instance
-                  editorInstanceRef.current = editor;
-                  
-                  // Store the Monaco instance
-                  monacoRef.current = monaco;
-                  
-                  // Configure YAML language support with enhanced syntax highlighting
-                  console.log('Configuring YAML language support (fullscreen)...');
-                  configureYamlLanguage(monaco);
-                  
-                  // Apply our custom theme when the editor mounts
-                  console.log('Applying Monaco themes (fullscreen)...');
-                  defineCustomMonacoThemes(monaco);
-                  applyMonacoTheme(monaco);
-                  
-                  // Set up YAML linting integration
-                  setupMonacoIntegration(editor, monaco);
-                  
-                  // Debug: Check if YAML language is registered
-                  const registeredLanguages = monaco.languages.getLanguages();
-                  const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
-                  console.log('YAML language registered (fullscreen):', yamlLang ? 'YES' : 'NO');
-                  
-                  // Force immediate layout to ensure correct sizing
-                  editor.layout();
-                  
-                  // Add error handling for iPad-specific issues
-                  window.addEventListener('error', (event) => {
-                    if (event.message === 'Canceled: Canceled' || 
-                        event.error?.message === 'Canceled: Canceled') {
-                      event.preventDefault();
-                      return true; // Prevent the error from propagating
-                    }
-                    return false;
-                  });
-                }}
-                onChange={(value) => {
-                  if (!value) return;
-                  
-                  // Run YAML validation and show indentation errors
-                  if (monacoRef.current && editorInstanceRef.current) {
-                    const model = editorInstanceRef.current.getModel();
-                    if (model) {
-                      const markers = validateYamlIndentation(monacoRef.current, model);
-                      monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
-                    }
-                  }
-                  
-                  try {
-                    // Set editing flag to prevent useEffect from overriding our changes
-                    setIsEditing(true);
-                    
-                    // Parse YAML to validate it and get values for form
-                    const parsed = parseYaml(value)
-                    
-                    // Extract external ID from all possible formats
-                    const externalIdValue = parsed.externalId !== undefined ? 
-                      parsed.externalId : 
-                      (parsed.external_id !== undefined ? parsed.external_id : 
-                       (parsed.id !== undefined ? parsed.id : undefined));
-
-                    
-                    // Update our local state
-                    setCurrentConfig(value);
-                    
-                    // Pass the updated configuration to the parent
-                    onEditChange?.({
-                      name: parsed.name,
-                      externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
-                      key: parsed.key,
-                      description: parsed.description,
-                      configuration: value // Store the original YAML string
-                    });
-                  } catch (error) {
-                    // Handle cancellation errors gracefully
-                    if (error instanceof Error && 
-                        (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
-                      return; // Just ignore the error
-                    }
-                    
-                    // Ignore other parse errors while typing
-                  }
-                }}
-                options={getCommonMonacoOptions(isMobileDevice)}
-              />
-            </div>
-
-            {/* YAML Linter Panel - 1/3 width on the right */}
-            {lintResult && (
-              <div className="flex-[1] bg-background rounded-lg p-4 overflow-y-auto">
-                <YamlLinterPanel
-                  result={lintResult}
-                  onMessageClick={handleLintMessageClick}
-                  className="text-sm"
-                />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* YAML Linter Panel - only show below editor in normal mode (not fullscreen) */}
-      {!isEditorFullscreen && lintResult && (
-        <div className="mt-3">
-          <div className="bg-background rounded-lg p-4">
-            <YamlLinterPanel
-              result={lintResult}
-              onMessageClick={handleLintMessageClick}
-              className="text-sm"
+              namePlaceholder="Score name"
+              descriptionPlaceholder="No description"
+              keyPlaceholder="score-key"
+              externalIdPlaceholder="External ID"
             />
           </div>
         </div>
       )}
 
-      {/* Action buttons - show in both normal and fullscreen modes */}
-      {hasChanges && (
-        <div className={cn(
-          "mt-3 space-y-4",
-          isEditorFullscreen && "mt-4"
-        )}>
-          <div className={cn(
-            "flex gap-2",
-            isEditorFullscreen ? "flex-row items-end" : "justify-end"
-          )}>
-            {isEditorFullscreen && (
-              <textarea
-                value={versionNote}
-                onChange={(e) => onNoteChange(e.target.value)}
-                placeholder="Add a note about this version..."
-                className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-sm resize-none h-10
-                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                         placeholder:text-muted-foreground"
-                rows={1}
-              />
-            )}
-            <div className="flex gap-2">
-              <Button className="bg-card hover:bg-card/80 text-card-foreground shadow-none border-0" onClick={() => {
-                setIsEditing(false); // Reset editing flag
-                onCancel?.();
-              }}>Cancel</Button>
-              <Button onClick={() => {
-                setIsEditing(false); // Reset editing flag
-                if (isEditorFullscreen) {
-                  setIsEditorFullscreen(false); // Exit fullscreen after save
-                }
-                onSave?.();
-              }}>Save Changes</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Version history - hide in fullscreen mode */}
-      {!isEditorFullscreen && versions && (
-        <div className="mt-3 overflow-hidden flex-shrink-0">
-          <ScoreVersionHistory
+      {/* Main Layout - Sidebar + Content */}
+      {!isEditorFullscreen && (
+        <div className="flex flex-1 min-h-0 bg-background rounded-lg overflow-hidden">
+          {/* Left Sidebar - Version History */}
+          <ScoreSidebarVersionHistory
             versions={versions}
             championVersionId={championVersionId}
             selectedVersionId={selectedVersionId}
             onVersionSelect={onVersionSelect}
-            onToggleFeature={onToggleFeature}
-            onPromoteToChampion={onPromoteToChampion}
-            forceExpanded={forceExpandHistory}
+            isSidebarCollapsed={isSidebarCollapsed}
+            onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           />
+
+          {/* Main Content - Versioned Content */}
+          <div className="flex-1 flex flex-col">
+            {/* Version Header */}
+            {selectedVersion && (
+              <div className="p-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-medium text-sm">
+                        {selectedVersion.id === championVersionId ? 'Champion Version' : 'Version'}
+                      </h3>
+                      {selectedVersion.id === championVersionId && (
+                        <Crown className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-2">
+                      <Timestamp time={selectedVersion.createdAt} variant="relative" className="text-xs" />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {selectedVersion.note || 'No note'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-3">
+                    {selectedVersion.id !== championVersionId && onPromoteToChampion && (
+                      <ShadcnDropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                            aria-label="Version actions"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => onPromoteToChampion(selectedVersion.id)}>
+                            <Crown className="mr-2 h-4 w-4" />
+                            Promote
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </ShadcnDropdownMenu>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tabbed Content */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+                <div className="flex items-center justify-between border-b border-border">
+                  <TabsList className="h-auto p-0 bg-transparent justify-start">
+                    <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
+                    <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                  </TabsList>
+                  <div className="flex gap-1 pr-3">
+                    <CardButton
+                      icon={Expand}
+                      onClick={() => {
+                        setFullscreenActiveTab(activeTab)
+                        setIsEditorFullscreen(true)
+                      }}
+                      aria-label="Open fullscreen editor"
+                    />
+                  </div>
+                </div>
+                
+                <TabsContent value="guidelines" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
+                  {isGuidelinesInlineEdit ? (
+                    <Editor
+                      height="100%"
+                      defaultLanguage="markdown"
+                      value={guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
+                      onChange={(value) => {
+                        onGuidelinesChange?.(value || '')
+                      }}
+                      onMount={(editor, monaco) => {
+                        defineCustomMonacoThemes(monaco)
+                        applyMonacoTheme(monaco)
+                        setupMonacoThemeWatcher(monaco)
+                        
+                        // Add click outside handler
+                        const handleClickOutside = (e: MouseEvent) => {
+                          const editorElement = editor.getDomNode()
+                          if (editorElement && !editorElement.contains(e.target as Node)) {
+                            setIsGuidelinesInlineEdit(false)
+                            // Only exit edit mode, don't save a new version
+                            // The changes are already stored in guidelinesEditValue via onGuidelinesChange
+                          }
+                        }
+                        
+                        // Add the event listener after a short delay to avoid immediate triggering
+                        setTimeout(() => {
+                          document.addEventListener('mousedown', handleClickOutside)
+                        }, 100)
+                        
+                        // Cleanup function
+                        return () => {
+                          document.removeEventListener('mousedown', handleClickOutside)
+                        }
+                      }}
+                      options={{
+                        ...getCommonMonacoOptions(),
+                        wordWrap: 'on',
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        fontSize: 14,
+                        tabSize: 2,
+                        insertSpaces: true,
+                        automaticLayout: true,
+                      }}
+                    />
+                  ) : (
+                    <div 
+                      className="flex-1 p-4 overflow-y-auto cursor-text hover:bg-muted/30 transition-colors"
+                      onClick={() => {
+                        setIsGuidelinesInlineEdit(true)
+                        handleStartInlineEdit?.()
+                      }}
+                    >
+                      <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                        {(() => {
+                          // Show edited content if there are unsaved changes, otherwise show original content
+                          const contentToShow = hasGuidelinesChanges 
+                            ? guidelinesEditValue 
+                            : (selectedVersion?.guidelines || score.guidelines || '');
+                          
+                          return contentToShow ? (
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm, remarkBreaks]}
+                              components={{
+                                p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                                ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+                                ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+                                li: ({ children }) => <li className="mb-1">{children}</li>,
+                                strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                                em: ({ children }) => <em className="italic">{children}</em>,
+                                code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                                pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+                                h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                                blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+                              }}
+                            >
+                              {contentToShow}
+                            </ReactMarkdown>
+                          ) : (
+                            <div className="text-muted-foreground italic">
+                              Click to add guidelines...
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+                
+                <TabsContent value="code" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden">
+                  <div className="flex flex-col h-full">
+                    {/* Code Editor */}
+                    <div className="flex-1 min-h-0">
+                      <Editor
+                        height="100%"
+                        defaultLanguage="yaml"
+                        value={score.configuration || ''}
+                        onChange={(value) => {
+                          // For direct YAML editing, bypass the complex form field logic
+                          // and just update the configuration directly
+                          setIsEditing(true);
+                          onEditChange?.({ configuration: value || '' });
+                        }}
+                        onMount={(editor, monaco) => {
+                          defineCustomMonacoThemes(monaco)
+                          applyMonacoTheme(monaco)
+                          setupMonacoThemeWatcher(monaco)
+                          configureYamlLanguage(monaco)
+                          setupMonacoIntegration(editor, monaco)
+                        }}
+                        options={{
+                          ...getCommonMonacoOptions(),
+                          wordWrap: 'on',
+                          minimap: { enabled: false },
+                          scrollBeyondLastLine: false,
+                          fontSize: 14,
+                          tabSize: 2,
+                          insertSpaces: true,
+                          automaticLayout: true,
+                        }}
+                      />
+                    </div>
+                    {/* Validation Panel underneath */}
+                    <div className="border-t border-border bg-background p-3 min-h-[200px]">
+                      <YamlLinterPanel 
+                        result={lintResult || undefined}
+                        onMessageClick={handleLintMessageClick}
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Fullscreen Editor Mode */}
+      {isEditorFullscreen && (
+        <div className="flex flex-col h-full w-full">
+          {/* Fullscreen Tabs */}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <Tabs value={fullscreenActiveTab} onValueChange={(value) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between border-b border-border">
+                <TabsList className="h-auto p-0 bg-transparent justify-start">
+                  <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
+                  <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                </TabsList>
+                <div className="flex gap-2">
+                  <CardButton
+                    icon={X}
+                    onClick={() => setIsEditorFullscreen(false)}
+                    aria-label="Close fullscreen"
+                  />
+                </div>
+              </div>
+              
+              {/* Guidelines Tab - 50/50 split */}
+              <TabsContent value="guidelines" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0">
+                <div className="flex h-full">
+                  {/* Left: Markdown Editor */}
+                  <div className="w-1/2 border-r border-border">
+                    <Editor
+                      height="100%"
+                      defaultLanguage="markdown"
+                      value={guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
+                      onChange={(value) => {
+                        onGuidelinesChange?.(value || '')
+                      }}
+                      onMount={(editor, monaco) => {
+                        defineCustomMonacoThemes(monaco)
+                        applyMonacoTheme(monaco)
+                        setupMonacoThemeWatcher(monaco)
+                      }}
+                      options={{
+                        ...getCommonMonacoOptions(),
+                        wordWrap: 'on',
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        fontSize: 14,
+                        tabSize: 2,
+                        insertSpaces: true,
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
+                  {/* Right: Preview */}
+                  <div className="w-1/2 p-4 overflow-y-auto bg-background">
+                    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                      {(guidelinesEditValue || selectedVersion?.guidelines || score.guidelines) ? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkBreaks]}
+                          components={{
+                            p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                            ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+                            ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+                            li: ({ children }) => <li className="mb-1">{children}</li>,
+                            strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                            em: ({ children }) => <em className="italic">{children}</em>,
+                            code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                            pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+                            h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                            blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+                          }}
+                        >
+                          {guidelinesEditValue || selectedVersion?.guidelines || score.guidelines || ''}
+                        </ReactMarkdown>
+                      ) : (
+                        <div className="text-muted-foreground italic">
+                          No guidelines yet. Start typing in the editor to add guidelines.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+              
+              {/* Code Tab - 2/3 + 1/3 split */}
+              <TabsContent value="code" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0">
+                <div className="flex h-full">
+                  {/* Left: YAML Editor (2/3) */}
+                  <div className="w-2/3 border-r border-border">
+                    <Editor
+                      height="100%"
+                      defaultLanguage="yaml"
+                      value={score.configuration || ''}
+                      onChange={(value) => {
+                        // For direct YAML editing, bypass the complex form field logic
+                        // and just update the configuration directly
+                        setIsEditing(true);
+                        onEditChange?.({ configuration: value || '' });
+                      }}
+                      onMount={(editor, monaco) => {
+                        defineCustomMonacoThemes(monaco)
+                        applyMonacoTheme(monaco)
+                        setupMonacoThemeWatcher(monaco)
+                        configureYamlLanguage(monaco)
+                        setupMonacoIntegration(editor, monaco)
+                      }}
+                      options={{
+                        ...getCommonMonacoOptions(),
+                        wordWrap: 'on',
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        fontSize: 14,
+                        tabSize: 2,
+                        insertSpaces: true,
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
+                  {/* Right: Validation Panel (1/3) */}
+                  <div className="w-1/3 bg-background p-3 overflow-y-auto">
+                    <YamlLinterPanel 
+                      result={lintResult || undefined}
+                      onMessageClick={handleLintMessageClick}
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+          
+          {/* Save/Cancel buttons - only show when there are changes */}
+          {(hasChanges || hasGuidelinesChanges) && (
+            <div className="flex items-center gap-3 p-4 bg-background">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setNewVersionNote('')
+                  setIsEditorFullscreen(false)
+                }}
+                disabled={isSavingGuidelines}
+                className="h-10"
+              >
+                Cancel
+              </Button>
+              <textarea
+                value={newVersionNote}
+                onChange={(e) => {
+                  setNewVersionNote(e.target.value)
+                  onNoteChange?.(e.target.value)
+                }}
+                placeholder="Please say what you changed and why..."
+                className="flex-1 px-3 py-2 rounded-md bg-background text-sm resize-none h-10 border border-muted
+                         placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                rows={1}
+              />
+              <Button
+                variant="default"
+                onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
+                disabled={isSavingGuidelines}
+                className="h-10"
+              >
+                {isSavingGuidelines ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+
+
+      {/* Unified Save/Cancel Bar - appears when there are changes */}
+      {(hasChanges || hasGuidelinesChanges) && !isEditorFullscreen && (
+        <div className="mt-3">
+          <div className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setNewVersionNote('')
+                onCancel?.()
+              }}
+              className="shrink-0 h-10"
+            >
+              Cancel
+            </Button>
+            <input
+              type="text"
+              value={newVersionNote}
+              onChange={(e) => {
+                setNewVersionNote(e.target.value)
+                onNoteChange(e.target.value)
+              }}
+              placeholder="Please say what you changed and why..."
+              className="flex-1 px-3 py-2 rounded-md bg-background text-sm h-10
+                       placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <Button
+              variant="default"
+              onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
+              className="shrink-0 h-10"
+            >
+              Save Changes
+            </Button>
+          </div>
+        </div>
+      )}
+
+
+
+
+
+
+
+
 
       {/* Test Score Dialog */}
       <TestScoreDialog
@@ -1081,9 +1263,13 @@ export function ScoreComponent({
   isFullWidth = false,
   onSave,
   onFeedbackAnalysis,
+  onCostAnalysis,
+  onDelete,
   exampleItems = [],
   scorecardName,
   onTaskCreated,
+  initialSelectedVersionId,
+  onVersionSelect,
   className,
   ...props
 }: ScoreComponentProps) {
@@ -1092,12 +1278,75 @@ export function ScoreComponent({
   const [hasChanges, setHasChanges] = React.useState(false)
   const [versions, setVersions] = React.useState<ScoreVersion[]>([])
   const [championVersionId, setChampionVersionId] = React.useState<string>()
-  const [selectedVersionId, setSelectedVersionId] = React.useState<string>()
+  const [selectedVersionId, setSelectedVersionId] = React.useState<string | undefined>(initialSelectedVersionId || undefined)
   const [versionNote, setVersionNote] = React.useState('')
   const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
   const [forceExpandHistory, setForceExpandHistory] = React.useState(false)
-  
+  const [isGuidelinesExpanded, setIsGuidelinesExpanded] = React.useState(false)
+  const [isGuidelinesEditing, setIsGuidelinesEditing] = React.useState(false)
+  const [isGuidelinesFullscreen, setIsGuidelinesFullscreen] = React.useState(false)
+  const [guidelinesEditValue, setGuidelinesEditValue] = React.useState('')
+  const [hasGuidelinesChanges, setHasGuidelinesChanges] = React.useState(false)
+  const [isSavingGuidelines, setIsSavingGuidelines] = React.useState(false)
 
+  // Version selection handler
+  const handleVersionSelect = (version: ScoreVersion) => {
+    console.log('🔍 Loading version:', version.id, 'Guidelines:', version.guidelines)
+    setSelectedVersionId(version.id)
+    setVersionNote(version.note || '')
+    
+    // Call parent's version select handler to update URL
+    onVersionSelect?.(version.id)
+    
+    // Signal to DetailContent to reset editing state
+    setResetEditingCounter(prev => prev + 1)
+    
+    try {
+      // Parse the YAML configuration to extract all fields
+      const config = parseYaml(version.configuration)
+      
+      // Extract external ID from either format
+      const externalIdValue = config.externalId !== undefined ? 
+        config.externalId : 
+        (config.external_id !== undefined ? config.external_id : 
+         (config.id !== undefined ? config.id : undefined));
+
+      
+      // Update the editedScore with values from the YAML configuration and version record
+      // YAML is source of truth for most fields, but guidelines come from ScoreVersion.guidelines
+      setEditedScore(prev => {
+        const updated = {
+          ...prev,
+          // Use values from YAML, falling back to previous values if not present
+          name: config.name !== undefined ? config.name : prev.name,
+          // Support all three formats for external ID
+          externalId: externalIdValue !== undefined ? String(externalIdValue) : prev.externalId,
+          key: config.key !== undefined ? config.key : prev.key,
+          description: config.description !== undefined ? config.description : prev.description,
+          // Guidelines come from ScoreVersion.guidelines, not from YAML
+          guidelines: version.guidelines !== undefined ? version.guidelines : prev.guidelines,
+          // Store the complete configuration for the editor
+          configuration: version.configuration
+        };
+        console.log('🔧 Setting editedScore guidelines to:', updated.guidelines)
+        return updated;
+      })
+      
+      // Reset hasChanges since we just loaded a version
+      setHasChanges(false);
+      
+      // Reset guidelines editing state when switching versions
+      setHasGuidelinesChanges(false);
+      setIsGuidelinesEditing(false);
+      setGuidelinesEditValue(version.guidelines || '');
+      
+      // Remove toast notification for simply viewing a version
+      // We only want notifications for actions that change state
+    } catch (error) {
+      console.error('Error parsing version YAML:', error)
+      toast.error('Error loading version configuration')
+    }
+  }
   
   // Ensure editedScore is updated when score prop changes
   React.useEffect(() => {
@@ -1108,8 +1357,13 @@ export function ScoreComponent({
     setForceExpandHistory(false) // Reset expansion when score changes
   }, [score])
   
-  // Fetch versions when score changes
+  // Fetch versions when score changes - ONLY for detail view
   React.useEffect(() => {
+    // Skip version fetching for grid view to prevent flickering
+    if (variant === 'grid') {
+      return;
+    }
+    
     const fetchVersions = async () => {
       try {
         
@@ -1122,6 +1376,7 @@ export function ScoreComponent({
                 name
                 externalId
                 championVersionId
+                description
               }
             }
           `,
@@ -1139,6 +1394,12 @@ export function ScoreComponent({
           if (championId) {
             setChampionVersionId(championId);
           }
+          
+          // Update the editedScore with the fetched description
+          setEditedScore(prev => ({
+            ...prev,
+            description: scoreData.description || prev.description
+          }));
         }
         
         // Then fetch all versions using the secondary index query
@@ -1155,6 +1416,7 @@ export function ScoreComponent({
                   id
                   scoreId
                   configuration
+                  guidelines
                   isFeatured
                   note
                   createdAt
@@ -1169,8 +1431,13 @@ export function ScoreComponent({
           }
         }) as GraphQLResult<GetScoreVersionsByScoreIdResponse>;
         
+        if ('errors' in response && response.errors) {
+          console.error('🚨 GraphQL errors loading versions:', response.errors);
+        }
+        
         if ('data' in response && response.data?.listScoreVersionByScoreIdAndCreatedAt?.items) {
           const versionItems = response.data.listScoreVersionByScoreIdAndCreatedAt.items;
+          console.log('🔍 Loaded versions:', versionItems.map(v => ({ id: v.id, guidelines: v.guidelines })));
           setVersions(versionItems);
           
           // Sort versions by createdAt in descending order
@@ -1183,12 +1450,33 @@ export function ScoreComponent({
             ? versionItems.find(v => v.id === championId) 
             : null;
             
-          if (champion) {
-            // Automatically select the champion version
+          // Priority order for version selection:
+          // 1. initialSelectedVersionId (from deep link)
+          // 2. champion version
+          // 3. most recent version
+          
+          if (initialSelectedVersionId) {
+            // Try to select the version specified in the URL
+            const initialVersion = versionItems.find(v => v.id === initialSelectedVersionId);
+            if (initialVersion) {
+              console.log('🔗 Deep link: Selecting initial version:', initialVersion.id);
+              handleVersionSelect(initialVersion);
+            } else {
+              console.warn('⚠️ Deep link: Initial version not found, falling back to champion');
+              // Fallback to champion if initial version not found
+              if (champion) {
+                handleVersionSelect(champion);
+              } else if (sortedVersions.length > 0) {
+                handleVersionSelect(sortedVersions[0]);
+              }
+            }
+          } else if (champion) {
+            // No deep link, select champion version
+            console.log('👑 Selecting champion version:', champion.id);
             handleVersionSelect(champion);
           } else if (sortedVersions.length > 0) {
-            // If no champion exists but we have versions, select the most recent one
-            // but don't automatically set it as champion
+            // No champion, select most recent version
+            console.log('📅 Selecting most recent version:', sortedVersions[0].id);
             handleVersionSelect(sortedVersions[0]);
             
             // Only set the most recent version as champion if there are no champions at all
@@ -1226,7 +1514,68 @@ export function ScoreComponent({
       }
     };
     fetchVersions();
-  }, [score])
+  }, [score, variant, initialSelectedVersionId])
+
+
+
+
+
+  const handleSaveGuidelines = async () => {
+    if (isSavingGuidelines) return
+    
+    try {
+      setIsSavingGuidelines(true)
+      
+      // Debug: Check what we actually have
+      console.log('🔍 handleSaveGuidelines - guidelinesEditValue type:', typeof guidelinesEditValue)
+      console.log('🔍 handleSaveGuidelines - guidelinesEditValue value:', guidelinesEditValue)
+      
+      // This should always be a string - if it's not, we have a bug to fix
+      if (typeof guidelinesEditValue !== 'string') {
+        console.error('❌ BUG: guidelinesEditValue is not a string!', guidelinesEditValue)
+        throw new Error(`guidelinesEditValue should be a string, got ${typeof guidelinesEditValue}`)
+      }
+      
+      // Update the score guidelines
+      handleEditChange({ guidelines: guidelinesEditValue })
+      setIsGuidelinesEditing(false)
+      setIsGuidelinesFullscreen(false)
+      setHasGuidelinesChanges(false)
+      
+      // Call the internal handleSave with the current guidelines value
+      await handleSave(guidelinesEditValue)
+      toast.success('Guidelines saved successfully')
+    } catch (error) {
+      console.error('Error saving guidelines:', error)
+      toast.error('Failed to save guidelines')
+    } finally {
+      setIsSavingGuidelines(false)
+    }
+  }
+
+  const handleCancelGuidelinesEdit = () => {
+    // Reset to the original content for the selected version
+    const currentVersion = selectedVersionId ? versions.find(v => v.id === selectedVersionId) : undefined;
+    const originalContent = currentVersion?.guidelines || editedScore.guidelines || '';
+    setGuidelinesEditValue(originalContent)
+    setHasGuidelinesChanges(false)
+    setIsGuidelinesEditing(false)
+    setIsGuidelinesFullscreen(false)
+  }
+
+  const handleGuidelinesChange = (value: string) => {
+    console.log('🔍 handleGuidelinesChange called with type:', typeof value)
+    console.log('🔍 handleGuidelinesChange called with value:', value)
+    
+    if (typeof value !== 'string') {
+      console.error('❌ BUG: handleGuidelinesChange received non-string!', value)
+      console.trace('Stack trace for non-string value')
+      return // Don't set invalid value
+    }
+    
+    setGuidelinesEditValue(value)
+    setHasGuidelinesChanges(value !== (editedScore.guidelines || ''))
+  }
 
   const handleEditChange = (changes: Partial<ScoreData>) => {
     
@@ -1240,7 +1589,7 @@ export function ScoreComponent({
       
       // If we're changing fields other than the note, reset onlyNoteChanged flag
       if ('name' in changes || 'key' in changes || 'externalId' in changes || 
-          'description' in changes || 'configuration' in changes) {
+          'description' in changes || 'configuration' in changes || 'guidelines' in changes) {
         // Mark field changes detected
       }
       
@@ -1270,33 +1619,61 @@ export function ScoreComponent({
         
         // Update name if changed
         if (changes.name !== undefined) {
-          updatedConfig.name = changes.name;
+          if (changes.name && changes.name !== '') {
+            updatedConfig.name = changes.name;
+          } else {
+            delete updatedConfig.name;
+          }
         }
         
         // Update key if changed
         if (changes.key !== undefined) {
-          updatedConfig.key = changes.key;
+          if (changes.key && changes.key !== '') {
+            updatedConfig.key = changes.key;
+          } else {
+            delete updatedConfig.key;
+          }
         }
         
         // Update description if changed
         if (changes.description !== undefined) {
-          updatedConfig.description = changes.description;
+          if (changes.description && changes.description !== '') {
+            updatedConfig.description = changes.description;
+          } else {
+            delete updatedConfig.description;
+          }
         }
         
         // Update external ID with the appropriate format
         if (changes.externalId !== undefined) {
-          if (usesUnderscoreFormat) {
-            updatedConfig.external_id = changes.externalId;
-            // Remove camelCase if exists
-            if ('externalId' in updatedConfig) {
-              delete updatedConfig.externalId;
+          if (changes.externalId && changes.externalId !== '') {
+            if (usesUnderscoreFormat) {
+              updatedConfig.external_id = changes.externalId;
+              // Remove camelCase if exists
+              if ('externalId' in updatedConfig) {
+                delete updatedConfig.externalId;
+              }
+            } else {
+              updatedConfig.externalId = changes.externalId;
+              // Remove snake_case if exists
+              if ('external_id' in updatedConfig) {
+                delete updatedConfig.external_id;
+              }
             }
           } else {
-            updatedConfig.externalId = changes.externalId;
-            // Remove snake_case if exists
-            if ('external_id' in updatedConfig) {
-              delete updatedConfig.external_id;
-            }
+            // Remove all external ID fields if empty
+            delete updatedConfig.externalId;
+            delete updatedConfig.external_id;
+            delete updatedConfig.id;
+          }
+        }
+        
+        // Update isDisabled if changed
+        if (changes.isDisabled !== undefined) {
+          if (changes.isDisabled) {
+            updatedConfig.isDisabled = changes.isDisabled;
+          } else {
+            delete updatedConfig.isDisabled;
           }
         }
         
@@ -1314,55 +1691,14 @@ export function ScoreComponent({
     setEditedScore(score)
     setVersionNote('') // Reset note on cancel
     setHasChanges(false)
+    setHasGuidelinesChanges(false) // Also reset guidelines changes
+    setGuidelinesEditValue(editedScore.guidelines || '') // Reset guidelines to original value
+    setIsGuidelinesEditing(false) // Exit guidelines editing mode
     setSelectedVersionId(undefined) // Reset selection to champion
     setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
   }
 
-  const handleVersionSelect = (version: ScoreVersion) => {
-    setSelectedVersionId(version.id)
-    setVersionNote(version.note || '')
-    
-    // Signal to DetailContent to reset editing state
-    setResetEditingCounter(prev => prev + 1)
-    
-    try {
-      // Parse the YAML configuration to extract all fields
-      const config = parseYaml(version.configuration)
-      
-      // Extract external ID from either format
-      const externalIdValue = config.externalId !== undefined ? 
-        config.externalId : 
-        (config.external_id !== undefined ? config.external_id : 
-         (config.id !== undefined ? config.id : undefined));
 
-      
-      // Update the editedScore with values from the YAML configuration
-      // This ensures we're using the YAML as the source of truth
-      setEditedScore(prev => {
-        const updated = {
-          ...prev,
-          // Use values from YAML, falling back to previous values if not present
-          name: config.name !== undefined ? config.name : prev.name,
-          // Support all three formats for external ID
-          externalId: externalIdValue !== undefined ? String(externalIdValue) : prev.externalId,
-          key: config.key !== undefined ? config.key : prev.key,
-          description: config.description !== undefined ? config.description : prev.description,
-          // Store the complete configuration for the editor
-          configuration: version.configuration
-        };
-        return updated;
-      })
-      
-      // Reset hasChanges since we just loaded a version
-      setHasChanges(false);
-      
-      // Remove toast notification for simply viewing a version
-      // We only want notifications for actions that change state
-    } catch (error) {
-      console.error('Error parsing version YAML:', error)
-      toast.error('Error loading version configuration')
-    }
-  }
 
   const handleToggleFeature = async (versionId: string) => {
     try {
@@ -1408,13 +1744,19 @@ export function ScoreComponent({
     setHasChanges(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (overrideGuidelines?: string) => {
     try {
+      console.log('ScoreComponent handleSave called for score:', score);
+      console.log('editedScore data:', editedScore);
+      console.log('versions array:', versions);
+      console.log('championVersionId:', championVersionId);
+      
       // Signal to DetailContent to reset editing state
       setResetEditingCounter(prev => prev + 1)
       
       // Update the Score record with the new values
-      await client.graphql({
+      console.log('Updating Score record...');
+      const updateResult = await client.graphql({
         query: `
           mutation UpdateScore($input: UpdateScoreInput!) {
             updateScore(input: $input) {
@@ -1422,6 +1764,7 @@ export function ScoreComponent({
               name
               externalId
               key
+              description
             }
           }
         `,
@@ -1429,11 +1772,14 @@ export function ScoreComponent({
           input: {
             id: String(score.id),
             name: editedScore.name,
-            externalId: editedScore.externalId,
-            key: editedScore.key,
+            ...(editedScore.externalId && editedScore.externalId !== '' && { externalId: editedScore.externalId }),
+            ...(editedScore.key && editedScore.key !== '' && { key: editedScore.key }),
+            ...(editedScore.description && editedScore.description !== '' && { description: editedScore.description }),
           }
         }
       });
+      
+      console.log('Score record update result:', updateResult);
 
       // Check if we're editing an existing version or creating a new one
       const isEditingExistingVersion = selectedVersionId && versions.some(v => v.id === selectedVersionId);
@@ -1445,12 +1791,25 @@ export function ScoreComponent({
       if (!configurationYaml) {
         // Check if we should use external_id or externalId format
         // Default to external_id for new configurations as it's more standard
-        configurationYaml = stringifyYaml({
-          name: editedScore.name,
-          external_id: editedScore.externalId,
-          key: editedScore.key,
-          description: editedScore.description
-        });
+        const newConfigObj: Record<string, any> = {
+          name: editedScore.name
+        };
+        
+        // Only add fields that have values to avoid "key: null" in YAML
+        if (editedScore.externalId && editedScore.externalId !== '') {
+          newConfigObj.external_id = editedScore.externalId;
+        }
+        if (editedScore.key && editedScore.key !== '') {
+          newConfigObj.key = editedScore.key;
+        }
+        if (editedScore.description && editedScore.description !== '') {
+          newConfigObj.description = editedScore.description;
+        }
+        if (editedScore.isDisabled) {
+          newConfigObj.isDisabled = editedScore.isDisabled;
+        }
+        
+        configurationYaml = stringifyYaml(newConfigObj);
       } else {
         // Ensure the configuration has the latest values
         try {
@@ -1463,21 +1822,47 @@ export function ScoreComponent({
 
           
           // Update the external ID field using the same format that was in the original YAML
-          if (hasSimpleId) {
-            // Using simple id format
-            parsed.id = editedScore.externalId;
-          } else if (hasExternalUnderscoreId) {
-            // Using snake_case format
-            parsed.external_id = editedScore.externalId;
+          if (editedScore.externalId && editedScore.externalId !== '') {
+            if (hasSimpleId) {
+              // Using simple id format
+              parsed.id = editedScore.externalId;
+            } else if (hasExternalUnderscoreId) {
+              // Using snake_case format
+              parsed.external_id = editedScore.externalId;
+            } else {
+              // Using camelCase format (default)
+              parsed.externalId = editedScore.externalId;
+            }
           } else {
-            // Using camelCase format (default)
-            parsed.externalId = editedScore.externalId;
+            // Remove all external ID fields if empty
+            delete parsed.id;
+            delete parsed.external_id;
+            delete parsed.externalId;
           }
           
           // Update other fields
           parsed.name = editedScore.name;
-          parsed.key = editedScore.key;
-          if (editedScore.description) parsed.description = editedScore.description;
+          
+          // Only set key if it has a value
+          if (editedScore.key && editedScore.key !== '') {
+            parsed.key = editedScore.key;
+          } else {
+            delete parsed.key;
+          }
+          
+          // Only set description if it has a value
+          if (editedScore.description && editedScore.description !== '') {
+            parsed.description = editedScore.description;
+          } else {
+            delete parsed.description;
+          }
+          
+          // Handle isDisabled field
+          if (editedScore.isDisabled) {
+            parsed.isDisabled = editedScore.isDisabled;
+          } else {
+            delete parsed.isDisabled;
+          }
           
           // Update the configuration
           configurationYaml = stringifyYaml(parsed);
@@ -1487,13 +1872,19 @@ export function ScoreComponent({
       }
 
       
+      const now = new Date().toISOString();
       const versionPayload = {
         scoreId: String(score.id),
         configuration: configurationYaml,
+        guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
         isFeatured: false,
         note: versionNote || 'Updated score configuration',
+        createdAt: now,
+        updatedAt: now
       };
 
+      console.log('Creating ScoreVersion with payload:', versionPayload);
+      console.log('🔍 Guidelines being saved:', overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''));
       const createVersionResponse = await client.graphql({
         query: `
           mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
@@ -1501,6 +1892,7 @@ export function ScoreComponent({
               id
               scoreId
               configuration
+              guidelines
               isFeatured
               note
               createdAt
@@ -1513,9 +1905,12 @@ export function ScoreComponent({
         }
       }) as GraphQLResult<CreateScoreVersionResponse>;
       
+      console.log('CreateScoreVersion response:', createVersionResponse);
+      
       const newVersion = 'data' in createVersionResponse && createVersionResponse.data?.createScoreVersion;
       
       // Update local state with the new version
+      console.log('🔍 Created newVersion with guidelines:', newVersion && 'guidelines' in newVersion ? newVersion.guidelines : 'N/A');
       if (newVersion) {
         const placeholderVersion = {
           ...newVersion,
@@ -1565,8 +1960,16 @@ export function ScoreComponent({
       setHasChanges(false);
       setVersionNote('');
       setForceExpandHistory(true); // Auto-expand version history after save
+      
+      // Call the parent's onSave callback if provided
+      onSave?.();
     } catch (error) {
       console.error('Error saving score:', error);
+      console.error('Full error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+        fullError: error
+      });
       toast.error(error instanceof Error ? error.message : 'Error updating score');
     }
   };
@@ -1655,9 +2058,11 @@ export function ScoreComponent({
               onToggleFullWidth={onToggleFullWidth}
               onClose={onClose}
               onEditChange={handleEditChange}
-              onSave={onSave || handleSave}
+              onSave={handleSave}
               onCancel={handleCancel}
               onFeedbackAnalysis={onFeedbackAnalysis}
+              onCostAnalysis={onCostAnalysis}
+              onDelete={onDelete}
               hasChanges={hasChanges}
               versions={versions}
               championVersionId={championVersionId}
@@ -1673,10 +2078,50 @@ export function ScoreComponent({
               selectedAccount={selectedAccount}
               scorecardName={scorecardName}
               onTaskCreated={onTaskCreated}
+              // Guidelines editing props
+              isGuidelinesExpanded={isGuidelinesExpanded}
+              onToggleGuidelinesExpanded={() => setIsGuidelinesExpanded(!isGuidelinesExpanded)}
+              isGuidelinesEditing={isGuidelinesEditing}
+              guidelinesEditValue={guidelinesEditValue}
+              hasGuidelinesChanges={hasGuidelinesChanges}
+              isSavingGuidelines={isSavingGuidelines}
+              onStartInlineEdit={() => {
+                setIsGuidelinesEditing(true)
+                // Use the current displayed content (either edited or original)
+                const currentVersion = selectedVersionId ? versions.find(v => v.id === selectedVersionId) : undefined;
+                const currentContent = hasGuidelinesChanges 
+                  ? guidelinesEditValue 
+                  : (currentVersion?.guidelines || editedScore.guidelines || '');
+                setGuidelinesEditValue(currentContent)
+              }}
+              onOpenGuidelinesEditor={() => {
+                setIsGuidelinesFullscreen(true)
+                // Use the current displayed content (either edited or original)
+                const currentVersion = selectedVersionId ? versions.find(v => v.id === selectedVersionId) : undefined;
+                const currentContent = hasGuidelinesChanges 
+                  ? guidelinesEditValue 
+                  : (currentVersion?.guidelines || editedScore.guidelines || '');
+                setGuidelinesEditValue(currentContent)
+              }}
+              onGuidelinesChange={handleGuidelinesChange}
+              onSaveGuidelines={handleSaveGuidelines}
+              onCancelGuidelinesEdit={handleCancelGuidelinesEdit}
             />
           )}
         </div>
       </div>
+
+      {/* Fullscreen Guidelines Editor */}
+      <FullscreenGuidelinesEditor
+        isOpen={isGuidelinesFullscreen}
+        title={`Guidelines - ${score.name}`}
+        value={guidelinesEditValue}
+        onChange={handleGuidelinesChange}
+        onSave={handleSaveGuidelines}
+        onCancel={handleCancelGuidelinesEdit}
+        hasChanges={hasGuidelinesChanges}
+        isSaving={isSavingGuidelines}
+      />
     </div>
   )
 } 

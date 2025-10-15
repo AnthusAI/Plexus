@@ -26,6 +26,8 @@ const config: StorybookConfig = {
   },
   staticDirs: ['../public'],
   webpackFinal: async (config) => {
+    const webpack = require('webpack');
+    
     if (config.resolve) {
       config.resolve.alias = {
         ...config.resolve.alias,
@@ -33,6 +35,16 @@ const config: StorybookConfig = {
         '@number-flow/react': path.resolve(currentDir, '../components/ui/number-flow-dev.tsx'),
       };
     }
+    
+    // Use NormalModuleReplacementPlugin to replace AccountContext imports with mock
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /.*\/app\/contexts\/AccountContext/,
+        path.resolve(currentDir, '../__mocks__/AccountContext.ts')
+      )
+    );
+    
     return config;
   },
 };

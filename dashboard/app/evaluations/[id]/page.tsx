@@ -7,7 +7,8 @@ import { generateClient } from 'aws-amplify/api'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { Schema } from '@/amplify/data/resource'
 import EvaluationTask from '@/components/EvaluationTask'
-import { getValueFromLazyLoader, transformEvaluation, standardizeScoreResults, Evaluation } from '@/utils/data-operations'
+import { TaskDisplay } from '@/components/TaskDisplay'
+import { getValueFromLazyLoader, transformEvaluation, Evaluation } from '@/utils/data-operations'
 import EvaluationsDashboard from '@/components/evaluations-dashboard'
 import { GraphQLResult } from '@aws-amplify/api'
 
@@ -323,75 +324,14 @@ export function PublicEvaluation({
         <div className="h-full flex flex-col">
           <h1 className="text-xl font-bold mb-2">Evaluation Results</h1>
           <div className="flex-1 overflow-auto">
-            <EvaluationTask 
+            <TaskDisplay
               variant="detail"
-              isFullWidth={true}
-              task={{
-                id: evaluation.id,
-                type: evaluation.type,
-                scorecard: evaluation.scorecard?.name || '',
-                score: evaluation.score?.name || '',
-                time: evaluation.createdAt,
-                data: {
-                  id: evaluation.id,
-                  title: evaluation.scorecard?.name || '',
-                  accuracy: evaluation.accuracy || null,
-                  metrics: evaluation.metrics || [],
-                  processedItems: evaluation.processedItems || 0,
-                  totalItems: evaluation.totalItems || 0,
-                  progress: (evaluation.processedItems || 0) / (evaluation.totalItems || 1) * 100,
-                  inferences: evaluation.inferences || 0,
-                  cost: evaluation.cost || null,
-                  status: evaluation.status || 'COMPLETED',
-                  elapsedSeconds: evaluation.elapsedSeconds || null,
-                  estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds || null,
-                  startedAt: evaluation.startedAt ? evaluation.startedAt : undefined,
-                  errorMessage: evaluation.errorMessage ? evaluation.errorMessage : undefined,
-                  errorDetails: evaluation.errorDetails ? evaluation.errorDetails : undefined,
-                  confusionMatrix: evaluation.confusionMatrix ? {
-                    matrix: typeof evaluation.confusionMatrix === 'string' ? 
-                      JSON.parse(evaluation.confusionMatrix).matrix : 
-                      evaluation.confusionMatrix.matrix,
-                    labels: typeof evaluation.confusionMatrix === 'string' ? 
-                      JSON.parse(evaluation.confusionMatrix).labels : 
-                      evaluation.confusionMatrix.labels
-                  } : undefined,
-                  datasetClassDistribution: evaluation.datasetClassDistribution ? 
-                    (typeof evaluation.datasetClassDistribution === 'string' ?
-                      JSON.parse(evaluation.datasetClassDistribution) :
-                      evaluation.datasetClassDistribution) : undefined,
-                  isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced === null ? 
-                    undefined : evaluation.isDatasetClassDistributionBalanced,
-                  predictedClassDistribution: evaluation.predictedClassDistribution ? 
-                    (typeof evaluation.predictedClassDistribution === 'string' ?
-                      JSON.parse(evaluation.predictedClassDistribution) :
-                      evaluation.predictedClassDistribution) : undefined,
-                  isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced === null ? 
-                    undefined : evaluation.isPredictedClassDistributionBalanced,
-                  scoreResults: evaluation.scoreResults ? standardizeScoreResults(evaluation.scoreResults) : [],
-                  task: evaluation.task ? {
-                    id: evaluation.task.id,
-                    accountId: (evaluation as any).accountId || '',
-                    type: evaluation.task.type || 'EVALUATION',
-                    status: evaluation.task.status,
-                    target: evaluation.task.target,
-                    command: evaluation.task.command,
-                    description: evaluation.task.description || undefined,
-                    metadata: evaluation.task.metadata || {},
-                    createdAt: evaluation.task.createdAt || undefined,
-                    startedAt: evaluation.task.startedAt || undefined,
-                    completedAt: evaluation.task.completedAt || undefined,
-                    estimatedCompletionAt: evaluation.task.estimatedCompletionAt || undefined,
-                    errorMessage: evaluation.task.errorMessage || undefined,
-                    errorDetails: evaluation.task.errorDetails || undefined,
-                    currentStageId: evaluation.task.currentStageId || undefined,
-                    stages: {
-                      items: evaluation.task.stages ? getValueFromLazyLoader(evaluation.task.stages)?.data?.items || [] : [],
-                      nextToken: null
-                    }
-                  } : null
-                }
+              task={evaluation.task}
+              evaluationData={{
+                ...evaluation,
+                scoreResults: evaluation.scoreResults
               }}
+              isFullWidth={true}
               selectedScoreResultId={selectedScoreResultId}
               onSelectScoreResult={setSelectedScoreResultId}
             />

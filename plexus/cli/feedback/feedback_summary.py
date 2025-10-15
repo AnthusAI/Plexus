@@ -8,9 +8,9 @@ import yaml
 import asyncio
 from typing import Optional, Dict, Any
 
-from plexus.cli.console import console
-from plexus.cli.client_utils import create_client
-from plexus.cli.reports.utils import resolve_account_id_for_command
+from plexus.cli.shared.console import console
+from plexus.cli.shared.client_utils import create_client
+from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.cli.feedback.feedback_service import FeedbackService
 
 

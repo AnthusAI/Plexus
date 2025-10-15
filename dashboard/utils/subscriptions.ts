@@ -1121,4 +1121,86 @@ export function observeScoreResultChanges() {
       };
     }
   };
-} 
+}
+
+// GraphNode subscription queries
+const onCreateGraphNodeSubscriptionQuery = /* GraphQL */ `
+  subscription OnCreateGraphNode {
+    onCreateGraphNode {
+      id
+      procedureId
+      name
+      metadata
+      status
+      parentNodeId
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const onUpdateGraphNodeSubscriptionQuery = /* GraphQL */ `
+  subscription OnUpdateGraphNode {
+    onUpdateGraphNode {
+      id
+      procedureId
+      name
+      metadata
+      status
+      parentNodeId
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export function observeGraphNodeUpdates() {
+  return new Observable(observer => {
+    const client = getClient();
+    const subscriptions: { unsubscribe: () => void }[] = [];
+
+    // Subscribe to create events
+    const createSub = (client.graphql({ query: onCreateGraphNodeSubscriptionQuery }) as any)
+      .subscribe({
+        next: ({ data }: { data: any }) => {
+          console.log('GraphNode create subscription event:', {
+            nodeId: data?.onCreateGraphNode?.id,
+            procedureId: data?.onCreateGraphNode?.procedureId,
+            name: data?.onCreateGraphNode?.name,
+            status: data?.onCreateGraphNode?.status,
+            data: data?.onCreateGraphNode
+          });
+          observer.next({ type: 'create', data: data?.onCreateGraphNode });
+        },
+        error: (error: any) => {
+          console.error('ExperimentNode create subscription error:', error);
+          observer.error(error);
+        }
+      });
+    subscriptions.push(createSub);
+
+    // Subscribe to update events
+    const updateSub = (client.graphql({ query: onUpdateGraphNodeSubscriptionQuery }) as any)
+      .subscribe({
+        next: ({ data }: { data: any }) => {
+          console.log('GraphNode update subscription event:', {
+            nodeId: data?.onUpdateGraphNode?.id,
+            procedureId: data?.onUpdateGraphNode?.procedureId,
+            name: data?.onUpdateGraphNode?.name,
+            status: data?.onUpdateGraphNode?.status,
+            data: data?.onUpdateGraphNode
+          });
+          observer.next({ type: 'update', data: data?.onUpdateGraphNode });
+        },
+        error: (error: any) => {
+          console.error('ExperimentNode update subscription error:', error);
+          observer.error(error);
+        }
+      });
+    subscriptions.push(updateSub);
+
+    return () => {
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  });
+}

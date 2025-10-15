@@ -20,7 +20,7 @@
     "test:storybook": "test-storybook",
     "typecheck": "tsc --noEmit --pretty --diagnostics",
     "typecheck:profile": "tsc --noEmit --generateTrace .ts-trace",
-    "test-storybook:ci": "npm run build-storybook --quiet && npx concurrently -k -s first -n \"SB,TEST\" -c \"magenta,blue\" \"npx http-server storybook-static --port 6006 --silent\" \"npx wait-on tcp:6006 && npm run test-storybook -- --url http://localhost:6006\"",
+    "test-storybook:ci": "npm run build-storybook --quiet && npx concurrently -k -s first -n \"SB,TEST\" -c \"magenta,blue\" \"npx http-server storybook-static --port 6007 --silent\" \"npx wait-on tcp:6007 && npm run test-storybook -- --url http://localhost:6007\"",
     "ci:typecheck": "npm run typecheck",
     "ci:unit": "npm run test:coverage",
     "ci:storybook": "npm run test-storybook:ci",
@@ -110,6 +110,7 @@
     "tailwindcss-animate": "^1.0.7",
     "unist-util-visit": "^5.0.0",
     "vaul": "^1.1.2",
+    "victory": "^37.3.6",
     "zen-observable-ts": "^1.1.0"
   },
   "devDependencies": {

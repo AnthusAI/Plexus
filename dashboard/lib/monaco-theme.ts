@@ -117,14 +117,18 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
         [/^---\s*$/, 'tag'],
         [/^\.\.\.\s*$/, 'tag'],
         
+        
         // Keys (including quoted keys) - more comprehensive pattern
         [/^\s*([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key'],
         [/^\s*(['"])((?:[^'"]|\\.)*)(\1)\s*(?=:)/, ['delimiter', 'key', 'delimiter']],
         
+        // Keys after array dashes (on same line as -)
+        [/([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key'],
+        
         // Values after colons
         [/:\s*/, 'delimiter', '@value'],
         
-        // Arrays
+        // Arrays - stay in root state to process keys properly
         [/^\s*-\s*/, 'delimiter.array'],
         
         // Everything else
@@ -132,6 +136,13 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       ],
       
       value: [
+        // Array items - pop back to root and process as array
+        [/^\s*-\s*/, 'delimiter.array', '@pop'],
+        
+        // Keys in value context (for nested structures)
+        [/^\s*([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key', '@pop'],
+        [/^\s*(['"])((?:[^'"]|\\.)*)(\1)\s*(?=:)/, ['delimiter', 'key', 'delimiter'], '@pop'],
+        
         // Strings (single quoted)
         [/'([^'\\]|\\.)*'/, 'string', '@pop'],
         
@@ -166,8 +177,21 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       ],
       
       multiline: [
-        [/^(\s*)(.*)$/, ['', 'string']],
-        [/^(?!\s)/, '', '@pop'],
+        // Exit multiline string when we encounter a YAML key (with colon) at base indentation or less
+        // Specific pattern for user_message with multiline indicators
+        [/^(\s*)(user_message)(\s*)(:)(\s*)([\|\>][-+]?\d*\s*)$/, ['', 'key', '', 'delimiter', '', 'string.yaml'], '@multiline'],
+        [/^(\s*)([a-zA-Z_][\w\-]*)\s*:\s*([\|\>][-+]?\d*\s*)$/, ['', 'key', 'delimiter', 'string.yaml'], '@multiline'],
+        [/^([a-zA-Z_][\w\-]*)\s*:/, 'key', '@pop'],
+        [/^(\s*)([a-zA-Z_][\w\-]*)\s*:/, ['', 'key'], '@pop'],
+        [/^(\s*)(['"])(.*?)\2\s*:/, ['', 'delimiter', 'key', 'delimiter'], '@pop'],
+        // Exit multiline string for document separators
+        [/^(---|\.\.\.)/, 'tag', '@pop'],
+        // Exit multiline string for list items at base level only (not indented lists within the string)
+        [/^-\s/, 'delimiter.array', '@pop'],
+        // Exit multiline string for comments that start at beginning of line
+        [/^\s*#.*$/, 'comment'],
+        // Everything else in a multiline string is treated as string content (including quotes)
+        [/^.*$/, 'string'],
       ],
     },
   })
@@ -281,7 +305,7 @@ const detectIndentationPattern = (lines: string[]): number => {
 }
 
 /**
- * YAML validation function for indentation errors - Fixed version
+ * YAML validation function for indentation errors - Fixed version for multiline strings
  */
 export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel) => {
   const markers: editor.IMarkerData[] = []
@@ -290,6 +314,8 @@ export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel
   // Detect the document's indentation pattern
   const expectedIndentStep = detectIndentationPattern(lines)
   const indentationStack: number[] = []
+  let inMultilineString = false
+  let multilineStringIndent = 0
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -314,6 +340,54 @@ export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel
         endLineNumber: lineNumber,
         endColumn: line.indexOf('\t') + 2
       })
+    }
+    
+    // Check if we're entering a multiline string (literal | or folded >)
+    const multilineStringMatch = line.match(/:\s*[\|>][-+]?\d*\s*$/)
+    if (multilineStringMatch && isYamlKeyLine(line)) {
+      inMultilineString = true
+      // Set expected multiline string indentation to be greater than the key's indentation
+      multilineStringIndent = indentLevel + expectedIndentStep
+      continue
+    }
+    
+    // If we're in a multiline string, validate differently
+    if (inMultilineString) {
+      // Check if we've exited the multiline string (line with same or less indentation than the key, and is a key line)
+      if (indentLevel <= multilineStringIndent - expectedIndentStep && isYamlKeyLine(line)) {
+        inMultilineString = false
+        multilineStringIndent = 0
+        // Continue with normal validation for this key line
+      } else {
+        // We're still in the multiline string - skip indentation validation
+        // Only check that content has proper indentation (should be at least at multilineStringIndent level)
+        if (line.trim() !== '' && indentLevel < multilineStringIndent && !line.trim().startsWith('#')) {
+          // Allow for the first content line to establish the base indentation
+          if (i > 0) {
+            const prevContentLines = lines.slice(0, i).reverse()
+            let hasContentLine = false
+            for (const prevLine of prevContentLines) {
+              if (prevLine.trim() !== '' && !prevLine.trim().startsWith('#') && !prevLine.match(/:\s*[\|>]/)) {
+                hasContentLine = true
+                break
+              }
+            }
+            
+            // Only show warning if there are already content lines in this multiline string
+            if (hasContentLine) {
+              markers.push({
+                severity: monaco.MarkerSeverity.Warning,
+                message: `Multiline string content should be indented at least ${multilineStringIndent} spaces.`,
+                startLineNumber: lineNumber,
+                startColumn: 1,
+                endLineNumber: lineNumber,
+                endColumn: indentLevel + 1
+              })
+            }
+          }
+        }
+        continue
+      }
     }
     
     // Only validate indentation for actual YAML key lines
@@ -400,8 +474,8 @@ export const defineCustomMonacoThemes = (monaco: Monaco): void => {
     { token: 'delimiter.comma', foreground: getCssVar('--muted-foreground') },
     { token: 'bracket', foreground: getCssVar('--muted-foreground') },
     
-    // Identifiers - using foreground color
-    { token: 'identifier', foreground: getCssVar('--foreground') },
+    // Identifiers - using string color (most YAML identifiers are string-like)
+    { token: 'identifier', foreground: getEditorColor('--editor-string') },
     
     // Whitespace - minimal visibility for indentation guides
     { token: 'whitespace', foreground: getCssVar('--border') },
@@ -415,7 +489,7 @@ export const defineCustomMonacoThemes = (monaco: Monaco): void => {
     colors: {
       'editor.background': '#' + getCssVar('--background'),
       'editor.foreground': '#' + getCssVar('--foreground'),
-      'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
+      'editor.lineHighlightBackground': '#' + getCssVar('--muted') + '50',
       'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
       'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
       'editor.selectionBackground': '#' + getCssVar('--primary') + '30', // primary with transparency
@@ -438,7 +512,7 @@ export const defineCustomMonacoThemes = (monaco: Monaco): void => {
     colors: {
       'editor.background': '#' + getCssVar('--background'),
       'editor.foreground': '#' + getCssVar('--foreground'),
-      'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
+      'editor.lineHighlightBackground': '#' + getCssVar('--muted') + '50',
       'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
       'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
       'editor.selectionBackground': '#' + getCssVar('--primary') + '30', // primary with transparency

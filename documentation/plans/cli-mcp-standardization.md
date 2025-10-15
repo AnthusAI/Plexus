@@ -64,7 +64,7 @@ list_plexus_report_configurations    → plexus_report_configurations_list
 
 ### Feedback Tools (Already Correct)
 These follow the correct pattern:
-- `plexus_feedback_summary` ✓
+- `plexus_feedback_analysis` ✓
 - `plexus_feedback_find` ✓
 - `plexus_predict` ✓
 

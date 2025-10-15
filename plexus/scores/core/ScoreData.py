@@ -13,7 +13,7 @@ from plexus.CustomLogging import logging, console
 
 class ScoreData:
 
-    def load_data(self, *, data=None, excel=None, fresh=False):
+    def load_data(self, *, data=None, excel=None, fresh=False, reload=False):
         """
         Load the specified data from the training data lake, with caching, into a combined DataFrame in the class instance.
 
@@ -23,12 +23,50 @@ class ScoreData:
             Dictionary of data to load from the training data lake.
         excel : str, optional
             Path to an Excel file to load data from.
+        fresh : bool, optional
+            If True, bypass cache and fetch fresh data.
+        reload : bool, optional
+            If True, reload existing dataset by refreshing values for current records only.
         """
         data_cache = self._load_data_cache()
 
-        self.dataframe = data_cache.load_dataframe(data=data, fresh=fresh)
+        # Check if the data cache's load_dataframe method supports the reload parameter
+        import inspect
+        load_dataframe_signature = inspect.signature(data_cache.load_dataframe)
+        
+        # Build kwargs based on what the data cache supports
+        kwargs = {'data': data, 'fresh': fresh}
+        if 'reload' in load_dataframe_signature.parameters:
+            kwargs['reload'] = reload
+        elif reload:
+            # Log a warning if reload was requested but not supported
+            logging.warning(f"The data cache {data_cache.__class__.__name__} does not support the 'reload' parameter. Ignoring --reload flag.")
+        
+        self.dataframe = data_cache.load_dataframe(**kwargs)
 
-        logging.debug(f"Loaded dataframe: {self.dataframe.head().to_string()}")
+        # Essential dataset information
+        logging.info(f"Dataset loaded: {self.dataframe.shape[0]} rows x {self.dataframe.shape[1]} columns")
+        logging.info(f"Columns: {list(self.dataframe.columns)}")
+        
+        # Show first 3 rows sample if data exists
+        if len(self.dataframe) > 0:
+            logging.info("Sample data (first 3 rows):")
+            for i in range(min(3, len(self.dataframe))):
+                row_data = {}
+                for col in self.dataframe.columns:
+                    value = self.dataframe.iloc[i][col]
+                    if isinstance(value, str) and len(value) > 100:
+                        row_data[col] = value[:97] + "..."
+                    else:
+                        row_data[col] = value
+                logging.info(f"  Row {i}: {row_data}")
+        
+        # Basic quality checks
+        if len(self.dataframe) > 0:
+            score_columns = [col for col in self.dataframe.columns if col not in ['text', 'content_id', 'feedback_item_id', 'metadata', 'IDs']]
+            if score_columns:
+                logging.info(f"Found {len(score_columns)} potential score columns: {score_columns}")
+
         
         # Apply dependency filters if they exist
         if self.parameters.dependencies:
@@ -42,9 +80,6 @@ class ScoreData:
             
             logging.info(f"Applied dependency filters.  Rows after: {len(self.dataframe)}")
 
-        # Display the first few rows of the dataframe
-        logging.debug(f"First few rows of the dataframe:")
-        logging.debug(self.dataframe.head().to_string())
 
         self.analyze_dataset()
 

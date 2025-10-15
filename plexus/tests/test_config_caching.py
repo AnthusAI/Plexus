@@ -21,6 +21,18 @@ from plexus.cli.shared import get_score_yaml_path, sanitize_path_name
 class TestScoreYamlPath(unittest.TestCase):
     """Tests for generating the file path for a score's cached configuration."""
     
+    def setUp(self):
+        """Set up the test environment."""
+        # Create a temporary directory for the test
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.temp_dir.name)
+    
+    def tearDown(self):
+        """Clean up after the test."""
+        os.chdir(self.old_cwd)
+        self.temp_dir.cleanup()
+    
     def test_get_score_yaml_path(self):
         """Test that the path is generated correctly."""
         scorecard_name = "Test Scorecard"
@@ -84,13 +96,7 @@ metrics:
         # Get the expected file path
         yaml_path = get_score_yaml_path(self.scorecard_name, self.score_name)
         
-        # If the test is running in a fresh environment, ensure the parent directory doesn't exist yet
-        # If it already exists from a previous test run, that's okay too
-        if not yaml_path.parent.exists():
-            self.assertFalse(yaml_path.parent.exists())
-        
         # Save the configuration
-        os.makedirs(yaml_path.parent, exist_ok=True)
         with open(yaml_path, 'w') as f:
             f.write(self.score_config)
         
@@ -108,7 +114,6 @@ metrics:
         yaml_path = get_score_yaml_path(self.scorecard_name, self.score_name)
         
         # Create the file
-        os.makedirs(yaml_path.parent, exist_ok=True)
         with open(yaml_path, 'w') as f:
             f.write(self.score_config)
         
@@ -185,7 +190,6 @@ class TestPerformanceImprovement(unittest.TestCase):
         # Now, cache the configurations
         for i, score_id in enumerate(self.score_ids):
             yaml_path = get_score_yaml_path(self.scorecard_name, self.score_names[i])
-            os.makedirs(yaml_path.parent, exist_ok=True)
             with open(yaml_path, 'w') as f:
                 f.write(api_results[i])
         
@@ -207,6 +211,18 @@ class TestPerformanceImprovement(unittest.TestCase):
 
 class TestCachingIntegration(unittest.TestCase):
     """Integration tests for configuration caching."""
+    
+    def setUp(self):
+        """Set up the test environment."""
+        # Create a temporary directory for the test
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.temp_dir.name)
+    
+    def tearDown(self):
+        """Clean up after the test."""
+        os.chdir(self.old_cwd)
+        self.temp_dir.cleanup()
     
     @patch('os.path.exists')
     @patch('builtins.open', new_callable=mock_open)

@@ -10,15 +10,17 @@ import {
 } from '@/components/ui/dropdown-menu'
 import EvaluationTask from '@/components/EvaluationTask'
 import { calculateProgress } from '../utils/format'
-import type { EvaluationTaskData, TaskData, TaskStage } from '@/types/tasks/evaluation'
+import type { TaskData, TaskStage } from '@/types/tasks/evaluation'
+import type { EvaluationTaskData } from '@/components/EvaluationTask'
+import type { ProcessedEvaluation } from '@/utils/data-operations'
 import { TaskStatus } from '@/types/shared'
 
 interface EvaluationCardProps {
-  evaluation: Schema['Evaluation']['type']
+  evaluation: ProcessedEvaluation
   selectedEvaluationId: string | undefined | null
   scorecardNames: Record<string, string>
   scoreNames: Record<string, string>
-  onSelect: (evaluation: Schema['Evaluation']['type']) => void
+  onSelect: (evaluation: ProcessedEvaluation) => void
   onDelete: (evaluationId: string) => Promise<boolean>
   evaluationRefsMap?: React.MutableRefObject<Map<string, HTMLDivElement | null>>
 }
@@ -56,6 +58,11 @@ interface RawTask {
   stages?: {
     items?: RawTaskStage[]
     nextToken?: string | null
+  } | {
+    data?: {
+      items?: RawTaskStage[]
+    }
+    nextToken?: string | null
   }
 }
 
@@ -91,14 +98,21 @@ export const EvaluationCard = React.memo(({
     startedAt: evaluation.startedAt || undefined,
     errorMessage: evaluation.errorMessage || undefined,
     errorDetails: evaluation.errorDetails || null,
+    scoreResults: evaluation.scoreResults as any, // Pass the transformed score results with itemIdentifiers
     task: taskData
+  }
+  
+  if (evaluation.status === 'RUNNING' || evaluation.task?.status === 'RUNNING') {
+    console.log(`STAGE_TRACE: EvaluationCard render ${evaluation.id} with taskData stages: ${taskData?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
   }
 
   React.useEffect(() => {
+    
     const fetchTaskData = async () => {
+      // Handle both function and direct object formats
       if (typeof evaluation.task === 'function') {
         try {
-          const result = await evaluation.task()
+          const result = await (evaluation.task as any)()
           if (result.data) {
             const rawTask = result.data as RawTask
             // Transform to match TaskData interface
@@ -120,7 +134,7 @@ export const EvaluationCard = React.memo(({
               errorDetails: rawTask.errorDetails === null ? undefined : rawTask.errorDetails,
               currentStageId: rawTask.currentStageId,
               stages: rawTask.stages ? {
-                items: (rawTask.stages.items || []).map((stage: RawTaskStage): TaskStage => ({
+                items: ('items' in rawTask.stages ? rawTask.stages.items || [] : []).map((stage: RawTaskStage): TaskStage => ({
                   id: stage.id || '',
                   name: stage.name || '',
                   order: stage.order || 0,
@@ -134,10 +148,111 @@ export const EvaluationCard = React.memo(({
                 }))
               } : undefined
             }
-            setTaskData(transformedTask)
+            
+            if ((transformedTask.stages?.items?.length ?? 0) > 0) {
+              console.log(`STAGE_TRACE: EvaluationCard transformed function task ${transformedTask.id} with ${transformedTask.stages?.items?.length} stages: ${(transformedTask.stages?.items ?? []).map(s => `${s.name}:${s.status}`).join(',')}`);
+            }
+            
+            // Always update to ensure latest stage status changes are reflected
+            const hasStageData = transformedTask.stages && transformedTask.stages.items.length > 0;
+            const existingStageData = taskData?.stages?.items || [];
+            const newStageData = transformedTask.stages?.items || [];
+            
+            // Compare stage data to detect changes
+            const stagesChanged = JSON.stringify(existingStageData.map(s => ({ 
+              name: s.name, 
+              status: s.status, 
+              processedItems: s.processedItems,
+              statusMessage: s.statusMessage
+            }))) !== JSON.stringify(newStageData.map(s => ({ 
+              name: s.name, 
+              status: s.status, 
+              processedItems: s.processedItems,
+              statusMessage: s.statusMessage
+            })));
+            
+            const shouldUpdate = !taskData || hasStageData || taskData.stages?.items?.length === 0 || stagesChanged;
+            
+            if (shouldUpdate) {
+              console.log(`STAGE_TRACE: EvaluationCard setTaskData function ${transformedTask.id} updating with stages: ${newStageData.map(s => `${s.name}:${s.status}`).join(',')}`);
+              setTaskData(transformedTask)
+            }
           }
         } catch (error) {
           console.error('Error fetching task data:', error)
+        }
+      } else if (evaluation.task && typeof evaluation.task === 'object') {
+        // Handle direct task object assignment
+        const rawTask = evaluation.task as RawTask
+        // Check if stages has the nested data structure or direct items
+        const stageItems = rawTask.stages && 'data' in rawTask.stages 
+          ? rawTask.stages.data?.items || []
+          : rawTask.stages && 'items' in rawTask.stages ? rawTask.stages.items || [] : [];
+        
+        if (stageItems.length > 0) {
+          console.log(`STAGE_TRACE: EvaluationCard processing direct task ${rawTask.id} with ${stageItems.length} stages`);
+        }
+        
+        const transformedTask: TaskData = {
+          id: rawTask.id || '',
+          accountId: rawTask.accountId || '',
+          type: rawTask.type || '',
+          status: rawTask.status || '',
+          target: rawTask.target || '',
+          command: rawTask.command || '',
+          description: rawTask.description === null ? undefined : rawTask.description,
+          dispatchStatus: rawTask.dispatchStatus as 'DISPATCHED' | undefined,
+          metadata: rawTask.metadata,
+          createdAt: rawTask.createdAt,
+          startedAt: rawTask.startedAt === null ? undefined : rawTask.startedAt,
+          completedAt: rawTask.completedAt === null ? undefined : rawTask.completedAt,
+          estimatedCompletionAt: rawTask.estimatedCompletionAt === null ? undefined : rawTask.estimatedCompletionAt,
+          errorMessage: rawTask.errorMessage === null ? undefined : rawTask.errorMessage,
+          errorDetails: rawTask.errorDetails === null ? undefined : rawTask.errorDetails,
+          currentStageId: rawTask.currentStageId,
+          stages: rawTask.stages ? {
+            items: stageItems.map((stage: RawTaskStage): TaskStage => ({
+              id: stage.id || '',
+              name: stage.name || '',
+              order: stage.order || 0,
+              status: isValidStatus(stage.status) ? stage.status : 'PENDING',
+              statusMessage: stage.statusMessage === null ? undefined : stage.statusMessage,
+              startedAt: stage.startedAt === null ? undefined : stage.startedAt,
+              completedAt: stage.completedAt === null ? undefined : stage.completedAt,
+              estimatedCompletionAt: stage.estimatedCompletionAt === null ? undefined : stage.estimatedCompletionAt,
+              processedItems: stage.processedItems,
+              totalItems: stage.totalItems
+            }))
+          } : undefined
+        }
+        
+        if ((transformedTask.stages?.items?.length ?? 0) > 0) {
+          console.log(`STAGE_TRACE: EvaluationCard transformed direct task ${transformedTask.id} with ${transformedTask.stages?.items?.length} stages: ${(transformedTask.stages?.items ?? []).map(s => `${s.name}:${s.status}`).join(',')}`);
+        }
+        
+        // Always update to ensure latest stage status changes are reflected
+        const hasStageData = transformedTask.stages && transformedTask.stages.items.length > 0;
+        const existingStageData = taskData?.stages?.items || [];
+        const newStageData = transformedTask.stages?.items || [];
+        
+        // Compare stage data to detect changes
+        const stagesChanged = JSON.stringify(existingStageData.map(s => ({ 
+          name: s.name, 
+          status: s.status, 
+          processedItems: s.processedItems,
+          statusMessage: s.statusMessage
+        }))) !== JSON.stringify(newStageData.map(s => ({ 
+          name: s.name, 
+          status: s.status, 
+          processedItems: s.processedItems,
+          statusMessage: s.statusMessage
+        })));
+        
+        const shouldUpdate = !taskData || hasStageData || taskData.stages?.items?.length === 0 || stagesChanged;
+        
+        if (shouldUpdate) {
+          console.log(`STAGE_TRACE: EvaluationCard setTaskData direct ${transformedTask.id} updating with stages: ${newStageData.map(s => `${s.name}:${s.status}`).join(',')}`);
+          setTaskData(transformedTask)
         }
       }
     }

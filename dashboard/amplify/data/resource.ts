@@ -42,12 +42,14 @@ type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "
 type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "editedAt";
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
-type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
 type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
 type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "recordType" | "timeRangeStart" | "timeRangeEnd" | "numberOfMinutes" | "count" | "cost" | "decisionCount" | "externalAiApiCount" | "cachedAiApiCount" | "errorCount" | "createdAt" | "updatedAt";
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
+type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
+type GraphNodeIndexFields = "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
+type ProcedureTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -78,6 +80,9 @@ const schema = a.schema({
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'accountId'),
             dataSources: a.hasMany('DataSource', 'accountId'),
             dataSets: a.hasMany('DataSet', 'accountId'),
+            procedures: a.hasMany('Procedure', 'accountId'),
+            procedureTemplates: a.hasMany('ProcedureTemplate', 'accountId'),
+            chatSessions: a.hasMany('ChatSession', 'accountId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -92,6 +97,7 @@ const schema = a.schema({
             name: a.string().required(),
             key: a.string().required(),
             description: a.string(),
+            guidelines: a.string(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             sections: a.hasMany('ScorecardSection', 'scorecardId'),
@@ -104,10 +110,11 @@ const schema = a.schema({
             feedbackItems: a.hasMany('FeedbackItem', 'scorecardId'),
             externalId: a.string(),
             exampleItems: a.hasMany('ScorecardExampleItem', 'scorecardId'),
-            processedItems: a.hasMany('ScorecardProcessedItem', 'scorecardId'),
             aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scorecardId'),
             dataSources: a.hasMany('DataSource', 'scorecardId'),
             dataSets: a.hasMany('DataSet', 'scorecardId'),
+            procedures: a.hasMany('Procedure', 'scorecardId'),
+            chatSessions: a.hasMany('ChatSession', 'scorecardId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -167,7 +174,9 @@ const schema = a.schema({
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required(),
             isDisabled: a.boolean(),
-            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scoreId')
+            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scoreId'),
+            procedures: a.hasMany('Procedure', 'scoreId'),
+            chatSessions: a.hasMany('ChatSession', 'scoreId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -186,6 +195,7 @@ const schema = a.schema({
             scoreId: a.string().required(),
             score: a.belongsTo('Score', 'scoreId'),
             configuration: a.string().required(),
+            guidelines: a.string(),
             isFeatured: a.boolean().required(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -196,7 +206,8 @@ const schema = a.schema({
             parentVersion: a.belongsTo('ScoreVersion', 'parentVersionId'),
             childVersions: a.hasMany('ScoreVersion', 'parentVersionId'),
             evaluations: a.hasMany('Evaluation', 'scoreVersionId'),
-            dataSets: a.hasMany('DataSet', 'scoreVersionId')
+            dataSets: a.hasMany('DataSet', 'scoreVersionId'),
+            procedures: a.hasMany('Procedure', 'scoreVersionId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -316,7 +327,6 @@ const schema = a.schema({
             text: a.string(),
             metadata: a.json(),
             asExampleFor: a.hasMany('ScorecardExampleItem', 'itemId'),
-            processedFor: a.hasMany('ScorecardProcessedItem', 'itemId'),
             itemIdentifiers: a.hasMany('Identifier', 'itemId'),
         })
         .authorization((allow) => [
@@ -331,8 +341,6 @@ const schema = a.schema({
             idx("scoreId").sortKeys(["createdAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
             idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId"),
-            // GSI for efficient querying by creation type (evaluation vs prediction)
-            idx("accountId").sortKeys(["createdByType", "createdAt"]).name("byAccountCreatedByTypeAndCreatedAt"),
         ]),
 
     Identifier: a
@@ -392,10 +400,10 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId"),
+            idx("accountId").sortKeys(["createdAt"]).name("byAccountAndCreatedAt"),
             idx("itemId"),
-            idx("scorecardId"),
-            idx("scoreId"),
-            idx("evaluationId")
+            idx("itemId").sortKeys(["scoreId"]).name("byItemScore"),
+            idx("scoreId")
         ]),
 
     ScoreResult: a
@@ -409,6 +417,7 @@ const schema = a.schema({
             cost: a.json(), // Cost information including tokens, API calls, and monetary cost
             attachments: a.string().array(), // Array of file paths for trace and log files
             type: a.string(), // Type of score result: "prediction", "evaluation", etc.
+            status: a.string(), // Status of the score result (e.g. "pending", "synced", "error")
             itemId: a.string().required(),
             item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
@@ -444,7 +453,7 @@ const schema = a.schema({
             index("scoreId"),
             index("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
             index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
-            index("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated")
+            index("type").sortKeys(["createdAt"]).name("byTypeAndCreatedAt")
         ]),
 
     BatchJobScoringJob: a
@@ -531,8 +540,6 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
             idx("taskId"),
-            idx("name"),
-            idx("order"),
             idx("status")
         ]),
 
@@ -755,26 +762,6 @@ const schema = a.schema({
             idx("recordType").sortKeys(["timeRangeStart"]).name("byRecordTypeAndTime")
         ]),
 
-    ScorecardProcessedItem: a
-        .model({
-            scorecardId: a.id().required(),
-            itemId: a.id().required(),
-            processedAt: a.datetime(),
-            lastScoreResultId: a.string(), // Reference to most recent result
-            
-            // Relationships to both ends
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            item: a.belongsTo('Item', 'itemId'),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: ScorecardProcessedItemIndexFields) => any) => [
-            idx("scorecardId"),
-            idx("itemId"),
-            idx("scorecardId").sortKeys(["processedAt"]),
-        ]),
 
     DataSource: a
         .model({
@@ -805,8 +792,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["key"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
-            idx("key"),
-            idx("name")
+            idx("key")
         ]),
 
     DataSourceVersion: a
@@ -858,7 +844,6 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: DataSetIndexFields) => any) => [
-            idx("accountId").sortKeys(["updatedAt"]),
             idx("accountId").sortKeys(["createdAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["createdAt"]),
@@ -868,6 +853,145 @@ const schema = a.schema({
             idx("scoreVersionId").sortKeys(["createdAt"]),
             idx("dataSourceVersionId").sortKeys(["updatedAt"]),
             idx("dataSourceVersionId").sortKeys(["createdAt"])
+        ]),
+
+    Procedure: a
+        .model({
+            featured: a.boolean(),
+            templateId: a.string(),
+            template: a.belongsTo('ProcedureTemplate', 'templateId'),
+            code: a.string(), // YAML template code copied from template
+            rootNodeId: a.id(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            scoreVersionId: a.string(),
+            scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
+            nodes: a.hasMany('GraphNode', 'procedureId'),
+            chatSessions: a.hasMany('ChatSession', 'procedureId'),
+            chatMessages: a.hasMany('ChatMessage', 'procedureId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ProcedureIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("scorecardId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["updatedAt"]),
+            idx("templateId").sortKeys(["updatedAt"]),
+            idx("rootNodeId")
+        ]),
+
+    GraphNode: a
+        .model({
+            procedureId: a.id().required(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
+            parentNodeId: a.id(),
+            parentNode: a.belongsTo('GraphNode', 'parentNodeId'),
+            childNodes: a.hasMany('GraphNode', 'parentNodeId'),
+            name: a.string(),
+            status: a.string(),
+            metadata: a.json(), // Consolidated field for code, hypothesis, insight, value, etc.
+            chatSessions: a.hasMany('ChatSession', 'nodeId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: GraphNodeIndexFields) => any) => [
+            idx("procedureId").sortKeys(["createdAt"]).name("nodesByProcedureCreatedAt"),
+            idx("parentNodeId").name("nodesByParent")
+        ]),
+
+    ProcedureTemplate: a
+        .model({
+            name: a.string().required(),
+            description: a.string(),
+            template: a.string().required(), // The YAML template content
+            category: a.string(), // e.g., "hypothesis_generation", "beam_search"
+            version: a.string(), // Template version (e.g., "1.0", "2.1")
+            isDefault: a.boolean(), // Whether this is the default template for the category
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            procedures: a.hasMany('Procedure', 'templateId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("accountId").sortKeys(["updatedAt"])
+        ]),
+
+    ChatSession: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            procedureId: a.string(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
+            nodeId: a.string(),
+            node: a.belongsTo('GraphNode', 'nodeId'),
+            name: a.string(),
+            category: a.string(),
+            status: a.enum(['ACTIVE', 'COMPLETED', 'ERROR']),
+            metadata: a.json(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            messages: a.hasMany('ChatMessage', 'sessionId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("procedureId").sortKeys(["createdAt"]),
+            idx("nodeId").sortKeys(["createdAt"]),
+            idx("status").sortKeys(["updatedAt"])
+        ]),
+
+    ChatMessage: a
+        .model({
+            sessionId: a.string().required(),
+            session: a.belongsTo('ChatSession', 'sessionId'),
+            procedureId: a.string(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
+            role: a.enum(['USER', 'ASSISTANT', 'SYSTEM', 'TOOL']),
+            content: a.string().required(),
+            metadata: a.json(),
+            messageType: a.enum(['MESSAGE', 'TOOL_CALL', 'TOOL_RESPONSE']),
+            toolName: a.string(), // Name of the tool being called (for TOOL_CALL and TOOL_RESPONSE)
+            toolParameters: a.json(), // Parameters passed to the tool (for TOOL_CALL)
+            toolResponse: a.json(), // Response from the tool (for TOOL_RESPONSE)
+            parentMessageId: a.string(), // Links tool responses to their calls, or chains related messages
+            parentMessage: a.belongsTo('ChatMessage', 'parentMessageId'),
+            childMessages: a.hasMany('ChatMessage', 'parentMessageId'),
+            sequenceNumber: a.integer(), // Order within the session for proper conversation flow
+            createdAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("sessionId").sortKeys(["sequenceNumber"]),
+            idx("sessionId").sortKeys(["createdAt"]),
+            idx("procedureId").sortKeys(["createdAt"]),
+            idx("parentMessageId")
         ]),
 });
 

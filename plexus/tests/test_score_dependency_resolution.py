@@ -15,7 +15,7 @@ from unittest.mock import patch, mock_open
 import pytest
 from ruamel.yaml import YAML
 
-from plexus.cli.dependency_discovery import (
+from plexus.cli.shared.dependency_discovery import (
     extract_dependencies_from_config,
     discover_dependencies,
     build_name_id_mappings

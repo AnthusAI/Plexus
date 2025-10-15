@@ -65,20 +65,29 @@ class Generator(BaseNode):
             if hasattr(state, 'chat_history') and state.chat_history:
                 logging.info(f"Using existing chat history with {len(state.chat_history)} messages")
                 
-                # Convert dict messages back to LangChain objects if needed
+                # Convert dict messages back to LangChain objects if needed, filtering out empty messages
                 chat_messages = []
                 for msg in state.chat_history:
+                    # Skip messages with empty or whitespace-only content
                     if isinstance(msg, dict):
+                        content = msg.get('content', '')
+                        if not content or not content.strip():
+                            continue
+                        
                         msg_type = msg.get('type', '').lower()
                         if msg_type == 'human':
-                            chat_messages.append(HumanMessage(content=msg['content']))
+                            chat_messages.append(HumanMessage(content=content))
                         elif msg_type == 'ai':
-                            chat_messages.append(AIMessage(content=msg['content']))
+                            chat_messages.append(AIMessage(content=content))
                         elif msg_type == 'system':
-                            chat_messages.append(SystemMessage(content=msg['content']))
+                            chat_messages.append(SystemMessage(content=content))
                         else:
-                            chat_messages.append(BaseMessage(content=msg['content']))
+                            chat_messages.append(BaseMessage(content=content))
                     else:
+                        # For non-dict messages, check content attribute
+                        content = getattr(msg, 'content', '')
+                        if not content or not content.strip():
+                            continue
                         chat_messages.append(msg)
                 
                 # Get the initial system and human messages from prompt template
@@ -91,6 +100,11 @@ class Generator(BaseNode):
                 # 3. All chat history messages in order
                 messages = initial_messages + chat_messages
                 
+                # Check for empty message content in retry flow
+                for i, msg in enumerate(messages):
+                    if not msg.content or not msg.content.strip():
+                        raise ValueError(f"Retry message {i} has empty content")
+                
                 # Log the final message sequence
                 logging.info("Final message sequence:")
                 for i, msg in enumerate(messages):
@@ -99,8 +113,15 @@ class Generator(BaseNode):
             else:
                 logging.info("Building new messages from prompt template")
                 try:
-                    prompt = prompt_templates[0].format_prompt(**state.model_dump())
+                    state_dict = state.model_dump()
+                    prompt = prompt_templates[0].format_prompt(**state_dict)
                     messages = prompt.to_messages()
+                    
+                    # Check for empty message content
+                    for i, msg in enumerate(messages):
+                        if not msg.content or not msg.content.strip():
+                            raise ValueError(f"Message {i} has empty content")
+                    
                     logging.info(f"Built new messages: {[type(m).__name__ for m in messages]}")
                 except Exception as e:
                     logging.error(f"Error building messages: {e}")
@@ -197,7 +218,9 @@ class Generator(BaseNode):
         
         # Check if either completion or explanation has content
         has_completion = state.completion is not None and state.completion.strip()
-        has_explanation = state.explanation is not None and state.explanation.strip()
+        has_explanation = (state.explanation is not None and 
+                          state.explanation.strip() and 
+                          state.explanation != "No completion received from LLM")
         
         if has_completion or has_explanation:
             logging.info(f"Content generated, ending")
@@ -373,15 +396,35 @@ class Generator(BaseNode):
 
                     response = await model.ainvoke(messages)
                     
+                    # Normalize response content for gpt-oss and other complex response formats
+                    normalized_content = self.normalize_response_text(response)
+                    
+                    # Check for empty completion and handle for retry
+                    if not normalized_content or not normalized_content.strip():
+                        logging.info(f"  ⚠ {self.node_name}: No completion received from LLM")
+                        # Return state with None completion to trigger retry logic
+                        state.completion = None
+                        state.explanation = "No completion received from LLM"
+                        return state
+                    
+                    # Extract reasoning content for gpt-oss models
+                    reasoning_content = ""
+                    if self.is_gpt_oss_model():
+                        reasoning_content = self.extract_reasoning_content(response)
+                    
                     # Create the initial result state
                     result_state = self.GraphState(
                         **{k: v for k, v in state.model_dump().items() if k not in ['completion']},
-                        completion=response.content
+                        completion=normalized_content
                     )
                     
                     output_state = {
-                        "explanation": response.content
+                        "explanation": normalized_content
                     }
+                    
+                    # Add reasoning to output_state for gpt-oss models
+                    if reasoning_content:
+                        output_state["reasoning"] = reasoning_content
                     
                     # Log the state and get a new state object with updated node_results
                     updated_state = self.log_state(result_state, None, output_state)

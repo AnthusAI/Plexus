@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { Button } from "./ui/button"
 import { amplifyClient } from "@/utils/amplify-client"
+import { FilterInput } from '@/components/FilterInput'
 import type { Schema } from "@/amplify/data/resource"
 import { Plus } from "lucide-react"
 import ScorecardContext from "@/components/ScorecardContext"
@@ -60,6 +61,7 @@ export default function DataSourcesDashboard({
   const [isDataSetFullWidth, setIsDataSetFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [dataSetAnimationComplete, setDataSetAnimationComplete] = useState(false)
+  const [dataSourcesFilter, setDataSourcesFilter] = useState('')
   
   // Track when we previously had a dataset to handle proper close animations
   const previouslyHadDataSet = useRef<boolean>(false)
@@ -525,11 +527,15 @@ export default function DataSourcesDashboard({
             ) : (
               // Grid view
               <>
-                <div className="flex justify-end">
-                  <Button 
-                    onClick={handleCreate} 
-                    variant="ghost" 
-                    className="bg-card hover:bg-accent text-muted-foreground"
+                <div className="flex gap-2 items-center justify-between">
+                  <FilterInput
+                    placeholder="Filter..."
+                    onFilterChange={setDataSourcesFilter}
+                  />
+                  <Button
+                    onClick={handleCreate}
+                    variant="ghost"
+                    className="bg-card hover:bg-accent text-muted-foreground whitespace-nowrap"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     New Data Source
@@ -537,7 +543,11 @@ export default function DataSourcesDashboard({
                 </div>
                 <div className="@container">
                   <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-3">
-                    {dataSources.map(dataSource => (
+                    {dataSources
+                      .filter(dataSource =>
+                        !dataSourcesFilter || dataSource.name.toLowerCase().includes(dataSourcesFilter.toLowerCase())
+                      )
+                      .map(dataSource => (
                       <DataSourceComponent
                         key={dataSource.id}
                         variant="grid"

@@ -15,17 +15,20 @@ export interface CardButtonProps {
   skeletonMode?: boolean
 }
 
-export function CardButton({
-  icon: Icon,
-  onClick,
-  disabled,
-  'aria-label': ariaLabel,
-  active = false,
-  label,
-  className,
-  variant = 'default',
-  skeletonMode = false
-}: CardButtonProps) {
+export const CardButton = React.forwardRef<HTMLButtonElement, CardButtonProps>(function CardButton(
+  {
+    icon: Icon,
+    onClick,
+    disabled,
+    'aria-label': ariaLabel,
+    active = false,
+    label,
+    className,
+    variant = 'default',
+    skeletonMode = false
+  }: CardButtonProps,
+  ref
+) {
   // Skeleton mode rendering
   if (skeletonMode) {
     return (
@@ -65,9 +68,10 @@ export function CardButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
+      ref={ref}
     >
       {Icon && <Icon className="h-4 w-4" />}
       {label && <span>{label}</span>}
     </Button>
   )
-} 
+})

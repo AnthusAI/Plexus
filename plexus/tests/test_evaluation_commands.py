@@ -218,14 +218,14 @@ class TestErrorHandling(unittest.TestCase):
 class TestRealCommandIntegration(unittest.TestCase):
     """Integration tests for the real evaluation commands."""
     
-    @patch('plexus.cli.EvaluationCommands.load_scorecard_from_api')
+    @patch('plexus.cli.evaluation.evaluations.load_scorecard_from_api')
     def test_integration_with_real_accuracy_command(self, mock_load):
         """Test integration with the actual accuracy command."""
         # This test would require mocking many dependencies
         # and is included here as a template for further expansion
         pass
     
-    @patch('plexus.cli.EvaluationCommands.load_scorecard_from_api')
+    @patch('plexus.cli.evaluation.evaluations.load_scorecard_from_api')
     def test_integration_with_real_distribution_command(self, mock_load):
         """Test integration with the actual distribution command."""
         # This test would require mocking many dependencies
