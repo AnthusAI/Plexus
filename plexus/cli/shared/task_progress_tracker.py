@@ -925,36 +925,9 @@ class TaskProgressTracker:
             return
 
         try:
-<<<<<<< HEAD:plexus/cli/task_progress_tracker.py
-            # Pass client correctly if get_stages supports it, otherwise omit
-            # Assuming get_stages uses self._client if available or creates default
-            stages_result = self.api_task.get_stages(client=client)
-            # Handle case where get_stages returns a non-iterable (like Mock object)
-            if hasattr(stages_result, '__iter__') and not isinstance(stages_result, (str, bytes)):
-                existing_api_stages = {s.name: s for s in stages_result}
-            else:
-                logging.warning(f"get_stages returned non-iterable: {type(stages_result)}")
-                existing_api_stages = {}
-            logging.debug(f"Found existing API stages: {list(existing_api_stages.keys())}")
-        except TypeError:
-             # Fallback if get_stages doesn't accept client kwarg
-             logging.warning("Task.get_stages does not accept 'client', using default client resolution.")
-             try:
-                 stages_result = self.api_task.get_stages()
-                 # Handle case where get_stages returns a non-iterable (like Mock object)
-                 if hasattr(stages_result, '__iter__') and not isinstance(stages_result, (str, bytes)):
-                     existing_api_stages = {s.name: s for s in stages_result}
-                 else:
-                     logging.warning(f"get_stages returned non-iterable: {type(stages_result)}")
-                     existing_api_stages = {}
-             except Exception as e:
-                 logging.error(f"Failed to get existing stages for task {self.api_task.id}: {e}", exc_info=True)
-                 existing_api_stages = {}
-=======
             # get_stages() uses the task's client internally
             existing_api_stages = {s.name: s for s in self.api_task.get_stages()}
             logging.debug(f"Found existing API stages: {list(existing_api_stages.keys())}")
->>>>>>> main:plexus/cli/shared/task_progress_tracker.py
         except Exception as e:
             logging.error(f"Failed to get existing stages for task {self.api_task.id}: {e}", exc_info=True)
             existing_api_stages = {}
@@ -1001,19 +974,7 @@ class TaskProgressTracker:
                 else:
                     logging.warning(f"create_stages_batch returned non-iterable: {type(created_stages)}")
                 
-<<<<<<< HEAD:plexus/cli/task_progress_tracker.py
-                # Only log the count if created_stages is a valid iterable
-                if hasattr(created_stages, '__iter__') and not isinstance(created_stages, (str, bytes)):
-                    try:
-                        count = len(created_stages)
-                        logging.info(f"Successfully created {count} stages in batch")
-                    except TypeError:
-                        logging.info("Successfully created stages in batch")
-                else:
-                    logging.info("Successfully created stages in batch")
-=======
                 logging.debug(f"Task progress tracker: created {len(created_stages)} stages")
->>>>>>> main:plexus/cli/shared/task_progress_tracker.py
                 
             except Exception as e:
                 logging.error(f"Error creating stages in batch: {e}", exc_info=True)
