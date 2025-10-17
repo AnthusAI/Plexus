@@ -2344,6 +2344,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'confidence': score_result.confidence,  # Add confidence from Score.Result
                 'explanation': score_result.explanation,  # Add explanation from Score.Result
                 'code': '200',  # Add success code
+                'status': 'COMPLETED',  # Add status
             }
             
             # Add scoreId - try multiple sources
@@ -2376,7 +2377,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
 
             # Validate all required fields are present and not None
-            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code']
+            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code', 'status']
             missing_fields = [field for field in required_fields if not data.get(field)]
             if missing_fields:
                 raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
@@ -2397,6 +2398,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     code
                     type
                     feedbackItemId
+                    status
                 }
             }
             """
