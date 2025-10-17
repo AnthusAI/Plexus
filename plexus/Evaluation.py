@@ -2351,13 +2351,15 @@ Total cost:       ${expenses['total_cost']:.6f}
             score_id = None
             if hasattr(score_result, 'parameters') and hasattr(score_result.parameters, 'id'):
                 score_id = score_result.parameters.id
-            elif hasattr(self, 'score_id') and self.score_id:
+            elif hasattr(self, 'score_id') and self.score_id is not None:
                 score_id = self.score_id
             else:
                 self.logging.warning("No score ID found")
             
-            if score_id:
+            if score_id is not None:
                 data['scoreId'] = score_id
+            else:
+                logging.error("score_id is None, not adding to data")
             
             # Add feedback item ID if provided from the dataset
             if feedback_item_id:
@@ -2377,8 +2379,8 @@ Total cost:       ${expenses['total_cost']:.6f}
             feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
 
             # Validate all required fields are present and not None
-            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code', 'status']
-            missing_fields = [field for field in required_fields if not data.get(field)]
+            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'scoreId', 'value', 'metadata', 'code', 'status']
+            missing_fields = [field for field in required_fields if field not in data or data[field] is None]
             if missing_fields:
                 raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
@@ -2390,6 +2392,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     itemId
                     accountId
                     scorecardId
+                    scoreId
                     value
                     confidence
                     explanation
