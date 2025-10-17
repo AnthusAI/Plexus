@@ -7,7 +7,11 @@ from .identifier_search import (
     get_item_identifiers,
     create_identifiers_for_item
 )
-
+from .scoring import (
+    create_scorecard_instance_for_single_score,
+    resolve_scorecard_id,
+    resolve_score_id,
+)
 __all__ = [
     'truncate_dict_strings', 
     'truncate_dict_strings_inner',
@@ -16,5 +20,8 @@ __all__ = [
     'batch_find_items_by_identifiers',
     'find_item_by_typed_identifier',
     'get_item_identifiers',
-    'create_identifiers_for_item'
+    'create_identifiers_for_item',
+    'create_scorecard_instance_for_single_score',
+    'resolve_scorecard_id',
+    'resolve_score_id',
 ] 
