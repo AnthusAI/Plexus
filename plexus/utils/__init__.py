@@ -11,6 +11,10 @@ from .scoring import (
     create_scorecard_instance_for_single_score,
     resolve_scorecard_id,
     resolve_score_id,
+    get_existing_score_result,
+    get_plexus_client,
+    sanitize_metadata_for_graphql,
+    check_if_score_is_disabled
 )
 __all__ = [
     'truncate_dict_strings', 
@@ -24,4 +28,8 @@ __all__ = [
     'create_scorecard_instance_for_single_score',
     'resolve_scorecard_id',
     'resolve_score_id',
+    'get_existing_score_result',
+    'get_plexus_client',
+    'sanitize_metadata_for_graphql',
+    'check_if_score_is_disabled',
 ] 
