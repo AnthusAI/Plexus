@@ -1,9 +1,132 @@
 import asyncio
 import logging
 import traceback
+import json
+import os
 from typing import Dict, Optional
 from plexus.dashboard.api.models.scorecard import Scorecard as ScorecardModel
 from plexus.dashboard.api.models.score import Score as ScoreModel
+from plexus.dashboard.api.models.account import Account
+from plexus.dashboard.api.models.score_result import ScoreResult
+# Import Item model for upsert functionality
+try:
+    from plexus.dashboard.api.models.item import Item
+    PLEXUS_ITEM_AVAILABLE = True
+except ImportError:
+    PLEXUS_ITEM_AVAILABLE = False
+from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
+
+# Initialize CloudWatch logger for metrics
+cloudwatch_logger = CloudWatchLogger(namespace="CallCriteria/API")
+
+async def get_plexus_client():
+    """Get the Plexus Dashboard client for API operations."""
+    from plexus.dashboard.api.client import PlexusDashboardClient
+    return PlexusDashboardClient()
+
+def sanitize_metadata_for_graphql(metadata: dict) -> dict:
+    """
+    Sanitize metadata for GraphQL compatibility.
+
+    Handles various data types and applies size limits to ensure the metadata
+    can be safely stored in GraphQL/DynamoDB:
+    - Truncates long strings
+    - Summarizes large complex objects
+    - Removes problematic characters
+    - Handles serialization errors gracefully
+
+    Args:
+        metadata: Dictionary of metadata to sanitize
+
+    Returns:
+        Sanitized metadata dictionary safe for GraphQL operations
+    """
+    sanitized_metadata = {}
+    if metadata:
+        for key, meta_value in metadata.items():
+            try:
+                if meta_value is None:
+                    sanitized_metadata[key] = None
+                elif isinstance(meta_value, bool):
+                    sanitized_metadata[key] = meta_value
+                elif isinstance(meta_value, (int, float)):
+                    # Ensure numeric values are reasonable for GraphQL
+                    if abs(meta_value) < 1e10:
+                        sanitized_metadata[key] = meta_value
+                elif isinstance(meta_value, str):
+                    # Truncate very long strings and remove problematic characters
+                    cleaned_str = meta_value.replace('\x00', '').replace('\r', '').replace('\n', ' ')
+                    if len(cleaned_str) > 500:
+                        cleaned_str = cleaned_str[:497] + "..."
+                    sanitized_metadata[key] = cleaned_str
+                elif isinstance(meta_value, (dict, list)):
+                    # Convert complex objects to JSON strings with size limit
+                    json_str = json.dumps(meta_value, default=str)
+                    if len(json_str) > 1000:
+                        # Store summary instead of full object
+                        if isinstance(meta_value, dict):
+                            sanitized_metadata[key] = f"{{dict with {len(meta_value)} keys}}"
+                        elif isinstance(meta_value, list):
+                            sanitized_metadata[key] = f"[list with {len(meta_value)} items]"
+                    else:
+                        sanitized_metadata[key] = json_str
+                else:
+                    # Convert other types to string with size limit
+                    str_value = str(meta_value)[:500]
+                    sanitized_metadata[key] = str_value
+            except Exception as e:
+                logging.warning(f"Failed to sanitize metadata key '{key}': {e}")
+                # Store a safe placeholder instead of skipping
+                sanitized_metadata[key] = f"<serialization_error: {type(meta_value).__name__}>"
+
+    return sanitized_metadata
+
+async def check_if_score_is_disabled(scorecard_external_id: str, score_external_id: str, account_id: str) -> bool:
+    """
+    Check if a score is currently disabled by querying the API.
+    
+    Args:
+        scorecard_external_id: The external ID of the scorecard
+        score_external_id: The external ID of the score
+        account_id: The DynamoDB ID of the account
+        
+    Returns:
+        bool: True if the score is disabled, False otherwise
+    """
+    try:
+        client = await get_plexus_client()
+        
+        # Resolve scorecard ID
+        scorecard_dynamo_id = await resolve_scorecard_id(scorecard_external_id, account_id, client)
+        if not scorecard_dynamo_id:
+            logging.warning(f"Could not resolve scorecard {scorecard_external_id} - assuming score not disabled")
+            return False
+        
+        # Resolve score ID and get its disabled status
+        resolved_score_info = await resolve_score_id(score_external_id, scorecard_dynamo_id, client)
+        if not resolved_score_info:
+            logging.warning(f"Could not resolve score {score_external_id} - assuming not disabled")
+            return False
+            
+        score_dynamo_id = resolved_score_info['id']
+        
+        # Get the score using SDK method to check its disabled status
+        score = await asyncio.to_thread(ScoreModel.get_by_id, score_dynamo_id, client)
+        
+        if score:
+            is_disabled = getattr(score, 'isDisabled', False)
+            logging.info(f"Score {score_external_id} (ID: {score_dynamo_id}) disabled status: {is_disabled}")
+            return is_disabled
+        else:
+            logging.warning(f"Could not fetch score data for ID: {score_dynamo_id}")
+            return False
+            
+    except Exception as e:
+        logging.error(f"Error checking if score is disabled: {str(e)}")
+        logging.error(f"Stack trace: {traceback.format_exc()}")
+        # If there's an error, assume not disabled (fail open)
+        return False
+
 
 async def create_scorecard_instance_for_single_score(scorecard_identifier: str, score_identifier: str) -> "Optional[ScorecardModel]":
     """Create a scorecard instance optimized for a single score request."""
@@ -170,4 +293,128 @@ async def resolve_score_id(external_id: str, scorecard_dynamo_id: str, client) -
     except Exception as e:
         logging.error(f"Error resolving score external ID {external_id} for scorecard {scorecard_dynamo_id}: {e}")
         logging.error(f"Stack trace: {traceback.format_exc()}")
+        return None
+
+async def get_existing_score_result(report_id: str, scorecard_id: str, score_id: str, account_id: str) -> Optional[dict]:
+    """
+    Check if a score result already exists for the given report, scorecard, and score.
+    Now uses the new ScoreResult.find_by_cache_key method for cleaner, more maintainable code.
+    
+    Args:
+        report_id: The external ID of the report
+        scorecard_id: The external ID of the scorecard
+        score_id: The external ID of the score
+        account_id: The DynamoDB ID of the account
+    Returns:
+        A dictionary with the cached result if found, None otherwise
+    """
+    try:
+        client = await get_plexus_client()
+        
+        # Use Item.find_by_identifier to get the item (consistent with cache creation)
+        if PLEXUS_ITEM_AVAILABLE:
+            item = await asyncio.to_thread(
+                Item.find_by_identifier,
+                client=client,
+                account_id=account_id,
+                identifier_key="reportId",  # Use input key (will be mapped to "report ID" internally)
+                identifier_value=report_id,
+                debug=True  # Enable debug logging to verify the fix
+            )
+            
+            if not item:
+                logging.info(f"❌ No Item found with reportId: {report_id} in account: {account_id}")
+                return None
+            
+            logging.info(f"✅ Found Item with ID: {item.id} for reportId: {report_id}")
+        else:
+            logging.error("Plexus Item SDK not available")
+            return None
+        
+        # Resolve scorecard and score IDs
+        # CRITICAL: We must have valid DynamoDB IDs for both scorecard and score to prevent cache pollution.
+        # Previously, using external IDs as fallbacks caused incorrect cache hits where requests for 
+        # non-existent scores would return cached results from completely different scores/scorecards.
+        dynamo_scorecard_id = await resolve_scorecard_id(scorecard_id, account_id, client)
+        if not dynamo_scorecard_id:
+            logging.warning(f"Scorecard ID {scorecard_id} could not be resolved - skipping cache lookup to prevent cross-scorecard pollution")
+            return None
+        
+        resolved_score_info = await resolve_score_id(score_id, dynamo_scorecard_id, client)
+        if not resolved_score_info:
+            logging.warning(f"Score ID {score_id} could not be resolved - skipping cache lookup to prevent cross-score pollution")
+            return None
+        
+        dynamo_score_id = resolved_score_info['id']
+        
+        # Use the new ScoreResult.find_by_cache_key method
+        cached_score_result = await asyncio.to_thread(
+            ScoreResult.find_by_cache_key,
+            client=client,
+            item_id=item.id,
+            scorecard_id=dynamo_scorecard_id,
+            score_id=dynamo_score_id,
+            account_id=account_id
+        )
+        
+        if cached_score_result:
+            logging.info(f"✅ CACHE HIT: Found cached result {cached_score_result.id} with value: {cached_score_result.value}")
+            logging.info(json.dumps({
+                "message_type": "cache_hit_found",
+                "score_result_id": cached_score_result.id,
+                "report_id": report_id,
+                "scorecard_id": scorecard_id,
+                "score_id": score_id,
+                "item_id": item.id,
+                "value": cached_score_result.value,
+                "updated_at": cached_score_result.updatedAt.isoformat() if cached_score_result.updatedAt else None,
+                "method": "score_result_find_by_cache_key"
+            }))
+            
+            cloudwatch_logger.log_metric(
+                metric_name="CacheHit",
+                metric_value=1,
+                dimensions={"Environment": os.getenv('environment', 'unknown')}
+            )
+            
+            return {
+                "value": cached_score_result.value,
+                "explanation": cached_score_result.explanation or ''
+            }
+        else:
+            logging.info(f"❌ CACHE MISS: No cached result found for item_id={item.id}, scorecard_id={dynamo_scorecard_id}, score_id={dynamo_score_id}")
+            logging.info(json.dumps({
+                "message_type": "cache_miss_no_result",
+                "report_id": report_id,
+                "scorecard_id": scorecard_id,
+                "score_id": score_id,
+                "item_id": item.id,
+                "dynamo_scorecard_id": dynamo_scorecard_id,
+                "dynamo_score_id": dynamo_score_id,
+                "operation": "no_cached_score_result_found"
+            }))
+            
+            cloudwatch_logger.log_metric(
+                metric_name="CacheMiss",
+                metric_value=1,
+                dimensions={"Environment": os.getenv('environment', 'unknown')}
+            )
+            
+            return None
+        
+    except Exception as e:
+        logging.error(f"Error checking for existing score result: {e}")
+        logging.error(f"Stack trace: {traceback.format_exc()}")
+        logging.error(json.dumps({
+            "message_type": "cache_lookup_error",
+            "error": str(e),
+            "report_id": report_id,
+            "scorecard_id": scorecard_id,
+            "score_id": score_id
+        }))
+        cloudwatch_logger.log_metric(
+            metric_name="CacheMiss",
+            metric_value=1,
+            dimensions={"Environment": os.getenv('environment', 'unknown')}
+        )
         return None
