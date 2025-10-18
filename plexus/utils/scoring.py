@@ -94,6 +94,10 @@ async def check_if_score_is_disabled(scorecard_external_id: str, score_external_
         bool: True if the score is disabled, False otherwise
     """
     try:
+        if not account_id:
+            logging.error("No account ID provided. Cannot check if score is disabled.")
+            return False
+        
         client = await get_plexus_client()
         
         # Resolve scorecard ID
