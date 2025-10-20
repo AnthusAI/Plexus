@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import Mock
 from typing import TYPE_CHECKING
 from .score_result import ScoreResult
+from datetime import datetime, timezone
+import json
 
 if TYPE_CHECKING:
     from ..client import PlexusDashboardClient
@@ -360,3 +362,96 @@ class TestFindByCacheKey:
         expected_fields = ['id', 'value', 'itemId', 'scorecardId', 'scoreId', 'updatedAt', 'createdAt']
         for field in expected_fields:
             assert field in query, f"Field {field} should be in the query"
+
+def test_score_result_update_with_datetime_createdAt():
+    """Test that update() properly handles datetime objects passed as createdAt"""
+    mock_client = Mock()
+    
+    # Mock the initial ScoreResult with actual datetime objects (like real GraphQL returns)
+    score_result = ScoreResult(
+        id="test-id",
+        value="0.95",
+        itemId="test-item",
+        accountId="test-account",
+        scorecardId="test-scorecard",
+        createdAt=datetime.now(timezone.utc),  # Real datetime object
+        updatedAt=datetime.now(timezone.utc),  # Real datetime object
+        client=mock_client
+    )
+    
+    # Mock the response with datetime objects (simulating real GraphQL behavior)
+    mock_client.execute.return_value = {
+        'updateScoreResult': {
+            'id': 'test-id',
+            'value': '0.95',
+            'itemId': 'test-item',
+            'accountId': 'test-account',
+            'scorecardId': 'test-scorecard',
+            'attachments': ['file1.txt'],
+            'createdAt': datetime.now(timezone.utc).isoformat(),  # GraphQL returns ISO string
+            'updatedAt': datetime.now(timezone.utc).isoformat(),  # GraphQL returns ISO string
+        }
+    }
+    
+    # This should NOT raise TypeError about datetime serialization
+    try:
+        updated = score_result.update(
+            attachments=['file1.txt'],
+            createdAt=datetime.now(timezone.utc)  # Passing a datetime object
+        )
+        
+        # Should succeed
+        assert updated.attachments == ['file1.txt']
+    except TypeError as e:
+        if "datetime" in str(e):
+            pytest.fail(f"update() should handle datetime objects: {e}")
+        raise
+
+
+def test_score_result_updatedAt_is_json_serializable():
+    """Test that updatedAt can be serialized to JSON for logging"""
+    mock_client = Mock()
+    
+    score_result = ScoreResult(
+        id="test-id",
+        value="0.95",
+        itemId="test-item",
+        accountId="test-account",
+        scorecardId="test-scorecard",
+        updatedAt=datetime.now(timezone.utc),
+        client=mock_client
+    )
+    
+    # This is what happens in our logging code - should not raise
+    try:
+        json.dumps({
+            "updated_at": str(score_result.updatedAt) if score_result.updatedAt else None
+        })
+    except TypeError as e:
+        pytest.fail(f"updatedAt should be JSON serializable after str(): {e}")
+
+
+def test_get_by_id_returns_datetime_objects():
+    """Test that get_by_id properly parses datetime strings into datetime objects"""
+    mock_client = Mock()
+    
+    now = datetime.now(timezone.utc)
+    iso_string = now.isoformat()
+    
+    mock_client.execute.return_value = {
+        'getScoreResult': {
+            'id': 'test-id',
+            'value': '0.95',
+            'itemId': 'test-item',
+            'accountId': 'test-account',
+            'scorecardId': 'test-scorecard',
+            'createdAt': iso_string,
+            'updatedAt': iso_string,
+        }
+    }
+    
+    result = ScoreResult.get_by_id('test-id', mock_client)
+    
+    # Should have datetime objects, not strings
+    assert isinstance(result.createdAt, datetime), f"createdAt should be datetime, got {type(result.createdAt)}"
+    assert isinstance(result.updatedAt, datetime), f"updatedAt should be datetime, got {type(result.updatedAt)}"

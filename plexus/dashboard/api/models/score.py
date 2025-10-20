@@ -170,6 +170,47 @@ class Score(BaseModel):
         return cls.from_dict(result['listScoreByExternalId']['items'][0], client)
 
     @classmethod
+    def get_by_scorecard_and_external_id(cls, scorecard_id: str, external_id: str, 
+                                         client: '_BaseAPIClient') -> Optional[Dict[str, Any]]:
+        """Get a score by scorecard ID and external ID using the GSI.
+        
+        This uses the byScorecardIdAndExternalId GSI for efficient lookup.
+        
+        Args:
+            scorecard_id: The scorecard ID to filter by
+            external_id: The score external ID to look up
+            client: The API client instance
+            
+        Returns:
+            Dict with 'id' and 'name' keys if found, None otherwise
+        """
+        query = """
+        query GetScoreByScorecardIdAndExternalId($scorecardId: String!, $externalId: String!) {
+            listScoreByScorecardIdAndExternalId(scorecardId: $scorecardId, externalId: {eq: $externalId}, limit: 1) {
+                items {
+                    id
+                    name
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "scorecardId": scorecard_id,
+            "externalId": external_id
+        }
+        
+        result = client.execute(query, variables)
+        items = result.get('listScoreByScorecardIdAndExternalId', {}).get('items', [])
+        
+        if items:
+            logger.debug(f"Found score: {items[0]['name']} ({items[0]['id']}) for scorecard {scorecard_id}")
+            return items[0]  # Return dict with id and name
+        
+        logger.debug(f"No score found with external ID {external_id} for scorecard {scorecard_id}")
+        return None
+
+    @classmethod
     def list_by_section_id(cls, section_id: str, client: '_BaseAPIClient', 
                           next_token: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
         """

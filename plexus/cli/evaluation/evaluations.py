@@ -106,13 +106,17 @@ def format_confusion_matrix_summary(final_metrics):
     confusion_matrix = final_metrics.get('confusionMatrix')
     predicted_dist = final_metrics.get('predictedClassDistribution', {})
     dataset_dist = final_metrics.get('datasetClassDistribution', {})
-    
+
+    # Initialize these variables in case confusion_matrix is None
+    matrix_dict = {}
+    all_classes = set()
+
     # Debug logging for all data structures
     logging.info(f"DEBUG: Predicted distribution type: {type(predicted_dist)}")
     logging.info(f"DEBUG: Predicted distribution content: {predicted_dist}")
     logging.info(f"DEBUG: Dataset distribution type: {type(dataset_dist)}")
     logging.info(f"DEBUG: Dataset distribution content: {dataset_dist}")
-    
+
     if confusion_matrix:
         # Add debug logging to see the actual format
         logging.info(f"DEBUG: Confusion matrix type: {type(confusion_matrix)}")
@@ -131,9 +135,8 @@ def format_confusion_matrix_summary(final_metrics):
                 return "\n".join(summary_lines)
         
         # Handle different confusion matrix formats
-        matrix_dict = {}
-        all_classes = set()
-        
+        # (matrix_dict and all_classes already initialized above)
+
         if isinstance(confusion_matrix, dict):
             # Check if it's the format with 'matrix' and 'labels' keys
             if 'matrix' in confusion_matrix and 'labels' in confusion_matrix:
@@ -1142,13 +1145,34 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None, 
         
         parsed_configs = target_configs
         logging.info(f"Final selection: {len(parsed_configs)} scores (including dependencies)")
-        
+
         if not parsed_configs:
             if score_names:
                 raise ValueError(f"No valid configurations found for requested scores: {score_names}")
             else:
                 raise ValueError(f"No valid configurations found in {scorecard_dir}")
-        
+
+        # Enrich parsed configs with actual score IDs from the API
+        # The YAML files may have id, external_id, name, or key fields
+        # Use the general-purpose resolve_score_identifier to get the actual database ID
+        from plexus.cli.shared.identifier_resolution import resolve_score_identifier
+
+        logging.info("Enriching score configs with IDs from API...")
+        for config in parsed_configs:
+            # Try to find an identifier in the config (try id, external_id, key, or name)
+            identifier = config.get('id') or config.get('external_id') or config.get('key') or config.get('name')
+
+            if identifier:
+                # Use the reusable resolve_score_identifier function
+                resolved_id = resolve_score_identifier(client, scorecard_id, identifier)
+                if resolved_id:
+                    config['id'] = resolved_id
+                    logging.info(f"Enriched '{config.get('name')}' (identifier: '{identifier}') with ID: {resolved_id}")
+                else:
+                    logging.warning(f"Could not resolve ID for score '{config.get('name')}' with identifier '{identifier}'")
+            else:
+                logging.warning(f"Score '{config.get('name')}' has no identifier field to resolve")
+
         # Create scorecard structure using the resolved API data
         scorecard_data = {
             'id': scorecard_id,
@@ -1537,38 +1561,40 @@ def accuracy(
                     primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
                     score_id_for_eval = None
                     score_version_id_for_eval = None
-                    
-                    if primary_score_identifier and scorecard_instance.scores:
-                        logging.info(f"Identifying primary score '{primary_score_identifier}' for evaluation record")
-                        for sc_config in scorecard_instance.scores:
-                            if (sc_config.get('name') == primary_score_identifier or
-                                sc_config.get('key') == primary_score_identifier or 
-                                str(sc_config.get('id', '')) == primary_score_identifier or
-                                sc_config.get('externalId') == primary_score_identifier or
-                                sc_config.get('originalExternalId') == primary_score_identifier):
-                                score_id_for_eval = sc_config.get('id')
-                                
-                                # When using --yaml flag, do not set score_version_id since local YAML files
-                                # represent the champion version and we don't want to associate with a specific version
-                                if yaml:
-                                    logging.info(f"Using --yaml flag: not setting score_version_id (local YAML represents champion version)")
-                                    score_version_id_for_eval = None
-                                else:
-                                    score_version_id_for_eval = sc_config.get('version')
-                                    
-                                    if not score_version_id_for_eval:
-                                        score_version_id_for_eval = sc_config.get('championVersionId')
-                                
-                                # The score_id_for_eval should be valid at this point
-                                if score_id_for_eval is not None:
-                                    logging.info(f"Using primary score from YAML: {sc_config.get('name')}")
-                                    break
-                    
-                    # If no match found and user specified a score, that's an error  
-                    if score_id_for_eval is None and primary_score_identifier:
-                        error_msg = f"Could not find score '{primary_score_identifier}' in scorecard YAML files"
-                        logging.error(error_msg)
-                        raise ValueError(error_msg)
+
+                    # Use the generalized identifier resolution to get the database UUID
+                    if primary_score_identifier:
+                        from plexus.cli.shared.direct_identifier_resolution import direct_resolve_score_identifier
+                        logging.info(f"Resolving primary score identifier '{primary_score_identifier}' to database UUID")
+
+                        # We need the scorecard database ID for resolution
+                        # The scorecard_instance.scorecard_identifier should be the database UUID
+                        scorecard_db_id = scorecard_instance.scorecard_identifier
+                        if not scorecard_db_id:
+                            error_msg = "Scorecard database ID not available for score resolution"
+                            logging.error(error_msg)
+                            raise ValueError(error_msg)
+
+                        score_id_for_eval = direct_resolve_score_identifier(client, scorecard_db_id, primary_score_identifier)
+
+                        if score_id_for_eval:
+                            logging.info(f"Resolved score '{primary_score_identifier}' to database UUID: {score_id_for_eval}")
+
+                            # When using --yaml flag, do not set score_version_id since local YAML files
+                            # represent the champion version and we don't want to associate with a specific version
+                            if yaml:
+                                logging.info(f"Using --yaml flag: not setting score_version_id (local YAML represents champion version)")
+                                score_version_id_for_eval = None
+                            else:
+                                # Look up the version from the scorecard instance if available
+                                for sc_config in (scorecard_instance.scores or []):
+                                    if sc_config.get('id') == score_id_for_eval or sc_config.get('name') == primary_score_identifier:
+                                        score_version_id_for_eval = sc_config.get('version') or sc_config.get('championVersionId')
+                                        break
+                        else:
+                            error_msg = f"Could not resolve score identifier '{primary_score_identifier}' to database UUID"
+                            logging.error(error_msg)
+                            raise ValueError(error_msg)
                     
                 except Exception as e:
                     error_msg = f"Error loading scorecard from YAML files: {str(e)}"
@@ -1851,7 +1877,8 @@ def accuracy(
 
             if primary_score_config:
                 score_id_for_eval = primary_score_config.get('id')
-                
+                logging.info(f"Initial score_id_for_eval from config: {score_id_for_eval} (type: {type(score_id_for_eval)})")
+
                 # When using --yaml flag, do not set score_version_id since local YAML files
                 # represent the champion version and we don't want to associate with a specific version
                 if yaml:
@@ -1859,23 +1886,55 @@ def accuracy(
                     score_version_id_for_eval = None
                 else:
                     score_version_id_for_eval = primary_score_config.get('version')
-                    
+
                     if not score_version_id_for_eval:
                         score_version_id_for_eval = primary_score_config.get('championVersionId')
-                
-                # If the score_id_for_eval looks like an external ID (numeric),
-                # we need to resolve it to the actual DynamoDB UUID for Amplify Gen2 schema association
-                if score_id_for_eval and (isinstance(score_id_for_eval, int) or str(score_id_for_eval).isdigit()):
+
+                # Always resolve score_id to DynamoDB UUID using direct_resolve_score_identifier
+                # This handles any identifier format (external ID, name, key, UUID)
+                if score_id_for_eval and scorecard_id:
                     try:
-                        # Use scorecard ID if available for better resolution  
-                        scorecard_id_for_resolution = scorecard_id if 'scorecard_record' in locals() and scorecard_record else None
-                        resolved_uuid = resolve_score_external_id_to_uuid(client, str(score_id_for_eval), scorecard_id_for_resolution)
+                        from plexus.cli.shared.direct_identifier_resolution import direct_resolve_score_identifier
+                        logging.info(f"Resolving score identifier '{score_id_for_eval}' to DynamoDB UUID using scorecard_id: {scorecard_id}")
+                        resolved_uuid = direct_resolve_score_identifier(client, scorecard_id, str(score_id_for_eval))
                         if resolved_uuid:
+                            logging.info(f"Resolved score_id from '{score_id_for_eval}' to DynamoDB UUID: {resolved_uuid}")
                             score_id_for_eval = resolved_uuid
                         else:
-                                score_id_for_eval = None  # Clear invalid external ID
+                            logging.warning(f"Failed to resolve score_id '{score_id_for_eval}' to DynamoDB UUID")
+                            score_id_for_eval = None
                     except Exception as resolve_error:
+                        logging.error(f"Error resolving score_id '{score_id_for_eval}': {resolve_error}")
                         score_id_for_eval = None
+
+            # Update the evaluation record with scoreId and scoreVersionId now that they're resolved
+            if evaluation_record and (score_id_for_eval or score_version_id_for_eval):
+                try:
+                    update_params = {}
+                    if score_id_for_eval:
+                        update_params['scoreId'] = score_id_for_eval
+                        logging.info(f"Updating evaluation record with scoreId: {score_id_for_eval}")
+                    if score_version_id_for_eval:
+                        update_params['scoreVersionId'] = score_version_id_for_eval
+                        logging.info(f"Updating evaluation record with scoreVersionId: {score_version_id_for_eval}")
+
+                    if update_params:
+                        mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                            updateEvaluation(input: $input) {
+                                id
+                                scoreId
+                                scoreVersionId
+                            }
+                        }"""
+                        client.execute(mutation, {
+                            'input': {
+                                'id': evaluation_record.id,
+                                **update_params
+                            }
+                        })
+                        logging.info(f"Successfully updated evaluation record {evaluation_record.id} with score identifiers")
+                except Exception as e:
+                    logging.warning(f"Failed to update evaluation record with score identifiers: {e}")
 
             # Instantiate AccuracyEvaluation
             logging.info("Instantiating AccuracyEvaluation...")
@@ -1960,7 +2019,12 @@ def accuracy(
             logging.info("Running accuracy evaluation...")
             try:
                 # Pass tracker when available; method tolerates None
-                final_metrics = await accuracy_eval.run(tracker=tracker)
+                result_metrics = await accuracy_eval.run(tracker=tracker)
+                # Ensure we have valid metrics (run() should return dict, not None)
+                if result_metrics is not None:
+                    final_metrics = result_metrics
+                else:
+                    logging.warning("Evaluation run() returned None, using default metrics")
             except Exception as e:
                 error_msg = f"Error during execution: {str(e)}"
                 logging.error(error_msg)
@@ -2048,21 +2112,27 @@ def accuracy(
             logging.info("EVALUATION RESULTS")
             logging.info('='*60)
             logging.info(f"Sample Size:        {len(labeled_samples_data)}")
-            logging.info(f"Overall Accuracy:   {final_metrics.get('accuracy', 'N/A'):.1%}" if isinstance(final_metrics.get('accuracy'), (int, float)) else f"Overall Accuracy:   {final_metrics.get('accuracy', 'N/A')}")
-            logging.info(f"Precision:          {final_metrics.get('precision', 'N/A'):.1%}" if isinstance(final_metrics.get('precision'), (int, float)) else f"Precision:          {final_metrics.get('precision', 'N/A')}")
-            logging.info(f"Recall:             {final_metrics.get('recall', 'N/A'):.1%}" if isinstance(final_metrics.get('recall'), (int, float)) else f"Recall:             {final_metrics.get('recall', 'N/A')}")
-            logging.info(f"Alignment:          {final_metrics.get('alignment', 'N/A'):.1%}" if isinstance(final_metrics.get('alignment'), (int, float)) else f"Alignment:          {final_metrics.get('alignment', 'N/A')}")
+
+            # Safely extract metrics (handle None case)
+            if final_metrics:
+                logging.info(f"Overall Accuracy:   {final_metrics.get('accuracy', 'N/A'):.1%}" if isinstance(final_metrics.get('accuracy'), (int, float)) else f"Overall Accuracy:   {final_metrics.get('accuracy', 'N/A')}")
+                logging.info(f"Precision:          {final_metrics.get('precision', 'N/A'):.1%}" if isinstance(final_metrics.get('precision'), (int, float)) else f"Precision:          {final_metrics.get('precision', 'N/A')}")
+                logging.info(f"Recall:             {final_metrics.get('recall', 'N/A'):.1%}" if isinstance(final_metrics.get('recall'), (int, float)) else f"Recall:             {final_metrics.get('recall', 'N/A')}")
+                logging.info(f"Alignment:          {final_metrics.get('alignment', 'N/A'):.1%}" if isinstance(final_metrics.get('alignment'), (int, float)) else f"Alignment:          {final_metrics.get('alignment', 'N/A')}")
+            else:
+                logging.warning("No final metrics available")
             
             # Add cost information if available
-            total_cost = final_metrics.get('total_cost')
-            if total_cost is not None:
-                cost_per_sample = total_cost / len(labeled_samples_data) if len(labeled_samples_data) > 0 else 0
-                logging.info(f"Cost per Sample:    ${cost_per_sample:.6f}")
-                logging.info(f"Total Cost:         ${total_cost:.6f}")
-            
-            skipped_results = final_metrics.get('skipped_results', 0)
-            if skipped_results > 0:
-                logging.info(f"Skipped Results:    {skipped_results} (due to unmet dependency conditions)")
+            if final_metrics:
+                total_cost = final_metrics.get('total_cost')
+                if total_cost is not None:
+                    cost_per_sample = total_cost / len(labeled_samples_data) if len(labeled_samples_data) > 0 else 0
+                    logging.info(f"Cost per Sample:    ${cost_per_sample:.6f}")
+                    logging.info(f"Total Cost:         ${total_cost:.6f}")
+
+                skipped_results = final_metrics.get('skipped_results', 0)
+                if skipped_results > 0:
+                    logging.info(f"Skipped Results:    {skipped_results} (due to unmet dependency conditions)")
             
             logging.info("")
             
