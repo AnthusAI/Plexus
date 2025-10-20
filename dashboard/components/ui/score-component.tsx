@@ -38,6 +38,7 @@ import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
+import MetricsSummary from '@/components/MetricsSummary'
 
 const client = generateClient();
 
@@ -176,13 +177,120 @@ interface DetailContentProps {
   onCancelGuidelinesEdit?: () => void
 }
 
-const GridContent = React.memo(({ 
+// Helper function to fetch most recent evaluation for a score
+async function fetchMostRecentEvaluation(scoreId: string) {
+  try {
+    const response = await client.graphql({
+      query: `
+        query ListEvaluationByScoreIdAndUpdatedAt(
+          $scoreId: String!
+          $sortDirection: ModelSortDirection!
+          $limit: Int
+        ) {
+          listEvaluationByScoreIdAndUpdatedAt(
+            scoreId: $scoreId
+            sortDirection: $sortDirection
+            limit: $limit
+          ) {
+            items {
+              id
+              metrics
+              createdAt
+            }
+          }
+        }
+      `,
+      variables: {
+        scoreId,
+        sortDirection: 'DESC',
+        limit: 1
+      }
+    }) as GraphQLResult<any>
+
+    const evaluation = response.data?.listEvaluationByScoreIdAndUpdatedAt?.items?.[0]
+    return evaluation || null
+  } catch (error) {
+    console.error('Error fetching evaluation:', error)
+    return null
+  }
+}
+
+// Helper function to transform evaluation metrics into summary data
+function transformEvaluationToSummary(evaluation: any) {
+  if (!evaluation?.metrics) return null
+
+  try {
+    const metrics = typeof evaluation.metrics === 'string'
+      ? JSON.parse(evaluation.metrics)
+      : evaluation.metrics
+
+    const otherMetricsSegments = [
+      { start: 0, end: 60, color: 'var(--gauge-inviable)' },
+      { start: 60, end: 85, color: 'var(--gauge-converging)' },
+      { start: 85, end: 100, color: 'var(--gauge-great)' }
+    ]
+
+    const alignmentSegments = [
+      { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // -1 to 0
+      { start: 50, end: 60, color: 'var(--gauge-converging)' },   // 0 to 0.2
+      { start: 60, end: 75, color: 'var(--gauge-almost)' },       // 0.2 to 0.5
+      { start: 75, end: 90, color: 'var(--gauge-viable)' },       // 0.5 to 0.8
+      { start: 90, end: 100, color: 'var(--gauge-great)' }        // 0.8 to 1.0
+    ]
+
+    // Metrics format: array of {name, value} objects
+    // Get the first metric (should be accuracy)
+    const firstMetric = metrics[0]
+    if (!firstMetric || typeof firstMetric.value !== 'number') {
+      return null
+    }
+
+    // Special handling for Alignment (Gwet's AC1)
+    if (firstMetric.name === 'Alignment') {
+      return {
+        gauge: {
+          value: firstMetric.value,
+          label: firstMetric.name,
+          segments: alignmentSegments,
+          min: -1,           // AC1 ranges from -1 to 1
+          max: 1,
+          valueUnit: '',     // No percentage sign
+          decimalPlaces: 2,  // Show 2 decimal places
+          backgroundColor: 'var(--gauge-background)',
+        },
+        evaluationId: evaluation.id
+      }
+    }
+
+    // Default handling for other metrics
+    return {
+      gauge: {
+        value: firstMetric.value,
+        label: firstMetric.name,
+        segments: otherMetricsSegments,
+        backgroundColor: 'var(--gauge-background)',
+      },
+      evaluationId: evaluation.id
+    }
+  } catch (error) {
+    console.error('Error transforming evaluation:', error)
+    return null
+  }
+}
+
+const GridContent = React.memo(({
   score,
-  isSelected 
-}: { 
+  isSelected
+}: {
   score: ScoreData
   isSelected?: boolean
 }) => {
+  const [summaryData, setSummaryData] = React.useState<{
+    gauge: any
+    evaluationId: string
+  } | null>(null)
+  const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(false)
+
   // Pre-compute all displayed values in a single operation before rendering
   // This ensures React renders them in the same cycle and prevents flickering
   // Use only the Score record data, never fetch additional data for grid view
@@ -191,10 +299,34 @@ const GridContent = React.memo(({
     description: score.description || '',
     externalId: score.externalId || score.id
   }), [score.name, score.description, score.externalId, score.id]);
-  
+
+  // Fetch evaluation metrics when component mounts
+  React.useEffect(() => {
+    let isMounted = true
+
+    async function loadMetrics() {
+      setIsLoadingMetrics(true)
+      const evaluation = await fetchMostRecentEvaluation(score.id)
+
+      if (isMounted) {
+        if (evaluation) {
+          const summary = transformEvaluationToSummary(evaluation)
+          setSummaryData(summary)
+        }
+        setIsLoadingMetrics(false)
+      }
+    }
+
+    loadMetrics()
+
+    return () => {
+      isMounted = false
+    }
+  }, [score.id])
+
   return (
-    <div className="flex justify-between items-start">
-      <div className="space-y-1.5">
+    <div className="flex items-start gap-4">
+      <div className="flex-1 space-y-1.5 min-w-0">
         <div className="font-medium">{displayData.name}</div>
         <div className="text-sm text-muted-foreground flex items-center gap-1">
           <IdCard className="h-3 w-3" />
@@ -202,14 +334,25 @@ const GridContent = React.memo(({
         </div>
         <div className="text-sm">{displayData.description}</div>
       </div>
-      {score.icon && (
-        <div className="flex flex-col items-center gap-1">
-          <div className="text-muted-foreground">
-            {score.icon}
+
+      <div className="flex flex-col items-center gap-2 flex-shrink-0">
+        {score.icon && (
+          <div className="flex items-center gap-1">
+            <div className="text-xs text-muted-foreground">Score</div>
+            <div className="text-muted-foreground">
+              {score.icon}
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground text-center">Score</div>
-        </div>
-      )}
+        )}
+
+        {/* Metrics Summary Gauge */}
+        {summaryData && (
+          <MetricsSummary
+            gauge={summaryData.gauge}
+            evaluationUrl={`/lab/evaluations/${summaryData.evaluationId}`}
+          />
+        )}
+      </div>
     </div>
   )
 })
