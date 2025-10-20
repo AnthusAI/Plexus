@@ -1344,13 +1344,14 @@ def accuracy(
     
     # Proceeding with normal evaluation
     # Original implementation for non-dry-run mode
+    evaluation_record = None  # Track the evaluation record at function level for return
+
     async def _run_accuracy():
         from plexus.dashboard.api.client import PlexusDashboardClient
         # Starting evaluation process
-        nonlocal task_id, score, resolved_version  # Make task_id, score, and resolved_version accessible to modify in the async function
-        
+        nonlocal task_id, score, resolved_version, evaluation_record  # Make these accessible to modify in the async function
+
         task = None  # Track the task
-        evaluation_record = None  # Track the evaluation record
         score_id_for_eval = None  # Track the score ID for the evaluation
         score_version_id_for_eval = None  # Track the score version ID for the evaluation
         
@@ -2040,10 +2041,11 @@ def accuracy(
                 try:
                     # Use metrics returned by AccuracyEvaluation
                     update_payload_metrics = []
+                    if final_metrics.get("alignment") is not None:
+                        # Store Gwet's AC1 raw value in range [-1, 1]
+                        update_payload_metrics.append({"name": "Alignment", "value": final_metrics["alignment"]})
                     if final_metrics.get("accuracy") is not None:
                         update_payload_metrics.append({"name": "Accuracy", "value": final_metrics["accuracy"] * 100})
-                    if final_metrics.get("alignment") is not None:
-                        update_payload_metrics.append({"name": "Alignment", "value": final_metrics["alignment"] * 100})
                     if final_metrics.get("precision") is not None:
                         update_payload_metrics.append({"name": "Precision", "value": final_metrics["precision"] * 100})
                     if final_metrics.get("recall") is not None:
@@ -2183,6 +2185,9 @@ def accuracy(
                 )
         except Exception as e:
             logging.error(f"Error during cleanup: {e}")
+
+    # Return the evaluation record ID so MCP tool can retrieve it
+    return evaluation_record
 
 def get_data_driven_samples(
     scorecard_instance, 

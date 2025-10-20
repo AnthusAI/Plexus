@@ -342,12 +342,14 @@ def register_evaluation_tools(mcp: FastMCP):
                 logger.error(error_msg)
                 return json.dumps({"error": error_msg})
 
-            # Get the most recent evaluation for this scorecard/score
-            # The CLI function creates the evaluation record but doesn't return it
-            eval_info = Evaluation.get_latest_evaluation("call-criteria", "accuracy")
+            # Get the evaluation record returned by the CLI command
+            evaluation_record = result.return_value
 
-            if not eval_info:
-                return json.dumps({"error": "Evaluation completed but no record found"})
+            if not evaluation_record or not evaluation_record.id:
+                return json.dumps({"error": "Evaluation completed but no record returned"})
+
+            # Get full evaluation info using the specific ID
+            eval_info = Evaluation.get_evaluation_info(evaluation_record.id)
 
             # Return the same format - note that get_evaluation_info uses snake_case keys
             response = {
