@@ -115,7 +115,12 @@ class _BaseAPIClient:
         
         if not all([self.api_url, self.api_key]):
             raise ValueError("Missing required API URL or API key")
-            
+
+        # Check environment variable for schema introspection setting
+        # Default to True for backward compatibility, but allow disabling for Lambda/packaging scenarios
+        fetch_schema_str = os.getenv('PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT', 'true').lower()
+        self._fetch_schema = fetch_schema_str in ('true', '1', 'yes')
+
         # Set up GQL client with API key authentication
         transport = RequestsHTTPTransport(
             url=self.api_url,
@@ -126,10 +131,10 @@ class _BaseAPIClient:
             verify=True,
             retries=3,
         )
-        
+
         self.client = Client(
             transport=transport,
-            fetch_schema_from_transport=True
+            fetch_schema_from_transport=self._fetch_schema
         )
         
         # Initialize model namespaces
@@ -232,7 +237,7 @@ class _BaseAPIClient:
             )
             client = Client(
                 transport=transport,
-                fetch_schema_from_transport=True
+                fetch_schema_from_transport=self._fetch_schema
             )
             with client as session:
                 return session.execute(gql(query), variable_values=variables)

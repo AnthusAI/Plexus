@@ -453,7 +453,7 @@ const schema = a.schema({
             index("scoreId"),
             index("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
             index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
-            index("type").sortKeys(["createdAt"]).name("byTypeAndCreatedAt")
+            index("type").sortKeys(["status", "updatedAt"]).name("byTypeStatusUpdated"),
         ]),
 
     BatchJobScoringJob: a
