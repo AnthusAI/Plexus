@@ -26,7 +26,15 @@ def get_score_yaml_path(scorecard_name: str, score_name: str) -> Path:
         Path('scorecards/my_scorecard/call_quality_score.yaml')
     """
     # Create the scorecards directory if it doesn't exist
-    scorecards_dir = Path('scorecards')
+    # Allow override via environment variable for Lambda compatibility
+    scorecards_base = os.environ.get('SCORECARD_CACHE_DIR', 'scorecards')
+    scorecards_dir = Path(scorecards_base)
+    
+    # Handle case where 'scorecards' exists as a file instead of directory
+    if scorecards_dir.exists() and not scorecards_dir.is_dir():
+        # Remove the file if it exists
+        scorecards_dir.unlink()
+    
     scorecards_dir.mkdir(exist_ok=True)
     
     # Create sanitized directory names
