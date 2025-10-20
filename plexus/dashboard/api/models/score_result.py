@@ -454,7 +454,7 @@ class ScoreResult(BaseModel):
         cls,
         client: '_BaseAPIClient',
         item_id: str,
-        scorecard_id: str,
+        type: str,
         score_id: str,
         account_id: Optional[str] = None
     ) -> Optional['ScoreResult']:
@@ -462,13 +462,13 @@ class ScoreResult(BaseModel):
         Find the most recent ScoreResult using cache key components.
         
         This method encapsulates the cache lookup logic for finding existing
-        ScoreResults based on the standard cache key: itemId + scorecardId + scoreId.
-        It uses the time-based GSI to return the most recent result.
+        ScoreResults based on the standard cache key: itemId + type + scoreId.
+        It uses the time-based GSI to return the most recent result by updatedAt.
         
         Args:
             client: API client for database operations
             item_id: Item ID (should be resolved DynamoDB ID)
-            scorecard_id: Scorecard ID (should be resolved DynamoDB ID)
+            type: Type of score result (should be "prediction" or "evaluation")
             score_id: Score ID (should be resolved DynamoDB ID)
             account_id: Optional account ID for additional context/validation
             
@@ -480,26 +480,24 @@ class ScoreResult(BaseModel):
             cached_result = ScoreResult.find_by_cache_key(
                 client=client,
                 item_id="da270073-83ab-4c43-a1e6-961851c13d92",
-                scorecard_id="f4076c72-e74b-4eaf-afd6-d4f61c9f0142", 
+                type="prediction", 
                 score_id="687361f7-44a9-466f-8920-7f9dc351bcd2"
             )
         """
         try:
-            # Use the same GSI query logic from the existing cache implementation
+            # Use the composite sort key GSI: byItemIdAndTypeAndScoreIdAndUpdatedAt
+            # The index has partition key: itemId
+            # And composite sort key: type#scoreId#updatedAt
+            # We need to use the beginsWith filter to match type and scoreId
             cache_query = """
             query GetMostRecentScoreResult(
                 $itemId: String!,
-                $scorecardId: String!,
+                $type: String!,
                 $scoreId: String!
             ) {
-                listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt(
                     itemId: $itemId,
-                    scorecardIdScoreIdUpdatedAt: {
-                        beginsWith: {
-                            scorecardId: $scorecardId,
-                            scoreId: $scoreId
-                        }
-                    },
+                    typeScoreIdUpdatedAt: { beginsWith: { type: $type, scoreId: $scoreId } },
                     sortDirection: DESC,
                     limit: 1
                 ) {
@@ -512,7 +510,7 @@ class ScoreResult(BaseModel):
             
             cache_variables = {
                 "itemId": item_id,
-                "scorecardId": scorecard_id,
+                "type": type,
                 "scoreId": score_id
             }
             
@@ -520,7 +518,7 @@ class ScoreResult(BaseModel):
             response = client.execute(cache_query, cache_variables)
             
             # Extract results from the response
-            items = response.get('listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt', {}).get('items', [])
+            items = response.get('listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt', {}).get('items', [])
             
             if items:
                 # Return the most recent result (first item due to DESC sort, limit 1)
