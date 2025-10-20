@@ -222,6 +222,45 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
+    def get_by_account_and_external_id(cls, account_id: str, external_id: str, client: '_BaseAPIClient') -> Optional['Scorecard']:
+        """Get a scorecard by account ID and external ID using the GSI.
+        
+        This uses the byAccountIdAndExternalId GSI for efficient lookup.
+        
+        Args:
+            account_id: The account ID to filter by
+            external_id: The scorecard external ID to look up
+            client: The API client instance
+            
+        Returns:
+            Scorecard: The found scorecard or None
+        """
+        query = """
+        query GetScorecardByAccountIdAndExternalId($accountId: String!, $externalId: String!) {
+            listScorecardByAccountIdAndExternalId(accountId: $accountId, externalId: {eq: $externalId}, limit: 1) {
+                items {
+                    %s
+                }
+            }
+        }
+        """ % cls.fields()
+        
+        variables = {
+            "accountId": account_id,
+            "externalId": external_id
+        }
+        
+        result = client.execute(query, variables)
+        items = result.get('listScorecardByAccountIdAndExternalId', {}).get('items', [])
+        
+        if items:
+            logger.debug(f"Found scorecard: {items[0]['name']} ({items[0]['id']}) for account {account_id}")
+            return cls.from_dict(items[0], client)
+        
+        logger.debug(f"No scorecard found with external ID {external_id} for account {account_id}")
+        return None
+
+    @classmethod
     def list_by_external_id(cls, external_id: str, client: '_BaseAPIClient') -> Optional['Scorecard']:
         """Get a scorecard by its external ID.
         
