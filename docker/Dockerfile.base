@@ -1,0 +1,74 @@
+# ---- Build (manylinux to avoid ABI issues) ----
+FROM quay.io/pypa/manylinux2014_x86_64 AS builder
+
+ENV PYCURL_SSL_LIBRARY=openssl
+ENV PYBIN=/opt/python/cp311-cp311/bin
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+
+# minimal, cacheable system deps for pycurl build
+RUN yum -y --setopt=tsflags=nodocs --setopt=install_weak_deps=0 install \
+      libcurl-devel openssl-devel git && yum clean all
+ENV PYCURL_SSL_LIBRARY=openssl
+
+# build & cache pycurl wheel (needs libcurl-devel)
+RUN $PYBIN/pip wheel --wheel-dir /wheels --no-binary=:all: pycurl
+
+# build & cache psycopg with bundled libpq (no system libpq needed at runtime)
+RUN $PYBIN/pip wheel --wheel-dir /wheels "psycopg[binary]>=3.1,<4"
+
+# build & cache your VCS dep wheel
+RUN $PYBIN/pip wheel --wheel-dir /wheels \
+        git+https://github.com/AnthusAI/openai_cost_calculator.git@main
+
+# Copy dependency metadata and full plexus source
+# (handler.py comes later to maximize cache reuse)
+COPY pyproject.toml ./
+COPY plexus/ plexus/
+
+# 🔧 Fix SQLAlchemy pin for Python 3.11
+RUN sed -i 's/SQLAlchemy\[asyncio\]==1\.4\.15/SQLAlchemy[asyncio]>=1.4.49,<2.0/' pyproject.toml
+
+# binary-only for everything; allow sdist for pure-Python stragglers **and pycurl**
+RUN --mount=type=cache,target=/root/.cache/pip \
+    $PYBIN/python -m pip install --upgrade pip wheel setuptools && \
+    $PYBIN/pip wheel --wheel-dir /wheels \
+      --only-binary=:all: \
+      --no-binary pytest-watch,pydotplus,pycurl,docopt \
+      .
+
+# 2) install ALL deps from wheels into Lambda's site-packages, EXCEPT plexus wheel
+RUN mkdir -p /opt/python/lib/python3.11/site-packages && \
+    DEPS="$(ls /wheels/*.whl | grep -v -E '/wheels/plexus(-|_).*\.whl$' || true)" && \
+    [ -z "$DEPS" ] || $PYBIN/pip install --no-cache-dir --no-index --find-links=/wheels \
+        --target /opt/python/lib/python3.11/site-packages $DEPS
+
+# 3) install your plexus wheel itself, without deps
+RUN $PYBIN/pip install --no-cache-dir --no-index --find-links=/wheels \
+        --target /opt/python/lib/python3.11/site-packages \
+        --no-deps /wheels/plexus-*.whl
+
+# sanity: fail build if imports don't work (skip pycurl here due to NSS vs OpenSSL in manylinux)
+RUN PYTHONPATH=/opt/python/lib/python3.11/site-packages $PYBIN/python - <<'PY'
+import yaml, requests, pandas, tiktoken, plexus
+print("builder imports OK (pycurl checked in final stage)")
+PY
+
+# ---- Final: Lambda runtime ----
+FROM public.ecr.aws/lambda/python:3.11
+RUN yum install -y libcurl && yum clean all && rm -rf /var/cache/yum
+COPY --from=builder /opt /opt
+
+# sanity in runtime (now psycopg can load libpq)
+RUN PYTHONPATH=/opt/python/lib/python3.11/site-packages /var/lang/bin/python - <<'PY'
+import psycopg, yaml, requests, pandas, tiktoken, pycurl, plexus
+print("final runtime imports OK")
+PY
+
+# Copy handler last - this layer invalidates only when handler changes
+COPY lambda_functions/score_processing/handler.py ${LAMBDA_TASK_ROOT}/handler.py
+
+ENV PYTHONPATH="/var/task:/opt/python/lib/python3.11/site-packages"
+ENV PATH="/opt/python/bin:${PATH}"
+CMD ["handler.handler"]

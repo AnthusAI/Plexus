@@ -1,0 +1,11 @@
+# FROM your local-tested base (swap to ECR tag only after sanity passes)
+FROM 695039645615.dkr.ecr.us-west-2.amazonaws.com/plexus-lambda-base:py311-amd64
+
+# Copy only what the handler imports
+COPY lambda_images/score_processing/handler.py ${LAMBDA_TASK_ROOT}/
+
+# Make local runs mirror Lambda's sys.path
+ENV PYTHONPATH="/var/task:/opt/python/lib/python3.11/site-packages:${PYTHONPATH}"
+ENV PATH="/opt/python/bin:${PATH}"
+
+CMD ["handler.handler"]

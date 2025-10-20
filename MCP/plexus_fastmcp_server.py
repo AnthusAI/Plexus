@@ -52,6 +52,12 @@ if using_stdio:
             return self
         def __setattr__(self, name, value):
             pass
+        def __enter__(self):
+            # Support context manager protocol (with statements)
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            # Support context manager protocol (with statements)
+            return False
         def __lt__(self, other):
             return True
         def __le__(self, other):
