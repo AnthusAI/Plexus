@@ -2017,24 +2017,37 @@ Based on this data, you should prioritize examining error types with the highest
 
             logger.info(f"Found {len(hypothesis_nodes)} hypothesis nodes to test")
 
-            # Filter out nodes that already have scoreVersionId
-            nodes_to_test = []
-            for node in hypothesis_nodes:
-                if self._node_has_score_version(node):
-                    logger.info(f"Node {node.id} already has ScoreVersion, skipping")
-                else:
-                    nodes_to_test.append(node)
+            # Separate nodes by what work they need:
+            # - nodes_needing_versions: Don't have scoreVersionId yet
+            # - nodes_needing_evaluation: Have scoreVersionId but not evaluation_id
+            nodes_needing_versions = []
+            nodes_needing_evaluation = []
 
-            if not nodes_to_test:
-                logger.info("All hypothesis nodes already have ScoreVersions")
+            for node in hypothesis_nodes:
+                has_version = self._node_has_score_version(node)
+                has_eval = self._node_has_evaluation(node)
+
+                if not has_version:
+                    nodes_needing_versions.append(node)
+                    logger.info(f"Node {node.id} needs ScoreVersion")
+                elif not has_eval:
+                    nodes_needing_evaluation.append(node)
+                    logger.info(f"Node {node.id} has ScoreVersion but needs evaluation")
+                else:
+                    logger.info(f"Node {node.id} is fully complete (has version and evaluation)")
+
+            # If all nodes are complete, we're done
+            if not nodes_needing_versions and not nodes_needing_evaluation:
+                logger.info("All hypothesis nodes are fully complete")
                 return {
                     "success": True,
-                    "message": "All hypothesis nodes already tested",
+                    "message": "All hypothesis nodes already have ScoreVersions and evaluations",
                     "nodes_tested": 0,
                     "nodes_skipped": len(hypothesis_nodes)
                 }
 
-            logger.info(f"Testing {len(nodes_to_test)} hypothesis nodes")
+            logger.info(f"Work needed: {len(nodes_needing_versions)} nodes need versions, "
+                       f"{len(nodes_needing_evaluation)} nodes need evaluations")
 
             # Create TestPhaseAgent
             test_agent = TestPhaseAgent(self.client)
@@ -2069,40 +2082,156 @@ Based on this data, you should prioritize examining error types with the highest
                     "nodes_tested": 0
                 }
 
-            # Execute test phase for each hypothesis
+            # PART 1: Create ScoreVersions for nodes that need them
             test_results = []
-            for node in nodes_to_test:
-                logger.info(f"Testing hypothesis node {node.id}")
+            if nodes_needing_versions:
+                logger.info(f"PART 1: Creating ScoreVersions for {len(nodes_needing_versions)} nodes")
 
-                result = await test_agent.execute(
-                    hypothesis_node=node,
-                    score_version_id=score_version_id,
-                    procedure_context=experiment_context
+                for node in nodes_needing_versions:
+                    logger.info(f"Creating ScoreVersion for hypothesis node {node.id}")
+
+                    result = await test_agent.execute(
+                        hypothesis_node=node,
+                        score_version_id=score_version_id,
+                        procedure_context=experiment_context
+                    )
+
+                    test_results.append(result)
+
+                    if result['success']:
+                        logger.info(f"✓ Successfully created ScoreVersion {result['score_version_id']} for node {node.id}")
+                    else:
+                        logger.error(f"✗ Failed to create ScoreVersion for node {node.id}: {result.get('error')}")
+
+                # Clean up temp files
+                test_agent.cleanup()
+
+                # Check ScoreVersion creation success
+                successful_version_count = sum(1 for r in test_results if r['success'])
+                failed_version_count = len(test_results) - successful_version_count
+
+                if failed_version_count > 0:
+                    logger.error(f"Failed to create ScoreVersions for {failed_version_count} nodes")
+                    return {
+                        "success": False,
+                        "nodes_tested": len(nodes_needing_versions),
+                        "nodes_successful": successful_version_count,
+                        "nodes_failed": failed_version_count,
+                        "results": test_results,
+                        "message": f"ScoreVersion creation failed for {failed_version_count} nodes"
+                    }
+
+                logger.info(f"✓ Part 1 complete: Created {successful_version_count} ScoreVersions")
+            else:
+                logger.info("PART 1: Skipped - all nodes already have ScoreVersions")
+
+            # PART 2: Run evaluations for all nodes that need them
+            # This includes:
+            # 1. Nodes that just got ScoreVersions created in Part 1
+            # 2. Nodes that already had ScoreVersions but no evaluation
+            nodes_to_evaluate = []
+
+            # Add nodes that just got versions created
+            if nodes_needing_versions:
+                # Re-fetch to get updated metadata with scoreVersionId
+                from plexus.dashboard.api.models.graph_node import GraphNode
+                newly_versioned_nodes = [GraphNode.get_by_id(node.id, self.client) for node in nodes_needing_versions]
+                nodes_to_evaluate.extend(newly_versioned_nodes)
+
+            # Add nodes that already had versions but need evaluation
+            nodes_to_evaluate.extend(nodes_needing_evaluation)
+
+            logger.info(f"PART 2: Running evaluations for {len(nodes_to_evaluate)} ScoreVersions")
+
+            evaluation_results = []
+            for node in nodes_to_evaluate:
+                # Check if node already has evaluation
+                if self._node_has_evaluation(node):
+                    logger.info(f"Node {node.id} already has evaluation, skipping")
+                    evaluation_results.append({
+                        "node_id": node.id,
+                        "success": True,
+                        "message": "Evaluation already exists"
+                    })
+                    continue
+
+                logger.info(f"Running evaluation for node {node.id}")
+
+                # Run evaluation
+                eval_data = await self._run_evaluation_for_hypothesis_node(
+                    node=node,
+                    scorecard_name=experiment_context['scorecard_name'],
+                    score_name=experiment_context['score_name'],
+                    account_id=experiment_context['account_id'],
+                    n_samples=50  # Use same sample size as baseline
                 )
 
-                test_results.append(result)
+                if not eval_data:
+                    logger.error(f"✗ Evaluation failed for node {node.id}")
+                    evaluation_results.append({
+                        "node_id": node.id,
+                        "success": False,
+                        "error": "Evaluation failed"
+                    })
+                    continue
 
-                if result['success']:
-                    logger.info(f"✓ Successfully created ScoreVersion {result['score_version_id']} for node {node.id}")
+                # Extract evaluation ID
+                evaluation_id = eval_data.get('evaluation_id')
+                if not evaluation_id:
+                    logger.error(f"No evaluation_id in results for node {node.id}")
+                    evaluation_results.append({
+                        "node_id": node.id,
+                        "success": False,
+                        "error": "No evaluation ID returned"
+                    })
+                    continue
+
+                # Generate LLM summary
+                logger.info(f"Generating evaluation summary for node {node.id}")
+                summary = await self._create_evaluation_summary(node, eval_data)
+
+                # Update node with evaluation info
+                update_success = await self._update_node_with_evaluation(
+                    node_id=node.id,
+                    evaluation_id=evaluation_id,
+                    summary=summary
+                )
+
+                if update_success:
+                    logger.info(f"✓ Successfully evaluated and updated node {node.id}")
+                    evaluation_results.append({
+                        "node_id": node.id,
+                        "success": True,
+                        "evaluation_id": evaluation_id,
+                        "summary": summary
+                    })
                 else:
-                    logger.error(f"✗ Failed to create ScoreVersion for node {node.id}: {result.get('error')}")
-
-            # Clean up temp files
-            test_agent.cleanup()
+                    logger.error(f"✗ Failed to update node {node.id} with evaluation")
+                    evaluation_results.append({
+                        "node_id": node.id,
+                        "success": False,
+                        "error": "Failed to update node metadata"
+                    })
 
             # Check overall success
-            successful_count = sum(1 for r in test_results if r['success'])
-            failed_count = len(test_results) - successful_count
+            successful_eval_count = sum(1 for r in evaluation_results if r['success'])
+            failed_eval_count = len(evaluation_results) - successful_eval_count
 
-            overall_success = failed_count == 0
+            overall_success = failed_eval_count == 0
+
+            total_nodes_processed = len(nodes_needing_versions) + len(nodes_needing_evaluation)
 
             return {
                 "success": overall_success,
-                "nodes_tested": len(nodes_to_test),
-                "nodes_successful": successful_count,
-                "nodes_failed": failed_count,
-                "results": test_results,
-                "message": f"Tested {len(nodes_to_test)} nodes: {successful_count} successful, {failed_count} failed"
+                "nodes_tested": total_nodes_processed,
+                "nodes_needing_versions": len(nodes_needing_versions),
+                "nodes_needing_evaluation": len(nodes_needing_evaluation),
+                "nodes_successful": successful_eval_count,
+                "nodes_failed": failed_eval_count,
+                "score_version_results": test_results,
+                "evaluation_results": evaluation_results,
+                "message": f"Test phase complete: {len(nodes_needing_versions)} versions created, "
+                          f"{len(nodes_to_evaluate)} evaluated ({successful_eval_count} successful, {failed_eval_count} failed)"
             }
 
         except Exception as e:
@@ -2123,6 +2252,241 @@ Based on this data, you should prioritize examining error types with the highest
             metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
             return 'scoreVersionId' in metadata
         except:
+            return False
+
+    def _node_has_evaluation(self, node) -> bool:
+        """Check if a GraphNode already has an evaluation_id in metadata."""
+        if not node.metadata:
+            return False
+
+        try:
+            import json
+            metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+            return 'evaluation_id' in metadata
+        except:
+            return False
+
+    async def _run_evaluation_for_hypothesis_node(
+        self,
+        node,
+        scorecard_name: str,
+        score_name: str,
+        account_id: str,
+        n_samples: int = 50
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run evaluation for a specific hypothesis node's ScoreVersion.
+
+        Args:
+            node: GraphNode with scoreVersionId in metadata
+            scorecard_name: Name of the scorecard
+            score_name: Name of the score
+            account_id: Account ID
+            n_samples: Number of samples to evaluate
+
+        Returns:
+            Dict with evaluation results, or None on failure
+        """
+        try:
+            import json
+
+            # Get scoreVersionId from node metadata
+            metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+            score_version_id = metadata.get('scoreVersionId')
+
+            if not score_version_id:
+                logger.error(f"Node {node.id} has no scoreVersionId in metadata")
+                return None
+
+            logger.info(f"Running evaluation for node {node.id} with ScoreVersion {score_version_id}")
+
+            # Run the evaluation (reuse existing method)
+            evaluation_results_json = await self._run_evaluation_for_procedure(
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                score_version_id=score_version_id,
+                account_id=account_id,
+                parameter_values={},  # No additional parameters needed
+                n_samples=n_samples
+            )
+
+            # Parse the results
+            eval_data = json.loads(evaluation_results_json) if isinstance(evaluation_results_json, str) else evaluation_results_json
+
+            # Debug: Log the type and structure of eval_data
+            logger.info(f"Evaluation result type: {type(eval_data)}")
+            if isinstance(eval_data, dict):
+                logger.info(f"Evaluation result keys: {list(eval_data.keys())}")
+            elif isinstance(eval_data, list):
+                logger.error(f"Evaluation returned a list instead of dict. Length: {len(eval_data)}")
+                if len(eval_data) > 0:
+                    logger.error(f"First item type: {type(eval_data[0])}")
+                return None
+
+            if 'error' in eval_data:
+                logger.error(f"Evaluation failed for node {node.id}: {eval_data['error']}")
+                return None
+
+            return eval_data
+
+        except Exception as e:
+            logger.error(f"Error running evaluation for node {node.id}: {e}", exc_info=True)
+            return None
+
+    async def _create_evaluation_summary(
+        self,
+        node,
+        eval_data: Dict[str, Any]
+    ) -> str:
+        """
+        Create a token-efficient LLM summary of evaluation results vs hypothesis.
+
+        Args:
+            node: GraphNode with hypothesis in metadata
+            eval_data: Evaluation results dict
+
+        Returns:
+            Concise summary string for storage in node metadata
+        """
+        try:
+            import json
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import SystemMessage, HumanMessage
+
+            # Extract hypothesis from node metadata
+            hypothesis_text = "No hypothesis description available"
+            if node.metadata:
+                try:
+                    metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+                    hypothesis_text = metadata.get('hypothesis', hypothesis_text)
+                except:
+                    pass
+
+            # Extract key metrics from evaluation
+            # Note: evaluation_runner returns different structure:
+            # - 'accuracy' is at top level (already in %)
+            # - 'metrics' is a list of {"name": "Accuracy", "value": 64.0} objects
+            # - 'confusionMatrix' not 'confusion_matrix'
+
+            # Get accuracy from top-level field (already in percentage)
+            accuracy = eval_data.get('accuracy')
+
+            # Try to find AC1 in metrics list
+            ac1 = None
+            metrics_list = eval_data.get('metrics', [])
+            if isinstance(metrics_list, list):
+                for metric in metrics_list:
+                    if metric.get('name') == 'Alignment':
+                        ac1 = metric.get('value')
+                        break
+
+            confusion_matrix = eval_data.get('confusionMatrix', {})
+
+            # Build prompt
+            system_prompt = """You are an expert at analyzing ML evaluation results. Create a concise 2-3 sentence summary that:
+1. States whether the hypothesis was validated or not (based on metrics)
+2. Highlights the most important metric changes (accuracy, AC1, confusion matrix patterns)
+3. Provides a clear recommendation (promote, iterate, or reject)
+
+Be direct and factual. Focus on actionable insights."""
+
+            user_prompt = f"""Hypothesis: {hypothesis_text}
+
+Evaluation Results:
+- Accuracy: {accuracy if accuracy is not None else 'N/A'}
+- AC1 Agreement: {ac1 if ac1 is not None else 'N/A'}
+- Confusion Matrix: {json.dumps(confusion_matrix, indent=2)}
+
+Create a concise summary (2-3 sentences) of whether this hypothesis improved the score."""
+
+            # Get OpenAI API key
+            from plexus.config.loader import load_config
+            load_config()
+            import os
+            api_key = os.getenv('OPENAI_API_KEY')
+
+            if not api_key:
+                logger.error("No OpenAI API key available for summary generation")
+                return f"Evaluation complete. Accuracy: {accuracy}, AC1: {ac1}"
+
+            # Call LLM
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, openai_api_key=api_key)
+            response = llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ])
+
+            summary = response.content.strip()
+            logger.info(f"Generated evaluation summary: {summary[:100]}...")
+            return summary
+
+        except Exception as e:
+            logger.error(f"Error creating evaluation summary: {e}", exc_info=True)
+            # Fallback to simple summary with safe access
+            try:
+                if isinstance(eval_data, dict):
+                    # Get accuracy from top-level field
+                    accuracy = eval_data.get('accuracy', 'N/A')
+
+                    # Try to find AC1/Alignment in metrics list
+                    ac1 = 'N/A'
+                    metrics_list = eval_data.get('metrics', [])
+                    if isinstance(metrics_list, list):
+                        for metric in metrics_list:
+                            if isinstance(metric, dict) and metric.get('name') == 'Alignment':
+                                ac1 = metric.get('value', 'N/A')
+                                break
+                else:
+                    accuracy = 'N/A'
+                    ac1 = 'N/A'
+                return f"Evaluation complete. Accuracy: {accuracy}%, Alignment: {ac1}%. Error generating detailed summary: {str(e)[:100]}"
+            except:
+                return f"Evaluation complete. Error extracting metrics: {str(e)[:100]}"
+
+    async def _update_node_with_evaluation(
+        self,
+        node_id: str,
+        evaluation_id: str,
+        summary: str
+    ) -> bool:
+        """
+        Update GraphNode metadata with evaluation ID and summary.
+
+        Args:
+            node_id: ID of GraphNode to update
+            evaluation_id: ID of the evaluation
+            summary: Token-efficient summary of results
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from plexus.dashboard.api.models.graph_node import GraphNode
+            import json
+
+            # Get node
+            node = GraphNode.get_by_id(node_id, self.client)
+
+            # Parse existing metadata
+            metadata = {}
+            if node.metadata:
+                try:
+                    metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+                except:
+                    pass
+
+            # Add evaluation info
+            metadata['evaluation_id'] = evaluation_id
+            metadata['evaluation_summary'] = summary
+
+            # Update node
+            node.update_content(metadata=metadata)
+
+            logger.info(f"✓ Updated node {node_id} with evaluation ID: {evaluation_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error updating node with evaluation: {e}", exc_info=True)
             return False
 
     def _get_or_create_task_with_stages_for_procedure(
