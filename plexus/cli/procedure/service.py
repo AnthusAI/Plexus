@@ -1033,6 +1033,22 @@ class ProcedureService:
                                 result['test_phase'] = test_results
                                 # Stay in TEST state for retry
 
+                        # Execute insights phase if we're in INSIGHTS state
+                        if current_state == STATE_INSIGHTS:
+                            logger.info("Executing insights phase: running evaluations on new ScoreVersions")
+                            insights_results = await self._execute_insights_phase(
+                                procedure_id,
+                                procedure_info,
+                                experiment_context
+                            )
+
+                            if insights_results.get('success'):
+                                logger.info("Insights phase completed successfully")
+                                result['insights_phase'] = insights_results
+                            else:
+                                logger.error(f"Insights phase failed: {insights_results.get('error')}")
+                                result['insights_phase'] = insights_results
+
                         # Add AI results to the response
                         result['ai_execution'] = {
                             'completed': True,
@@ -1983,13 +1999,19 @@ Based on this data, you should prioritize examining error types with the highest
         experiment_context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Execute the test phase: create ScoreVersions for all hypothesis nodes.
+        Execute the test phase: create ScoreVersions and run evaluations on them.
 
         This method:
         1. Gets all hypothesis nodes (non-root nodes)
-        2. Skips nodes that already have scoreVersionId in metadata
-        3. For each remaining node, uses TestPhaseAgent to create a ScoreVersion
+        2. Skips nodes that already have scoreVersionId AND evaluationId in metadata
+        3. For each remaining node:
+           a. Uses TestPhaseAgent to create a ScoreVersion
+           b. Runs evaluation on the created ScoreVersion
+           c. Stores evaluationId in node metadata
         4. Returns success/failure status with details
+
+        The test phase is not complete until successful evaluations have been run
+        for each hypothesis node.
 
         Args:
             procedure_id: The procedure ID
@@ -2017,19 +2039,26 @@ Based on this data, you should prioritize examining error types with the highest
 
             logger.info(f"Found {len(hypothesis_nodes)} hypothesis nodes to test")
 
-            # Filter out nodes that already have scoreVersionId
+            # Filter out nodes that already have both scoreVersionId AND evaluationId
             nodes_to_test = []
             for node in hypothesis_nodes:
-                if self._node_has_score_version(node):
-                    logger.info(f"Node {node.id} already has ScoreVersion, skipping")
+                has_version = self._node_has_score_version(node)
+                has_evaluation = self._node_has_evaluation(node)
+
+                if has_version and has_evaluation:
+                    logger.info(f"Node {node.id} already has ScoreVersion and Evaluation, skipping")
+                elif has_version and not has_evaluation:
+                    logger.info(f"Node {node.id} has ScoreVersion but missing Evaluation - will run evaluation")
+                    nodes_to_test.append(node)
                 else:
+                    logger.info(f"Node {node.id} needs ScoreVersion and Evaluation")
                     nodes_to_test.append(node)
 
             if not nodes_to_test:
-                logger.info("All hypothesis nodes already have ScoreVersions")
+                logger.info("All hypothesis nodes already have ScoreVersions and Evaluations")
                 return {
                     "success": True,
-                    "message": "All hypothesis nodes already tested",
+                    "message": "All hypothesis nodes already fully tested",
                     "nodes_tested": 0,
                     "nodes_skipped": len(hypothesis_nodes)
                 }
@@ -2074,24 +2103,104 @@ Based on this data, you should prioritize examining error types with the highest
             for node in nodes_to_test:
                 logger.info(f"Testing hypothesis node {node.id}")
 
-                result = await test_agent.execute(
-                    hypothesis_node=node,
-                    score_version_id=score_version_id,
-                    procedure_context=experiment_context
-                )
+                node_result = {
+                    "node_id": node.id,
+                    "score_version_created": False,
+                    "evaluation_run": False,
+                    "success": False
+                }
 
-                test_results.append(result)
+                # Step 1: Create ScoreVersion if node doesn't have one
+                if not self._node_has_score_version(node):
+                    logger.info(f"Creating ScoreVersion for node {node.id}")
+                    version_result = await test_agent.execute(
+                        hypothesis_node=node,
+                        score_version_id=score_version_id,
+                        procedure_context=experiment_context
+                    )
 
-                if result['success']:
-                    logger.info(f"✓ Successfully created ScoreVersion {result['score_version_id']} for node {node.id}")
+                    if not version_result['success']:
+                        logger.error(f"✗ Failed to create ScoreVersion for node {node.id}: {version_result.get('error')}")
+                        node_result['error'] = f"ScoreVersion creation failed: {version_result.get('error')}"
+                        test_results.append(node_result)
+                        continue
+
+                    node_result['score_version_id'] = version_result['score_version_id']
+                    node_result['score_version_created'] = True
+                    logger.info(f"✓ Successfully created ScoreVersion {version_result['score_version_id']} for node {node.id}")
                 else:
-                    logger.error(f"✗ Failed to create ScoreVersion for node {node.id}: {result.get('error')}")
+                    # Node already has ScoreVersion, retrieve it from metadata
+                    import json
+                    try:
+                        metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+                        node_result['score_version_id'] = metadata.get('scoreVersionId')
+                        logger.info(f"Node {node.id} already has ScoreVersion {node_result['score_version_id']}")
+                    except Exception as e:
+                        logger.error(f"Failed to retrieve scoreVersionId from node {node.id}: {e}")
+                        node_result['error'] = "Failed to retrieve existing scoreVersionId"
+                        test_results.append(node_result)
+                        continue
+
+                # Step 2: Run evaluation on the ScoreVersion
+                logger.info(f"Running evaluation for ScoreVersion {node_result['score_version_id']}")
+                try:
+                    eval_result = await self._run_evaluation_for_procedure(
+                        scorecard_name=procedure_info.scorecard_name,
+                        score_name=procedure_info.score_name,
+                        score_version_id=node_result['score_version_id'],
+                        account_id=procedure_info.procedure.accountId,
+                        parameter_values=experiment_context.get('parameter_values', {}),
+                        n_samples=50
+                    )
+
+                    # Parse evaluation results
+                    import json
+                    eval_data = json.loads(eval_result) if isinstance(eval_result, str) else eval_result
+
+                    if 'error' in eval_data:
+                        logger.error(f"✗ Evaluation failed for node {node.id}: {eval_data['error']}")
+                        node_result['error'] = f"Evaluation failed: {eval_data['error']}"
+                        test_results.append(node_result)
+                        continue
+
+                    evaluation_id = eval_data.get('evaluation_id')
+                    if not evaluation_id:
+                        logger.error(f"✗ No evaluation_id in evaluation results for node {node.id}")
+                        node_result['error'] = "No evaluation_id in results"
+                        test_results.append(node_result)
+                        continue
+
+                    node_result['evaluation_id'] = evaluation_id
+                    node_result['accuracy'] = eval_data.get('accuracy')
+                    node_result['evaluation_run'] = True
+                    logger.info(f"✓ Evaluation complete for node {node.id}: evaluation_id={evaluation_id}, accuracy={node_result['accuracy']}")
+
+                    # Step 3: Store evaluation ID in node metadata
+                    try:
+                        metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+                        metadata['evaluationId'] = evaluation_id
+                        node.update_content(metadata=metadata)
+                        logger.info(f"✓ Stored evaluation ID {evaluation_id} in node {node.id} metadata")
+                        node_result['success'] = True
+                    except Exception as e:
+                        logger.error(f"✗ Failed to store evaluation ID in node {node.id}: {e}")
+                        node_result['error'] = f"Failed to store evaluationId: {str(e)}"
+                        test_results.append(node_result)
+                        continue
+
+                except Exception as e:
+                    logger.error(f"✗ Error running evaluation for node {node.id}: {e}", exc_info=True)
+                    node_result['error'] = f"Evaluation error: {str(e)}"
+                    test_results.append(node_result)
+                    continue
+
+                test_results.append(node_result)
 
             # Clean up temp files
             test_agent.cleanup()
 
             # Check overall success
-            successful_count = sum(1 for r in test_results if r['success'])
+            successful_count = sum(1 for r in test_results if r.get('success', False))
             failed_count = len(test_results) - successful_count
 
             overall_success = failed_count == 0
@@ -2124,6 +2233,195 @@ Based on this data, you should prioritize examining error types with the highest
             return 'scoreVersionId' in metadata
         except:
             return False
+
+    def _node_has_evaluation(self, node) -> bool:
+        """Check if a GraphNode already has an evaluationId in metadata."""
+        if not node.metadata:
+            return False
+
+        try:
+            import json
+            metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+            return 'evaluationId' in metadata
+        except:
+            return False
+
+    async def _execute_insights_phase(
+        self,
+        procedure_id: str,
+        procedure_info: 'ProcedureInfo',
+        experiment_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute the insights phase: analyze existing evaluation results.
+
+        NOTE: Evaluations are run during the TEST phase. This phase only retrieves
+        and analyzes results that have already been stored in node metadata.
+
+        This method:
+        1. Gets all hypothesis nodes with evaluationId
+        2. Retrieves evaluation results for each node
+        3. Compares results to baseline evaluation
+        4. Generates insights and recommendations
+
+        Args:
+            procedure_id: The procedure ID
+            procedure_info: ProcedureInfo with node details
+            experiment_context: Context dict with baseline evaluation results
+
+        Returns:
+            Dict with success status and insights analysis
+        """
+        try:
+            from plexus.dashboard.api.models.graph_node import GraphNode
+            import json
+
+            # Get all hypothesis nodes (non-root nodes have parentNodeId)
+            all_nodes = GraphNode.list_by_procedure(procedure_id, self.client)
+            hypothesis_nodes = [n for n in all_nodes if n.parentNodeId is not None]
+
+            if not hypothesis_nodes:
+                logger.warning("No hypothesis nodes found for insights phase")
+                return {
+                    "success": False,
+                    "error": "No hypothesis nodes found",
+                    "evaluations_run": 0
+                }
+
+            logger.info(f"Found {len(hypothesis_nodes)} hypothesis nodes for insights analysis")
+
+            # Filter for nodes that have evaluationId (evaluations already run in test phase)
+            nodes_with_evaluations = []
+            for node in hypothesis_nodes:
+                if self._node_has_evaluation(node):
+                    nodes_with_evaluations.append(node)
+                else:
+                    logger.info(f"Node {node.id} has no evaluation results, skipping")
+
+            if not nodes_with_evaluations:
+                logger.warning("No hypothesis nodes have evaluation results to analyze")
+                return {
+                    "success": False,
+                    "error": "No hypothesis nodes with evaluation results found",
+                    "nodes_analyzed": 0
+                }
+
+            logger.info(f"Analyzing {len(nodes_with_evaluations)} hypothesis nodes with evaluation results")
+
+            # Get baseline evaluation results for comparison
+            baseline_evaluation_results = experiment_context.get('evaluation_results', '{}')
+            try:
+                baseline_data = json.loads(baseline_evaluation_results) if isinstance(baseline_evaluation_results, str) else baseline_evaluation_results
+                baseline_accuracy = baseline_data.get('accuracy', 0)
+                logger.info(f"Baseline accuracy: {baseline_accuracy}")
+            except:
+                logger.warning("Could not parse baseline evaluation results")
+                baseline_accuracy = None
+
+            # Retrieve and analyze evaluation results for each hypothesis node
+            analysis_results = []
+            successful_count = 0
+            failed_count = 0
+
+            for node in nodes_with_evaluations:
+                logger.info(f"Analyzing evaluation results for node {node.id}")
+
+                # Get evaluation ID from node metadata
+                try:
+                    metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+                    evaluation_id = metadata.get('evaluationId')
+                    score_version_id = metadata.get('scoreVersionId')
+
+                    if not evaluation_id:
+                        logger.error(f"Node {node.id} missing evaluationId in metadata")
+                        analysis_results.append({
+                            "node_id": node.id,
+                            "success": False,
+                            "error": "Missing evaluationId in metadata"
+                        })
+                        failed_count += 1
+                        continue
+
+                    # Retrieve existing evaluation results
+                    logger.info(f"Retrieving evaluation results for evaluation {evaluation_id}")
+                    eval_result_str = await self._get_evaluation_results(evaluation_id)
+
+                    # Parse evaluation results
+                    try:
+                        eval_data = json.loads(eval_result_str) if isinstance(eval_result_str, str) else eval_result_str
+
+                        if 'error' in eval_data:
+                            logger.error(f"Failed to retrieve evaluation for node {node.id}: {eval_data['error']}")
+                            analysis_results.append({
+                                "node_id": node.id,
+                                "evaluation_id": evaluation_id,
+                                "success": False,
+                                "error": eval_data['error']
+                            })
+                            failed_count += 1
+                        else:
+                            accuracy = eval_data.get('accuracy', 0)
+
+                            # Compare to baseline
+                            improvement = None
+                            if baseline_accuracy is not None:
+                                improvement = accuracy - baseline_accuracy
+
+                            logger.info(f"✓ Retrieved evaluation for node {node.id}: accuracy={accuracy}, baseline={baseline_accuracy}, improvement={improvement}")
+
+                            analysis_results.append({
+                                "node_id": node.id,
+                                "score_version_id": score_version_id,
+                                "evaluation_id": evaluation_id,
+                                "success": True,
+                                "accuracy": accuracy,
+                                "baseline_accuracy": baseline_accuracy,
+                                "improvement": improvement,
+                                "ac1": eval_data.get('ac1'),
+                                "precision": eval_data.get('precision'),
+                                "recall": eval_data.get('recall')
+                            })
+                            successful_count += 1
+
+                    except Exception as e:
+                        logger.error(f"Error parsing evaluation results for node {node.id}: {e}")
+                        analysis_results.append({
+                            "node_id": node.id,
+                            "evaluation_id": evaluation_id,
+                            "success": False,
+                            "error": f"Failed to parse results: {str(e)}"
+                        })
+                        failed_count += 1
+
+                except Exception as e:
+                    logger.error(f"Error analyzing node {node.id}: {e}", exc_info=True)
+                    analysis_results.append({
+                        "node_id": node.id,
+                        "success": False,
+                        "error": str(e)
+                    })
+                    failed_count += 1
+
+            # Overall success if all analyses succeeded
+            overall_success = failed_count == 0
+
+            return {
+                "success": overall_success,
+                "nodes_analyzed": len(nodes_with_evaluations),
+                "nodes_successful": successful_count,
+                "nodes_failed": failed_count,
+                "baseline_accuracy": baseline_accuracy,
+                "results": analysis_results,
+                "message": f"Analyzed {len(nodes_with_evaluations)} nodes: {successful_count} successful, {failed_count} failed"
+            }
+
+        except Exception as e:
+            logger.error(f"Error executing insights phase: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "nodes_analyzed": 0
+            }
 
     def _get_or_create_task_with_stages_for_procedure(
         self,
