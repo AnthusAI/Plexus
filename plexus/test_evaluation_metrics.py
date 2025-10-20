@@ -371,6 +371,38 @@ class TestErrorHandling:
         assert len(metrics['predictedClassDistribution']) == 1
         assert len(metrics['datasetClassDistribution']) == 1
     
+    def test_error_as_legitimate_class_label(self, mock_evaluation):
+        """Test that 'error' as a class label (without error attribute) is counted in metrics"""
+        # Create results where "error" is a legitimate prediction class, not a system error
+        results = []
+        for i, (predicted, actual) in enumerate([('yes', 'yes'), ('error', 'yes'), ('no', 'no'), ('error', 'error')]):
+            # Create normal score result without error attribute
+            score_result = create_mock_score_result(predicted, actual, score_name="test_score")
+            result = {
+                'form_id': f'form_{i}',
+                'results': {
+                    'test_score': score_result
+                }
+            }
+            results.append(result)
+        
+        metrics = mock_evaluation.calculate_metrics(results)
+        
+        # All 4 results should be counted (2 correct: yes->yes, error->error; 2 incorrect: error->yes, no->no incorrect)
+        # Wait, let me recalculate: yes==yes (correct), error==yes (incorrect), no==no (correct), error==error (correct)
+        # So 3 correct out of 4 = 75%
+        assert metrics['accuracy'] == 0.75  # 3 correct out of 4 results
+        
+        # Distributions should include all 4 results including "error" as a class
+        total_predicted = sum(item['count'] for item in metrics['predictedClassDistribution'])
+        total_actual = sum(item['count'] for item in metrics['datasetClassDistribution'])
+        assert total_predicted == 4
+        assert total_actual == 4
+        
+        # Check that "error" appears in the distributions as a legitimate class
+        predicted_labels = {item['label'] for item in metrics['predictedClassDistribution']}
+        assert 'error' in predicted_labels
+    
     def test_missing_metadata_handling(self, mock_evaluation):
         """Test handling of results with missing metadata"""
         # Create result with minimal metadata

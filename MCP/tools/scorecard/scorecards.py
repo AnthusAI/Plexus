@@ -426,10 +426,41 @@ def register_scorecard_tools(mcp: FastMCP):
             scorecard_id = created_scorecard.get('id')
             if not scorecard_id:
                 return f"Error: Failed to create scorecard '{name}'. No ID returned."
-            
+
+            # Create a default section for the scorecard
+            section_mutation = f"""
+            mutation CreateSection {{
+                createScorecardSection(input: {{
+                    scorecardId: "{scorecard_id}"
+                    name: "Default"
+                    order: 0
+                }}) {{
+                    id
+                    name
+                    order
+                }}
+            }}
+            """
+
+            logger.info(f"Creating default section for scorecard: {scorecard_id}")
+            section_result = client.execute(section_mutation)
+
+            section_created = False
+            section_id = None
+            if section_result and 'createScorecardSection' in section_result:
+                section_data = section_result['createScorecardSection']
+                if section_data:
+                    section_id = section_data.get('id')
+                    section_created = True
+                    logger.info(f"Created default section with ID: {section_id}")
+                else:
+                    logger.warning(f"Section creation returned null for scorecard {scorecard_id}")
+            else:
+                logger.warning(f"No section creation response for scorecard {scorecard_id}")
+
             # Generate dashboard URL
             dashboard_url = f"https://plexus.anth.us/lab/scorecards/{scorecard_id}"
-            
+
             # Return structured success response
             return {
                 "success": True,
@@ -440,7 +471,9 @@ def register_scorecard_tools(mcp: FastMCP):
                 "description": created_scorecard.get('description', description or ''),
                 "accountId": created_scorecard.get('accountId', account_id),
                 "createdAt": created_scorecard.get('createdAt'),
-                "dashboardUrl": dashboard_url
+                "dashboardUrl": dashboard_url,
+                "defaultSectionCreated": section_created,
+                "defaultSectionId": section_id
             }
             
         except Exception as e:

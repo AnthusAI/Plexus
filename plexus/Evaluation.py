@@ -541,8 +541,11 @@ class Evaluation:
                     self.logging.warning(f"Score result has no 'value' attribute: {score_identifier}")
                     continue
 
-                # Skip if the score result is an error or was skipped due to unmet conditions
-                if isinstance(score_result.value, str) and score_result.value.upper() in ["ERROR", "SKIPPED"]:
+                # Skip if the score result is a system error (has error attribute) or was skipped due to unmet conditions
+                # Note: Don't skip if "error" is a legitimate class label (no error attribute)
+                if isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                    continue
+                if isinstance(score_result.value, str) and score_result.value.upper() == "ERROR" and hasattr(score_result, 'error') and score_result.error:
                     continue
 
                 # Ensure parameters attribute exists before accessing name
@@ -2194,6 +2197,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         has_processed_scores = True
 
                         # Create ScoreResult in a non-blocking way only for the primary score
+                        logging.info(f"DEBUG: About to check ScoreResult creation conditions - dry_run={getattr(self, 'dry_run', False)}, dashboard_client={self.dashboard_client is not None}, experiment_id={self.experiment_id}")
                         if getattr(self, 'dry_run', False):
                             pass  # Skip ScoreResult creation in dry run
                         elif self.dashboard_client and self.experiment_id:
@@ -2293,6 +2297,7 @@ Total cost:       ${expenses['total_cost']:.6f}
 
     async def _create_score_result(self, *, score_result, content_id, result, feedback_item_id=None):
         """Create a score result in the dashboard."""
+        logging.info(f"DEBUG: _create_score_result called for content_id={content_id}")
         try:
             # Validate required attributes are available
             if not hasattr(self, 'experiment_id') or not self.experiment_id:
@@ -2334,6 +2339,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Use content_id as the itemId since Items are created by the data loading process
             
             # Create data dictionary with all required fields
+            # MARKER: CODE VERSION 2025-10-17-v3 - This ensures we're using the updated code
             data = {
                 'evaluationId': self.experiment_id,
                 'itemId': content_id,  # Use content_id directly
@@ -2345,7 +2351,10 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'explanation': score_result.explanation,  # Add explanation from Score.Result
                 'code': '200',  # Add success code
                 'status': 'COMPLETED',  # Add status
+                'type': 'evaluation',  # Add type field required by byTypeStatusUpdated GSI
             }
+            logging.info(f"🔧 CODE VERSION 2025-10-17-v3 ACTIVE - Creating ScoreResult with type='{data.get('type')}' and status='{data.get('status')}'")
+            logging.info(f"🔧 Full data dict keys: {list(data.keys())}")
             
             # Add scoreId - try multiple sources
             score_id = None
@@ -2377,6 +2386,10 @@ Total cost:       ${expenses['total_cost']:.6f}
 
             # Validate feedback_item_id if present
             feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
+
+            # Debug logging to see what's actually in the data dict
+            logging.info(f"DEBUG: ScoreResult data keys: {list(data.keys())}")
+            logging.info(f"DEBUG: type={data.get('type')}, status={data.get('status')}, updatedAt={data.get('updatedAt')}")
 
             # Validate all required fields are present and not None
             required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'scoreId', 'value', 'metadata', 'code', 'status']
