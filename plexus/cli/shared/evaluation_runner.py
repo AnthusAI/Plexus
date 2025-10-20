@@ -235,10 +235,11 @@ async def run_accuracy_evaluation(
             try:
                 # Update evaluation record to COMPLETED status (same as CLI)
                 update_payload_metrics = []
+                if final_metrics.get("alignment") is not None:
+                    # Store Gwet's AC1 raw value in range [-1, 1]
+                    update_payload_metrics.append({"name": "Alignment", "value": final_metrics["alignment"]})
                 if final_metrics.get("accuracy") is not None:
                     update_payload_metrics.append({"name": "Accuracy", "value": final_metrics["accuracy"] * 100})
-                if final_metrics.get("alignment") is not None:
-                    update_payload_metrics.append({"name": "Alignment", "value": final_metrics["alignment"] * 100})
                 if final_metrics.get("precision") is not None:
                     update_payload_metrics.append({"name": "Precision", "value": final_metrics["precision"] * 100})
                 if final_metrics.get("recall") is not None:

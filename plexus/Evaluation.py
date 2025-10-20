@@ -1514,21 +1514,15 @@ class Evaluation:
         
         # Format metrics for API
         metrics_for_api = []
+        if metrics.get("alignment") is not None:
+            # For alignment (Gwet's AC1), store the raw value in range [-1, 1]
+            alignment_value = metrics["alignment"]
+            metrics_for_api.append({"name": "Alignment", "value": alignment_value})
+            # Added alignment to metrics
         if metrics.get("accuracy") is not None:
             metrics_for_api.append({"name": "Accuracy", "value": metrics["accuracy"] * 100})
         if metrics.get("precision") is not None:
             metrics_for_api.append({"name": "Precision", "value": metrics["precision"] * 100})
-        if metrics.get("alignment") is not None:
-            # For alignment (Gwet's AC1), we map from [-1, 1] to [0, 100] for UI display
-            # Only map if the value is negative, otherwise use the raw value scaled to percentage
-            alignment_value = metrics["alignment"]
-            # Process alignment value
-            if alignment_value < 0:
-                display_value = 0  # Map negative values to 0
-            else:
-                display_value = alignment_value * 100  # Scale to percentage
-            metrics_for_api.append({"name": "Alignment", "value": display_value})
-            # Added alignment to metrics
         if metrics.get("recall") is not None:
             metrics_for_api.append({"name": "Recall", "value": metrics["recall"] * 100})
         
@@ -1592,7 +1586,7 @@ class Evaluation:
             metric_names = [m["name"] for m in metrics_for_api]
             
             # Force append any missing metrics with default N/A value (-1 displays as N/A in UI)
-            required_metrics = ["Accuracy", "Precision", "Alignment", "Recall"]
+            required_metrics = ["Alignment", "Accuracy", "Precision", "Recall"]
             for required_metric in required_metrics:
                 if required_metric not in metric_names:
                     metrics_for_api.append({"name": required_metric, "value": -1})
@@ -1604,8 +1598,8 @@ class Evaluation:
         else:
             # Create default metrics list with all required metrics if empty
             default_metrics = [
+                {"name": "Alignment", "value": metrics.get("alignment", 0)},
                 {"name": "Accuracy", "value": metrics.get("accuracy", 0) * 100},
-                {"name": "Alignment", "value": 0 if metrics.get("alignment", 0) < 0 else metrics.get("alignment", 0) * 100},
                 {"name": "Precision", "value": metrics.get("precision", 0) * 100},
                 {"name": "Recall", "value": metrics.get("recall", 0) * 100}
             ]
