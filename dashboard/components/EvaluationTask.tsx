@@ -1057,16 +1057,40 @@ evaluation:
     }
   }, [data, generateUniversalCode]);
 
-  const metrics = useMemo(() => 
-    variant === 'detail' ? 
-      (data.metrics ?? []).map(metric => ({
-        value: metric.value,
-        label: metric.name,
-        information: getMetricInformation(metric.name),
-        maximum: metric.maximum ?? 100,
-        unit: metric.unit ?? '%',
-        priority: metric.priority
-      }))
+  const metrics = useMemo(() =>
+    variant === 'detail' ?
+      (data.metrics ?? []).map(metric => {
+        // Special handling for Alignment (Gwet's AC1)
+        if (metric.name === 'Alignment') {
+          return {
+            value: metric.value,
+            label: metric.name,
+            information: getMetricInformation(metric.name),
+            min: -1,           // AC1 ranges from -1 to 1
+            max: 1,
+            valueUnit: '',     // No percentage sign
+            decimalPlaces: 2,  // Show 2 decimal places
+            priority: metric.priority,
+            segments: [
+              { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // -1 to 0
+              { start: 50, end: 60, color: 'var(--gauge-converging)' },   // 0 to 0.2
+              { start: 60, end: 75, color: 'var(--gauge-almost)' },       // 0.2 to 0.5
+              { start: 75, end: 90, color: 'var(--gauge-viable)' },       // 0.5 to 0.8
+              { start: 90, end: 100, color: 'var(--gauge-great)' }        // 0.8 to 1.0
+            ]
+          }
+        }
+
+        // Default handling for other metrics
+        return {
+          value: metric.value,
+          label: metric.name,
+          information: getMetricInformation(metric.name),
+          max: metric.maximum ?? 100,        // Fixed: was 'maximum', should be 'max'
+          valueUnit: metric.unit ?? '%',     // Fixed: was 'unit', should be 'valueUnit'
+          priority: metric.priority
+        }
+      })
       : [
         {
           value: data.accuracy ?? undefined,
