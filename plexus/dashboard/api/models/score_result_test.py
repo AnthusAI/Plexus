@@ -187,7 +187,7 @@ class TestFindByCacheKey:
     def mock_gsi_response(self, sample_score_result_data):
         """Mock GSI query response"""
         return {
-            'listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt': {
+            'listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt': {
                 'items': [sample_score_result_data]
             }
         }
@@ -196,7 +196,7 @@ class TestFindByCacheKey:
     def mock_empty_gsi_response(self):
         """Mock empty GSI query response (cache miss)"""
         return {
-            'listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt': {
+            'listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt': {
                 'items': []
             }
         }
@@ -208,7 +208,7 @@ class TestFindByCacheKey:
         result = ScoreResult.find_by_cache_key(
             client=mock_client,
             item_id="item-123",
-            scorecard_id="scorecard-456",
+            type="prediction",
             score_id="score-789"
         )
         
@@ -227,12 +227,12 @@ class TestFindByCacheKey:
         query = call_args[0][0]
         variables = call_args[0][1]
         
-        assert 'listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt' in query
+        assert 'listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt' in query
         assert 'sortDirection: DESC' in query
         assert 'limit: 1' in query
         assert variables == {
             "itemId": "item-123",
-            "scorecardId": "scorecard-456", 
+            "type": "prediction", 
             "scoreId": "score-789"
         }
     
@@ -243,7 +243,7 @@ class TestFindByCacheKey:
         result = ScoreResult.find_by_cache_key(
             client=mock_client,
             item_id="item-nonexistent",
-            scorecard_id="scorecard-nonexistent",
+            type="prediction",
             score_id="score-nonexistent"
         )
         
@@ -260,7 +260,7 @@ class TestFindByCacheKey:
         result = ScoreResult.find_by_cache_key(
             client=mock_client,
             item_id="item-123",
-            scorecard_id="scorecard-456",
+            type="prediction",
             score_id="score-789",
             account_id="account-abc"  # Optional parameter
         )
@@ -279,7 +279,7 @@ class TestFindByCacheKey:
         result = ScoreResult.find_by_cache_key(
             client=mock_client,
             item_id="item-123",
-            scorecard_id="scorecard-456",
+            type="prediction",
             score_id="score-789"
         )
         
@@ -299,7 +299,7 @@ class TestFindByCacheKey:
         
         # Mock response with multiple items (should be sorted DESC by updatedAt)
         mock_response = {
-            'listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt': {
+            'listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt': {
                 'items': [newer_result]  # GSI should return most recent first due to DESC sort + limit 1
             }
         }
@@ -308,7 +308,7 @@ class TestFindByCacheKey:
         result = ScoreResult.find_by_cache_key(
             client=mock_client,
             item_id="item-123",
-            scorecard_id="scorecard-456",
+            type="prediction",
             score_id="score-789"
         )
         
@@ -323,7 +323,7 @@ class TestFindByCacheKey:
         ScoreResult.find_by_cache_key(
             client=mock_client,
             item_id="test-item",
-            scorecard_id="test-scorecard", 
+            type="prediction", 
             score_id="test-score"
         )
         
@@ -334,11 +334,11 @@ class TestFindByCacheKey:
         # Verify key parts of the GSI query
         assert 'query GetMostRecentScoreResult' in query
         assert '$itemId: String!' in query
-        assert '$scorecardId: String!' in query
+        assert '$type: String!' in query
         assert '$scoreId: String!' in query
         assert 'itemId: $itemId' in query
         assert 'beginsWith:' in query
-        assert 'scorecardId: $scorecardId' in query
+        assert 'type: $type' in query
         assert 'scoreId: $scoreId' in query
         assert 'sortDirection: DESC' in query
         assert 'limit: 1' in query
@@ -350,7 +350,7 @@ class TestFindByCacheKey:
         ScoreResult.find_by_cache_key(
             client=mock_client,
             item_id="test-item",
-            scorecard_id="test-scorecard",
+            type="prediction",
             score_id="test-score"
         )
         

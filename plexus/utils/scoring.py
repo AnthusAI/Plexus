@@ -299,7 +299,7 @@ async def resolve_score_id(external_id: str, scorecard_dynamo_id: str, client) -
         logging.error(f"Stack trace: {traceback.format_exc()}")
         return None
 
-async def get_existing_score_result(report_id: str, scorecard_id: str, score_id: str, account_id: str) -> Optional[dict]:
+async def get_existing_score_result(report_id: str, scorecard_id: str, score_id: str, type: str, account_id: str) -> Optional[dict]:
     """
     Check if a score result already exists for the given report, scorecard, and score.
     Now uses the new ScoreResult.find_by_cache_key method for cleaner, more maintainable code.
@@ -356,7 +356,7 @@ async def get_existing_score_result(report_id: str, scorecard_id: str, score_id:
             ScoreResult.find_by_cache_key,
             client=client,
             item_id=item.id,
-            scorecard_id=dynamo_scorecard_id,
+            type=type,
             score_id=dynamo_score_id,
             account_id=account_id
         )
