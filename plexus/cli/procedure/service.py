@@ -1033,6 +1033,22 @@ class ProcedureService:
                                 result['test_phase'] = test_results
                                 # Stay in TEST state for retry
 
+                        # Execute insights phase if we're in INSIGHTS state
+                        if current_state == STATE_INSIGHTS:
+                            logger.info("Executing insights phase: running evaluations on new ScoreVersions")
+                            insights_results = await self._execute_insights_phase(
+                                procedure_id,
+                                procedure_info,
+                                experiment_context
+                            )
+
+                            if insights_results.get('success'):
+                                logger.info("Insights phase completed successfully")
+                                result['insights_phase'] = insights_results
+                            else:
+                                logger.error(f"Insights phase failed: {insights_results.get('error')}")
+                                result['insights_phase'] = insights_results
+
                         # Add AI results to the response
                         result['ai_execution'] = {
                             'completed': True,
@@ -1983,13 +1999,19 @@ Based on this data, you should prioritize examining error types with the highest
         experiment_context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Execute the test phase: create ScoreVersions for all hypothesis nodes.
+        Execute the test phase: create ScoreVersions and run evaluations on them.
 
         This method:
         1. Gets all hypothesis nodes (non-root nodes)
-        2. Skips nodes that already have scoreVersionId in metadata
-        3. For each remaining node, uses TestPhaseAgent to create a ScoreVersion
+        2. Skips nodes that already have scoreVersionId AND evaluationId in metadata
+        3. For each remaining node:
+           a. Uses TestPhaseAgent to create a ScoreVersion
+           b. Runs evaluation on the created ScoreVersion
+           c. Stores evaluationId in node metadata
         4. Returns success/failure status with details
+
+        The test phase is not complete until successful evaluations have been run
+        for each hypothesis node.
 
         Args:
             procedure_id: The procedure ID
