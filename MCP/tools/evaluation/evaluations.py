@@ -284,8 +284,21 @@ def register_evaluation_tools(mcp: FastMCP):
         yaml: bool = True,
         version: Optional[str] = None,
         latest: bool = False,
+        fresh: bool = False,
+        reload: bool = False,
     ) -> str:
-        """Run a local YAML-based accuracy evaluation using the same code path as CLI (DRY)."""
+        """Run a local YAML-based accuracy evaluation using the same code path as CLI (DRY).
+
+        Parameters:
+        - scorecard_name: Name of the scorecard to evaluate
+        - score_name: Name of the score to evaluate (optional, evaluates all if not provided)
+        - n_samples: Number of samples to evaluate (default: 10)
+        - yaml: Use local YAML files instead of API (default: True)
+        - version: Specific version ID to use
+        - latest: Use latest version instead of champion
+        - fresh: Pull fresh, non-cached data from the data lake (default: False)
+        - reload: Reload existing dataset by refreshing values for current records only (default: False)
+        """
         if not scorecard_name:
             return "Error: scorecard_name must be provided"
 
@@ -307,8 +320,7 @@ def register_evaluation_tools(mcp: FastMCP):
             args = [
                 '--scorecard', scorecard_name,
                 '--number-of-samples', str(n_samples),
-                '--sampling-method', 'random',
-                '--fresh'
+                '--sampling-method', 'random'
             ]
 
             if yaml:
@@ -322,6 +334,12 @@ def register_evaluation_tools(mcp: FastMCP):
 
             if latest:
                 args.append('--latest')
+
+            if fresh:
+                args.append('--fresh')
+
+            if reload:
+                args.append('--reload')
 
             # Run the CLI command in a thread pool to avoid event loop conflicts
             # This ensures we use the exact same code path as the CLI
