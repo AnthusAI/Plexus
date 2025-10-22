@@ -1016,11 +1016,37 @@ evaluation:
   estimated_remaining_seconds: ${evaluationData.estimatedRemainingSeconds || 0}
   
   # Additional Metrics
-  metrics:${evaluationData.metrics?.map(metric => `
+  metrics:${(() => {
+    try {
+      let metricsData = evaluationData.metrics;
+      
+      // Parse if string
+      if (typeof metricsData === 'string') {
+        metricsData = JSON.parse(metricsData);
+      }
+      
+      // Ensure it's an array
+      if (!Array.isArray(metricsData)) {
+        if (metricsData && typeof metricsData === 'object') {
+          metricsData = Object.entries(metricsData).map(([key, value]) => ({
+            name: key,
+            value: value
+          }));
+        } else {
+          return '';
+        }
+      }
+      
+      return metricsData.map(metric => `
     - name: "${metric.name}"
       value: ${metric.value}
       unit: "${metric.unit || ''}"
-      priority: ${metric.priority || false}`).join('') || ''}
+      priority: ${metric.priority || false}`).join('');
+    } catch (e) {
+      console.error('Error parsing metrics:', e);
+      return '';
+    }
+  })()}
   
   # Error Information
   error_message: "${evaluationData.errorMessage || ''}"
