@@ -118,5 +118,10 @@ class DeploymentStage(cdk.Stage):
         )
 
         # Future stacks will be added here:
-        # MonitoringStack(self, "Monitoring", environment=environment, env=kwargs.get("env"))
-        # DataPipelineStack(self, "DataPipeline", environment=environment, env=kwargs.get("env"))
+        # MonitoringStack(
+        #     self,
+        #     "Monitoring",
+        #     environment=environment,
+        #     stack_name=f"plexus-monitoring-{environment}",
+        #     env=kwargs.get("env")
+        # )
