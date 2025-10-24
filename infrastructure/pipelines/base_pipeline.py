@@ -113,6 +113,7 @@ class DeploymentStage(cdk.Stage):
             self,
             "ScoringWorker",
             environment=environment,
+            stack_name=f"plexus-scoring-worker-{environment}",
             env=kwargs.get("env")
         )
 
