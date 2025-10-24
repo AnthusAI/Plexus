@@ -16,6 +16,7 @@ infrastructure/
 │       └── naming.py                # Naming convention utilities
 │
 └── pipelines/                       # Deployment pipelines
+    ├── base_pipeline.py             # Base pipeline class
     ├── staging_pipeline.py          # Staging deployment (watches 'staging' branch)
     └── production_pipeline.py       # Production deployment (watches 'main' branch)
 ```
@@ -93,18 +94,21 @@ infrastructure/
            # Add resources here
    ```
 
-2. **Add to deployment stages** in both pipeline files:
+2. **Add to deployment stage** in `pipelines/base_pipeline.py`:
    ```python
-   # In StagingDeploymentStage and ProductionDeploymentStage
+   # In DeploymentStage.__init__(), after ScoringWorkerStack
    MonitoringStack(
        self,
        "Monitoring",
-       environment="staging",  # or "production"
+       environment=environment,
+       stack_name=f"plexus-monitoring-{environment}",
        env=kwargs.get("env")
    )
    ```
 
 3. **Commit and push** to appropriate branch - pipeline will automatically deploy
+
+**Note**: Always use `stack_name` parameter to get clean CloudFormation stack names following the `plexus-{service}-{environment}` pattern.
 
 ## Naming Convention
 
