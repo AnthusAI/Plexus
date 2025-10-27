@@ -4,6 +4,7 @@ import logging
 import sys
 import os
 import watchtower
+import boto3
 from datetime import datetime
 import time
 
@@ -32,7 +33,7 @@ def _get_aws_credentials():
     """
     access_key = os.getenv('AWS_ACCESS_KEY_ID')
     secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-    region = os.getenv('AWS_REGION_NAME')
+    region = os.getenv('AWS_REGION') or os.getenv('AWS_REGION_NAME') or os.getenv('AWS_DEFAULT_REGION')
     
     is_configured = all([access_key, secret_key, region])
     
@@ -92,7 +93,8 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
             
             cloudwatch_handler = watchtower.CloudWatchLogHandler(
                 log_group=log_group,
-                stream_name=stream_name
+                stream_name=stream_name,
+                boto3_client=boto3.client('logs', region_name=region)
             )
             cloudwatch_handler.setFormatter(PlexusFormatter())
             handlers.append(cloudwatch_handler)
@@ -168,7 +170,7 @@ def add_log_stream(stream_name):
     global cloudwatch_handler, current_log_group
     
     # Skip if CloudWatch logging is not configured
-    _, _, _, is_configured = _get_aws_credentials()
+    _, _, region, is_configured = _get_aws_credentials()
     if not is_configured or not current_log_group:
         logging.debug(f"CloudWatch logging not configured, skipping stream: {stream_name}")
         return None
@@ -177,6 +179,7 @@ def add_log_stream(stream_name):
     new_handler = watchtower.CloudWatchLogHandler(
         log_group=current_log_group,
         stream_name=f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}-{stream_name}",
+        boto3_client=boto3.client('logs', region_name=region),
         use_queues=False  # To ensure immediate logging for the specific stream
     )
     
