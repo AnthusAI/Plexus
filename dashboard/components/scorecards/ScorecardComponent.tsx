@@ -193,6 +193,7 @@ export const DetailContent = React.memo(function DetailContent({
   shouldExpandExamples,
   onExamplesExpanded,
   onTaskCreated,
+  onCreateScore,
   onOpenGuidelinesEditor,
   onStartInlineEdit,
   isGuidelinesEditing,
@@ -272,6 +273,9 @@ export const DetailContent = React.memo(function DetailContent({
     }
   }, [shouldExpandExamples, isExamplesExpanded, onExamplesExpanded]);
 
+  // Debounce timer for section name changes
+  const sectionNameDebounceTimers = React.useRef<Record<string, NodeJS.Timeout>>({})
+  
   const handleSectionNameChange = (sectionId: string, newName: string) => {
     setSectionNameChanges(prev => ({
       ...prev,
@@ -286,6 +290,25 @@ export const DetailContent = React.memo(function DetailContent({
         name: newName 
       }
       onEditChange?.({ sections: { items: updatedSections } })
+      
+      // Debounce the database update (wait 1 second after user stops typing)
+      if (sectionNameDebounceTimers.current[sectionId]) {
+        clearTimeout(sectionNameDebounceTimers.current[sectionId])
+      }
+      
+      sectionNameDebounceTimers.current[sectionId] = setTimeout(async () => {
+        try {
+          console.log('💾 Updating section name in database:', newName)
+          await amplifyClient.ScorecardSection.update({
+            id: sectionId,
+            name: newName
+          })
+          console.log('💾 Section name updated successfully')
+        } catch (error) {
+          console.error('❌ Error updating section name:', error)
+          toast.error('Failed to update section name')
+        }
+      }, 1000) // Wait 1 second after user stops typing
     }
   }
 
@@ -932,12 +955,7 @@ export const DetailContent = React.memo(function DetailContent({
                     <CardButton
                       icon={Plus}
                       label="Create Score"
-                      onClick={() => {
-                        // Navigate to score creation page
-                        if (typeof window !== 'undefined') {
-                          window.location.href = `/scorecards/${score.id}/scores/new/edit?sectionId=${section.id}`
-                        }
-                      }}
+                      onClick={() => onCreateScore?.(section.id)}
                     />
                   </div>
                 </div>
@@ -1053,6 +1071,7 @@ export default function ScorecardComponent({
   shouldExpandExamples,
   onExamplesExpanded,
   onTaskCreated,
+  onCreateScore,
   className, 
   ...props 
 }: ScorecardComponentProps) {
@@ -1098,8 +1117,8 @@ export default function ScorecardComponent({
   const handleEditChange = (changes: Partial<ScorecardData>) => {
     setEditedScore(prev => {
       const updated = { ...prev, ...changes }
-      // Only set hasChanges if name, key, externalId, description, or guidelines were changed
-      if ('name' in changes || 'key' in changes || 'externalId' in changes || 'description' in changes || 'examples' in changes || 'guidelines' in changes) {
+      // Only set hasChanges if name, key, externalId, description, sections, or guidelines were changed
+      if ('name' in changes || 'key' in changes || 'externalId' in changes || 'description' in changes || 'sections' in changes || 'examples' in changes || 'guidelines' in changes) {
         setHasChanges(true)
       }
       return updated
@@ -1199,23 +1218,47 @@ export default function ScorecardComponent({
     }
   }, [])
 
-  const handleAddSection = () => {
-    const maxOrder = Math.max(0, ...(editedScore.sections?.items || []).map(s => s.order))
-    const newSection = {
-      id: `temp_${Date.now()}`,
-      name: "New section",
-      order: maxOrder + 1,
-      scores: { items: [] }
-    }
-    setEditedScore(prev => ({
-      ...prev,
-      sections: {
-        items: [...(prev.sections?.items || []), newSection]
+  const handleAddSection = async () => {
+    try {
+      const maxOrder = Math.max(0, ...(editedScore.sections?.items || []).map(s => s.order))
+      
+      // Create the section in the database immediately
+      console.log('💾 Creating new section in database...')
+      const newSectionResult = await amplifyClient.ScorecardSection.create({
+        name: "New section",
+        order: maxOrder + 1,
+        scorecardId: editedScore.id
+      })
+      
+      if (!newSectionResult.data) {
+        throw new Error('Failed to create section')
       }
-    }))
+      
+      console.log('💾 New section created with ID:', newSectionResult.data.id)
+      
+      // Add the new section with its real database ID
+      const newSection = {
+        id: newSectionResult.data.id,
+        name: newSectionResult.data.name,
+        order: newSectionResult.data.order,
+        scores: { items: [] }
+      }
+      
+      setEditedScore(prev => ({
+        ...prev,
+        sections: {
+          items: [...(prev.sections?.items || []), newSection]
+        }
+      }))
+      
+      toast.success('Section created successfully')
+    } catch (error) {
+      console.error('❌ Error creating section:', error)
+      toast.error('Failed to create section: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    }
   }
 
-  const handleMoveSection = (index: number, direction: 'up' | 'down') => {
+  const handleMoveSection = async (index: number, direction: 'up' | 'down') => {
     if (!editedScore.sections?.items) return
 
     const newSections = [...editedScore.sections.items]
@@ -1234,21 +1277,65 @@ export default function ScorecardComponent({
       ...prev,
       sections: { items: newSections }
     }))
+    
+    try {
+      // Update the order in the database immediately
+      console.log('🔄 Updating section order in database...')
+      await Promise.all([
+        amplifyClient.ScorecardSection.update({
+          id: newSections[index].id,
+          order: newSections[index].order
+        }),
+        amplifyClient.ScorecardSection.update({
+          id: newSections[newIndex].id,
+          order: newSections[newIndex].order
+        })
+      ])
+      console.log('🔄 Section order updated successfully')
+    } catch (error) {
+      console.error('❌ Error updating section order:', error)
+      toast.error('Failed to update section order: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    }
   }
 
-  const handleDeleteSection = (sectionIndex: number) => {
+  const handleDeleteSection = async (sectionIndex: number) => {
     if (!editedScore.sections?.items) return
 
-    const updatedSections = [...editedScore.sections.items]
-    updatedSections.splice(sectionIndex, 1)
-    updatedSections.forEach((section, index) => {
-      section.order = index
-    })
+    const sectionToDelete = editedScore.sections.items[sectionIndex]
+    
+    try {
+      // Delete the section from the database immediately
+      console.log('🗑️ Deleting section from database:', sectionToDelete.name)
+      await amplifyClient.ScorecardSection.delete({ id: sectionToDelete.id })
+      console.log('🗑️ Section deleted successfully')
+      
+      // Remove from local state
+      const updatedSections = [...editedScore.sections.items]
+      updatedSections.splice(sectionIndex, 1)
+      
+      // Reorder remaining sections
+      updatedSections.forEach((section, index) => {
+        section.order = index
+      })
 
-    setEditedScore(prev => ({
-      ...prev,
-      sections: { items: updatedSections }
-    }))
+      setEditedScore(prev => ({
+        ...prev,
+        sections: { items: updatedSections }
+      }))
+      
+      // Update the order of remaining sections in the database
+      for (const section of updatedSections) {
+        await amplifyClient.ScorecardSection.update({
+          id: section.id,
+          order: section.order
+        })
+      }
+      
+      toast.success('Section deleted successfully')
+    } catch (error) {
+      console.error('❌ Error deleting section:', error)
+      toast.error('Failed to delete section: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    }
   }
 
   const handleSave = async () => {
@@ -1258,7 +1345,8 @@ export default function ScorecardComponent({
         name: editedScore.name,
         key: editedScore.key,
         externalId: editedScore.externalId,
-        description: editedScore.description
+        description: editedScore.description,
+        sectionsCount: editedScore.sections?.items?.length || 0
       })
       
       // Build update object, converting empty strings to undefined for optional fields
@@ -1283,19 +1371,20 @@ export default function ScorecardComponent({
         updateData.description = editedScore.description
       }
       
-      console.log('💾 Sending update with data:', updateData)
+      console.log('💾 Sending scorecard update with data:', updateData)
       
       const result = await amplifyClient.Scorecard.update(updateData)
 
       console.log('💾 Scorecard update result:', result)
-      console.log('💾 Result errors:', result.errors)
       
       // Check if update actually succeeded
       if (!result.data) {
         console.error('❌ Update returned null data:', result)
-        const errorMessage = result.errors?.map((e: any) => e.message).join(', ') || 'Unknown error'
-        throw new Error(`Update failed: ${errorMessage}`)
+        throw new Error('Update failed - no data returned from server')
       }
+
+      // Note: Sections are now saved immediately when created/moved/deleted/renamed
+      // This save only handles scorecard-level properties
 
       // In a future update, we'll save examples to a dedicated table or field
       console.log('Examples would be saved:', editedScore.examples)
@@ -1374,6 +1463,7 @@ export default function ScorecardComponent({
               shouldExpandExamples={shouldExpandExamples}
               onExamplesExpanded={onExamplesExpanded}
               onTaskCreated={onTaskCreated}
+              onCreateScore={onCreateScore}
               onOpenGuidelinesEditor={handleOpenGuidelinesEditor}
               onStartInlineEdit={handleStartInlineEdit}
               isGuidelinesEditing={isGuidelinesEditing}
