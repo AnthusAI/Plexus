@@ -1066,6 +1066,9 @@ export default function ScorecardComponent({
   const previewRef = React.useRef<HTMLDivElement>(null)
   const editorRef = React.useRef<any>(null)
 
+  // Track the previous scorecard ID to detect when we switch to a different scorecard
+  const prevScoreIdRef = React.useRef<string | null>(null)
+
   React.useEffect(() => {
     console.log('🔍 ScorecardComponent received score:', {
       id: score.id,
@@ -1076,14 +1079,27 @@ export default function ScorecardComponent({
       hasGuidelines: 'guidelines' in score,
       allScoreFields: Object.keys(score)
     });
-    setEditedScore(score)
-  }, [score])
+    
+    // Update editedScore in two cases:
+    // 1. We're switching to a different scorecard (different ID)
+    // 2. We're on the same scorecard but have no unsaved changes (data was refreshed after save)
+    if (prevScoreIdRef.current !== score.id) {
+      console.log('🔄 Switching to different scorecard, resetting editedScore');
+      setEditedScore(score)
+      setHasChanges(false)
+      prevScoreIdRef.current = score.id
+    } else if (!hasChanges) {
+      // Same scorecard, no unsaved changes - update with fresh data from server
+      console.log('🔄 Updating editedScore with fresh data from server (no unsaved changes)');
+      setEditedScore(score)
+    }
+  }, [score, hasChanges])
 
   const handleEditChange = (changes: Partial<ScorecardData>) => {
     setEditedScore(prev => {
       const updated = { ...prev, ...changes }
-      // Only set hasChanges if name, key, externalId, or guidelines were changed
-      if ('name' in changes || 'key' in changes || 'externalId' in changes || 'examples' in changes || 'guidelines' in changes) {
+      // Only set hasChanges if name, key, externalId, description, or guidelines were changed
+      if ('name' in changes || 'key' in changes || 'externalId' in changes || 'description' in changes || 'examples' in changes || 'guidelines' in changes) {
         setHasChanges(true)
       }
       return updated
@@ -1237,23 +1253,61 @@ export default function ScorecardComponent({
 
   const handleSave = async () => {
     try {
-      // For now, we'll just save the basic properties
-      // We'll need to add a separate API or update the schema to handle examples
-      await amplifyClient.Scorecard.update({
+      console.log('💾 handleSave called with editedScore:', {
         id: editedScore.id,
         name: editedScore.name,
         key: editedScore.key,
         externalId: editedScore.externalId,
         description: editedScore.description
       })
+      
+      // Build update object, converting empty strings to undefined for optional fields
+      // DynamoDB/Amplify doesn't like empty strings for optional fields
+      const updateData: {
+        id: string
+        name: string
+        key: string
+        externalId?: string
+        description?: string
+      } = {
+        id: editedScore.id,
+        name: editedScore.name,
+        key: editedScore.key
+      }
+      
+      // Only include optional fields if they have actual values
+      if (editedScore.externalId && editedScore.externalId.trim() !== '') {
+        updateData.externalId = editedScore.externalId
+      }
+      if (editedScore.description && editedScore.description.trim() !== '') {
+        updateData.description = editedScore.description
+      }
+      
+      console.log('💾 Sending update with data:', updateData)
+      
+      const result = await amplifyClient.Scorecard.update(updateData)
+
+      console.log('💾 Scorecard update result:', result)
+      console.log('💾 Result errors:', result.errors)
+      
+      // Check if update actually succeeded
+      if (!result.data) {
+        console.error('❌ Update returned null data:', result)
+        const errorMessage = result.errors?.map((e: any) => e.message).join(', ') || 'Unknown error'
+        throw new Error(`Update failed: ${errorMessage}`)
+      }
 
       // In a future update, we'll save examples to a dedicated table or field
       console.log('Examples would be saved:', editedScore.examples)
 
       setHasChanges(false)
+      toast.success('Scorecard saved successfully')
+      console.log('💾 Calling onSave callback...')
       onSave?.()
+      console.log('💾 Save complete!')
     } catch (error) {
-      console.error('Error saving scorecard:', error)
+      console.error('❌ Error saving scorecard:', error)
+      toast.error('Failed to save scorecard: ' + (error instanceof Error ? error.message : 'Unknown error'))
     }
   }
 
