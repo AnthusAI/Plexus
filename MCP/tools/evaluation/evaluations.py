@@ -280,54 +280,105 @@ def register_evaluation_tools(mcp: FastMCP):
     async def plexus_evaluation_run(
         scorecard_name: str = "",
         score_name: str = "",
+        evaluation_type: str = "accuracy",
         n_samples: int = 10,
+        days: int = 7,
         yaml: bool = True,
         version: Optional[str] = None,
         latest: bool = False,
     ) -> str:
-        """Run a local YAML-based accuracy evaluation using the same code path as CLI (DRY)."""
+        """
+        Run an evaluation using the same code path as CLI.
+        
+        Parameters:
+        - scorecard_name: Name of the scorecard to evaluate (required)
+        - score_name: Name of specific score to evaluate (REQUIRED for feedback evaluations, optional for accuracy)
+        - evaluation_type: Type of evaluation - "accuracy" (default) or "feedback"
+        - n_samples: Number of samples for accuracy evaluation (default: 10)
+        - days: Number of days to look back for feedback evaluation (default: 7)
+        - yaml: Load scorecard from YAML files for accuracy evaluation (default: True)
+        - version: Specific score version ID. For accuracy: version to evaluate. For feedback: if provided, runs accuracy eval with FeedbackItems dataset
+        - latest: Use latest score version for accuracy evaluation (default: False)
+        
+        Returns:
+        - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL
+        
+        NOTE: Feedback evaluations MUST specify a score_name because evaluation records
+        are associated with a single score, not an entire scorecard.
+        
+        FEEDBACK EVALUATION MODES:
+        - Without version: Analyzes feedback edits to measure agreement (fast, no predictions)
+        - With version: Runs predictions using specified version against feedback as ground truth (slower, tests version)
+        """
         if not scorecard_name:
             return "Error: scorecard_name must be provided"
+
+        # Validate evaluation type
+        if evaluation_type not in ["accuracy", "feedback"]:
+            return f"Error: evaluation_type must be 'accuracy' or 'feedback', got '{evaluation_type}'"
+        
+        # Validate that feedback evaluations have a score_name
+        if evaluation_type == "feedback" and not score_name:
+            return "Error: score_name is required for feedback evaluations. Feedback evaluations must be run on a single score."
 
         # Validate mutually exclusive version options (same as CLI)
         if version and latest:
             return "Error: Cannot use both version and latest options. Choose one."
 
-        logger.info(f"MCP Evaluation - Scorecard: {scorecard_name}, Score: {score_name}, YAML: {yaml}, Samples: {n_samples}")
+        logger.info(f"MCP Evaluation - Type: {evaluation_type}, Scorecard: {scorecard_name}, Score: {score_name}, Days: {days}, YAML: {yaml}, Samples: {n_samples}")
 
         try:
             import json
             import asyncio
             from concurrent.futures import ThreadPoolExecutor
             from click.testing import CliRunner
-            from plexus.cli.evaluation.evaluations import accuracy
+            from plexus.cli.evaluation.evaluations import accuracy, feedback
             from plexus.Evaluation import Evaluation
 
-            # Build CLI arguments
-            args = [
-                '--scorecard', scorecard_name,
-                '--number-of-samples', str(n_samples),
-                '--sampling-method', 'random',
-                '--fresh'
-            ]
+            if evaluation_type == "feedback":
+                # Build CLI arguments for feedback evaluation
+                args = [
+                    '--scorecard', scorecard_name,
+                    '--days', str(days)
+                ]
 
-            if yaml:
-                args.append('--yaml')
+                if score_name:
+                    args.extend(['--score', score_name])
+                
+                # Add version parameter if provided (enables accuracy eval with FeedbackItems dataset)
+                if version:
+                    args.extend(['--version', version])
 
-            if score_name:
-                args.extend(['--score', score_name])
+                # Run the CLI command in a thread pool to avoid event loop conflicts
+                def run_cli_command():
+                    runner = CliRunner()
+                    return runner.invoke(feedback, args, catch_exceptions=False, standalone_mode=False)
 
-            if version:
-                args.extend(['--version', version])
+            else:  # accuracy evaluation
+                # Build CLI arguments for accuracy evaluation
+                args = [
+                    '--scorecard', scorecard_name,
+                    '--number-of-samples', str(n_samples),
+                    '--sampling-method', 'random',
+                    '--fresh'
+                ]
 
-            if latest:
-                args.append('--latest')
+                if yaml:
+                    args.append('--yaml')
 
-            # Run the CLI command in a thread pool to avoid event loop conflicts
-            # This ensures we use the exact same code path as the CLI
-            def run_cli_command():
-                runner = CliRunner()
-                return runner.invoke(accuracy, args, catch_exceptions=False, standalone_mode=False)
+                if score_name:
+                    args.extend(['--score', score_name])
+
+                if version:
+                    args.extend(['--version', version])
+
+                if latest:
+                    args.append('--latest')
+
+                # Run the CLI command in a thread pool to avoid event loop conflicts
+                def run_cli_command():
+                    runner = CliRunner()
+                    return runner.invoke(accuracy, args, catch_exceptions=False, standalone_mode=False)
 
             # Execute in a thread pool to avoid "event loop already running" error
             loop = asyncio.get_event_loop()
@@ -345,15 +396,25 @@ def register_evaluation_tools(mcp: FastMCP):
             # Get the evaluation record returned by the CLI command
             evaluation_record = result.return_value
 
-            if not evaluation_record or not evaluation_record.id:
+            if not evaluation_record:
                 return json.dumps({"error": "Evaluation completed but no record returned"})
+            
+            # Check if it has an id attribute
+            evaluation_id = getattr(evaluation_record, 'id', None)
+            if not evaluation_id:
+                return json.dumps({"error": f"Evaluation record missing id attribute. Type: {type(evaluation_record)}"})
 
             # Get full evaluation info using the specific ID
-            eval_info = Evaluation.get_evaluation_info(evaluation_record.id)
+            eval_info = Evaluation.get_evaluation_info(evaluation_id)
+            
+            if not eval_info:
+                return json.dumps({"error": f"Could not retrieve evaluation info for id: {evaluation_id}"})
 
             # Return the same format - note that get_evaluation_info uses snake_case keys
+            eval_id = eval_info.get('id')
             response = {
-                'evaluation_id': eval_info.get('id'),
+                'evaluation_id': eval_id,
+                'evaluation_type': evaluation_type,
                 'scorecard_id': eval_info.get('scorecard_id'),
                 'score_id': eval_info.get('score_id'),
                 'accuracy': eval_info.get('accuracy'),
@@ -361,6 +422,7 @@ def register_evaluation_tools(mcp: FastMCP):
                 'confusionMatrix': eval_info.get('confusion_matrix'),  # snake_case in source
                 'predictedClassDistribution': eval_info.get('predicted_class_distribution'),  # snake_case in source
                 'datasetClassDistribution': eval_info.get('dataset_class_distribution'),  # snake_case in source
+                'dashboard_url': f"https://app.plexusanalytics.com/evaluations/{eval_id}" if eval_id else None
             }
 
             return json.dumps(response)

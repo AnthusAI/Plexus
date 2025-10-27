@@ -244,7 +244,21 @@ class Scorecard:
 
     @classmethod
     def score_names(cls):
-        return [score['name'] for score in cls.scores]
+        # Support both class-level (from create_from_yaml) and instance-level (from create_instance_from_api_data) usage
+        # When called on an instance, cls is still the class, but we need to check if it's being called on an instance
+        # that has instance-level scores
+        if hasattr(cls, 'scores') and isinstance(cls.scores, list):
+            return [score['name'] for score in cls.scores]
+        # If no class-level scores, this might be an instance call - but classmethods can't access instance attributes
+        # So we need a separate instance method
+        return []
+    
+    def get_score_names(self):
+        """Instance method to get score names. Works for instances created via create_instance_from_api_data."""
+        if hasattr(self, 'scores') and isinstance(self.scores, list):
+            return [score['name'] for score in self.scores]
+        # Fall back to class method for backwards compatibility
+        return self.__class__.score_names()
 
     def name(self):
         """

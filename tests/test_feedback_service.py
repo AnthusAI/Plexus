@@ -262,17 +262,17 @@ class TestFeedbackService:
         assert len(result["class_distribution"]) == 2  # Yes and No
         assert len(result["predicted_class_distribution"]) == 2
     
-    @patch('plexus.cli.feedback.feedback_service.GwetAC1')
+    @patch('plexus.analysis.feedback_analyzer.GwetAC1')
     def test_analyze_feedback_items_ac1_calculation(self, mock_gwet_class):
         """Test AC1 calculation integration."""
-        # Mock the GwetAC1 calculator
+        # Mock the GwetAC1 calculator to return perfect agreement
         mock_calculator = Mock()
         mock_result = Mock()
-        mock_result.value = 0.75
+        mock_result.value = 1.0  # Perfect agreement for 2 items that both agree
         mock_calculator.calculate.return_value = mock_result
         mock_gwet_class.return_value = mock_calculator
         
-        # Create mock feedback items
+        # Create mock feedback items with perfect agreement
         items = []
         for initial, final in [("Yes", "Yes"), ("No", "No")]:
             item = Mock(spec=FeedbackItem)
@@ -282,8 +282,8 @@ class TestFeedbackService:
         
         result = FeedbackService._analyze_feedback_items(items)
         
-        # Verify AC1 was calculated
-        assert result["ac1"] == 0.75
+        # Verify AC1 was calculated (perfect agreement = 1.0)
+        assert result["ac1"] == 1.0
         mock_calculator.calculate.assert_called_once()
     
     def test_generate_recommendation_no_data(self):

@@ -21,7 +21,7 @@ import yaml
 
 from plexus.CustomLogging import logging, set_log_group
 from plexus.Scorecard import Scorecard
-from plexus.Evaluation import AccuracyEvaluation
+from plexus.Evaluation import AccuracyEvaluation, FeedbackEvaluation
 from plexus.cli.shared.console import console
 
 # Import dashboard-specific modules
@@ -2991,3 +2991,370 @@ def last(account_key: str, type: Optional[str]):
     except Exception as e:
         logging.error(f"Error getting latest evaluation: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
+
+
+@evaluate.command()
+@click.option('--scorecard', 'scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
+@click.option('--score', 'score', required=True, help='Score identifier (ID, name, key, or external ID). REQUIRED - feedback evaluations must be run on a single score.')
+@click.option('--days', default=7, type=int, help='Number of days to look back for feedback items (default: 7)')
+@click.option('--version', default=None, type=str, help='Specific score version ID to evaluate. If provided, runs accuracy evaluation with FeedbackItems dataset.')
+@click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
+def feedback(
+    scorecard: str,
+    score: str,
+    days: int,
+    version: Optional[str],
+    task_id: Optional[str]
+):
+    """
+    Evaluate feedback alignment by analyzing feedback items over a time period for a specific score.
+    
+    This command has two modes:
+    
+    1. WITHOUT --version (default): Analyzes feedback edits to measure agreement
+       - Calculates Gwet's AC1 agreement coefficient (primary metric)
+       - Calculates accuracy, precision, recall based on human corrections
+       - Does not run predictions, just analyzes existing feedback
+    
+    2. WITH --version: Runs accuracy evaluation using feedback items as ground truth
+       - Creates a FeedbackItems dataset from feedback over the time period
+       - Runs predictions using the specified score version
+       - Compares predictions against human-corrected values
+       - Useful for testing specific versions against real-world corrections
+    
+    NOTE: Feedback evaluations MUST be run on a single score (not an entire scorecard).
+    This is because evaluation records are associated with a specific score.
+    
+    Examples:
+        # Analyze feedback edits (default mode)
+        plexus evaluate feedback --scorecard "Call Criteria" --score "Greeting" --days 14
+        
+        # Test a specific version against feedback
+        plexus evaluate feedback --scorecard "Call Criteria" --score "Greeting" --days 30 --version abc123
+    """
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+    from plexus.dashboard.api.models.score import Score as DashboardScore
+    
+    logging.info(f"Starting feedback evaluation for scorecard={scorecard}, score={score}, days={days}")
+    console.print(f"[bold blue]Starting Feedback Evaluation[/bold blue]")
+    console.print(f"Scorecard: {scorecard}")
+    console.print(f"Score: {score}")
+    console.print(f"Time Period: Last {days} days")
+    
+    try:
+        # Create API client
+        client = create_client()
+        
+        # Resolve account ID and get account object for key
+        account_id = resolve_account_id_for_command(client, None)
+        if not account_id:
+            console.print("[bold red]Error: Could not resolve account ID[/bold red]")
+            return
+        
+        # Get account object to retrieve the key
+        from plexus.dashboard.api.models.account import Account
+        account = Account.get_by_id(account_id, client)
+        if not account or not account.key:
+            console.print("[bold red]Error: Could not retrieve account key[/bold red]")
+            return
+        account_key = account.key
+        
+        # Resolve scorecard (returns ID string, not object)
+        scorecard_id = resolve_scorecard_identifier(client, scorecard)
+        if not scorecard_id:
+            console.print(f"[bold red]Error: Could not find scorecard '{scorecard}'[/bold red]")
+            return
+        
+        console.print(f"Resolved scorecard ID: {scorecard_id}")
+        
+        # Resolve score (required) - returns ID string, not object
+        score_id = resolve_score_identifier(client, scorecard_id, score)
+        if not score_id:
+            console.print(f"[bold red]Error: Could not find score '{score}' in scorecard '{scorecard}'[/bold red]")
+            return
+        console.print(f"Resolved score ID: {score_id}")
+        
+        # If version is specified, use accuracy evaluation with FeedbackItems dataset
+        if version:
+            console.print(f"\n[bold]Mode: Accuracy Evaluation with FeedbackItems Dataset[/bold]")
+            console.print(f"Score Version: {version}")
+            console.print(f"This will run predictions using version {version} against feedback items as ground truth.")
+            
+            # Import necessary modules for accuracy evaluation
+            from plexus.Scorecard import Scorecard
+            from plexus.Evaluation import AccuracyEvaluation
+            import yaml
+            import tempfile
+            import os
+            
+            # Get the score object to access external_id
+            score_obj = DashboardScore.get_by_id(score_id, client=client)
+            score_external_id = score_obj.externalId if score_obj and score_obj.externalId else score
+            
+            console.print(f"Using score identifier: {score_external_id}")
+            
+            # Create a temporary YAML file with FeedbackItems dataset override
+            dataset_config = {
+                "class": "FeedbackItems",
+                "scorecard": scorecard,  # Use the identifier provided by user
+                "score": score_external_id,  # Use external ID if available, otherwise the identifier
+                "days": days
+            }
+            
+            # Load the scorecard YAML
+            scorecard_yaml_path = f"scorecards/{scorecard}"
+            if not os.path.exists(scorecard_yaml_path):
+                # Try with .yaml extension
+                scorecard_yaml_path = f"scorecards/{scorecard}.yaml"
+            
+            # Check if it's a directory (individual score files) or a single YAML file
+            if os.path.isdir(scorecard_yaml_path):
+                # It's a directory with individual score YAML files
+                # Look for the score's YAML file in the directory
+                score_yaml_filename = f"{score_external_id}.yaml"
+                score_yaml_path = os.path.join(scorecard_yaml_path, score_yaml_filename)
+                
+                if not os.path.exists(score_yaml_path):
+                    # Try with score name
+                    score_yaml_path = os.path.join(scorecard_yaml_path, f"{score}.yaml")
+                
+                if not os.path.exists(score_yaml_path):
+                    console.print(f"[bold red]Error: Could not find score YAML at {score_yaml_path}[/bold red]")
+                    console.print(f"[dim]Available files in {scorecard_yaml_path}:[/dim]")
+                    for f in os.listdir(scorecard_yaml_path):
+                        if f.endswith('.yaml'):
+                            console.print(f"[dim]  - {f}[/dim]")
+                    return
+                
+                # Load the individual score YAML
+                with open(score_yaml_path, 'r') as f:
+                    score_data = yaml.safe_load(f)
+                
+                # Ensure score_data has a 'name' field
+                if 'name' not in score_data:
+                    score_data['name'] = score
+                
+                # Create a minimal scorecard structure with just this score
+                # Include key and id if available from the resolved scorecard
+                scorecard_data = {
+                    'name': scorecard,
+                    'key': scorecard.lower().replace(' ', '_').replace('-', '_'),
+                    'id': scorecard_id,  # Use the resolved scorecard ID
+                    'scores': [score_data]
+                }
+                console.print(f"[dim]Loaded score YAML from: {score_yaml_path}[/dim]")
+            elif os.path.isfile(scorecard_yaml_path):
+                # It's a single YAML file with all scores
+                with open(scorecard_yaml_path, 'r') as f:
+                    scorecard_data = yaml.safe_load(f)
+            else:
+                console.print(f"[bold red]Error: Could not find scorecard YAML at {scorecard_yaml_path}[/bold red]")
+                return
+            
+            # Override the data section for the specific score
+            if 'scores' in scorecard_data:
+                for score_config in scorecard_data['scores']:
+                    # Match by name, key, external_id, or id
+                    score_matches = False
+                    if score_config.get('name') == score or \
+                       score_config.get('key') == score or \
+                       score_config.get('external_id') == score or \
+                       score_config.get('id') == score_id or \
+                       score_config.get('external_id') == score_external_id:
+                        score_matches = True
+                    
+                    if score_matches:
+                        score_config['data'] = dataset_config
+                        console.print(f"[dim]Overriding dataset for score: {score_config.get('name')}[/dim]")
+                        break
+            
+            # Create temporary file with modified YAML
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as tmp_file:
+                yaml.dump(scorecard_data, tmp_file)
+                tmp_yaml_path = tmp_file.name
+            
+            try:
+                # Load scorecard with overridden dataset
+                # Use create_instance_from_api_data which returns a proper instance
+                # (same approach as load_scorecard_from_yaml_files)
+                
+                # Read the temporary YAML to get the scores config
+                with open(tmp_yaml_path, 'r') as f:
+                    temp_scorecard_data = yaml.safe_load(f)
+                
+                # Create scorecard instance using the API data approach
+                console.print("[dim]Creating scorecard instance from modified YAML...[/dim]")
+                scorecard_obj = Scorecard.create_instance_from_api_data(
+                    scorecard_id=scorecard_id,
+                    api_data={
+                        'id': scorecard_id,
+                        'name': scorecard,
+                        'key': temp_scorecard_data.get('key', scorecard.lower().replace(' ', '_').replace('-', '_')),
+                        'description': f'Scorecard for feedback evaluation with FeedbackItems dataset'
+                    },
+                    scores_config=temp_scorecard_data.get('scores', [])
+                )
+                console.print(f"[dim]Scorecard instance created: type={type(scorecard_obj)}, is_instance={isinstance(scorecard_obj, Scorecard)}[/dim]")
+                if hasattr(scorecard_obj, 'scores'):
+                    console.print(f"[dim]Scorecard has {len(scorecard_obj.scores)} scores[/dim]")
+                else:
+                    console.print("[bold red]Warning: Scorecard object has no 'scores' attribute![/bold red]")
+                
+                # Create evaluation record
+                started_at = datetime.now(timezone.utc)
+                evaluation_params = {
+                    "type": "feedback",  # Still mark as feedback type
+                    "accountId": account_id,
+                    "status": "SETUP",
+                    "scorecardId": scorecard_id,
+                    "scoreId": score_id,
+                    "scoreVersionId": version,  # Store the version being tested
+                    "accuracy": 0.0,
+                    "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
+                    "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
+                    "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
+                    "totalItems": 0,
+                    "processedItems": 0,
+                    "parameters": json.dumps({
+                        "days": days,
+                        "scorecard": scorecard,
+                        "score": score,
+                        "version": version,
+                        "mode": "accuracy_with_feedback_dataset"
+                    }),
+                    "taskId": task_id
+                }
+                
+                evaluation_record = DashboardEvaluation.create(client=client, **evaluation_params)
+                evaluation_id = evaluation_record.id
+                
+                console.print(f"\nCreated evaluation record: {evaluation_id}")
+                console.print(f"Dashboard URL: https://app.plexusanalytics.com/evaluations/{evaluation_id}")
+                
+                # Run accuracy evaluation with the modified scorecard
+                console.print("\n[bold]Running accuracy evaluation with FeedbackItems dataset...[/bold]")
+                
+                accuracy_eval = AccuracyEvaluation(
+                    scorecard_name=scorecard,
+                    scorecard=scorecard_obj,
+                    score_id=score_id,
+                    score_version_id=version,
+                    evaluation_id=evaluation_id,
+                    account_key=account_key,
+                    scorecard_id=scorecard_id,
+                    task_id=task_id
+                )
+                
+                # Run the evaluation
+                await_result = asyncio.run(accuracy_eval.run())
+                
+                console.print("\n[bold green]✓ Feedback Evaluation (with version) Complete[/bold green]")
+                console.print(f"\n[bold]View full results:[/bold]")
+                console.print(f"https://app.plexusanalytics.com/evaluations/{evaluation_id}")
+                
+                # Fetch the updated evaluation record after completion for MCP tool
+                evaluation_record = DashboardEvaluation.get_by_id(evaluation_id, client=client)
+                return evaluation_record
+                
+            finally:
+                # Clean up temporary file
+                if os.path.exists(tmp_yaml_path):
+                    os.unlink(tmp_yaml_path)
+        
+        # Default mode: Analyze feedback edits without running predictions
+        # Create evaluation record
+        started_at = datetime.now(timezone.utc)
+        evaluation_params = {
+            "type": "feedback",
+            "accountId": account_id,
+            "status": "SETUP",
+            "scorecardId": scorecard_id,
+            "scoreId": score_id,  # Required for feedback evaluations
+            "accuracy": 0.0,  # Will be updated after analysis
+            "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
+            "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
+            "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
+            "totalItems": 0,  # Will be updated after analysis
+            "processedItems": 0,  # Will be updated after analysis
+            "parameters": json.dumps({
+                "days": days,
+                "scorecard": scorecard,
+                "score": score
+            }),
+            "taskId": task_id
+        }
+        
+        evaluation_record = DashboardEvaluation.create(client=client, **evaluation_params)
+        evaluation_id = evaluation_record.id
+        
+        console.print(f"Created evaluation record: {evaluation_id}")
+        console.print(f"Dashboard URL: https://app.plexusanalytics.com/evaluations/{evaluation_id}")
+        
+        # Create FeedbackEvaluation instance
+        feedback_eval = FeedbackEvaluation(
+            scorecard_name=scorecard,  # Use the identifier string
+            scorecard=None,  # Not needed for feedback evaluation
+            days=days,
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            evaluation_id=evaluation_id,
+            account_id=account_id,
+            task_id=task_id,
+            api_client=client  # Pass as keyword arg for FeedbackEvaluation
+        )
+        
+        # Run the evaluation
+        console.print("\n[bold]Fetching and analyzing feedback items...[/bold]")
+        result = asyncio.run(feedback_eval.run())
+        
+        # Display results
+        console.print("\n[bold green]✓ Feedback Evaluation Complete[/bold green]")
+        console.print(f"\n[bold]Results:[/bold]")
+        
+        metrics = result.get("metrics", {})
+        ac1 = metrics.get("ac1")
+        accuracy = metrics.get("accuracy")
+        precision = metrics.get("precision")
+        recall = metrics.get("recall")
+        total_items = metrics.get("total_items", 0)
+        agreements = metrics.get("agreements", 0)
+        disagreements = metrics.get("disagreements", 0)
+        
+        console.print(f"Total Feedback Items: {total_items}")
+        console.print(f"Agreements: {agreements}")
+        console.print(f"Disagreements: {disagreements}")
+        
+        if ac1 is not None:
+            console.print(f"\n[bold]Gwet's AC1 Agreement:[/bold] {ac1:.3f}")
+            if ac1 >= 0.8:
+                console.print("[green]  ✓ Excellent agreement[/green]")
+            elif ac1 >= 0.6:
+                console.print("[yellow]  ⚠ Good agreement[/yellow]")
+            elif ac1 >= 0.4:
+                console.print("[orange]  ⚠ Moderate agreement[/orange]")
+            else:
+                console.print("[red]  ✗ Poor agreement - review needed[/red]")
+        
+        if accuracy is not None:
+            console.print(f"[bold]Accuracy:[/bold] {accuracy:.1f}%")
+        
+        if precision is not None:
+            console.print(f"[bold]Precision:[/bold] {precision:.1f}%")
+        
+        if recall is not None:
+            console.print(f"[bold]Recall:[/bold] {recall:.1f}%")
+        
+        console.print(f"\n[bold]View full results:[/bold]")
+        console.print(f"https://app.plexusanalytics.com/evaluations/{evaluation_id}")
+        
+        # Fetch the updated evaluation record after completion for MCP tool
+        evaluation_record = DashboardEvaluation.get_by_id(evaluation_id, client=client)
+        return evaluation_record
+        
+    except Exception as e:
+        logging.error(f"Error during feedback evaluation: {e}", exc_info=True)
+        console.print(f"[bold red]Error: {str(e)}[/bold red]")
+        raise
