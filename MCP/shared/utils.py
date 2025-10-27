@@ -10,8 +10,11 @@ from urllib.parse import urljoin
 from typing import Optional, Dict, Any, List
 from .setup import (
     DEFAULT_ACCOUNT_ID, DEFAULT_ACCOUNT_KEY, ACCOUNT_CACHE,
-    create_dashboard_client, resolve_account_identifier, logger
+    resolve_account_identifier, logger
 )
+
+# Import create_client directly to avoid the broken wrapper in setup.py
+from plexus.cli.shared.client_utils import create_client as create_dashboard_client
 
 def load_env_file(env_dir=None):
     """Load environment variables from .env file."""
@@ -38,45 +41,69 @@ def load_env_file(env_dir=None):
 
 def initialize_default_account():
     """Initialize the default account ID from the environment variable PLEXUS_ACCOUNT_KEY."""
-    global DEFAULT_ACCOUNT_ID, DEFAULT_ACCOUNT_KEY
-    
+    # Import setup module to update its globals directly
+    from . import setup
+
+    logger.info("=== INITIALIZING DEFAULT ACCOUNT ===")
+
     # Get account key from environment
     account_key = os.environ.get('PLEXUS_ACCOUNT_KEY')
+    logger.info(f"PLEXUS_ACCOUNT_KEY from env: {account_key}")
     if not account_key:
         logger.warning("PLEXUS_ACCOUNT_KEY environment variable not set")
         return
-    
-    DEFAULT_ACCOUNT_KEY = account_key
-    
+
+    setup.DEFAULT_ACCOUNT_KEY = account_key
+    logger.info(f"Set DEFAULT_ACCOUNT_KEY: {account_key}")
+
     # Create dashboard client and resolve account ID
     try:
-        client = create_dashboard_client()
+        logger.info("Creating dashboard client...")
+        # Use direct import to avoid setup.py's broken wrapper
+        from plexus.cli.shared.client_utils import create_client
+        client = create_client()
         if not client:
             logger.warning("Could not create dashboard client to resolve default account")
             return
-        
-        account_id = resolve_account_identifier(client, account_key)
+        logger.info("Dashboard client created successfully")
+
+        logger.info(f"Resolving account ID for key: {account_key}")
+        # Use Account.get_by_key directly instead of the broken resolve_account_identifier
+        from plexus.dashboard.api.models.account import Account
+        account = Account.get_by_key(account_key, client)
+        account_id = account.id if account else None
+        logger.info(f"Resolved account_id: {account_id}")
         if not account_id:
             logger.warning(f"Could not resolve account ID for key: {account_key}")
             return
-        
-        DEFAULT_ACCOUNT_ID = account_id
-        ACCOUNT_CACHE[account_key] = account_id
-        logger.info(f"Default account ID initialized successfully")
+
+        setup.DEFAULT_ACCOUNT_ID = account_id
+        setup.ACCOUNT_CACHE[account_key] = account_id
+        logger.info(f"DEFAULT_ACCOUNT_ID set to: {account_id}")
+        logger.info("=== ACCOUNT INITIALIZATION COMPLETE ===")
     except Exception as e:
-        logger.error(f"Error initializing default account ID: {str(e)}", exc_info=True)
+        logger.error(f"Exception during account initialization: {e}", exc_info=True)
 
 def get_default_account_id():
     """Get the default account ID, resolving it if necessary."""
-    global DEFAULT_ACCOUNT_ID, DEFAULT_ACCOUNT_KEY
-    
+    # Import setup module to read its globals directly
+    from . import setup
+
+    logger.info("=== GET_DEFAULT_ACCOUNT_ID CALLED ===")
+    logger.info(f"Current setup.DEFAULT_ACCOUNT_ID: {setup.DEFAULT_ACCOUNT_ID}")
+    logger.info(f"Current setup.DEFAULT_ACCOUNT_KEY: {setup.DEFAULT_ACCOUNT_KEY}")
+    logger.info(f"PLEXUS_ACCOUNT_KEY env: {os.environ.get('PLEXUS_ACCOUNT_KEY')}")
+
     # If already resolved, return it
-    if DEFAULT_ACCOUNT_ID:
-        return DEFAULT_ACCOUNT_ID
-    
+    if setup.DEFAULT_ACCOUNT_ID:
+        logger.info(f"Returning cached account ID: {setup.DEFAULT_ACCOUNT_ID}")
+        return setup.DEFAULT_ACCOUNT_ID
+
     # Try to resolve it now
+    logger.info("Account ID not cached, calling initialize_default_account()...")
     initialize_default_account()
-    return DEFAULT_ACCOUNT_ID
+    logger.info(f"After init, setup.DEFAULT_ACCOUNT_ID: {setup.DEFAULT_ACCOUNT_ID}")
+    return setup.DEFAULT_ACCOUNT_ID
 
 def resolve_account_id_with_cache(client, identifier):
     """Resolve an account identifier to its ID, using cache when possible."""

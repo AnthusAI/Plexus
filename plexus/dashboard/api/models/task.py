@@ -1043,7 +1043,7 @@ class Task(BaseModel):
             List[Task]: List of Task instances
         """
         query = """
-        query ListTaskByUpdatedAt($updatedAt: String!, $limit: Int, $nextToken: String) {
+        query ListTaskByUpdatedAt($updatedAt: AWSDateTime!, $limit: Int, $nextToken: String) {
             listTaskByUpdatedAt(updatedAt: $updatedAt, limit: $limit, nextToken: $nextToken) {
                 items {
                     %s

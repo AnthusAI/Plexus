@@ -243,7 +243,7 @@ async def fetch_feedback_items_fallback(client, account_id: str, scorecard_id: s
 @click.command(name="find")
 @click.option('--scorecard', required=True, help='The scorecard to search feedback for (accepts ID, name, key, or external ID).')
 @click.option('--score', required=True, help='The score to search feedback for (accepts ID, name, key, or external ID).')
-@click.option('--days', type=int, default=30, help='Number of days to look back for feedback items.')
+@click.option('--days', type=int, default=7, help='Number of days to look back for feedback items.')
 @click.option('--limit', type=int, help='Maximum number of feedback items to return (automatically randomized, prioritizing items with edit comments).')
 @click.option('--initial-value', 'initial_value', help='Filter by initial answer value (e.g., "Yes", "No").')
 @click.option('--final-value', 'final_value', help='Filter by final answer value (e.g., "Yes", "No").')

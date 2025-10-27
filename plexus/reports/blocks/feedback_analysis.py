@@ -64,6 +64,40 @@ class FeedbackAnalysis(BaseReportBlock):
                 raise ValueError("'scorecard' is required in the block configuration.")
             self._log(f"Call Criteria Scorecard ID from config: {cc_scorecard_id_param}")
 
+            # Check if "all" mode is requested
+            if str(cc_scorecard_id_param).lower() == "all":
+                self._log("Detected 'all scorecards' mode - will analyze every scorecard in the account")
+                return await self._generate_all_scorecards_analysis()
+
+            # Otherwise, proceed with single scorecard analysis
+            return await self._generate_single_scorecard_analysis(cc_scorecard_id_param)
+
+        except ValueError as ve:
+            self._log(f"Configuration or Value Error: {ve}")
+            final_output_data = {"error": str(ve), "scores": []}
+            summary_log = f"Error: {str(ve)}"
+            detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(ve)}"
+            return final_output_data, detailed_log
+        except Exception as e:
+            self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}", level="ERROR")
+            import traceback
+            self._log(traceback.format_exc())
+            final_output_data = {"error": str(e), "scores": []}
+            summary_log = f"Error: {str(e)}"
+            detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(e)}"
+            return final_output_data, detailed_log
+
+    async def _generate_single_scorecard_analysis(self, cc_scorecard_id_param: str, skip_indexed_items: bool = False) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Analyzes a single scorecard. This is the original generate() logic extracted for reuse.
+
+        Args:
+            cc_scorecard_id_param: The scorecard ID to analyze
+            skip_indexed_items: If True, skip creating detailed indexed feedback item files (for all_scorecards mode)
+        """
+        final_output_data = None
+
+        try:
             days = int(self.config.get("days", 14))
             start_date_str = self.config.get("start_date")
             end_date_str = self.config.get("end_date")
@@ -92,15 +126,32 @@ class FeedbackAnalysis(BaseReportBlock):
                 self._log(f"Call Criteria Question ID from config: {cc_question_id_param}")
 
             # --- 2. Resolve Plexus Scorecard ---
-            self._log(f"Resolving Plexus Scorecard for CC Scorecard ID: {cc_scorecard_id_param}...")
+            self._log(f"Resolving Plexus Scorecard for parameter: {cc_scorecard_id_param}...")
             try:
-                plexus_scorecard_obj = await asyncio.to_thread(
-                    Scorecard.get_by_external_id,
-                    external_id=str(cc_scorecard_id_param),
-                    client=self.api_client
-                )
+                # Try to determine if this is a UUID or external ID
+                # UUIDs are typically 36 characters with dashes (e.g., "f4076c72-e74b-4eaf-afd6-d4f61c9f0142")
+                # External IDs are typically shorter numeric strings (e.g., "97")
+                is_uuid = len(str(cc_scorecard_id_param)) > 20 and '-' in str(cc_scorecard_id_param)
+
+                if is_uuid:
+                    # Try to fetch by ID (UUID)
+                    self._log(f"Parameter appears to be a UUID, fetching by ID...")
+                    plexus_scorecard_obj = await asyncio.to_thread(
+                        Scorecard.get_by_id,
+                        id=str(cc_scorecard_id_param),
+                        client=self.api_client
+                    )
+                else:
+                    # Try to fetch by external ID
+                    self._log(f"Parameter appears to be an external ID, fetching by external_id...")
+                    plexus_scorecard_obj = await asyncio.to_thread(
+                        Scorecard.get_by_external_id,
+                        external_id=str(cc_scorecard_id_param),
+                        client=self.api_client
+                    )
+
                 if not plexus_scorecard_obj:
-                    msg = f"Plexus Scorecard not found for Call Criteria Scorecard ID: {cc_scorecard_id_param}"
+                    msg = f"Plexus Scorecard not found for parameter: {cc_scorecard_id_param}"
                     self._log(f"ERROR: {msg}", level="ERROR")
                     raise ValueError(msg)
                 self._log(f"Found Plexus Scorecard: '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id})")
@@ -268,65 +319,68 @@ class FeedbackAnalysis(BaseReportBlock):
                         analysis_for_this_score["score_id"] = score_info['plexus_score_id']
                         analysis_for_this_score["score_name"] = score_info['plexus_score_name']
                         analysis_for_this_score["cc_question_id"] = score_info['cc_question_id']
-                        
-                        # Create indexed feedback items structure for this score
-                        indexed_items = await self._create_indexed_feedback_items(items_for_this_score)
-                        
-                        # Export the indexed items to a JSON file
-                        if indexed_items and report_block_id:
-                            file_name = f"score-{score_index + 1}-results.json"
-                            self._log(f"Creating indexed feedback items JSON file: {file_name}")
-                            
-                            # Write the indexed items to a detail file
-                            detailed_json_content = json.dumps(indexed_items, default=str, indent=2)
-                            try:
-                                # Log the state of the ReportBlock before attaching file
+
+                        # Create indexed feedback items structure for this score (skip if requested)
+                        if not skip_indexed_items:
+                            indexed_items = await self._create_indexed_feedback_items(items_for_this_score)
+
+                            # Export the indexed items to a JSON file
+                            if indexed_items and report_block_id:
+                                file_name = f"score-{score_index + 1}-results.json"
+                                self._log(f"Creating indexed feedback items JSON file: {file_name}")
+
+                                # Write the indexed items to a detail file
+                                detailed_json_content = json.dumps(indexed_items, default=str, indent=2)
                                 try:
-                                    block_before = ReportBlock.get_by_id(report_block_id, self.api_client)
-                                    if block_before:
-                                        self._log(f"BEFORE ATTACH - ReportBlock {report_block_id} state: attachedFiles={block_before.attachedFiles}", level="DEBUG")
+                                    # Log the state of the ReportBlock before attaching file
+                                    try:
+                                        block_before = ReportBlock.get_by_id(report_block_id, self.api_client)
+                                        if block_before:
+                                            self._log(f"BEFORE ATTACH - ReportBlock {report_block_id} state: attachedFiles={block_before.attachedFiles}", level="DEBUG")
+                                    except Exception as e:
+                                        self._log(f"Error fetching ReportBlock before attach: {e}", level="WARNING")
+
+                                    # Attach the file - this now returns a path string, not an object
+                                    file_path = self.attach_detail_file(
+                                        report_block_id=report_block_id,
+                                        file_name=file_name,
+                                        content=detailed_json_content,
+                                        content_type="application/json"
+                                    )
+                                    self._log(f"Successfully attached indexed feedback items file: {file_name}, path: {file_path}")
+
+                                    # Log the state of the ReportBlock after attaching file
+                                    try:
+                                        block_after = ReportBlock.get_by_id(report_block_id, self.api_client)
+                                        if block_after:
+                                            self._log(f"AFTER ATTACH - ReportBlock {report_block_id} state: attachedFiles={block_after.attachedFiles}", level="INFO")
+
+                                            # Try to parse and validate the attachedFiles content
+                                            if block_after.attachedFiles:
+                                                try:
+                                                    # Check if already a list
+                                                    if isinstance(block_after.attachedFiles, list):
+                                                        paths_list = block_after.attachedFiles
+                                                        self._log(f"attachedFiles is already a list with {len(paths_list)} paths: {paths_list}", level="INFO")
+                                                    else:
+                                                        # For backward compatibility - try to parse JSON if it's a string
+                                                        paths_list = json.loads(block_after.attachedFiles)
+                                                        self._log(f"attachedFiles parsed from JSON string (for backward compatibility): {paths_list}", level="INFO")
+                                                except json.JSONDecodeError as je:
+                                                    self._log(f"attachedFiles is not valid JSON but should be a list: {je}", level="WARNING")
+                                            else:
+                                                self._log(f"attachedFiles is empty or None", level="WARNING")
+                                    except Exception as e:
+                                        self._log(f"Error fetching ReportBlock after attach: {e}", level="WARNING")
+
+                                    # Add reference to the file in the analysis result - just the filename since paths are now in attachedFiles
+                                    analysis_for_this_score["indexed_items_file"] = file_name
                                 except Exception as e:
-                                    self._log(f"Error fetching ReportBlock before attach: {e}", level="WARNING")
-                                
-                                # Attach the file - this now returns a path string, not an object
-                                file_path = self.attach_detail_file(
-                                    report_block_id=report_block_id,
-                                    file_name=file_name,
-                                    content=detailed_json_content,
-                                    content_type="application/json"
-                                )
-                                self._log(f"Successfully attached indexed feedback items file: {file_name}, path: {file_path}")
-                                
-                                # Log the state of the ReportBlock after attaching file
-                                try:
-                                    block_after = ReportBlock.get_by_id(report_block_id, self.api_client)
-                                    if block_after:
-                                        self._log(f"AFTER ATTACH - ReportBlock {report_block_id} state: attachedFiles={block_after.attachedFiles}", level="INFO")
-                                        
-                                        # Try to parse and validate the attachedFiles content
-                                        if block_after.attachedFiles:
-                                            try:
-                                                # Check if already a list
-                                                if isinstance(block_after.attachedFiles, list):
-                                                    paths_list = block_after.attachedFiles
-                                                    self._log(f"attachedFiles is already a list with {len(paths_list)} paths: {paths_list}", level="INFO")
-                                                else:
-                                                    # For backward compatibility - try to parse JSON if it's a string
-                                                    paths_list = json.loads(block_after.attachedFiles)
-                                                    self._log(f"attachedFiles parsed from JSON string (for backward compatibility): {paths_list}", level="INFO")
-                                            except json.JSONDecodeError as je:
-                                                self._log(f"attachedFiles is not valid JSON but should be a list: {je}", level="WARNING")
-                                        else:
-                                            self._log(f"attachedFiles is empty or None", level="WARNING")
-                                except Exception as e:
-                                    self._log(f"Error fetching ReportBlock after attach: {e}", level="WARNING")
-                                
-                                # Add reference to the file in the analysis result - just the filename since paths are now in attachedFiles
-                                analysis_for_this_score["indexed_items_file"] = file_name
-                            except Exception as e:
-                                self._log(f"Error attaching indexed feedback items file: {e}", level="ERROR")
-                                import traceback
-                                self._log(f"Error details: {traceback.format_exc()}", level="ERROR")
+                                    self._log(f"Error attaching indexed feedback items file: {e}", level="ERROR")
+                                    import traceback
+                                    self._log(f"Error details: {traceback.format_exc()}", level="ERROR")
+                        else:
+                            self._log(f"Skipping indexed items creation for score '{score_info['plexus_score_name']}' (all_scorecards mode)", level="DEBUG")
                     except Exception as e:
                         self._log(f"Error analyzing score {score_info['plexus_score_name']}: {e}", level="ERROR")
                         raise  # Re-raise to be caught by outer try/except
@@ -395,13 +449,11 @@ class FeedbackAnalysis(BaseReportBlock):
 
         except ValueError as ve:
             self._log(f"Configuration or Value Error: {ve}")
-            # final_output_data remains None, or could be set to an error structure
             final_output_data = {"error": str(ve), "scores": []}
             summary_log = f"Error: {str(ve)}"
             detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(ve)}"
         except Exception as e:
             self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}", level="ERROR")
-            # Log only first few lines of traceback, not the full trace
             import traceback
             self._log(traceback.format_exc())
             final_output_data = {"error": str(e), "scores": []}
@@ -433,7 +485,277 @@ class FeedbackAnalysis(BaseReportBlock):
         # Always return the detailed_log as the second return value to ensure logs are saved to S3
         # The service.py code will use this to upload to S3
         return final_output_data, detailed_log
-    
+
+    async def _fetch_all_scorecards(self) -> List[Scorecard]:
+        """
+        Fetches all scorecards for the current account.
+
+        Returns:
+            List of Scorecard objects
+        """
+        self._log("Fetching all scorecards for the account...")
+
+        # Get account_id
+        account_id = self.params.get("account_id")
+        if not account_id:
+            if hasattr(self.api_client, 'context') and self.api_client.context:
+                account_id = self.api_client.context.account_id
+
+        if not account_id:
+            self._log("ERROR: Could not determine account_id for fetching scorecards", level="ERROR")
+            return []
+
+        try:
+            # GraphQL query to list all scorecards for the account
+            query = """
+            query ListScorecards($accountId: String!) {
+                listScorecards(filter: {accountId: {eq: $accountId}}, limit: 1000) {
+                    items {
+                        id
+                        name
+                        key
+                        externalId
+                        accountId
+                        createdAt
+                        updatedAt
+                    }
+                }
+            }
+            """
+
+            variables = {"accountId": account_id}
+            result = await asyncio.to_thread(self.api_client.execute, query, variables)
+
+            if result and 'listScorecards' in result and result['listScorecards']:
+                scorecard_items = result['listScorecards'].get('items', [])
+                scorecards = [Scorecard.from_dict(item, self.api_client) for item in scorecard_items]
+                self._log(f"Found {len(scorecards)} scorecards for account {account_id}")
+                return scorecards
+            else:
+                self._log("No scorecards found or unexpected response format", level="WARNING")
+                return []
+
+        except Exception as e:
+            self._log(f"Error fetching scorecards: {e}", level="ERROR")
+            import traceback
+            self._log(traceback.format_exc())
+            return []
+
+    async def _analyze_single_scorecard_for_all_mode(self, scorecard: Scorecard, idx: int, total: int) -> Dict[str, Any]:
+        """
+        Analyzes a single scorecard and returns a complete result dict.
+        This is designed to be run in parallel with other scorecards.
+
+        Args:
+            scorecard: The Scorecard object to analyze
+            idx: The index of this scorecard (1-based, for logging)
+            total: Total number of scorecards being analyzed (for logging)
+
+        Returns:
+            Dictionary with scorecard analysis results or error placeholder
+        """
+        self._log(f"=== [{idx}/{total}] Analyzing '{scorecard.name}' (ID: {scorecard.id}, External ID: {scorecard.externalId}) ===")
+
+        try:
+            # Run analysis for this scorecard, skipping detailed item files to reduce data size
+            analysis_output, analysis_log = await self._generate_single_scorecard_analysis(
+                scorecard.id,
+                skip_indexed_items=True  # Skip detailed feedback items for all_scorecards mode
+            )
+
+            # Parse the YAML output back to dict if needed
+            if isinstance(analysis_output, str):
+                # Remove the comment header if present
+                yaml_content = analysis_output
+                if yaml_content.startswith("#"):
+                    lines = yaml_content.split('\n')
+                    # Find where the actual YAML starts (after comments)
+                    yaml_start = 0
+                    for i, line in enumerate(lines):
+                        if line and not line.strip().startswith('#'):
+                            yaml_start = i
+                            break
+                    yaml_content = '\n'.join(lines[yaml_start:])
+
+                try:
+                    analysis_dict = yaml.safe_load(yaml_content)
+                except:
+                    # If parsing fails, assume it's already a dict or use as-is
+                    analysis_dict = analysis_output if isinstance(analysis_output, dict) else {}
+            else:
+                analysis_dict = analysis_output
+
+            # Add scorecard metadata to the result
+            scorecard_result = {
+                "scorecard_id": scorecard.id,
+                "scorecard_name": scorecard.name,
+                "scorecard_external_id": scorecard.externalId,
+                # Include all the analysis data from the single scorecard analysis
+                **analysis_dict
+            }
+
+            # Log summary
+            ac1 = analysis_dict.get('overall_ac1')
+            total_items = analysis_dict.get('total_items', 0)
+            accuracy = analysis_dict.get('accuracy')
+            self._log(f"[{idx}/{total}] Completed '{scorecard.name}': AC1={ac1}, Items={total_items}, Accuracy={accuracy}")
+
+            return scorecard_result
+
+        except Exception as e:
+            self._log(f"[{idx}/{total}] Error analyzing '{scorecard.name}': {e}", level="ERROR")
+            import traceback
+            self._log(traceback.format_exc())
+
+            # Return placeholder for failed scorecard
+            return {
+                "scorecard_id": scorecard.id,
+                "scorecard_name": scorecard.name,
+                "scorecard_external_id": scorecard.externalId,
+                "overall_ac1": None,
+                "total_items": 0,
+                "error": str(e),
+                "scores": []
+            }
+
+    async def _generate_all_scorecards_analysis(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Analyzes all scorecards in the account and ranks them by AC1 performance.
+        This generates metrics and confusion matrices for each scorecard, but skips
+        detailed individual feedback item files to keep the output manageable.
+        """
+        self._log("Starting 'all scorecards' analysis mode")
+        self._log("Note: Detailed feedback item drill-down files will be skipped to reduce data size")
+
+        # Get date configuration
+        days = int(self.config.get("days", 14))
+        start_date_str = self.config.get("start_date")
+        end_date_str = self.config.get("end_date")
+
+        # Parse date strings
+        if start_date_str:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+        else:
+            start_date = datetime.now() - timedelta(days=days)
+        start_date = start_date.replace(tzinfo=timezone.utc)
+
+        if end_date_str:
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+        else:
+            end_date = datetime.now()
+
+        end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        end_date = end_date.replace(tzinfo=timezone.utc)
+
+        self._log(f"Date range: {start_date.isoformat()} to {end_date.isoformat()}")
+
+        # Fetch all scorecards
+        scorecards = await self._fetch_all_scorecards()
+
+        if not scorecards:
+            msg = "No scorecards found for this account"
+            self._log(f"ERROR: {msg}", level="ERROR")
+            return {
+                "mode": "all_scorecards",
+                "error": msg,
+                "total_scorecards_analyzed": 0,
+                "scorecards": []
+            }, "\n".join(self.log_messages)
+
+        self._log(f"Will analyze {len(scorecards)} scorecards in parallel")
+
+        # Create tasks for parallel analysis
+        analysis_tasks = []
+        for idx, scorecard in enumerate(scorecards, 1):
+            task = self._analyze_single_scorecard_for_all_mode(scorecard, idx, len(scorecards))
+            analysis_tasks.append(task)
+
+        # Run all analyses in parallel
+        self._log(f"Starting parallel analysis of {len(analysis_tasks)} scorecards...")
+        scorecard_results = await asyncio.gather(*analysis_tasks, return_exceptions=False)
+
+        # Filter out scorecards with no feedback data
+        scorecards_before_filter = len(scorecard_results)
+        scorecard_results = [result for result in scorecard_results if result.get('total_items', 0) > 0]
+        scorecards_filtered = scorecards_before_filter - len(scorecard_results)
+
+        if scorecards_filtered > 0:
+            self._log(f"Filtered out {scorecards_filtered} scorecard(s) with no feedback data")
+
+        if not scorecard_results:
+            msg = "No scorecards with feedback data found"
+            self._log(f"WARNING: {msg}", level="WARNING")
+            return {
+                "mode": "all_scorecards",
+                "message": msg,
+                "total_scorecards_analyzed": 0,
+                "date_range": {
+                    "start": start_date.isoformat(),
+                    "end": end_date.isoformat()
+                },
+                "scorecards": []
+            }, "\n".join(self.log_messages)
+
+        # Sort scorecards by AC1 (best first, None values at the end)
+        self._log("Sorting scorecards by overall AC1...")
+
+        def sort_key(scorecard_result):
+            ac1 = scorecard_result.get('overall_ac1')
+            # None values get -infinity so they sort to the end
+            return (ac1 is not None, ac1 if ac1 is not None else -float('inf'))
+
+        scorecard_results.sort(key=sort_key, reverse=True)
+
+        # Add rank to each scorecard
+        for rank, result in enumerate(scorecard_results, 1):
+            result['rank'] = rank
+
+        self._log(f"Completed analysis of {len(scorecard_results)} scorecards with feedback data")
+
+        # Build final output
+        final_output = {
+            "mode": "all_scorecards",
+            "total_scorecards_analyzed": len(scorecard_results),
+            "total_scorecards_with_data": len(scorecard_results),
+            "total_scorecards_filtered": scorecards_filtered,
+            "date_range": {
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat()
+            },
+            "scorecards": scorecard_results,
+            "message": f"Analyzed {len(scorecard_results)} scorecard(s) with feedback data, sorted by overall AC1 (best to worst). Filtered out {scorecards_filtered} scorecard(s) with no data.",
+            # Add block metadata
+            "block_title": f"{self.DEFAULT_NAME} - All Scorecards",
+            "block_description": f"{self.DEFAULT_DESCRIPTION} across all scorecards in the account"
+        }
+
+        # Format as YAML with comments
+        try:
+            contextual_comment = """# All Scorecards Feedback Analysis Report
+#
+# This report analyzes every scorecard in the account that has feedback data,
+# running full feedback analysis on each one and ranking them by overall AC1
+# (agreement coefficient).
+#
+# Scorecards with no feedback data in the specified time period are automatically
+# filtered out to keep the report focused and manageable.
+#
+# Scorecards are sorted from best to worst performing (by AC1).
+#
+# Each scorecard entry contains the complete per-score analysis, just like a
+# single-scorecard feedback analysis report.
+
+"""
+            yaml_output = yaml.dump(final_output, indent=2, allow_unicode=True, sort_keys=False)
+            formatted_output = contextual_comment + yaml_output
+        except Exception as e:
+            self._log(f"Failed to create YAML formatted output: {e}", level="ERROR")
+            formatted_output = yaml.dump(final_output, indent=2, allow_unicode=True, sort_keys=False)
+
+        detailed_log = "\n".join(self.log_messages) if self.log_messages else "No logs generated."
+
+        return formatted_output, detailed_log
+
     async def _fetch_feedback_items_for_score(self, plexus_scorecard_id: str, plexus_score_id: str, 
                                        start_date: Optional[datetime] = None, 
                                        end_date: Optional[datetime] = None) -> List[FeedbackItem]:

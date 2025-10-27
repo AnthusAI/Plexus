@@ -102,6 +102,9 @@ def register_evaluation_tools(mcp: FastMCP):
                     "processed_items": evaluation_info['processed_items'],
                     "metrics": evaluation_info['metrics'],
                     "accuracy": evaluation_info['accuracy'],
+                    "confusionMatrix": evaluation_info['confusion_matrix'],
+                    "predictedClassDistribution": evaluation_info['predicted_class_distribution'],
+                    "datasetClassDistribution": evaluation_info['dataset_class_distribution'],
                     "cost": evaluation_info['cost'],
                     "started_at": evaluation_info['started_at'],
                     "created_at": evaluation_info['created_at'],
@@ -274,34 +277,362 @@ def register_evaluation_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
     @mcp.tool()
-    async def run_plexus_evaluation(
+    async def plexus_evaluation_run(
         scorecard_name: str = "",
         score_name: str = "",
         n_samples: int = 10,
-        remote: bool = False,
         yaml: bool = True,
+        version: Optional[str] = None,
+        latest: bool = False,
+        fresh: bool = False,
+        reload: bool = False,
     ) -> str:
-        """Run a local YAML-based accuracy evaluation using the same code path as CLI (DRY)."""
+        """Run a local YAML-based accuracy evaluation using the same code path as CLI (DRY).
+
+        Parameters:
+        - scorecard_name: Name of the scorecard to evaluate
+        - score_name: Name of the score to evaluate (optional, evaluates all if not provided)
+        - n_samples: Number of samples to evaluate (default: 10)
+        - yaml: Use local YAML files instead of API (default: True)
+        - version: Specific version ID to use
+        - latest: Use latest version instead of champion
+        - fresh: Pull fresh, non-cached data from the data lake (default: False)
+        - reload: Reload existing dataset by refreshing values for current records only (default: False)
+        """
         if not scorecard_name:
             return "Error: scorecard_name must be provided"
 
-        try:
-            # Use the shared evaluation function - no code duplication!
-            from plexus.cli.shared.evaluation_runner import run_accuracy_evaluation
-            import json
+        # Validate mutually exclusive version options (same as CLI)
+        if version and latest:
+            return "Error: Cannot use both version and latest options. Choose one."
 
-            # Call the shared function that both CLI and MCP use
-            result = await run_accuracy_evaluation(
-                scorecard_name=scorecard_name,
-                score_name=score_name,
-                number_of_samples=n_samples,
-                sampling_method="random",
-                fresh=True,
-                use_yaml=yaml
-            )
-            
-            return json.dumps(result)
+        logger.info(f"MCP Evaluation - Scorecard: {scorecard_name}, Score: {score_name}, YAML: {yaml}, Samples: {n_samples}")
+
+        try:
+            import json
+            import asyncio
+            from concurrent.futures import ThreadPoolExecutor
+            from click.testing import CliRunner
+            from plexus.cli.evaluation.evaluations import accuracy
+            from plexus.Evaluation import Evaluation
+
+            # Build CLI arguments
+            args = [
+                '--scorecard', scorecard_name,
+                '--number-of-samples', str(n_samples),
+                '--sampling-method', 'random'
+            ]
+
+            if yaml:
+                args.append('--yaml')
+
+            if score_name:
+                args.extend(['--score', score_name])
+
+            if version:
+                args.extend(['--version', version])
+
+            if latest:
+                args.append('--latest')
+
+            if fresh:
+                args.append('--fresh')
+
+            if reload:
+                args.append('--reload')
+
+            # Run the CLI command in a thread pool to avoid event loop conflicts
+            # This ensures we use the exact same code path as the CLI
+            def run_cli_command():
+                runner = CliRunner()
+                return runner.invoke(accuracy, args, catch_exceptions=False, standalone_mode=False)
+
+            # Execute in a thread pool to avoid "event loop already running" error
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor() as pool:
+                result = await loop.run_in_executor(pool, run_cli_command)
+
+            # Check if command succeeded
+            if result.exit_code != 0:
+                error_msg = f"CLI command failed with exit code {result.exit_code}"
+                if result.output:
+                    error_msg += f": {result.output}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+            # Get the evaluation record returned by the CLI command
+            evaluation_record = result.return_value
+
+            if not evaluation_record or not evaluation_record.id:
+                return json.dumps({"error": "Evaluation completed but no record returned"})
+
+            # Get full evaluation info using the specific ID
+            eval_info = Evaluation.get_evaluation_info(evaluation_record.id)
+
+            # Return the same format - note that get_evaluation_info uses snake_case keys
+            response = {
+                'evaluation_id': eval_info.get('id'),
+                'scorecard_id': eval_info.get('scorecard_id'),
+                'score_id': eval_info.get('score_id'),
+                'accuracy': eval_info.get('accuracy'),
+                'metrics': eval_info.get('metrics'),
+                'confusionMatrix': eval_info.get('confusion_matrix'),  # snake_case in source
+                'predictedClassDistribution': eval_info.get('predicted_class_distribution'),  # snake_case in source
+                'datasetClassDistribution': eval_info.get('dataset_class_distribution'),  # snake_case in source
+            }
+
+            return json.dumps(response)
 
         except Exception as e:
             logger.error(f"Error running Plexus evaluation: {e}", exc_info=True)
-            return f"Error: {e}"
+            return json.dumps({"error": str(e)})
+
+    @mcp.tool()
+    async def plexus_evaluation_score_result_find(
+        evaluation_id: str,
+        predicted_value: Optional[str] = None,
+        actual_value: Optional[str] = None,
+        limit: Optional[Union[int, float, str]] = 5,
+        offset: Optional[Union[int, float, str]] = None,
+        include_text: bool = False
+    ) -> str:
+        """
+        Find and navigate individual score results from an evaluation using confusion matrix cell filtering.
+
+        This tool provides the evaluation equivalent of plexus_feedback_find, allowing navigation through
+        individual score results from an evaluation with confusion matrix cell-based filtering and
+        offset-based pagination.
+
+        Args:
+            evaluation_id (str): The unique ID of the evaluation to examine
+            predicted_value (str, optional): Filter by predicted value (e.g., "yes", "no", "high", "medium")
+            actual_value (str, optional): Filter by actual/human label value (e.g., "yes", "no", "low")
+            limit (int, optional): Maximum number of results to return (default: 5)
+            offset (int, optional): Starting index for pagination within filtered results (default: 0)
+            include_text (bool, optional): Whether to include full transcript text (default: False to prevent context overflow)
+
+        Returns:
+            str: JSON formatted list of individual score results with detailed information
+        """
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            from plexus.cli.shared.client_utils import create_client
+            import json as _json
+            from collections import defaultdict
+
+            # Create client
+            client = create_client()
+            if not client:
+                return _json.dumps({"error": "Failed to create API client"})
+
+            # Convert parameters to proper types
+            limit_int = int(limit) if limit is not None else 5
+            offset_int = int(offset) if offset is not None else 0
+
+            # Validate evaluation_id
+            if not evaluation_id or not evaluation_id.strip():
+                return _json.dumps({"error": "evaluation_id is required"})
+
+            # Fetch all score results for this evaluation
+            query = """
+            query ListScoreResultsByEvaluation($evaluationId: String!, $limit: Int, $nextToken: String) {
+                listScoreResultByEvaluationId(evaluationId: $evaluationId, limit: $limit, nextToken: $nextToken) {
+                    items {
+                        id
+                        evaluationId
+                        itemId
+                        accountId
+                        scorecardId
+                        scoreId
+                        value
+                        confidence
+                        explanation
+                        metadata
+                        trace
+                        code
+                        type
+                        feedbackItemId
+                        createdAt
+                        updatedAt
+                        item {
+                            id
+                            identifiers
+                            text
+                        }
+                    }
+                    nextToken
+                }
+            }
+            """
+
+            # Fetch all score results with pagination
+            all_score_results = []
+            next_token = None
+            max_pages = 50  # Safety limit
+            page_count = 0
+
+            while page_count < max_pages:
+                variables = {"evaluationId": evaluation_id, "limit": 500}
+                if next_token:
+                    variables["nextToken"] = next_token
+
+                response = client.execute(query, variables)
+                if 'errors' in response:
+                    return _json.dumps({"error": f"GraphQL errors: {response.get('errors')}"})
+
+                data = response.get('listScoreResultByEvaluationId', {})
+                items = data.get('items', [])
+                next_token = data.get('nextToken')
+
+                all_score_results.extend(items)
+
+                if not next_token:
+                    break
+                page_count += 1
+
+            logger.info(f"[MCP] Retrieved {len(all_score_results)} total score results")
+
+            # Group score results by confusion matrix cell (predicted_value, actual_value)
+            matrix_cells = defaultdict(list)
+            processed_results = []
+
+            for sr in all_score_results:
+                # Extract predicted value
+                predicted = (sr.get('value') or '').strip().lower()
+
+                # Extract actual value from metadata (same logic as plexus_evaluation_info)
+                md = sr.get('metadata')
+                try:
+                    if isinstance(md, str):
+                        md = _json.loads(md)
+                except Exception:
+                    md = None
+
+                human_label = None
+                if md and isinstance(md, dict):
+                    res_md = md.get('results') or {}
+                    if isinstance(res_md, dict) and res_md:
+                        key0 = next(iter(res_md))
+                        inner = res_md.get(key0) or {}
+                        inner_md = inner.get('metadata') or {}
+                        human_label = (inner_md.get('human_label') or '').strip().lower()
+
+                actual = human_label or 'unknown'
+
+                # Apply filtering if specified
+                pred_match = predicted_value is None or predicted == predicted_value.lower()
+                actual_match = actual_value is None or actual == actual_value.lower()
+
+                if pred_match and actual_match:
+                    # Create cell key for grouping
+                    cell_key = (predicted, actual)
+
+                    # Format the result for output
+                    formatted_result = {
+                        "score_result_id": sr.get('id'),
+                        "evaluation_id": sr.get('evaluationId'),
+                        "item_id": sr.get('itemId'),
+                        "predicted": predicted,
+                        "actual": actual,
+                        "explanation": sr.get('explanation'),
+                        "confidence": sr.get('confidence'),
+                        "code": sr.get('code'),
+                        "feedback_item_id": sr.get('feedbackItemId'),
+                        "created_at": sr.get('createdAt'),
+                        "updated_at": sr.get('updatedAt'),
+                        "confusion_matrix_cell": {
+                            "predicted": predicted,
+                            "actual": actual
+                        }
+                    }
+
+                    # Add trace data if available
+                    if sr.get('trace'):
+                        try:
+                            trace_data = _json.loads(sr.get('trace')) if isinstance(sr.get('trace'), str) else sr.get('trace')
+                            formatted_result["trace"] = trace_data
+                        except Exception:
+                            formatted_result["trace"] = sr.get('trace')
+
+                    # Add detailed metadata if available (but strip transcript text unless requested)
+                    if md and isinstance(md, dict):
+                        if include_text:
+                            # Include full metadata with transcript text
+                            formatted_result["detailed_metadata"] = md
+                        else:
+                            # Strip transcript text from metadata to prevent context overflow
+                            md_copy = _json.loads(_json.dumps(md))  # Deep copy
+                            res_md = md_copy.get('results') or {}
+                            if isinstance(res_md, dict):
+                                for score_name, score_data in res_md.items():
+                                    if isinstance(score_data, dict):
+                                        inner_md = score_data.get('metadata') or {}
+                                        if isinstance(inner_md, dict) and 'text' in inner_md:
+                                            # Remove the transcript text field
+                                            inner_md.pop('text', None)
+                            formatted_result["detailed_metadata"] = md_copy
+
+                    # Add item data if available (includes identifiers and optionally text)
+                    if sr.get('item'):
+                        item_data = sr.get('item')
+                        formatted_result["item"] = {
+                            "id": item_data.get('id'),
+                            "identifiers": item_data.get('identifiers')
+                        }
+                        # Only include text if explicitly requested to prevent context overflow
+                        if include_text and item_data.get('text'):
+                            formatted_result["item"]["text"] = item_data.get('text')
+
+                    matrix_cells[cell_key].append(formatted_result)
+                    processed_results.append(formatted_result)
+
+            logger.info(f"[MCP] After filtering: {len(processed_results)} results in {len(matrix_cells)} confusion matrix cells")
+
+            # Log cell distribution for debugging
+            for cell_key, cell_items in matrix_cells.items():
+                logger.info(f"[MCP] Cell {cell_key}: {len(cell_items)} items")
+
+            # Apply offset-based pagination
+            start_idx = offset_int
+            end_idx = offset_int + limit_int
+            page_results = processed_results[start_idx:end_idx]
+
+            # Calculate pagination info
+            total_available = len(processed_results)
+            has_next_page = end_idx < total_available
+            next_offset = end_idx if has_next_page else None
+
+            # Build response
+            result = {
+                "context": {
+                    "evaluation_id": evaluation_id,
+                    "filters": {
+                        "predicted_value": predicted_value,
+                        "actual_value": actual_value
+                    },
+                    "pagination": {
+                        "current_offset": offset_int,
+                        "limit": limit_int,
+                        "total_available": total_available,
+                        "has_next_page": has_next_page,
+                        "next_offset": next_offset
+                    },
+                    "confusion_matrix_cells": {
+                        cell_key[0] + "_" + cell_key[1]: len(cell_items)
+                        for cell_key, cell_items in matrix_cells.items()
+                    }
+                },
+                "score_results": page_results,
+                "summary": {
+                    "total_results_found": total_available,
+                    "results_in_page": len(page_results),
+                    "confusion_matrix_cells_found": len(matrix_cells)
+                }
+            }
+
+            return _json.dumps(result, indent=2, default=str)
+
+        except Exception as e:
+            logger.error(f"Error in plexus_evaluation_score_result_find: {e}", exc_info=True)
+            import json
+            return json.dumps({"error": f"Failed to find evaluation results: {str(e)}"})

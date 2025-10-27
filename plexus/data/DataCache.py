@@ -142,6 +142,29 @@ class DataCache(ABC):
             logging.error(error_msg)
             return None, False, error_msg
 
+    @staticmethod
+    def format_value_for_display(value, column_name=None):
+        """
+        Format a value for display in logs and debug output.
+        
+        Args:
+            value: The value to format
+            column_name: Optional column name (unused but kept for API compatibility)
+            
+        Returns:
+            str: Formatted string representation of the value
+        """
+        if value is None:
+            return "N/A"
+        elif isinstance(value, str):
+            if len(value) > 100:
+                return value[:97] + "..."
+            return value
+        elif isinstance(value, bool):
+            return "Yes" if value else "No"
+        else:
+            return str(value)
+
     def debug_dataframe(self, df, context="DATAFRAME", logger=None):
         """
         Essential debug logging for dataframes.
@@ -165,10 +188,7 @@ class DataCache(ABC):
                 row_data = {}
                 for col in df.columns:
                     value = df.iloc[i][col]
-                    if isinstance(value, str) and len(value) > 100:
-                        row_data[col] = value[:97] + "..."
-                    else:
-                        row_data[col] = value
+                    row_data[col] = DataCache.format_value_for_display(value)
                 logger.info(f"  Row {i}: {row_data}")
 
     @abstractmethod

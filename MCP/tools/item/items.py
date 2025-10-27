@@ -284,18 +284,25 @@ def register_item_tools(mcp: FastMCP):
                 return f"Item not found: {item_id} (tried direct ID, identifier search, and external ID lookup)"
             
             try:
-                # Convert item to dictionary format
+                # Convert item to dictionary format with intelligent truncation
+                def truncate_field(value, field_name, max_chars=5000):
+                    """Truncate large text fields to prevent massive responses."""
+                    if isinstance(value, str) and len(value) > max_chars:
+                        truncated = value[:max_chars]
+                        return f"{truncated}... (truncated from {len(value):,} to {max_chars:,} chars)"
+                    return value
+                
                 item_dict = {
                     'id': item.id,
                     'accountId': item.accountId,
                     'evaluationId': item.evaluationId,
                     'scoreId': item.scoreId,
-                    'description': item.description,
+                    'description': truncate_field(item.description, 'description', 1000),
                     'externalId': item.externalId,
                     'isEvaluation': item.isEvaluation,
                     'createdByType': item.createdByType,
-                    'text': item.text,  # Include text content
-                    'metadata': item.metadata,
+                    'text': truncate_field(item.text, 'text', 5000),  # Truncate large text content
+                    'metadata': item.metadata,  # Keep metadata as-is for now
                     'identifiers': item.identifiers,
                     'attachedFiles': item.attachedFiles,
                     'createdAt': item.createdAt.isoformat() if hasattr(item.createdAt, 'isoformat') else item.createdAt,

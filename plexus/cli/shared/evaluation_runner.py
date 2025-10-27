@@ -93,6 +93,7 @@ async def run_accuracy_evaluation(
     client: Optional[PlexusDashboardClient] = None,
     account_id: Optional[str] = None,
     fresh: bool = True,
+    reload: bool = False,
     use_yaml: bool = True
 ) -> dict:
     """Run a complete accuracy evaluation using the same logic as CLI.
@@ -189,6 +190,7 @@ async def run_accuracy_evaluation(
             score_name=primary_score_config.get('name') if primary_score_config else None,
             score_config=primary_score_config,
             fresh=fresh,
+            reload=reload,
             content_ids_to_sample_set=set(),
             progress_callback=tracker.update if tracker else None,
             number_of_samples=number_of_samples,
@@ -233,10 +235,11 @@ async def run_accuracy_evaluation(
             try:
                 # Update evaluation record to COMPLETED status (same as CLI)
                 update_payload_metrics = []
+                if final_metrics.get("alignment") is not None:
+                    # Store Gwet's AC1 raw value in range [-1, 1]
+                    update_payload_metrics.append({"name": "Alignment", "value": final_metrics["alignment"]})
                 if final_metrics.get("accuracy") is not None:
                     update_payload_metrics.append({"name": "Accuracy", "value": final_metrics["accuracy"] * 100})
-                if final_metrics.get("alignment") is not None:
-                    update_payload_metrics.append({"name": "Alignment", "value": final_metrics["alignment"] * 100})
                 if final_metrics.get("precision") is not None:
                     update_payload_metrics.append({"name": "Precision", "value": final_metrics["precision"] * 100})
                 if final_metrics.get("recall") is not None:
@@ -249,6 +252,14 @@ async def run_accuracy_evaluation(
                     'estimatedRemainingSeconds': 0,
                     'processedItems': len(labeled_samples_data),
                 }
+                
+                # Add confusion matrix and class distributions if available
+                if final_metrics.get('confusionMatrix'):
+                    update_fields['confusionMatrix'] = json.dumps(final_metrics['confusionMatrix'])
+                if final_metrics.get('predictedClassDistribution'):
+                    update_fields['predictedClassDistribution'] = json.dumps(final_metrics['predictedClassDistribution'])
+                if final_metrics.get('datasetClassDistribution'):
+                    update_fields['datasetClassDistribution'] = json.dumps(final_metrics['datasetClassDistribution'])
                 
                 evaluation_record.update(**update_fields)
                 
@@ -270,18 +281,18 @@ async def run_accuracy_evaluation(
             except Exception as e:
                 logging.warning(f"Could not complete evaluation record/task: {e}")
 
-        # Get the final evaluation info
-        eval_info = DashboardEval.get_evaluation_info(evaluation_record.id, include_score_results=False)
-        
+        # Return evaluation results directly from final_metrics
+        # Don't query the database - the update happens in a background thread
+        # and we already have all the data we need
         return {
-            'evaluation_id': eval_info.get('id'),
-            'scorecard_id': eval_info.get('scorecard_id'),
-            'score_id': eval_info.get('score_id'),
-            'accuracy': eval_info.get('accuracy'),
-            'metrics': eval_info.get('metrics'),
-            'confusionMatrix': eval_info.get('confusionMatrix'),
-            'predictedClassDistribution': eval_info.get('predictedClassDistribution'),
-            'datasetClassDistribution': eval_info.get('datasetClassDistribution'),
+            'evaluation_id': evaluation_record.id,
+            'scorecard_id': scorecard_id,
+            'score_id': score_id_for_eval,
+            'accuracy': final_metrics.get('accuracy', 0) * 100,
+            'metrics': update_payload_metrics,
+            'confusionMatrix': final_metrics.get('confusionMatrix'),
+            'predictedClassDistribution': final_metrics.get('predictedClassDistribution'),
+            'datasetClassDistribution': final_metrics.get('datasetClassDistribution'),
         }
         
     except Exception as e:

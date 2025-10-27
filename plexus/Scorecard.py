@@ -160,6 +160,11 @@ class Scorecard:
                                     if not score_config.get('version'):
                                         score_config['version'] = score_item.get('championVersionId')
                                         logging.info(f"Setting version {score_item.get('championVersionId')} for score {score_config.get('name')}")
+                                    
+                                    # Always copy isDisabled status from API data to config
+                                    if 'isDisabled' in score_item:
+                                        score_config['isDisabled'] = score_item.get('isDisabled')
+                                        logging.info(f"Setting isDisabled={score_item.get('isDisabled')} for score {score_config.get('name')}")
                                     break
                     parsed_configs.append(score_config)
                 except Exception as e:
@@ -182,6 +187,11 @@ class Scorecard:
                                 if not score_config.get('version'):
                                     score_config['version'] = score_item.get('championVersionId')
                                     logging.info(f"Setting version {score_item.get('championVersionId')} for score {score_config.get('name')}")
+                                
+                                # Always copy isDisabled status from API data to config
+                                if 'isDisabled' in score_item:
+                                    score_config['isDisabled'] = score_item.get('isDisabled')
+                                    logging.info(f"Setting isDisabled={score_item.get('isDisabled')} for score {score_config.get('name')}")
                                 break
                 parsed_configs.append(score_config)
             else:
@@ -374,6 +384,15 @@ class Scorecard:
         """
         logging.info(f"Getting score result for: {score}")
         
+        # Defensive checks for None inputs
+        if text is None:
+            logging.error(f"Text input is None for score '{score}'")
+            return [Score.Result(value="ERROR", error=f"Text input is None for score '{score}'")]
+        
+        if metadata is None:
+            logging.warning(f"Metadata is None for score '{score}', using empty dict")
+            metadata = {}
+        
         score_class = self.score_registry.get(score)
         if score_class is None:
             logging.error(f"Score with name '{score}' not found.")
@@ -439,15 +458,35 @@ class Scorecard:
                     else:
                         raise TypeError(f"Expected Score.Result or dict but got {type(result)}")
 
-                # Let BatchProcessingPause propagate up
-                score_result = await score_instance.predict(
-                    context=None,
-                    model_input=Score.Input(
-                        text=text,
-                        metadata=metadata,
-                        results=converted_results
+                # Enhanced error handling for predict call
+                try:
+                    # Additional defensive checks before prediction
+                    if text is None:
+                        raise ValueError(f"Text is None for score '{score}'")
+                    if metadata is None:
+                        metadata = {}
+                        logging.warning(f"Using empty metadata dict for score '{score}'")
+                    
+                    # Let BatchProcessingPause propagate up
+                    score_result = await score_instance.predict(
+                        context=None,
+                        model_input=Score.Input(
+                            text=text,
+                            metadata=metadata,
+                            results=converted_results
+                        )
                     )
-                )
+                except TypeError as te:
+                    if 'NoneType' in str(te) and 'iterable' in str(te):
+                        error_msg = f"NoneType iteration error in score '{score}': {str(te)}"
+                        logging.error(error_msg)
+                        logging.error(f"Input validation - text type: {type(text)}, metadata type: {type(metadata)}")
+                        logging.error(f"Converted results: {len(converted_results)} items")
+                        for i, res in enumerate(converted_results):
+                            logging.error(f"  Result {i}: {type(res)} with value {getattr(res, 'value', 'N/A')}")
+                        raise TypeError(error_msg) from te
+                    else:
+                        raise
 
                 # Get the total cost for this score
                 score_total_cost = score_instance.get_accumulated_costs()
@@ -538,9 +577,13 @@ class Scorecard:
                 scorecard_identifier = self.scorecard_identifier or (
                     self.name() if callable(self.name) else self.name
                 )
+                logging.info(f"Using scorecard identifier '{scorecard_identifier}' to load score '{score_name}'")
+                
                 # Use the standardized loader which pulls champion config from API or YAML cache
                 # Honor yaml-only preference when loading scores on-demand
                 yaml_only_prefer = getattr(self, 'yaml_only', False)
+                logging.info(f"Loading with yaml_only={yaml_only_prefer}, use_cache=True")
+                
                 loaded_instance = Score.load(
                     scorecard_identifier=scorecard_identifier,
                     score_name=score_name,
@@ -548,7 +591,8 @@ class Scorecard:
                     yaml_only=yaml_only_prefer
                 )
                 if not loaded_instance:
-                    logging.warning(f"Failed to load score instance for '{score_name}'")
+                    logging.warning(f"Score.load() returned None for score '{score_name}' in scorecard '{scorecard_identifier}'")
+                    logging.warning(f"This could mean the score doesn't exist, has a different name, or is in a different scorecard")
                     return False
 
                 # Build properties from the loaded instance's parameters
@@ -572,10 +616,15 @@ class Scorecard:
                         # Start from class scores if available
                         base_scores = getattr(self.__class__, 'scores', [])
                         self.scores = list(base_scores) if isinstance(base_scores, list) else []
+                        logging.info(f"Initialized self.scores with {len(self.scores)} base scores")
+                    
                     # Avoid duplicates by name
                     existing_names = {s.get('name') for s in self.scores if isinstance(s, dict)}
                     if parameters_dict.get('name') not in existing_names:
                         self.scores.append(dict(parameters_dict))
+                        logging.info(f"Added score '{score_name}' to self.scores (now has {len(self.scores)} scores)")
+                    else:
+                        logging.info(f"Score '{score_name}' already exists in self.scores")
                 except Exception as append_err:
                     logging.warning(f"Could not append loaded score '{score_name}' to self.scores: {append_err}")
 
@@ -588,13 +637,30 @@ class Scorecard:
         # Ensure requested scores themselves are loaded first
         for requested_score in list(subset_of_score_names):
             if not self.score_registry.get_properties(requested_score):
+                logging.info(f"Loading missing score on-demand: {requested_score}")
                 loaded_ok = ensure_score_loaded(requested_score)
                 if not loaded_ok:
-                    logging.warning(f"No properties found for score: {requested_score}")
+                    logging.warning(f"Failed to load score: {requested_score}")
+                else:
+                    logging.info(f"Successfully loaded score: {requested_score}")
 
-        # Add dependent scores to the subset of score names, loading any that are missing
+        # Recursively add dependent scores to the subset of score names, loading any that are missing
         dependent_scores_added = []
-        for score_name in subset_of_score_names:
+        scores_to_process = list(subset_of_score_names)  # Create a copy to iterate over
+        processed_scores = set()  # Track what we've already processed to avoid infinite loops
+        
+        logging.info(f"Starting recursive dependency resolution for {len(scores_to_process)} initial scores")
+        
+        while scores_to_process:
+            score_name = scores_to_process.pop(0)
+            
+            # Skip if already processed (avoid infinite loops)
+            if score_name in processed_scores:
+                continue
+            processed_scores.add(score_name)
+            
+            logging.info(f"Processing dependencies for score: {score_name}")
+            
             score_info = self.score_registry.get_properties(score_name)
             if score_info is None:
                 # Try on-demand load before giving up
@@ -603,25 +669,44 @@ class Scorecard:
                     continue
                 score_info = self.score_registry.get_properties(score_name)
                 
+            # Additional safety check - score_info could still be None after loading attempt
+            if score_info is None:
+                logging.warning(f"Score info is still None after loading attempt for: {score_name}")
+                continue
+                
             if 'depends_on' in score_info:
                 deps = score_info['depends_on']
                 if isinstance(deps, list):
                     for dependency in deps:
                         # Ensure dependency is registered/loaded
                         if not self.score_registry.get_properties(dependency):
-                            ensure_score_loaded(dependency)
+                            logging.info(f"Loading dependency: {dependency} for score: {score_name}")
+                            loaded_ok = ensure_score_loaded(dependency)
+                            if not loaded_ok:
+                                logging.warning(f"Failed to load dependency {dependency} for score {score_name}")
+                                continue
                         if dependency not in subset_of_score_names:
                             dependent_scores_added.append(dependency)
                             subset_of_score_names.append(dependency)
+                            scores_to_process.append(dependency)  # Add to processing queue for recursive dependency discovery
+                            logging.info(f"Added dependency {dependency} to processing queue")
                 elif isinstance(deps, dict):
                     for dependency in deps.keys():
                         # Ensure dependency is registered/loaded
                         if not self.score_registry.get_properties(dependency):
-                            ensure_score_loaded(dependency)
+                            logging.info(f"Loading dict dependency: {dependency} for score: {score_name}")
+                            loaded_ok = ensure_score_loaded(dependency)
+                            if not loaded_ok:
+                                logging.warning(f"Failed to load dict dependency {dependency} for score {score_name}")
+                                continue
                         if dependency not in subset_of_score_names:
                             dependent_scores_added.append(dependency)
                             subset_of_score_names.append(dependency)
-        logging.info(f"Added dependent scores: {dependent_scores_added}")
+                            scores_to_process.append(dependency)  # Add to processing queue for recursive dependency discovery
+                            logging.info(f"Added dict dependency {dependency} to processing queue")
+        
+        logging.info(f"Recursive dependency resolution complete. Added {len(dependent_scores_added)} dependent scores: {dependent_scores_added}")
+        logging.info(f"Final score list contains {len(subset_of_score_names)} scores: {subset_of_score_names}")
 
         dependency_graph, name_to_id = self.build_dependency_graph(subset_of_score_names)
         logging.info(f"Built dependency graph: {dependency_graph}")
@@ -644,7 +729,14 @@ class Scorecard:
                 # Check if conditions are met
                 if not self.check_dependency_conditions(score_id, dependency_graph, results_by_score_id):
                     logging.info(f"Conditions not met for {score_name}. Skipping.")
-                    result = "SKIPPED"
+                    result = Score.Result(
+                        value="SKIPPED",
+                        explanation="Score was skipped because dependency conditions were not met",
+                        parameters=Score.Parameters(
+                            name=score_name,
+                            scorecard=self.name
+                        )
+                    )
                     results_by_score_id[score_id] = result
                     
                     # Enqueue scores that depend on this one
@@ -665,11 +757,27 @@ class Scorecard:
                 logging.info(f"Processing score: {score_name} with dependencies: {score_deps}")
                 logging.info(f"Results available: {list(results_by_score_id.keys())}")
                 
+                # Detailed logging of dependency results
+                dependency_details = []
                 for dep_id in score_deps:
                     if dep_id in results_by_score_id:
                         dep_result = results_by_score_id[dep_id]
-                        if dep_result != "SKIPPED":
+                        if not (isinstance(dep_result, Score.Result) and dep_result.value == "SKIPPED"):
                             previous_results.append(dep_result)
+                            dep_name = dependency_graph.get(dep_id, {}).get('name', dep_id)
+                            dep_value = getattr(dep_result, 'value', 'unknown') if hasattr(dep_result, 'value') else str(dep_result)
+                            dependency_details.append(f"{dep_name}={dep_value}")
+                        else:
+                            dep_name = dependency_graph.get(dep_id, {}).get('name', dep_id)
+                            dependency_details.append(f"{dep_name}=SKIPPED")
+                    else:
+                        dep_name = dependency_graph.get(dep_id, {}).get('name', dep_id)
+                        dependency_details.append(f"{dep_name}=MISSING")
+                
+                if dependency_details:
+                    logging.info(f"📊 STARTING SCORING '{score_name}' using dependency results: [{', '.join(dependency_details)}]")
+                else:
+                    logging.info(f"📊 STARTING SCORING '{score_name}' with no dependencies")
                 
                 # Ensure the scorecard_name is included in the score parameters
                 score_registry_props = self.score_registry.get_properties(score_name)
@@ -862,6 +970,7 @@ class Scorecard:
         
         # Determine which scores collection to use
         scores_to_use = self.scores if hasattr(self, 'scores') else getattr(self.__class__, 'scores', [])
+        logging.info(f"Building dependency graph from {len(scores_to_use)} scores in self.scores")
         
         # Build complete name_to_id mapping from ALL available scores (not just subset)
         # This is needed for dependency resolution
@@ -869,59 +978,102 @@ class Scorecard:
             score_id = str(score.get('id', ''))
             score_name = score['name']
             name_to_id[score_name] = score_id
+            logging.debug(f"Added to name_to_id mapping: {score_name} -> {score_id}")
+        
+        # Also check the score registry for any scores that might not be in self.scores
+        logging.info("Checking score registry for additional scores...")
+        registry_names = []
+        for score_name in subset_of_score_names:
+            if score_name not in name_to_id:
+                # Try to get the score properties from the registry
+                score_props = self.score_registry.get_properties(score_name)
+                if score_props:
+                    score_id = str(score_props.get('id', ''))
+                    if score_id:
+                        name_to_id[score_name] = score_id
+                        registry_names.append(score_name)
+                        logging.info(f"Added score from registry: {score_name} -> {score_id}")
+                    else:
+                        logging.warning(f"Score '{score_name}' in registry has no ID")
+                else:
+                    logging.warning(f"Score '{score_name}' not found in registry or self.scores")
+        
+        if registry_names:
+            logging.info(f"Added {len(registry_names)} scores from registry: {registry_names}")
+        
+        logging.info(f"Final name_to_id mapping has {len(name_to_id)} entries: {list(name_to_id.keys())}")
         
         # Build dependency graph only for scores in the subset
-        for score in scores_to_use:
-            if score['name'] in subset_of_score_names:
-                score_id = str(score.get('id', ''))
-                score_name = score['name']
+        for score_name in subset_of_score_names:
+            # First try to find the score in scores_to_use
+            score_data = None
+            for score in scores_to_use:
+                if score['name'] == score_name:
+                    score_data = score
+                    break
+            
+            # If not found in scores_to_use, try the registry
+            if not score_data:
+                score_props = self.score_registry.get_properties(score_name)
+                if score_props:
+                    score_data = score_props
+                    logging.info(f"Using score data from registry for: {score_name}")
+            
+            if not score_data:
+                logging.warning(f"No data found for score '{score_name}' in scores_to_use or registry")
+                continue
                 
-                # Handle both simple list and conditional dependencies
-                dependencies = score.get('depends_on', [])
-                if isinstance(dependencies, list):
-                    # Simple list of dependencies - include ALL dependencies that exist in name_to_id
-                    deps = []
-                    for dep in dependencies:
-                        dep_id = name_to_id.get(dep)
-                        if dep_id:  # Only include if we have the dependency loaded
-                            deps.append(dep_id)
-                        else:
-                            logging.warning(f"Dependency '{dep}' for score '{score_name}' not found in loaded scores")
-                    graph[score_id] = {
-                        'name': score_name,
-                        'deps': deps,
-                        'conditions': {}
-                    }
-                elif isinstance(dependencies, dict):
-                    # Dictionary with conditions - include ALL dependencies that exist in name_to_id
-                    deps = []
-                    conditions = {}
-                    for dep, condition in dependencies.items():
-                        dep_id = name_to_id.get(dep)
-                        if dep_id:  # Only include if we have the dependency loaded
-                            deps.append(dep_id)
-                            if isinstance(condition, dict):
-                                conditions[dep_id] = condition
-                            elif isinstance(condition, str):
-                                conditions[dep_id] = {
-                                    'operator': '==',
-                                    'value': condition
-                                }
-                        else:
-                            logging.warning(f"Dependency '{dep}' for score '{score_name}' not found in loaded scores")
-                    graph[score_id] = {
-                        'name': score_name,
-                        'deps': deps,
-                        'conditions': conditions
-                    }
-                else:
-                    # Invalid dependency format
-                    logging.warning(f"Invalid dependency format for score {score_name}")
-                    graph[score_id] = {
-                        'name': score_name,
-                        'deps': [],
-                        'conditions': {}
-                    }
+            score_id = str(score_data.get('id', ''))
+            if not score_id:
+                logging.warning(f"Score '{score_name}' has no ID, skipping dependency graph entry")
+                continue
+                
+            # Handle both simple list and conditional dependencies
+            dependencies = score_data.get('depends_on', [])
+            if isinstance(dependencies, list):
+                # Simple list of dependencies - include ALL dependencies that exist in name_to_id
+                deps = []
+                for dep in dependencies:
+                    dep_id = name_to_id.get(dep)
+                    if dep_id:  # Only include if we have the dependency loaded
+                        deps.append(dep_id)
+                    else:
+                        logging.warning(f"Dependency '{dep}' for score '{score_name}' not found in loaded scores")
+                graph[score_id] = {
+                    'name': score_name,
+                    'deps': deps,
+                    'conditions': {}
+                }
+            elif isinstance(dependencies, dict):
+                # Dictionary with conditions - include ALL dependencies that exist in name_to_id
+                deps = []
+                conditions = {}
+                for dep, condition in dependencies.items():
+                    dep_id = name_to_id.get(dep)
+                    if dep_id:  # Only include if we have the dependency loaded
+                        deps.append(dep_id)
+                        if isinstance(condition, dict):
+                            conditions[dep_id] = condition
+                        elif isinstance(condition, str):
+                            conditions[dep_id] = {
+                                'operator': '==',
+                                'value': condition
+                            }
+                    else:
+                        logging.warning(f"Dependency '{dep}' for score '{score_name}' not found in loaded scores")
+                graph[score_id] = {
+                    'name': score_name,
+                    'deps': deps,
+                    'conditions': conditions
+                }
+            else:
+                # Invalid dependency format or no dependencies
+                logging.info(f"Score '{score_name}' has no dependencies or invalid dependency format")
+                graph[score_id] = {
+                    'name': score_name,
+                    'deps': [],
+                    'conditions': {}
+                }
         return graph, name_to_id
 
     def check_dependency_conditions(self, score_id: str, dependency_graph: dict, results_by_score_id: dict) -> bool:
@@ -945,7 +1097,7 @@ class Scorecard:
                 return False
                 
             dep_result = results_by_score_id[dep_id]
-            if isinstance(dep_result, str) and dep_result == "PAUSED":
+            if isinstance(dep_result, Score.Result) and dep_result.value == "PAUSED":
                 return False
                 
             # Extract value from result, handling both Score.Result objects and direct values
@@ -1059,6 +1211,11 @@ class Scorecard:
                                     config[key] = value
                                 
                                 logging.info(f"Setting version {api_score.get('championVersionId')} for config {config.get('name')}")
+                            
+                            # Always copy isDisabled status from API data to config (regardless of version)
+                            if 'isDisabled' in api_score:
+                                config['isDisabled'] = api_score.get('isDisabled')
+                                logging.info(f"Setting isDisabled={api_score.get('isDisabled')} for score {config.get('name')}")
                             break
         else:
             logging.warning("API data does not contain expected structure (sections.items)")

@@ -101,7 +101,7 @@ export const menuItems = [
   { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
-  { name: "Experiments", icon: Waypoints, path: "/lab/experiments" },
+  { name: "Procedures", icon: Waypoints, path: "/lab/procedures" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
   { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
@@ -119,7 +119,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const { theme, setTheme } = useTheme()
   const isDesktop = useMediaQuery("(min-width: 768px)")
   const isMobile = useMediaQuery("(max-width: 767px)")
-  const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount } = useAccount()
+  const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount, refetchAccounts } = useAccount()
   const pathname = usePathname()
 
   // Handle navigation loading states
@@ -249,7 +249,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
                 (item.name === "Items" && pathname.startsWith(item.path)) ||
                 (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
-                (item.name === "Experiments" && pathname.startsWith(item.path)) ||
+                (item.name === "Procedures" && pathname.startsWith(item.path)) ||
+                (item.name === "Templates" && pathname.startsWith(item.path)) ||
                 (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                 (item.name === "Reports" && pathname.startsWith(item.path)) ||
                 (item.name === "Sources" && pathname.startsWith(item.path)) ||
@@ -312,10 +313,18 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     alt={selectedAccount?.name || 'Account'} 
                   />
                   <AvatarFallback className="bg-background dark:bg-border">
-                    {selectedAccount?.name?.split(' ').map(word => word[0]).join('') || 'AC'}
+                    {isLoadingAccounts ? (
+                      <Spinner className="h-4 w-4" />
+                    ) : (
+                      selectedAccount?.name?.split(' ').map(word => word[0]).join('') || 'AC'
+                    )}
                   </AvatarFallback>
                 </Avatar>
-                {isLeftSidebarOpen && <span className="text-muted-foreground">{selectedAccount?.name || 'Select Account'}</span>}
+                {isLeftSidebarOpen && (
+                  <span className="text-muted-foreground">
+                    {isLoadingAccounts ? 'Loading accounts...' : selectedAccount?.name || 'Select Account'}
+                  </span>
+                )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[200px] z-[9999]">
@@ -343,26 +352,43 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="right" align="start" className="w-[200px] z-[9999]">
                   {isLoadingAccounts ? (
-                    <DropdownMenuItem>Loading accounts...</DropdownMenuItem>
+                    <DropdownMenuItem className="flex items-center">
+                      <Spinner className="mr-2 h-4 w-4" />
+                      Loading accounts...
+                    </DropdownMenuItem>
                   ) : accounts.length === 0 ? (
-                    <DropdownMenuItem>No accounts found</DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem className="text-muted-foreground">
+                        No accounts available
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        className="cursor-pointer text-primary"
+                        onClick={() => refetchAccounts()}
+                      >
+                        <ArrowLeftRight className="mr-2 h-4 w-4" />
+                        Retry Loading
+                      </DropdownMenuItem>
+                    </>
                   ) : (
                     accounts.map((account) => (
                       <DropdownMenuItem 
                         key={account.id} 
-                        className="cursor-pointer"
+                        className={`cursor-pointer ${selectedAccount?.id === account.id ? 'bg-accent' : ''}`}
                         onClick={() => setSelectedAccount(account)}
                       >
-                        <Avatar className="h-8 w-8 mr-2">
+                        <Avatar className="h-6 w-6 mr-2">
                           <AvatarImage 
                             src={`/avatar-${account.key}.png`} 
                             alt={account.name} 
                           />
-                          <AvatarFallback className="bg-frame dark:bg-border">
+                          <AvatarFallback className="bg-frame dark:bg-border text-xs">
                             {account.name.split(' ').map(word => word[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
-                        <span>{account.name}</span>
+                        <div className="flex flex-col">
+                          <span className="text-sm">{account.name}</span>
+                          <span className="text-xs text-muted-foreground">{account.key}</span>
+                        </div>
                       </DropdownMenuItem>
                     ))
                   )}

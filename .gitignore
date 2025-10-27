@@ -14,3 +14,5 @@ tmp/
 node_modules
 node_modules/*
 plexus/scores/reports/Test_scorecard/None/configuration.json
+.env.docker
+infrastructure/cdk.out/

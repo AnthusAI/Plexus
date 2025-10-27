@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, Pencil, Trash2, ChevronLeft, Copy } from "lucide-react"
+import { FilterInput } from '@/components/FilterInput'
 import { format, formatDistanceToNow } from "date-fns"
 import { useRouter } from 'next/navigation'
 import { getClient } from '@/utils/amplify-client'
@@ -72,6 +73,7 @@ export function ReportConfigurationsDashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [accountId, setAccountId] = useState<string | null>(null)
+  const [configurationsFilter, setConfigurationsFilter] = useState('')
 
   // Fetch account ID
   useEffect(() => {
@@ -240,7 +242,11 @@ export function ReportConfigurationsDashboard() {
               {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <FilterInput
+              placeholder="Filter..."
+              onFilterChange={setConfigurationsFilter}
+            />
             <Button onClick={handleCreate}>
               <Plus className="mr-2 h-4 w-4"/> New Configuration
             </Button>
@@ -251,7 +257,11 @@ export function ReportConfigurationsDashboard() {
       {/* Main Content Area */}
       <div className="flex-1 p-1.5 overflow-y-auto">
         <div className="grid gap-3 grid-cols-1 @[640px]:grid-cols-2">
-          {configurations.map((config) => (
+          {configurations
+            .filter(config =>
+              !configurationsFilter || config.name.toLowerCase().includes(configurationsFilter.toLowerCase())
+            )
+            .map((config) => (
             <Card key={config.id} className="cursor-pointer hover:bg-accent/5 border-0 shadow-none">
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="space-y-1">

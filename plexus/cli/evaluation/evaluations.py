@@ -64,6 +64,313 @@ from plexus.cli.shared.stage_configurations import get_evaluation_stage_configs
 
 from plexus.utils import truncate_dict_strings_inner
 
+def log_scorecard_configurations(scorecard_instance, context=""):
+    """Log the actual configurations being used by the scorecard instance."""
+    if not scorecard_instance or not hasattr(scorecard_instance, 'scores'):
+        logging.warning(f"No scorecard instance or scores available to log {context}")
+        return
+    
+    logging.info(f"==== SCORECARD CONFIGURATIONS IN USE {context} ====")
+    for i, score_config in enumerate(scorecard_instance.scores):
+        score_name = score_config.get('name', f'Score_{i}')
+        score_id = score_config.get('id', 'Unknown')
+        version = score_config.get('version', 'Not specified')
+        champion_version = score_config.get('championVersionId', 'Not specified')
+        
+        logging.info(f"Score #{i+1}: {score_name}")
+        logging.info(f"  ID: {score_id}")
+        logging.info(f"  Version field: {version}")
+        logging.info(f"  Champion version: {champion_version}")
+        
+        # Show a snippet of the actual configuration
+        if isinstance(score_config, dict):
+            # Show key configuration fields
+            key_fields = ['name', 'class', 'id', 'version', 'championVersionId', 'data']
+            logging.info(f"  Key config fields:")
+            for field in key_fields:
+                if field in score_config:
+                    value = score_config[field]
+                    if isinstance(value, str) and len(value) > 100:
+                        value = value[:100] + "..."
+                    logging.info(f"    {field}: {value}")
+        logging.info(f"  " + "-" * 50)
+    
+    logging.info(f"==== END SCORECARD CONFIGURATIONS {context} ====")
+    logging.info("")
+
+def format_confusion_matrix_summary(final_metrics):
+    """Format confusion matrix and detailed metrics for the evaluation summary."""
+    summary_lines = []
+    
+    # Get confusion matrix data
+    confusion_matrix = final_metrics.get('confusionMatrix')
+    predicted_dist = final_metrics.get('predictedClassDistribution', {})
+    dataset_dist = final_metrics.get('datasetClassDistribution', {})
+
+    # Initialize these variables in case confusion_matrix is None
+    matrix_dict = {}
+    all_classes = set()
+
+    # Debug logging for all data structures
+    logging.info(f"DEBUG: Predicted distribution type: {type(predicted_dist)}")
+    logging.info(f"DEBUG: Predicted distribution content: {predicted_dist}")
+    logging.info(f"DEBUG: Dataset distribution type: {type(dataset_dist)}")
+    logging.info(f"DEBUG: Dataset distribution content: {dataset_dist}")
+
+    if confusion_matrix:
+        # Add debug logging to see the actual format
+        logging.info(f"DEBUG: Confusion matrix type: {type(confusion_matrix)}")
+        logging.info(f"DEBUG: Confusion matrix content: {confusion_matrix}")
+        
+        summary_lines.append("CONFUSION MATRIX:")
+        summary_lines.append("-" * 40)
+        
+        # Parse confusion matrix if it's a string
+        if isinstance(confusion_matrix, str):
+            try:
+                import json
+                confusion_matrix = json.loads(confusion_matrix)
+            except:
+                summary_lines.append("Error parsing confusion matrix from JSON string")
+                return "\n".join(summary_lines)
+        
+        # Handle different confusion matrix formats
+        # (matrix_dict and all_classes already initialized above)
+
+        if isinstance(confusion_matrix, dict):
+            # Check if it's the format with 'matrix' and 'labels' keys
+            if 'matrix' in confusion_matrix and 'labels' in confusion_matrix:
+                # Format: {'matrix': [[7, 0], [2, 10]], 'labels': ['no', 'yes']}
+                matrix_2d = confusion_matrix['matrix']
+                labels = confusion_matrix['labels']
+                
+                if isinstance(matrix_2d, list) and isinstance(labels, list) and len(labels) >= 2:
+                    all_classes = set(labels)
+                    matrix_dict = {}
+                    for i, actual_class in enumerate(labels):
+                        matrix_dict[actual_class] = {}
+                        for j, pred_class in enumerate(labels):
+                            if i < len(matrix_2d) and j < len(matrix_2d[i]):
+                                matrix_dict[actual_class][pred_class] = matrix_2d[i][j]
+                            else:
+                                matrix_dict[actual_class][pred_class] = 0
+                else:
+                    summary_lines.append(f"Invalid matrix/labels format in confusion matrix")
+                    return "\n".join(summary_lines)
+            else:
+                # Standard nested dict format
+                matrix_dict = confusion_matrix
+                for actual, predicted_dict in confusion_matrix.items():
+                    all_classes.add(actual)
+                    if isinstance(predicted_dict, dict):
+                        all_classes.update(predicted_dict.keys())
+        elif isinstance(confusion_matrix, list):
+            # Handle list format - this might be a 2D array or list of dicts
+            try:
+                if len(confusion_matrix) > 0:
+                    if isinstance(confusion_matrix[0], list):
+                        # It's a 2D array format [[tp, fp], [fn, tn]] or similar
+                        # We need class labels to interpret this properly
+                        # For now, assume binary classification with classes ['no', 'yes']
+                        if len(confusion_matrix) == 2 and len(confusion_matrix[0]) == 2:
+                            classes = ['no', 'yes']  # Default assumption for binary
+                            all_classes = set(classes)
+                            matrix_dict = {}
+                            for i, actual_class in enumerate(classes):
+                                matrix_dict[actual_class] = {}
+                                for j, pred_class in enumerate(classes):
+                                    matrix_dict[actual_class][pred_class] = confusion_matrix[i][j]
+                        else:
+                            summary_lines.append(f"Unsupported 2D array confusion matrix format: {len(confusion_matrix)}x{len(confusion_matrix[0])}")
+                            return "\n".join(summary_lines)
+                    elif isinstance(confusion_matrix[0], dict):
+                        # List of dictionaries - convert to nested dict format
+                        for item in confusion_matrix:
+                            if 'actual' in item and 'predicted' in item and 'count' in item:
+                                actual = item['actual']
+                                predicted = item['predicted']
+                                count = item['count']
+                                
+                                if actual not in matrix_dict:
+                                    matrix_dict[actual] = {}
+                                matrix_dict[actual][predicted] = count
+                                
+                                all_classes.add(actual)
+                                all_classes.add(predicted)
+                    else:
+                        summary_lines.append(f"Unsupported list confusion matrix format: {type(confusion_matrix[0])}")
+                        return "\n".join(summary_lines)
+                else:
+                    summary_lines.append("Empty confusion matrix list")
+                    return "\n".join(summary_lines)
+            except Exception as e:
+                summary_lines.append(f"Error processing list format confusion matrix: {str(e)}")
+                return "\n".join(summary_lines)
+        else:
+            summary_lines.append(f"Unsupported confusion matrix format: {type(confusion_matrix)}")
+            return "\n".join(summary_lines)
+        
+        # Display confusion matrix in a readable format
+        if matrix_dict and all_classes:
+            all_classes = sorted(list(all_classes))
+            
+            if all_classes:
+                # Standard confusion matrix format with clear axis labels
+                summary_lines.append("")
+                summary_lines.append("                    Predicted")
+                header = "              "
+                for pred_class in all_classes:
+                    header += f"{pred_class}".rjust(10)
+                summary_lines.append(header)
+                
+                summary_lines.append("Actual      " + "-" * (10 * len(all_classes)))
+                
+                # Data rows
+                for actual_class in all_classes:
+                    row = f"{actual_class}".ljust(10) + " | "
+                    for pred_class in all_classes:
+                        count = matrix_dict.get(actual_class, {}).get(pred_class, 0)
+                        row += f"{count}".rjust(10)
+                    summary_lines.append(row)
+                
+                summary_lines.append("")
+                
+                # Add clear interpretation with examples
+                summary_lines.append("How to read this matrix:")
+                if len(all_classes) >= 2:
+                    class1, class2 = all_classes[0], all_classes[1]
+                    tp_example = matrix_dict.get(class1, {}).get(class1, 0)
+                    fp_example = matrix_dict.get(class2, {}).get(class1, 0)
+                    
+                    summary_lines.append(f"• Row '{class1}' shows all samples that were actually '{class1}'")
+                    summary_lines.append(f"• Column '{class1}' shows all samples that AI predicted as '{class1}'")
+                    summary_lines.append(f"• Cell ['{class1}','{class1}'] = {tp_example} (correctly predicted '{class1}')")
+                    if fp_example > 0:
+                        summary_lines.append(f"• Cell ['{class2}','{class1}'] = {fp_example} (incorrectly predicted '{class1}' when actually '{class2}')")
+                
+                summary_lines.append("• Diagonal cells = correct predictions")
+                summary_lines.append("• Off-diagonal cells = prediction errors")
+        
+        summary_lines.append("")
+    
+    # Add class distributions
+    if dataset_dist or predicted_dist:
+        summary_lines.append("CLASS DISTRIBUTION COMPARISON:")
+        summary_lines.append("(How many samples of each class: Ground Truth vs AI Predictions)")
+        summary_lines.append("-" * 65)
+        
+        # Parse and normalize distributions
+        dataset_dict = {}
+        predicted_dict = {}
+        
+        # Handle dataset distribution
+        if isinstance(dataset_dist, str):
+            try:
+                import json
+                dataset_dist = json.loads(dataset_dist)
+            except:
+                dataset_dist = {}
+        
+        if isinstance(dataset_dist, dict):
+            dataset_dict = dataset_dist
+        elif isinstance(dataset_dist, list):
+            # Handle list format - could be list of counts or list of dicts
+            if len(dataset_dist) > 0:
+                if isinstance(dataset_dist[0], dict) and 'class' in dataset_dist[0] and 'count' in dataset_dist[0]:
+                    # Format: [{'class': 'yes', 'count': 12}, {'class': 'no', 'count': 7}]
+                    for item in dataset_dist:
+                        dataset_dict[item['class']] = item['count']
+                elif all(isinstance(x, (int, float)) for x in dataset_dist):
+                    # Format: [7, 12] - need labels, use confusion matrix labels if available
+                    if matrix_dict and all_classes:
+                        labels = sorted(list(all_classes))
+                        for i, count in enumerate(dataset_dist):
+                            if i < len(labels):
+                                dataset_dict[labels[i]] = count
+        
+        # Handle predicted distribution
+        if isinstance(predicted_dist, str):
+            try:
+                import json
+                predicted_dist = json.loads(predicted_dist)
+            except:
+                predicted_dist = {}
+        
+        if isinstance(predicted_dist, dict):
+            predicted_dict = predicted_dist
+        elif isinstance(predicted_dist, list):
+            # Handle list format - could be list of counts or list of dicts
+            if len(predicted_dist) > 0:
+                if isinstance(predicted_dist[0], dict) and 'class' in predicted_dist[0] and 'count' in predicted_dist[0]:
+                    # Format: [{'class': 'yes', 'count': 10}, {'class': 'no', 'count': 9}]
+                    for item in predicted_dist:
+                        predicted_dict[item['class']] = item['count']
+                elif all(isinstance(x, (int, float)) for x in predicted_dist):
+                    # Format: [9, 10] - need labels, use confusion matrix labels if available
+                    if matrix_dict and all_classes:
+                        labels = sorted(list(all_classes))
+                        for i, count in enumerate(predicted_dist):
+                            if i < len(labels):
+                                predicted_dict[labels[i]] = count
+        
+        # Get all classes from both distributions
+        all_dist_classes = set()
+        if dataset_dict:
+            all_dist_classes.update(dataset_dict.keys())
+        if predicted_dict:
+            all_dist_classes.update(predicted_dict.keys())
+        
+        all_dist_classes = sorted(list(all_dist_classes))
+        
+        if all_dist_classes:
+            summary_lines.append("Class Label".ljust(15) + "Ground Truth".rjust(12) + "AI Predicted".rjust(12) + "Difference".rjust(12))
+            summary_lines.append("-" * 51)
+            
+            for cls in all_dist_classes:
+                actual_count = dataset_dict.get(cls, 0)
+                pred_count = predicted_dict.get(cls, 0)
+                difference = pred_count - actual_count
+                diff_str = f"+{difference}" if difference > 0 else str(difference)
+                
+                line = f"{cls}".ljust(15) + f"{actual_count}".rjust(12) + f"{pred_count}".rjust(12) + f"{diff_str}".rjust(12)
+                summary_lines.append(line)
+            
+            summary_lines.append("")
+            summary_lines.append("Note: Difference = AI Predicted - Ground Truth")
+            summary_lines.append("• Positive difference means AI over-predicted this class")
+            summary_lines.append("• Negative difference means AI under-predicted this class")
+        
+        summary_lines.append("")
+    
+    # Add per-class metrics if we can calculate them  
+    if matrix_dict and all_classes:
+        summary_lines.append("PER-CLASS METRICS:")
+        summary_lines.append("-" * 25)
+        summary_lines.append("Class".ljust(12) + "Precision".rjust(10) + "Recall".rjust(8) + "F1".rjust(8))
+        summary_lines.append("-" * 38)
+        
+        for cls in all_classes:
+            # Calculate precision, recall, F1 for this class
+            tp = matrix_dict.get(cls, {}).get(cls, 0)  # True positives
+            
+            # False positives: predicted as this class but actually something else
+            fp = sum(matrix_dict.get(other_cls, {}).get(cls, 0) 
+                    for other_cls in all_classes if other_cls != cls)
+            
+            # False negatives: actually this class but predicted as something else  
+            fn = sum(matrix_dict.get(cls, {}).get(other_cls, 0) 
+                    for other_cls in all_classes if other_cls != cls)
+            
+            # Calculate metrics
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+            f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+            
+            line = f"{cls}".ljust(12) + f"{precision:.3f}".rjust(10) + f"{recall:.3f}".rjust(8) + f"{f1:.3f}".rjust(8)
+            summary_lines.append(line)
+    
+    return "\n".join(summary_lines)
+
 def create_client() -> PlexusDashboardClient:
     """Create a client and log its configuration"""
     client = PlexusDashboardClient()
@@ -510,7 +817,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
         logging.error(f"Error loading configuration from {configuration_file_path}: {str(e)}")
         return None
 
-def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cache=False):
+def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cache=False, specific_version=None):
     """
     Load a scorecard from the Plexus Dashboard API.
     
@@ -520,6 +827,7 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
         use_cache: Whether to prefer local cache files over API (default: False)
                    When False, will always fetch from API but still write cache files
                    When True, will check local cache first and only fetch missing configs
+        specific_version: Optional specific score version ID to use instead of champion version
         
     Returns:
         Scorecard: An initialized Scorecard instance with required scores loaded
@@ -599,7 +907,8 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
                 client, 
                 scorecard_structure, 
                 target_scores,
-                use_cache=use_cache
+                use_cache=use_cache,
+                specific_version=specific_version
             )
             if not scores_config:
                 error_msg = f"Failed to fetch score configurations for scorecard: {scorecard_identifier}"
@@ -661,13 +970,14 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
             raise ValueError(f"{error_msg}\nThis might be due to API connectivity issues or invalid configurations.\nTry using the --yaml flag to load from local YAML files instead.") from e
         raise
 
-def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
+def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None, specific_version=None):
     """
     Load a scorecard from individual YAML configuration files saved by fetch_score_configurations.
     
     Args:
         scorecard_identifier: A string that identifies the scorecard (ID, name, key, or external ID)
         score_names: Optional list of specific score names to load
+        specific_version: Optional specific score version ID (Note: YAML files contain champion versions only)
         
     Returns:
         Scorecard: An initialized Scorecard instance with required scores loaded from YAML files
@@ -681,6 +991,9 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
     from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
     
     logging.info(f"Loading scorecard '{scorecard_identifier}' from individual YAML files")
+    
+    if specific_version:
+        logging.warning(f"Specific version '{specific_version}' requested, but YAML files only contain champion versions. Using champion version instead.")
     
     try:
         # First resolve the scorecard identifier to get the actual scorecard name
@@ -719,11 +1032,17 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
         if not yaml_files:
             raise ValueError(f"No YAML files found in scorecard directory: {scorecard_dir}")
         
+        logging.info(f"Found {len(yaml_files)} YAML files in {scorecard_dir}: {[f.name for f in yaml_files]}")
+        if score_names:
+            logging.info(f"Looking for scores matching identifiers: {score_names}")
         
-        # Parse YAML files to get score configurations
+        
+        # First pass: Parse all YAML files to build a complete inventory
         yaml_parser = YAML(typ='safe')
-        parsed_configs = []
+        all_configs = {}  # Map score name -> config
+        all_configs_by_id = {}  # Map score id -> config
         
+        logging.info("First pass: Loading all YAML files to build score inventory...")
         for yaml_file in yaml_files:
             try:
                 with open(yaml_file, 'r') as f:
@@ -738,24 +1057,122 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
                     logging.warning(f"Skipping configuration without name in {yaml_file}")
                     continue
                 
-                # Filter by score_names if provided
-                if score_names and score_name not in score_names:
-                    logging.info(f"Skipping score '{score_name}' (not in requested scores)")
-                    continue
+                # Log the score identifiers for debugging
+                score_id = config.get('id')
+                external_id = config.get('externalId')
+                logging.info(f"Found YAML file {yaml_file.name}: name='{score_name}', id='{score_id}', externalId='{external_id}'")
                 
-                parsed_configs.append(config)
-                logging.info(f"Loaded configuration for score: {score_name}")
+                # Store in both mappings
+                all_configs[score_name] = config
+                if score_id:
+                    all_configs_by_id[str(score_id)] = config
                 
             except Exception as e:
                 logging.error(f"Error parsing {yaml_file}: {str(e)}")
                 continue
         
+        logging.info(f"Loaded {len(all_configs)} total score configurations from YAML files")
+        
+        # Second pass: Identify target scores and discover dependencies
+        target_configs = []
+        processed_names = set()
+        
+        def find_config_by_identifier(identifier):
+            """Find a config by any identifier (name, id, etc.)"""
+            # First try direct name lookup
+            if identifier in all_configs:
+                return all_configs[identifier]
+            
+            # Then try ID lookup
+            if identifier in all_configs_by_id:
+                return all_configs_by_id[identifier]
+            
+            # Finally try searching by all identifier fields
+            for config in all_configs.values():
+                if (config.get('name') == identifier or
+                    config.get('key') == identifier or 
+                    str(config.get('id', '')) == identifier or
+                    config.get('externalId') == identifier or
+                    config.get('originalExternalId') == identifier):
+                    return config
+            return None
+        
+        def collect_dependencies(config, depth=0):
+            """Recursively collect all dependencies for a score"""
+            if depth > 10:  # Prevent infinite recursion
+                logging.warning(f"Max dependency depth reached for score: {config.get('name')}")
+                return []
+            
+            score_name = config.get('name')
+            if score_name in processed_names:
+                return []  # Already processed
+            
+            processed_names.add(score_name)
+            target_configs.append(config)
+            
+            depends_on = config.get('depends_on', [])
+            dependency_names = []
+            
+            # Extract dependency names from different formats
+            if isinstance(depends_on, list):
+                dependency_names = depends_on
+            elif isinstance(depends_on, dict):
+                dependency_names = list(depends_on.keys())
+            
+            # Recursively collect dependencies
+            for dep_name in dependency_names:
+                dep_config = find_config_by_identifier(dep_name)
+                if dep_config:
+                    logging.info(f"Found dependency '{dep_name}' for score '{score_name}'")
+                    collect_dependencies(dep_config, depth + 1)
+                else:
+                    logging.warning(f"Could not find dependency '{dep_name}' for score '{score_name}'")
+        
+        # Start dependency collection from specified scores or all scores
+        if score_names:
+            logging.info(f"Looking for scores matching identifiers: {score_names}")
+            for identifier in score_names:
+                config = find_config_by_identifier(identifier)
+                if config:
+                    logging.info(f"Found target score '{config.get('name')}' matching identifier '{identifier}'")
+                    collect_dependencies(config)
+                else:
+                    logging.warning(f"Could not find score matching identifier '{identifier}'")
+        else:
+            # If no specific scores requested, load all
+            for config in all_configs.values():
+                collect_dependencies(config)
+        
+        parsed_configs = target_configs
+        logging.info(f"Final selection: {len(parsed_configs)} scores (including dependencies)")
+
         if not parsed_configs:
             if score_names:
                 raise ValueError(f"No valid configurations found for requested scores: {score_names}")
             else:
                 raise ValueError(f"No valid configurations found in {scorecard_dir}")
-        
+
+        # Enrich parsed configs with actual score IDs from the API
+        # The YAML files may have id, external_id, name, or key fields
+        # Use the general-purpose resolve_score_identifier to get the actual database ID
+        from plexus.cli.shared.identifier_resolution import resolve_score_identifier
+
+        logging.info("Enriching score configs with IDs from API...")
+        for config in parsed_configs:
+            # Try to find an identifier in the config (try id, external_id, key, or name)
+            identifier = config.get('id') or config.get('external_id') or config.get('key') or config.get('name')
+
+            if identifier:
+                # Use the reusable resolve_score_identifier function
+                resolved_id = resolve_score_identifier(client, scorecard_id, identifier)
+                if resolved_id:
+                    config['id'] = resolved_id
+                    logging.info(f"Enriched '{config.get('name')}' (identifier: '{identifier}') with ID: {resolved_id}")
+                else:
+                    logging.warning(f"Could not resolve ID for score '{config.get('name')}' with identifier '{identifier}'")
+            else:
+                logging.warning(f"Score '{config.get('name')}' has no identifier field to resolve")
+
         # Create scorecard structure using the resolved API data
         scorecard_data = {
             'id': scorecard_id,
@@ -779,6 +1196,56 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
         logging.error(error_msg)
         raise ValueError(f"{error_msg}\nEnsure that individual score YAML files exist in the scorecard directory.\nYou may need to run fetch_score_configurations first to create these files.") from e
 
+def get_latest_score_version(client, score_id: str) -> Optional[str]:
+    """
+    Get the most recent ScoreVersion ID for a given score using the scoreId index sorted by createdAt.
+    
+    Args:
+        client: GraphQL API client
+        score_id: The score ID to get the latest version for
+        
+    Returns:
+        The latest ScoreVersion ID, or None if no versions found
+    """
+    try:
+        query = """
+        query ListScoreVersionByScoreIdAndCreatedAt($scoreId: String!, $sortDirection: ModelSortDirection, $limit: Int) {
+            listScoreVersionByScoreIdAndCreatedAt(scoreId: $scoreId, sortDirection: $sortDirection, limit: $limit) {
+                items {
+                    id
+                    createdAt
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "scoreId": score_id,
+            "sortDirection": "DESC",  # Most recent first
+            "limit": 1
+        }
+        
+        logging.info(f"Fetching latest ScoreVersion for score ID: {score_id}")
+        result = client.execute(query, variables)
+        
+        if result and 'listScoreVersionByScoreIdAndCreatedAt' in result:
+            items = result['listScoreVersionByScoreIdAndCreatedAt']['items']
+            if items:
+                latest_version_id = items[0]['id']
+                created_at = items[0]['createdAt']
+                logging.info(f"Found latest ScoreVersion: {latest_version_id} (created: {created_at})")
+                return latest_version_id
+            else:
+                logging.warning(f"No ScoreVersions found for score ID: {score_id}")
+                return None
+        else:
+            logging.error(f"Unexpected response format when fetching latest ScoreVersion for score: {score_id}")
+            return None
+            
+    except Exception as e:
+        logging.error(f"Error fetching latest ScoreVersion for score {score_id}: {str(e)}")
+        return None
+
 @evaluate.command()
 @click.option('--scorecard', 'scorecard', default=None, help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--yaml', is_flag=True, help='Load scorecard from individual YAML files (from fetch_score_configurations) instead of the API')
@@ -788,6 +1255,8 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None):
 @click.option('--random-seed', default=None, type=int, help='Random seed for sampling')
 @click.option('--content-ids-to-sample', default='', type=str, help='Comma-separated list of content IDs to sample')
 @click.option('--score', 'score', default='', type=str, help='Score identifier (ID, name, key, or external ID). Can be comma-separated for multiple scores.')
+@click.option('--version', default=None, type=str, help='Specific score version ID to evaluate (defaults to champion version)')
+@click.option('--latest', is_flag=True, help='Use the most recent score version (overrides --version)')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--reload', is_flag=True, help='Reload existing dataset by refreshing values for current records only.')
@@ -807,6 +1276,8 @@ def accuracy(
     random_seed: int,
     content_ids_to_sample: str,
     score: str,
+    version: Optional[str],
+    latest: bool,
     experiment_label: str,
     fresh: bool,
     reload: bool,
@@ -822,13 +1293,25 @@ def accuracy(
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     """
     logging.info("Starting accuracy evaluation")
-    logging.info(f"Scorecard: {scorecard}, Score: {score}, Samples: {number_of_samples}, Dry run: {dry_run}")
     
-    # Validate that fresh and reload are not both specified
+    # Validate mutually exclusive options
     if fresh and reload:
         logging.error("Cannot use both --fresh and --reload options. Choose one.")
         console.print("[bold red]Error: Cannot use both --fresh and --reload options. Choose one.[/bold red]")
         return
+    
+    if version and latest:
+        logging.error("Cannot use both --version and --latest options. Choose one.")
+        console.print("[bold red]Error: Cannot use both --version and --latest options. Choose one.[/bold red]")
+        return
+    
+    # Determine effective version for logging
+    effective_version = "latest" if latest else (version or "champion")
+    logging.info(f"Scorecard: {scorecard}, Score: {score}, Version: {effective_version}, Samples: {number_of_samples}, Dry run: {dry_run}")
+    
+    # Initialize resolved_version - will be updated later if --latest is used
+    # Don't initialize to version parameter since --latest needs to resolve it dynamically
+    resolved_version = version if not latest else None
     
     # If dry-run is enabled, provide a simplified successful execution path
     if dry_run:
@@ -839,6 +1322,7 @@ def accuracy(
         # Log the parameters that would be used
         console.print(f"[bold]Scorecard:[/bold] {scorecard}")
         console.print(f"[bold]Loading from:[/bold] {'YAML files' if yaml else 'API'}")
+        console.print(f"[bold]Version:[/bold] {version or 'champion'}")
         console.print(f"[bold]Number of samples:[/bold] {number_of_samples}")
         if score:
             console.print(f"[bold]Target scores:[/bold] {score}")
@@ -860,12 +1344,14 @@ def accuracy(
     
     # Proceeding with normal evaluation
     # Original implementation for non-dry-run mode
+    evaluation_record = None  # Track the evaluation record at function level for return
+
     async def _run_accuracy():
+        from plexus.dashboard.api.client import PlexusDashboardClient
         # Starting evaluation process
-        nonlocal task_id, score  # Make task_id and score accessible to modify in the async function
-        
+        nonlocal task_id, score, resolved_version, evaluation_record  # Make these accessible to modify in the async function
+
         task = None  # Track the task
-        evaluation_record = None  # Track the evaluation record
         score_id_for_eval = None  # Track the score ID for the evaluation
         score_version_id_for_eval = None  # Track the score version ID for the evaluation
         
@@ -960,6 +1446,12 @@ def accuracy(
                             "taskId": task.id
                         }
                         
+                        # Add scoreVersionId if using API loading and version is specified
+                        # Do not add scoreVersionId if using --yaml flag (local YAML files only contain champion versions)
+                        if not yaml and resolved_version:
+                            logging.info(f"Will set scoreVersionId to {resolved_version} in initial evaluation record (API loading with specific version)")
+                            experiment_params["scoreVersionId"] = resolved_version
+                        
                         # Validate 'score' parameter
                         if score is None:
                             score = ""  # Default to empty string if None
@@ -1023,6 +1515,12 @@ def accuracy(
                     "taskId": task.id
                 }
                 
+                # Add scoreVersionId if using API loading and version is specified
+                # Do not add scoreVersionId if using --yaml flag (local YAML files only contain champion versions)
+                if not yaml and resolved_version:
+                    logging.info(f"Will set scoreVersionId to {resolved_version} in initial evaluation record (Celery path - API loading with specific version)")
+                    experiment_params["scoreVersionId"] = resolved_version
+                
                 try:
                     logging.info("Creating initial Evaluation record for Celery path...")
                     evaluation_record = DashboardEvaluation.create(
@@ -1054,38 +1552,50 @@ def accuracy(
                 
                 target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
                 try:
-                    scorecard_instance = load_scorecard_from_yaml_files(scorecard, target_score_identifiers)
+                    scorecard_instance = load_scorecard_from_yaml_files(scorecard, target_score_identifiers, specific_version=version)
                     logging.info(f"Loaded scorecard '{scorecard}' from YAML with {len(scorecard_instance.scores)} scores")
+                    
+                    # Log the actual configurations being used
+                    log_scorecard_configurations(scorecard_instance, "(YAML Loading)")
                     
                     # Extract score_id and score_version_id for the primary score
                     primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
                     score_id_for_eval = None
                     score_version_id_for_eval = None
-                    
-                    if primary_score_identifier and scorecard_instance.scores:
-                        logging.info(f"Identifying primary score '{primary_score_identifier}' for evaluation record")
-                        for sc_config in scorecard_instance.scores:
-                            if (sc_config.get('name') == primary_score_identifier or
-                                sc_config.get('key') == primary_score_identifier or 
-                                str(sc_config.get('id', '')) == primary_score_identifier or
-                                sc_config.get('externalId') == primary_score_identifier or
-                                sc_config.get('originalExternalId') == primary_score_identifier):
-                                score_id_for_eval = sc_config.get('id')
-                                score_version_id_for_eval = sc_config.get('version')
-                                
-                                if not score_version_id_for_eval:
-                                    score_version_id_for_eval = sc_config.get('championVersionId')
-                                
-                                # The score_id_for_eval should be valid at this point
-                                if score_id_for_eval:
-                                    logging.info(f"Using primary score from YAML: {sc_config.get('name')}")
-                                    break
-                    
-                    # If no match found and user specified a score, that's an error  
-                    if not score_id_for_eval and primary_score_identifier:
-                        error_msg = f"Could not find score '{primary_score_identifier}' in scorecard YAML files"
-                        logging.error(error_msg)
-                        raise ValueError(error_msg)
+
+                    # Use the generalized identifier resolution to get the database UUID
+                    if primary_score_identifier:
+                        from plexus.cli.shared.direct_identifier_resolution import direct_resolve_score_identifier
+                        logging.info(f"Resolving primary score identifier '{primary_score_identifier}' to database UUID")
+
+                        # We need the scorecard database ID for resolution
+                        # The scorecard_instance.scorecard_identifier should be the database UUID
+                        scorecard_db_id = scorecard_instance.scorecard_identifier
+                        if not scorecard_db_id:
+                            error_msg = "Scorecard database ID not available for score resolution"
+                            logging.error(error_msg)
+                            raise ValueError(error_msg)
+
+                        score_id_for_eval = direct_resolve_score_identifier(client, scorecard_db_id, primary_score_identifier)
+
+                        if score_id_for_eval:
+                            logging.info(f"Resolved score '{primary_score_identifier}' to database UUID: {score_id_for_eval}")
+
+                            # When using --yaml flag, do not set score_version_id since local YAML files
+                            # represent the champion version and we don't want to associate with a specific version
+                            if yaml:
+                                logging.info(f"Using --yaml flag: not setting score_version_id (local YAML represents champion version)")
+                                score_version_id_for_eval = None
+                            else:
+                                # Look up the version from the scorecard instance if available
+                                for sc_config in (scorecard_instance.scores or []):
+                                    if sc_config.get('id') == score_id_for_eval or sc_config.get('name') == primary_score_identifier:
+                                        score_version_id_for_eval = sc_config.get('version') or sc_config.get('championVersionId')
+                                        break
+                        else:
+                            error_msg = f"Could not resolve score identifier '{primary_score_identifier}' to database UUID"
+                            logging.error(error_msg)
+                            raise ValueError(error_msg)
                     
                 except Exception as e:
                     error_msg = f"Error loading scorecard from YAML files: {str(e)}"
@@ -1099,8 +1609,43 @@ def accuracy(
                     logging.warning("'score' parameter is None, defaulting to empty string")
                 
                 target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
+                
+                # Handle --latest flag by resolving the latest version for the primary score
+                # resolved_version is already initialized in outer scope, don't reset it here
+                if latest and target_score_identifiers:
+                    primary_score_identifier = target_score_identifiers[0]
+                    logging.info(f"--latest flag specified for primary score: {primary_score_identifier}")
+                    
+                    # We need to resolve the score ID first to get the latest version
+                    # This requires a preliminary scorecard load to get score IDs
+                    temp_scorecard = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml, specific_version=None)
+                    
+                    # Find the primary score's ID from the loaded scorecard
+                    primary_score_id = None
+                    for sc_config in temp_scorecard.scores:
+                        if (sc_config.get('name') == primary_score_identifier or
+                            sc_config.get('key') == primary_score_identifier or 
+                            str(sc_config.get('id', '')) == primary_score_identifier or
+                            sc_config.get('externalId') == primary_score_identifier):
+                            primary_score_id = sc_config.get('id')
+                            break
+                    
+                    if primary_score_id:
+                        client = PlexusDashboardClient()
+                        latest_version_id = get_latest_score_version(client, primary_score_id)
+                        if latest_version_id:
+                            resolved_version = latest_version_id
+                            logging.info(f"Resolved --latest to version: {latest_version_id}")
+                        else:
+                            logging.warning(f"Could not find latest version for score {primary_score_identifier}, using champion version")
+                    else:
+                        logging.warning(f"Could not resolve score ID for {primary_score_identifier}, using champion version")
+                
                 try:
-                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml)
+                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml, specific_version=resolved_version)
+                    
+                    # Log the actual configurations being used
+                    log_scorecard_configurations(scorecard_instance, "(API Loading)")
                         
                     # Immediately identify the primary score and extract score_id and score_version_id
                     primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
@@ -1117,6 +1662,8 @@ def accuracy(
                                 sc_config.get('externalId') == primary_score_identifier or
                                 sc_config.get('originalExternalId') == primary_score_identifier):
                                 score_id_for_eval = sc_config.get('id')
+                                
+                                # API loading: set the score_version_id from configuration
                                 score_version_id_for_eval = sc_config.get('version')
                                 
                                 if not score_version_id_for_eval:
@@ -1137,12 +1684,12 @@ def accuracy(
                                         score_id_for_eval = None
                                 
                                 # The score_id_for_eval should be the database UUID at this point
-                                if score_id_for_eval:
+                                if score_id_for_eval is not None:
                                     logging.info(f"Using primary score from API: {sc_config.get('name')}")
                                     break
                     
                     # If no match found and user specified a score, that's an error
-                    if not score_id_for_eval and primary_score_identifier:
+                    if score_id_for_eval is None and primary_score_identifier:
                         error_msg = f"Could not find score '{primary_score_identifier}' in scorecard"
                         logging.error(error_msg)
                         raise ValueError(error_msg)
@@ -1331,24 +1878,64 @@ def accuracy(
 
             if primary_score_config:
                 score_id_for_eval = primary_score_config.get('id')
-                score_version_id_for_eval = primary_score_config.get('version')
-                
-                if not score_version_id_for_eval:
-                    score_version_id_for_eval = primary_score_config.get('championVersionId')
-                
-                # If the score_id_for_eval looks like an external ID (numeric),
-                # we need to resolve it to the actual DynamoDB UUID for Amplify Gen2 schema association
-                if score_id_for_eval and (isinstance(score_id_for_eval, int) or str(score_id_for_eval).isdigit()):
+                logging.info(f"Initial score_id_for_eval from config: {score_id_for_eval} (type: {type(score_id_for_eval)})")
+
+                # When using --yaml flag, do not set score_version_id since local YAML files
+                # represent the champion version and we don't want to associate with a specific version
+                if yaml:
+                    logging.info(f"Using --yaml flag: not setting score_version_id for evaluation record (local YAML represents champion version)")
+                    score_version_id_for_eval = None
+                else:
+                    score_version_id_for_eval = primary_score_config.get('version')
+
+                    if not score_version_id_for_eval:
+                        score_version_id_for_eval = primary_score_config.get('championVersionId')
+
+                # Always resolve score_id to DynamoDB UUID using direct_resolve_score_identifier
+                # This handles any identifier format (external ID, name, key, UUID)
+                if score_id_for_eval and scorecard_id:
                     try:
-                        # Use scorecard ID if available for better resolution  
-                        scorecard_id_for_resolution = scorecard_id if 'scorecard_record' in locals() and scorecard_record else None
-                        resolved_uuid = resolve_score_external_id_to_uuid(client, str(score_id_for_eval), scorecard_id_for_resolution)
+                        from plexus.cli.shared.direct_identifier_resolution import direct_resolve_score_identifier
+                        logging.info(f"Resolving score identifier '{score_id_for_eval}' to DynamoDB UUID using scorecard_id: {scorecard_id}")
+                        resolved_uuid = direct_resolve_score_identifier(client, scorecard_id, str(score_id_for_eval))
                         if resolved_uuid:
+                            logging.info(f"Resolved score_id from '{score_id_for_eval}' to DynamoDB UUID: {resolved_uuid}")
                             score_id_for_eval = resolved_uuid
                         else:
-                                score_id_for_eval = None  # Clear invalid external ID
+                            logging.warning(f"Failed to resolve score_id '{score_id_for_eval}' to DynamoDB UUID")
+                            score_id_for_eval = None
                     except Exception as resolve_error:
+                        logging.error(f"Error resolving score_id '{score_id_for_eval}': {resolve_error}")
                         score_id_for_eval = None
+
+            # Update the evaluation record with scoreId and scoreVersionId now that they're resolved
+            if evaluation_record and (score_id_for_eval or score_version_id_for_eval):
+                try:
+                    update_params = {}
+                    if score_id_for_eval:
+                        update_params['scoreId'] = score_id_for_eval
+                        logging.info(f"Updating evaluation record with scoreId: {score_id_for_eval}")
+                    if score_version_id_for_eval:
+                        update_params['scoreVersionId'] = score_version_id_for_eval
+                        logging.info(f"Updating evaluation record with scoreVersionId: {score_version_id_for_eval}")
+
+                    if update_params:
+                        mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                            updateEvaluation(input: $input) {
+                                id
+                                scoreId
+                                scoreVersionId
+                            }
+                        }"""
+                        client.execute(mutation, {
+                            'input': {
+                                'id': evaluation_record.id,
+                                **update_params
+                            }
+                        })
+                        logging.info(f"Successfully updated evaluation record {evaluation_record.id} with score identifiers")
+                except Exception as e:
+                    logging.warning(f"Failed to update evaluation record with score identifiers: {e}")
 
             # Instantiate AccuracyEvaluation
             logging.info("Instantiating AccuracyEvaluation...")
@@ -1433,7 +2020,12 @@ def accuracy(
             logging.info("Running accuracy evaluation...")
             try:
                 # Pass tracker when available; method tolerates None
-                final_metrics = await accuracy_eval.run(tracker=tracker)
+                result_metrics = await accuracy_eval.run(tracker=tracker)
+                # Ensure we have valid metrics (run() should return dict, not None)
+                if result_metrics is not None:
+                    final_metrics = result_metrics
+                else:
+                    logging.warning("Evaluation run() returned None, using default metrics")
             except Exception as e:
                 error_msg = f"Error during execution: {str(e)}"
                 logging.error(error_msg)
@@ -1449,10 +2041,11 @@ def accuracy(
                 try:
                     # Use metrics returned by AccuracyEvaluation
                     update_payload_metrics = []
+                    if final_metrics.get("alignment") is not None:
+                        # Store Gwet's AC1 raw value in range [-1, 1]
+                        update_payload_metrics.append({"name": "Alignment", "value": final_metrics["alignment"]})
                     if final_metrics.get("accuracy") is not None:
                         update_payload_metrics.append({"name": "Accuracy", "value": final_metrics["accuracy"] * 100})
-                    if final_metrics.get("alignment") is not None:
-                        update_payload_metrics.append({"name": "Alignment", "value": final_metrics["alignment"] * 100})
                     if final_metrics.get("precision") is not None:
                         update_payload_metrics.append({"name": "Precision", "value": final_metrics["precision"] * 100})
                     if final_metrics.get("recall") is not None:
@@ -1484,8 +2077,14 @@ def accuracy(
                     if score_id and isinstance(score_id, str) and '-' in score_id:
                         update_fields['scoreId'] = score_id
                     
-                    if score_version_id:
+                    # Only set scoreVersionId if not using --yaml flag
+                    # When using --yaml, local files represent champion versions, not specific versions
+                    # Use resolved_version (which includes --latest resolution) instead of the original version parameter
+                    if score_version_id and not yaml:
                         update_fields['scoreVersionId'] = score_version_id
+                        logging.info(f"Setting scoreVersionId to {score_version_id} in final evaluation update (API loading)")
+                    elif yaml:
+                        logging.info("Using --yaml flag: not setting scoreVersionId in final evaluation update (local YAML represents champion version)")
                     
                     # Add other data fields
                     if final_metrics.get("confusionMatrix"):
@@ -1511,12 +2110,40 @@ def accuracy(
                     logging.error(f"Could not complete evaluation record - error details: {str(e)}")
             
             # Display final results summary
-            logging.info(f"\n{'='*50}\nEVALUATION RESULTS\n{'='*50}")
-            logging.info(f"Completed evaluation of {len(labeled_samples_data)} samples")
-            logging.info(f"Overall accuracy: {final_metrics.get('accuracy', 'N/A')}")
-            logging.info(f"Precision: {final_metrics.get('precision', 'N/A')}")
-            logging.info(f"Alignment: {final_metrics.get('alignment', 'N/A')}")
-            logging.info(f"Recall: {final_metrics.get('recall', 'N/A')}")
+            logging.info(f"\n{'='*60}")
+            logging.info("EVALUATION RESULTS")
+            logging.info('='*60)
+            logging.info(f"Sample Size:        {len(labeled_samples_data)}")
+
+            # Safely extract metrics (handle None case)
+            if final_metrics:
+                logging.info(f"Overall Accuracy:   {final_metrics.get('accuracy', 'N/A'):.1%}" if isinstance(final_metrics.get('accuracy'), (int, float)) else f"Overall Accuracy:   {final_metrics.get('accuracy', 'N/A')}")
+                logging.info(f"Precision:          {final_metrics.get('precision', 'N/A'):.1%}" if isinstance(final_metrics.get('precision'), (int, float)) else f"Precision:          {final_metrics.get('precision', 'N/A')}")
+                logging.info(f"Recall:             {final_metrics.get('recall', 'N/A'):.1%}" if isinstance(final_metrics.get('recall'), (int, float)) else f"Recall:             {final_metrics.get('recall', 'N/A')}")
+                logging.info(f"Alignment:          {final_metrics.get('alignment', 'N/A'):.1%}" if isinstance(final_metrics.get('alignment'), (int, float)) else f"Alignment:          {final_metrics.get('alignment', 'N/A')}")
+            else:
+                logging.warning("No final metrics available")
+            
+            # Add cost information if available
+            if final_metrics:
+                total_cost = final_metrics.get('total_cost')
+                if total_cost is not None:
+                    cost_per_sample = total_cost / len(labeled_samples_data) if len(labeled_samples_data) > 0 else 0
+                    logging.info(f"Cost per Sample:    ${cost_per_sample:.6f}")
+                    logging.info(f"Total Cost:         ${total_cost:.6f}")
+
+                skipped_results = final_metrics.get('skipped_results', 0)
+                if skipped_results > 0:
+                    logging.info(f"Skipped Results:    {skipped_results} (due to unmet dependency conditions)")
+            
+            logging.info("")
+            
+            # Add detailed confusion matrix and metrics
+            detailed_summary = format_confusion_matrix_summary(final_metrics)
+            if detailed_summary:
+                logging.info(detailed_summary)
+            
+            logging.info('='*60)
             
             # Complete the Finalizing stage
             if tracker:
@@ -1558,6 +2185,9 @@ def accuracy(
                 )
         except Exception as e:
             logging.error(f"Error during cleanup: {e}")
+
+    # Return the evaluation record ID so MCP tool can retrieve it
+    return evaluation_record
 
 def get_data_driven_samples(
     scorecard_instance, 

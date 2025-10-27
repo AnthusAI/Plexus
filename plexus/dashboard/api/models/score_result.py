@@ -78,11 +78,15 @@ class ScoreResult(BaseModel):
     confidence: Optional[float] = None
     metadata: Optional[Dict] = None
     trace: Optional[Dict] = None
+    correct: Optional[bool] = None
+    cost: Optional[Dict] = None  # Cost information including tokens, API calls, and monetary cost
+    attachments: Optional[List[str]] = None  # List of S3 paths for trace/log attachments
     scoringJobId: Optional[str] = None
     evaluationId: Optional[str] = None
-    correct: Optional[bool] = None
-    code: Optional[str] = None
-    type: Optional[str] = None  # Type of score result: "prediction", "evaluation", etc.
+    feedbackItemId: Optional[str] = None
+    code: Optional[str] = '200'  # HTTP response code, defaults to '200' for success
+    type: Optional[str] = 'prediction'  # Type of score result: "prediction", "evaluation", etc.
+    status: Optional[str] = 'COMPLETED'  # Status of score result: "COMPLETED", "ERROR", etc.
     createdAt: Optional[datetime] = None
     updatedAt: Optional[datetime] = None
 
@@ -100,11 +104,15 @@ class ScoreResult(BaseModel):
         confidence: Optional[float] = None,
         metadata: Optional[Dict] = None,
         trace: Optional[Dict] = None,
+        correct: Optional[bool] = None,
+        cost: Optional[Dict] = None,
+        attachments: Optional[List[str]] = None,
         scoringJobId: Optional[str] = None,
         evaluationId: Optional[str] = None,
-        correct: Optional[bool] = None,
-        code: Optional[str] = None,
-        type: Optional[str] = None,
+        feedbackItemId: Optional[str] = None,
+        code: Optional[str] = '200',
+        type: Optional[str] = 'prediction',
+        status: Optional[str] = 'COMPLETED',
         createdAt: Optional[datetime] = None,
         updatedAt: Optional[datetime] = None,
         client: Optional['_BaseAPIClient'] = None
@@ -121,11 +129,15 @@ class ScoreResult(BaseModel):
         self.confidence = confidence
         self.metadata = metadata
         self.trace = trace
+        self.correct = correct
+        self.cost = cost
+        self.attachments = attachments
         self.scoringJobId = scoringJobId
         self.evaluationId = evaluationId
-        self.correct = correct
+        self.feedbackItemId = feedbackItemId
         self.code = code
         self.type = type
+        self.status = status
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     
@@ -162,12 +174,15 @@ class ScoreResult(BaseModel):
             confidence
             metadata
             trace
+            correct
+            cost
             attachments
             scoringJobId
             evaluationId
-            correct
+            feedbackItemId
             code
             type
+            status
             createdAt
             updatedAt
         """
@@ -190,6 +205,14 @@ class ScoreResult(BaseModel):
                 trace = json.loads(trace)
             except json.JSONDecodeError:
                 trace = None
+        
+        # Parse cost JSON if it's a string
+        cost = data.get('cost')
+        if isinstance(cost, str):
+            try:
+                cost = json.loads(cost)
+            except json.JSONDecodeError:
+                cost = None
         
         # Parse timestamp fields
         created_at = data.get('createdAt')
@@ -229,15 +252,45 @@ class ScoreResult(BaseModel):
             confidence=data.get('confidence'),
             metadata=metadata,
             trace=trace,
+            correct=data.get('correct'),
+            cost=cost,
+            attachments=data.get('attachments'),
             scoringJobId=data.get('scoringJobId'),
             evaluationId=data.get('evaluationId'),
-            correct=data.get('correct'),
+            feedbackItemId=data.get('feedbackItemId'),
             code=data.get('code'),
             type=data.get('type'),
+            status=data.get('status'),
             createdAt=created_at,
             updatedAt=updated_at,
             client=client
         )
+
+    @classmethod
+    def get_by_id(cls, score_result_id: str, client: '_BaseAPIClient') -> Optional['ScoreResult']:
+        """Get a ScoreResult by its ID.
+        
+        Args:
+            score_result_id: The ID of the score result to retrieve
+            client: The API client to use
+            
+        Returns:
+            ScoreResult object if found, None otherwise
+        """
+        query = f"""
+        query GetScoreResult($id: ID!) {{
+            getScoreResult(id: $id) {{
+                {cls.fields()}
+            }}
+        }}
+        """
+        
+        result = client.execute(query, {'id': score_result_id})
+        score_result_data = result.get('getScoreResult')
+        
+        if score_result_data:
+            return cls.from_dict(score_result_data, client)
+        return None
 
     @classmethod
     def create(
@@ -250,7 +303,8 @@ class ScoreResult(BaseModel):
         scoringJobId: Optional[str] = None,
         evaluationId: Optional[str] = None,
         code: str = '200',
-        type: Optional[str] = None,
+        type: str = 'prediction',
+        status: str = 'COMPLETED',
         **kwargs
     ) -> 'ScoreResult':
         """Create a new score result.
@@ -264,18 +318,27 @@ class ScoreResult(BaseModel):
             scoringJobId: ID of scoring job (optional)
             evaluationId: ID of evaluation (optional)
             code: HTTP response code (defaults to '200' for success)
-            type: Type of score result - "prediction", "evaluation", etc. (optional)
+            type: Type of score result - "prediction", "evaluation", etc. (defaults to 'prediction')
+            status: Status of score result (defaults to 'COMPLETED')
             **kwargs: Optional fields:
                      - confidence: float
                      - metadata: dict (will be JSON serialized)
+                     - trace: dict (will be JSON serialized)
+                     - cost: dict (will be JSON serialized)
                      - correct: bool
+                     - attachments: List[str]
         
         Note:
             Either scoringJobId or evaluationId should be provided, but not required
         """
-        # Convert metadata to string if present
+        # Convert JSON fields to strings if present
+        # Use default=str to handle Decimal and other non-serializable types
         if 'metadata' in kwargs:
-            kwargs['metadata'] = json.dumps(kwargs['metadata'])
+            kwargs['metadata'] = json.dumps(kwargs['metadata'], default=str)
+        if 'trace' in kwargs:
+            kwargs['trace'] = json.dumps(kwargs['trace'], default=str)
+        if 'cost' in kwargs:
+            kwargs['cost'] = json.dumps(kwargs['cost'], default=str)
             
         input_data = {
             'value': value,
@@ -283,6 +346,8 @@ class ScoreResult(BaseModel):
             'accountId': accountId,
             'scorecardId': scorecardId,
             'code': code,
+            'type': type,
+            'status': status,
             **kwargs
         }
         
@@ -290,8 +355,6 @@ class ScoreResult(BaseModel):
             input_data['scoringJobId'] = scoringJobId
         if evaluationId is not None:
             input_data['evaluationId'] = evaluationId
-        if type is not None:
-            input_data['type'] = type
         
         mutation = """
         mutation CreateScoreResult($input: CreateScoreResultInput!) {
@@ -306,9 +369,16 @@ class ScoreResult(BaseModel):
 
     def update(self, **kwargs) -> 'ScoreResult':
         """Update this score result with new values."""
-        # Convert metadata to string if present
+        # Convert JSON fields to strings if present
+        # Use default=str to handle Decimal and other non-serializable types
         if 'metadata' in kwargs:
-            kwargs['metadata'] = json.dumps(kwargs['metadata'])
+            kwargs['metadata'] = json.dumps(kwargs['metadata'], default=str)
+        
+        if 'cost' in kwargs:
+            kwargs['cost'] = json.dumps(kwargs['cost'], default=str)
+        
+        if 'trace' in kwargs:
+            kwargs['trace'] = json.dumps(kwargs['trace'], default=str)
             
         mutation = """
         mutation UpdateScoreResult($input: UpdateScoreResultInput!) {
@@ -319,13 +389,21 @@ class ScoreResult(BaseModel):
         """ % self.fields()
         
         # When updating any field, DynamoDB automatically updates 'updatedAt', which triggers
-        # GSI composite key requirements. Must include all fields for affected GSIs:
+        # GSI composite key requirements. The update() method automatically includes:
         # - byAccountCodeAndUpdatedAt: accountId + code + updatedAt
+        # - byTypeStatusUpdated: type + status + updatedAt
+        #
+        # Callers must pass additional fields as kwargs for other composite GSIs:
+        # - byScorecardItemAndCreatedAt: scorecardId + itemId + createdAt
+        # - byScorecardScoreItem: scorecardId + scoreId + itemId
+        # - byItemScorecardScore: itemId + scorecardId + scoreId
         variables = {
             'input': {
                 'id': self.id,
                 'accountId': self.accountId,  # Required for byAccountCodeAndUpdatedAt GSI
                 'code': getattr(self, 'code', '200'),  # Required for byAccountCodeAndUpdatedAt GSI, default to '200'
+                'type': getattr(self, 'type', 'prediction'),  # Required for byTypeStatusUpdated GSI, default to 'prediction'
+                'status': getattr(self, 'status', 'COMPLETED'),  # Required for byTypeStatusUpdated GSI, default to 'COMPLETED'
                 **kwargs
             }
         }
@@ -376,7 +454,7 @@ class ScoreResult(BaseModel):
         cls,
         client: '_BaseAPIClient',
         item_id: str,
-        scorecard_id: str,
+        type: str,
         score_id: str,
         account_id: Optional[str] = None
     ) -> Optional['ScoreResult']:
@@ -384,13 +462,13 @@ class ScoreResult(BaseModel):
         Find the most recent ScoreResult using cache key components.
         
         This method encapsulates the cache lookup logic for finding existing
-        ScoreResults based on the standard cache key: itemId + scorecardId + scoreId.
-        It uses the time-based GSI to return the most recent result.
+        ScoreResults based on the standard cache key: itemId + type + scoreId.
+        It uses the time-based GSI to return the most recent result by updatedAt.
         
         Args:
             client: API client for database operations
             item_id: Item ID (should be resolved DynamoDB ID)
-            scorecard_id: Scorecard ID (should be resolved DynamoDB ID)
+            type: Type of score result (should be "prediction" or "evaluation")
             score_id: Score ID (should be resolved DynamoDB ID)
             account_id: Optional account ID for additional context/validation
             
@@ -402,26 +480,24 @@ class ScoreResult(BaseModel):
             cached_result = ScoreResult.find_by_cache_key(
                 client=client,
                 item_id="da270073-83ab-4c43-a1e6-961851c13d92",
-                scorecard_id="f4076c72-e74b-4eaf-afd6-d4f61c9f0142", 
+                type="prediction", 
                 score_id="687361f7-44a9-466f-8920-7f9dc351bcd2"
             )
         """
         try:
-            # Use the same GSI query logic from the existing cache implementation
+            # Use the composite sort key GSI: byItemIdAndTypeAndScoreIdAndUpdatedAt
+            # The index has partition key: itemId
+            # And composite sort key: type#scoreId#updatedAt
+            # We need to use the beginsWith filter to match type and scoreId
             cache_query = """
             query GetMostRecentScoreResult(
                 $itemId: String!,
-                $scorecardId: String!,
+                $type: String!,
                 $scoreId: String!
             ) {
-                listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt(
                     itemId: $itemId,
-                    scorecardIdScoreIdUpdatedAt: {
-                        beginsWith: {
-                            scorecardId: $scorecardId,
-                            scoreId: $scoreId
-                        }
-                    },
+                    typeScoreIdUpdatedAt: { beginsWith: { type: $type, scoreId: $scoreId } },
                     sortDirection: DESC,
                     limit: 1
                 ) {
@@ -434,7 +510,7 @@ class ScoreResult(BaseModel):
             
             cache_variables = {
                 "itemId": item_id,
-                "scorecardId": scorecard_id,
+                "type": type,
                 "scoreId": score_id
             }
             
@@ -442,7 +518,7 @@ class ScoreResult(BaseModel):
             response = client.execute(cache_query, cache_variables)
             
             # Extract results from the response
-            items = response.get('listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt', {}).get('items', [])
+            items = response.get('listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt', {}).get('items', [])
             
             if items:
                 # Return the most recent result (first item due to DESC sort, limit 1)

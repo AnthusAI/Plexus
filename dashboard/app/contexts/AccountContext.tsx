@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { generateClient } from "aws-amplify/api"
+import { useAuthenticator } from '@aws-amplify/ui-react'
 import type { Schema } from "@/amplify/data/resource"
 import type { AccountSettings } from "@/types/account-config"
 import { isValidAccountSettings } from "@/types/account-config"
@@ -19,11 +20,13 @@ interface AccountContextType {
   visibleMenuItems: { name: string; icon: any; path: string }[]
   setSelectedAccount: (account: Account) => void
   refreshAccount: () => Promise<void>
+  refetchAccounts: () => Promise<void>
 }
 
 const AccountContext = createContext<AccountContextType | undefined>(undefined)
 
 export function AccountProvider({ children }: { children: React.ReactNode }) {
+  const { authStatus } = useAuthenticator(context => [context.authStatus])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true)
@@ -61,22 +64,91 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const refetchAccounts = async () => {
+    if (authStatus !== 'authenticated') {
+      console.log('User not authenticated, cannot refetch accounts')
+      return
+    }
+
+    setIsLoadingAccounts(true)
+    try {
+      console.log('Refetching accounts...')
+      const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
+        client.models.Account
+      )
+      
+      const accountsWithParsedSettings = accountsData.map(account => ({
+        ...account,
+        settings: typeof account.settings === 'string' ? 
+          JSON.parse(account.settings) : account.settings
+      }))
+      
+      setAccounts(accountsWithParsedSettings)
+      
+      // Reset selected account if it's no longer in the list
+      if (selectedAccount && !accountsWithParsedSettings.find(a => a.id === selectedAccount.id)) {
+        const defaultAccount = accountsWithParsedSettings.find(
+          account => account.key === 'call-criteria'
+        ) || accountsWithParsedSettings[0]
+        
+        if (defaultAccount) {
+          setSelectedAccount(defaultAccount)
+          updateVisibleMenuItems(defaultAccount)
+        } else {
+          setSelectedAccount(null)
+          setVisibleMenuItems(menuItems)
+        }
+      }
+    } catch (error) {
+      console.error('Error refetching accounts:', error)
+    } finally {
+      setIsLoadingAccounts(false)
+    }
+  }
+
+  // Clear account state when user logs out
+  useEffect(() => {
+    if (authStatus === 'unauthenticated') {
+      console.log('User unauthenticated, clearing account state')
+      setAccounts([])
+      setSelectedAccount(null)
+      setVisibleMenuItems(menuItems)
+      setIsLoadingAccounts(false)
+    }
+  }, [authStatus])
+
   useEffect(() => {
     async function fetchAccounts() {
+      // Only fetch accounts if user is authenticated
+      if (authStatus !== 'authenticated') {
+        console.log('User not authenticated, skipping account fetch. Auth status:', authStatus)
+        setIsLoadingAccounts(false)
+        return
+      }
+
       try {
+        console.log('Fetching accounts for authenticated user...')
         const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
           client.models.Account
         )
+        console.log('Raw accounts data:', accountsData)
+        
         const accountsWithParsedSettings = accountsData.map(account => ({
           ...account,
           settings: typeof account.settings === 'string' ? 
             JSON.parse(account.settings) : account.settings
         }))
+        
+        console.log('Processed accounts:', accountsWithParsedSettings)
         setAccounts(accountsWithParsedSettings)
-        if (!selectedAccount) {
+        
+        // Set default account if none is selected
+        if (!selectedAccount && accountsWithParsedSettings.length > 0) {
           const defaultAccount = accountsWithParsedSettings.find(
             account => account.key === 'call-criteria'
           ) || accountsWithParsedSettings[0]
+          
+          console.log('Setting default account:', defaultAccount)
           if (defaultAccount) {
             setSelectedAccount(defaultAccount)
             updateVisibleMenuItems(defaultAccount)
@@ -90,7 +162,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
 
     fetchAccounts()
-  }, [])
+  }, [authStatus, selectedAccount])
 
   useEffect(() => {
     updateVisibleMenuItems(selectedAccount)
@@ -103,7 +175,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       isLoadingAccounts,
       visibleMenuItems,
       setSelectedAccount,
-      refreshAccount
+      refreshAccount,
+      refetchAccounts
     }}>
       {children}
     </AccountContext.Provider>

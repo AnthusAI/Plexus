@@ -48,7 +48,9 @@ class FeedbackItems(DataCache):
         limit_per_cell: Optional[int] = Field(None, description="Maximum number of items to sample from each confusion matrix cell")
         initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
         final_value: Optional[str] = Field(None, description="Filter by corrected human value")
+        feedback_id: Optional[str] = Field(None, description="Specific feedback item ID to create dataset for (if specified, only this item will be included)")
         identifier_extractor: Optional[str] = Field(None, description="Optional client-specific identifier extractor class (e.g., 'CallCriteriaIdentifierExtractor')")
+        column_mappings: Optional[Dict[str, str]] = Field(None, description="Optional mapping of original score names to new column names (e.g., {'Agent Misrepresentation': 'Agent Misrepresentation - With Confidence'})")
         cache_file: str = Field(default="feedback_items_cache.parquet", description="Cache file name")
         local_cache_directory: str = Field(default='./.plexus_training_data_cache/', description="Local cache directory")
         
@@ -89,7 +91,10 @@ class FeedbackItems(DataCache):
         if self.parameters.identifier_extractor:
             self.identifier_extractor = self._load_identifier_extractor(self.parameters.identifier_extractor)
         
-        logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
+        if self.parameters.feedback_id:
+            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for specific feedback_id='{self.parameters.feedback_id}' in scorecard='{self.parameters.scorecard}', score='{self.parameters.score}'")
+        else:
+            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
 
     def _perform_reload(self, cache_identifier: str, scorecard_id: str, score_id: str, 
                         scorecard_name: str, score_name: str) -> pd.DataFrame:
@@ -309,11 +314,17 @@ class FeedbackItems(DataCache):
             'limit': self.parameters.limit,
             'limit_per_cell': self.parameters.limit_per_cell,
             'initial_value': self.normalized_initial_value,
-            'final_value': self.normalized_final_value
+            'final_value': self.normalized_final_value,
+            'feedback_id': self.parameters.feedback_id
         }
         params_str = json.dumps(params, sort_keys=True)
         params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
-        return f"feedback_items_{scorecard_id}_{score_id}_{self.parameters.days}d_{params_hash}"
+        
+        # If a specific feedback_id is provided, include it in the identifier
+        if self.parameters.feedback_id:
+            return f"feedback_items_{scorecard_id}_{score_id}_single_{self.parameters.feedback_id[:8]}_{params_hash}"
+        else:
+            return f"feedback_items_{scorecard_id}_{score_id}_{self.parameters.days}d_{params_hash}"
 
     def _get_cache_file_path(self, identifier: str) -> str:
         """Get the full path to the cache file."""
@@ -361,10 +372,13 @@ class FeedbackItems(DataCache):
         
         # Handle reload mode - reload existing cache with current values
         if reload:
+            logger.error(f"🔍 RELOAD DEBUG: reload=True, checking cache existence")
             if not self._cache_exists(cache_identifier):
+                logger.error(f"🔍 RELOAD DEBUG: No existing cache found, falling through to fresh load")
                 logger.warning("No existing cache found for reload mode. Performing fresh load instead.")
                 # Fall through to fresh load
             else:
+                logger.error(f"🔍 RELOAD DEBUG: Cache exists, calling _perform_reload")
                 logger.info(f"Reload mode: Loading existing cache and fetching current data for {scorecard_name} / {score_name}")
                 return self._perform_reload(cache_identifier, scorecard_id, score_id, scorecard_name, score_name)
         
@@ -374,6 +388,7 @@ class FeedbackItems(DataCache):
         if not fresh and not reload and self._cache_exists(cache_identifier):
             return self._load_from_cache(cache_identifier)
         
+        logger.error(f"🔍 FRESH LOAD DEBUG: Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
         logger.info(f"Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
         
         # Fetch feedback items
@@ -410,14 +425,19 @@ class FeedbackItems(DataCache):
         
         logger.info(f"Found {len(feedback_items)} feedback items")
         
-        # Build confusion matrix and sample items
-        sampled_items = self._sample_items_from_confusion_matrix(feedback_items)
-        
-        if not sampled_items:
-            logger.warning("No items after sampling")
-            return pd.DataFrame()
-        
-        logger.info(f"Sampled {len(sampled_items)} items from confusion matrix")
+        # If a specific feedback_id was provided, skip sampling and use the single item
+        if self.parameters.feedback_id:
+            sampled_items = feedback_items
+            logger.info(f"Using single feedback item {self.parameters.feedback_id} without sampling")
+        else:
+            # Build confusion matrix and sample items
+            sampled_items = self._sample_items_from_confusion_matrix(feedback_items)
+            
+            if not sampled_items:
+                logger.warning("No items after sampling")
+                return pd.DataFrame()
+            
+            logger.info(f"Sampled {len(sampled_items)} items from confusion matrix")
         
         # Create dataset rows
         df = self._create_dataset_rows(sampled_items, score_name)
@@ -481,6 +501,22 @@ class FeedbackItems(DataCache):
                 
                 result = self.client.execute(query, {"id": feedback_item_id})
                 
+                # DEBUG: Log the raw GraphQL response - using ERROR level to ensure visibility
+                logger.error(f"🔍 GRAPHQL DEBUG: Processing feedback_item_id={feedback_item_id}")
+                logger.error(f"🔍 GRAPHQL DEBUG: Raw result keys: {list(result.keys()) if result else 'None'}")
+                if result and 'getFeedbackItem' in result and result['getFeedbackItem']:
+                    feedback_data = result['getFeedbackItem']
+                    logger.error(f"🔍 GRAPHQL DEBUG: FeedbackItem keys: {list(feedback_data.keys())}")
+                    if 'item' in feedback_data and feedback_data['item']:
+                        item_raw_data = feedback_data['item']
+                        logger.error(f"🔍 GRAPHQL DEBUG: Item raw data keys: {list(item_raw_data.keys())}")
+                        logger.error(f"🔍 GRAPHQL DEBUG: Item metadata from GraphQL: {item_raw_data.get('metadata')}")
+                        logger.error(f"🔍 GRAPHQL DEBUG: Item metadata type: {type(item_raw_data.get('metadata'))}")
+                    else:
+                        logger.error(f"🔍 GRAPHQL DEBUG: No item data in feedback response")
+                else:
+                    logger.error(f"🔍 GRAPHQL DEBUG: No feedback item data in GraphQL response")
+                
                 if result and 'getFeedbackItem' in result and result['getFeedbackItem']:
                     item_data = result['getFeedbackItem']
                     feedback_item = FeedbackItem.from_dict(item_data, self.client)
@@ -503,8 +539,29 @@ class FeedbackItems(DataCache):
     
     async def _fetch_feedback_items(self, scorecard_id: str, score_id: str, 
                                    scorecard_name: str, score_name: str) -> List[FeedbackItem]:
-        """Fetch feedback items using the FeedbackService."""
-        # First, get all items without value filtering (since FeedbackService is case-sensitive)
+        """Fetch feedback items using the FeedbackService or specific feedback ID."""
+        
+        # If a specific feedback_id is provided, fetch only that item
+        if self.parameters.feedback_id:
+            logger.info(f"Fetching specific feedback item: {self.parameters.feedback_id}")
+            specific_items = await self._fetch_specific_feedback_items([self.parameters.feedback_id])
+            
+            if not specific_items:
+                logger.warning(f"Feedback item {self.parameters.feedback_id} not found")
+                return []
+            
+            # Validate that the item belongs to the correct scorecard and score
+            item = specific_items[0]
+            if item.scorecardId != scorecard_id or item.scoreId != score_id:
+                logger.error(f"Feedback item {self.parameters.feedback_id} belongs to scorecard {item.scorecardId}/score {item.scoreId}, "
+                           f"but expected scorecard {scorecard_id}/score {score_id}")
+                return []
+            
+            logger.info(f"Successfully fetched specific feedback item {self.parameters.feedback_id}")
+            return specific_items
+        
+        # Otherwise, fetch items using the normal FeedbackService approach
+        logger.error(f"🔍 FEEDBACK SERVICE DEBUG: About to call FeedbackService.find_feedback_items")
         all_items = await FeedbackService.find_feedback_items(
             client=self.client,
             scorecard_id=scorecard_id,
@@ -516,6 +573,18 @@ class FeedbackItems(DataCache):
             limit=None,  # We'll apply limits after sampling
             prioritize_edit_comments=False
         )
+        logger.error(f"🔍 FEEDBACK SERVICE DEBUG: Received {len(all_items)} items from FeedbackService")
+        
+        # Debug the first item to see what metadata structure we get
+        if all_items:
+            first_item = all_items[0]
+            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item ID: {first_item.id}")
+            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has .item: {hasattr(first_item, 'item')}")
+            if hasattr(first_item, 'item') and first_item.item:
+                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.id: {first_item.item.id}")
+                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.metadata: {getattr(first_item.item, 'metadata', 'NOT_FOUND')}")
+            else:
+                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has no .item or .item is None")
         
         # Apply case-insensitive filtering locally if needed
         if self.parameters.initial_value or self.parameters.final_value:
@@ -651,6 +720,13 @@ class FeedbackItems(DataCache):
             DataFrame with properly formatted rows matching CallCriteriaDBCache format
         """
         logger.debug(f"FeedbackItems: Creating dataset with {len(feedback_items)} items for score: {score_name}")
+        
+        # Apply column mapping if specified
+        mapped_score_name = score_name
+        if self.parameters.column_mappings and score_name in self.parameters.column_mappings:
+            mapped_score_name = self.parameters.column_mappings[score_name]
+            logger.info(f"Column mapping applied: '{score_name}' -> '{mapped_score_name}'")
+        
         # Create properly formatted dataset rows
         rows = []
         
@@ -699,6 +775,14 @@ class FeedbackItems(DataCache):
             # Edit comment: Direct edit comment from feedback item
             edit_comment = getattr(feedback_item, 'editCommentValue', None) or ""
             
+            # Extract call_date from metadata for separate column
+            call_date = None
+            try:
+                metadata_dict = json.loads(metadata) if isinstance(metadata, str) else metadata
+                call_date = metadata_dict.get('call_date')
+            except:
+                pass
+            
             # Build the row with ONLY the specified columns (IDs first, then metadata, then text)
             row = {
                 'content_id': content_id,
@@ -706,9 +790,10 @@ class FeedbackItems(DataCache):
                 'IDs': ids_hash,
                 'metadata': metadata,
                 'text': text,
-                score_name: score_value,
-                f"{score_name} comment": score_comment,
-                f"{score_name} edit comment": edit_comment
+                'call_date': call_date,
+                mapped_score_name: score_value,
+                f"{mapped_score_name} comment": score_comment,
+                f"{mapped_score_name} edit comment": edit_comment
             }
             
             rows.append(row)
@@ -719,7 +804,7 @@ class FeedbackItems(DataCache):
         # Create DataFrame with proper column structure even when empty
         if not rows:
             # Create empty DataFrame with expected columns (IDs first, then metadata, then text)
-            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', score_name, f"{score_name} comment", f"{score_name} edit comment"]
+            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', 'call_date', mapped_score_name, f"{mapped_score_name} comment", f"{mapped_score_name} edit comment"]
             df = pd.DataFrame(columns=columns)
         else:
             df = pd.DataFrame(rows)
@@ -734,7 +819,7 @@ class FeedbackItems(DataCache):
         logger.info("FEEDBACK_ITEMS_SPECIFIC_CHECKS:")
         
         # Check for missing required columns specific to FeedbackItems format
-        required_columns = ['content_id', 'feedback_item_id', 'text', 'metadata', 'IDs', score_name, f"{score_name} comment", f"{score_name} edit comment"]
+        required_columns = ['content_id', 'feedback_item_id', 'text', 'metadata', 'IDs', mapped_score_name, f"{mapped_score_name} comment", f"{mapped_score_name} edit comment"]
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             logger.error(f"Missing required FeedbackItems columns: {missing_columns}")
@@ -763,40 +848,96 @@ class FeedbackItems(DataCache):
     def _create_metadata_structure(self, feedback_item: FeedbackItem) -> str:
         """
         Create metadata JSON string from feedback item and associated item.
-        
+
         Args:
             feedback_item: The feedback item with associated item data
-            
+
         Returns:
             JSON string containing relevant metadata
         """
+        import json  # Move import to top of function
+        from datetime import datetime
+
+        # Helper function to convert datetime to ISO string
+        def serialize_datetime(value):
+            if isinstance(value, datetime):
+                return value.isoformat()
+            return value
+
         metadata = {
             'feedback_item_id': feedback_item.id,
             'scorecard_id': feedback_item.scorecardId,
             'score_id': feedback_item.scoreId,
             'account_id': feedback_item.accountId,
-            'created_at': feedback_item.createdAt,
-            'updated_at': feedback_item.updatedAt,
-            'edited_at': feedback_item.editedAt,
+            'created_at': serialize_datetime(feedback_item.createdAt),
+            'updated_at': serialize_datetime(feedback_item.updatedAt),
+            'edited_at': serialize_datetime(feedback_item.editedAt),
             'editor_name': feedback_item.editorName,
             'is_agreement': feedback_item.isAgreement,
             'cache_key': feedback_item.cacheKey,
             'initial_answer_value': feedback_item.initialAnswerValue,
             'initial_comment_value': feedback_item.initialCommentValue
         }
-        
-        # Add item metadata if available
+
+        # Add item metadata if available - use the cached metadata directly from API
         if feedback_item.item:
+            logger.info(f"Adding item metadata for feedback_item_id={feedback_item.id}, item_id={feedback_item.item.id}")
             item_metadata = {
                 'item_id': feedback_item.item.id,
                 'external_id': getattr(feedback_item.item, 'externalId', None),
-                'item_created_at': getattr(feedback_item.item, 'createdAt', None),
-                'item_updated_at': getattr(feedback_item.item, 'updatedAt', None),
+                'item_created_at': serialize_datetime(getattr(feedback_item.item, 'createdAt', None)),
+                'item_updated_at': serialize_datetime(getattr(feedback_item.item, 'updatedAt', None)),
                 'item_metadata': getattr(feedback_item.item, 'metadata', None)
             }
             metadata['item'] = item_metadata
+            logger.info(f"Item metadata added: {item_metadata}")
+            
+            # Use the Item's cached metadata directly (it should already have the API structure)
+            original_item_metadata = getattr(feedback_item.item, 'metadata', None)
+            logger.info(f"DEBUG: Checking item metadata for item_id={feedback_item.item.id}")
+            logger.info(f"DEBUG: feedback_item.item type: {type(feedback_item.item)}")
+            logger.info(f"DEBUG: feedback_item.item attributes: {dir(feedback_item.item)}")
+            logger.info(f"DEBUG: original_item_metadata: {original_item_metadata}")
+            logger.info(f"DEBUG: original_item_metadata type: {type(original_item_metadata)}")
+            if original_item_metadata:
+                logger.info(f"Found original item metadata for item_id={feedback_item.item.id}: type={type(original_item_metadata)}")
+                try:
+                    # Parse the original item metadata if it's a JSON string
+                    if isinstance(original_item_metadata, str):
+                        parsed_metadata = json.loads(original_item_metadata)
+                        logger.info(f"Parsed item metadata from JSON string for item_id={feedback_item.item.id}")
+                    else:
+                        parsed_metadata = original_item_metadata
+                        logger.info(f"Using item metadata as object for item_id={feedback_item.item.id}")
+                    
+                    # Merge the API-cached metadata directly (should already have other_data, etc.)
+                    if isinstance(parsed_metadata, dict):
+                        metadata.update(parsed_metadata)
+                        logger.info(f"Merged {len(parsed_metadata)} fields from cached item metadata for item_id={feedback_item.item.id}")
+                    else:
+                        logger.info(f"Parsed item metadata is not a dict for item_id={feedback_item.item.id}, type={type(parsed_metadata)}")
+                except Exception as e:
+                    logger.warning(f"Could not parse cached item metadata for item_id={feedback_item.item.id}: {e}")
+                    # Continue without the cached metadata
         
-        return json.dumps(metadata, default=str)
+        # Parse other_data if it's a JSON string (fix the root cause)
+        if 'other_data' in metadata and isinstance(metadata['other_data'], str):
+            try:
+                metadata['other_data'] = json.loads(metadata['other_data'])
+                logger.info(f"Parsed other_data from JSON string to dict for item_id={feedback_item.item.id}")
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Could not parse other_data JSON string for item_id={feedback_item.item.id}: {e}")
+                # Keep as string if parsing fails
+
+        # Check for non-serializable objects before attempting JSON serialization
+        try:
+            return json.dumps(metadata)
+        except TypeError as e:
+            # Log which key has the problematic value
+            logger.error(f"Failed to serialize metadata to JSON: {e}")
+            for key, value in metadata.items():
+                logger.error(f"  metadata['{key}'] = {value} (type: {type(value)})")
+            raise
     
     def _create_ids_hash(self, feedback_item: FeedbackItem) -> str:
         """

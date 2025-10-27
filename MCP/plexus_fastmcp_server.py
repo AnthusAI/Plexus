@@ -18,6 +18,126 @@ from typing_extensions import Annotated
 from fastmcp import FastMCP, Context
 from urllib.parse import urljoin
 
+# Completely disable Rich logging for stdio transport to prevent BrokenPipeError
+using_stdio = os.environ.get('MCP_STDIO_TRANSPORT') == '1' or '--transport' in sys.argv and 'stdio' in sys.argv
+if using_stdio:
+    # Set environment variables to disable Rich
+    os.environ['RICH_NO_COLOR'] = '1'
+    os.environ['RICH_CONSOLE_NO_COLOR'] = '1'
+    os.environ['RICH_TRACEBACKS_NO_COLOR'] = '1'
+    os.environ['RICH_FORCE_TERMINAL'] = '0'
+    os.environ['RICH_DISABLE'] = '1'
+    os.environ['TERM'] = 'dumb'
+    
+    # Completely disable Rich by monkey patching before any imports
+    import types
+    
+    # Create a dummy module that replaces rich
+    class DummyRichModule(types.ModuleType):
+        def __init__(self, name):
+            super().__init__(name)
+            # Add __spec__ to prevent "is None" errors
+            self.__spec__ = types.SimpleNamespace(name=name, loader=None, origin=None, submodule_search_locations=[])
+
+        def __getattr__(self, name):
+            # Return a dummy object for any attribute access
+            return DummyRichObject()
+    
+    class DummyRichObject:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __call__(self, *args, **kwargs):
+            return self
+        def __getattr__(self, name):
+            return self
+        def __setattr__(self, name, value):
+            pass
+        def __enter__(self):
+            # Support context manager protocol (with statements)
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            # Support context manager protocol (with statements)
+            return False
+        def __lt__(self, other):
+            return True
+        def __le__(self, other):
+            return True
+        def __eq__(self, other):
+            return True
+        def __ne__(self, other):
+            return False
+        def __gt__(self, other):
+            return False
+        def __ge__(self, other):
+            return True
+        def __iter__(self):
+            # Make DummyRichObject iterable to prevent 'not iterable' errors
+            return iter([])
+        def __len__(self):
+            return 0
+        def __getitem__(self, key):
+            return self
+        def __setitem__(self, key, value):
+            pass
+    
+    # Replace the rich module in sys.modules BEFORE importing FastMCP
+    sys.modules['rich'] = DummyRichModule('rich')
+    sys.modules['rich.console'] = DummyRichModule('rich.console')
+    sys.modules['rich.logging'] = DummyRichModule('rich.logging')
+    sys.modules['rich.table'] = DummyRichModule('rich.table')
+    sys.modules['rich.traceback'] = DummyRichModule('rich.traceback')
+    sys.modules['rich.markdown'] = DummyRichModule('rich.markdown')
+    sys.modules['rich.panel'] = DummyRichModule('rich.panel')
+    sys.modules['rich.text'] = DummyRichModule('rich.text')
+    sys.modules['rich.progress'] = DummyRichModule('rich.progress')
+    sys.modules['rich.prompt'] = DummyRichModule('rich.prompt')
+    sys.modules['rich.status'] = DummyRichModule('rich.status')
+    sys.modules['rich.syntax'] = DummyRichModule('rich.syntax')
+    sys.modules['rich.tree'] = DummyRichModule('rich.tree')
+    sys.modules['rich.align'] = DummyRichModule('rich.align')
+    sys.modules['rich.columns'] = DummyRichModule('rich.columns')
+    sys.modules['rich.group'] = DummyRichModule('rich.group')
+    sys.modules['rich.layout'] = DummyRichModule('rich.layout')
+    sys.modules['rich.live'] = DummyRichModule('rich.live')
+    sys.modules['rich.rule'] = DummyRichModule('rich.rule')
+    sys.modules['rich.spinner'] = DummyRichModule('rich.spinner')
+    sys.modules['rich.style'] = DummyRichModule('rich.style')
+    sys.modules['rich.theme'] = DummyRichModule('rich.theme')
+    sys.modules['rich.box'] = DummyRichModule('rich.box')
+    sys.modules['rich.color'] = DummyRichModule('rich.color')
+    sys.modules['rich.console'] = DummyRichModule('rich.console')
+    sys.modules['rich.measure'] = DummyRichModule('rich.measure')
+    sys.modules['rich.padding'] = DummyRichModule('rich.padding')
+    sys.modules['rich.region'] = DummyRichModule('rich.region')
+    sys.modules['rich.segment'] = DummyRichModule('rich.segment')
+    sys.modules['rich.spacing'] = DummyRichModule('rich.spacing')
+    sys.modules['rich.terminal_theme'] = DummyRichModule('rich.terminal_theme')
+    
+    # Configure FastMCP to not use Rich
+    import fastmcp
+    fastmcp.settings.enable_rich_tracebacks = False
+    
+    # Force basic logging configuration and replace Rich handlers
+    import logging
+    
+    # Remove any existing Rich handlers
+    for handler in logging.root.handlers[:]:
+        if 'rich' in str(type(handler)).lower():
+            logging.root.removeHandler(handler)
+    
+    # Force basic logging configuration
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s  [%(levelname)s] %(message)s',
+        handlers=[logging.StreamHandler(sys.stderr)],
+        force=True
+    )
+    
+    # Disable Rich loggers
+    logging.getLogger("rich").disabled = True
+    logging.getLogger("rich.logging").disabled = True
+    logging.getLogger("rich.console").disabled = True
+
 # Save original stdout file descriptor
 original_stdout_fd = None
 try:
@@ -251,15 +371,14 @@ mcp = FastMCP(
     - plexus_scorecard_info: Get detailed information about a specific scorecard, including sections and scores
     
     ## Score Management
-    - plexus_score_info: Get detailed information about a specific score, including location, configuration, and optionally all versions. Supports intelligent search across scorecards.
-    - plexus_score_configuration: Get the YAML configuration for a specific score version
-    - plexus_score_pull: Pull a score's champion version YAML configuration to a local file
-    - plexus_score_push: Push a score's local YAML configuration file to create a new version
-    - plexus_score_update: Update a score's configuration by creating a new version with provided YAML content
+    - plexus_score_info: Get detailed information about a specific score, including location, configuration, champion version details, and version history. Supports intelligent search across scorecards.
+    - plexus_score_update: **RECOMMENDED** - Update a score's configuration by creating a new version with provided YAML content. Supports parent_version_id for version lineage. Use this for most score updates.
+    - plexus_score_pull: Pull a score's champion version YAML configuration to a local file (for local development workflows)
+    - plexus_score_push: Push a score's local YAML configuration file to create a new version (for local development workflows)
     - plexus_score_delete: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
     
     ## Evaluation Tools
-    - run_plexus_evaluation: Dispatches a scorecard evaluation to run in the background. 
+    - plexus_evaluation_run: Run an accuracy evaluation on a Plexus scorecard using the same code path as the CLI. 
       The server will confirm dispatch but will not track progress or results. 
       Monitor evaluation status via Plexus Dashboard or system logs.
     - plexus_evaluation_info: Get detailed information about a specific evaluation by ID or get the latest evaluation.
@@ -280,12 +399,20 @@ mcp = FastMCP(
     - plexus_task_info: Get detailed information about a specific task by its ID, including task stages
     
     ## Feedback Analysis & Score Testing Tools
-    - plexus_feedback_summary: Generate comprehensive feedback summary with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
+    - plexus_feedback_analysis: Generate comprehensive feedback analysis with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
     - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
     - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
     
     ## Documentation Tools
     - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback analysis and score testing guide)
+    
+    ## Experiment Tools
+    - plexus_procedure_create: Create a new procedure
+    - plexus_procedure_list: List procedures for an account
+    - plexus_procedure_info: Get detailed procedure information
+    - plexus_procedure_run: Run a procedure 
+    - plexus_procedure_chat_sessions: Get chat sessions for a procedure (optional - shows conversation activity)
+    - plexus_procedure_chat_messages: Get detailed chat messages for debugging conversation flow and tool calls/responses
     
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
@@ -308,6 +435,8 @@ try:
     from tools.documentation.docs import register_documentation_tools
     from tools.cost.analysis import register_cost_analysis_tools
     from tools.dataset.datasets import register_dataset_tools
+    from tools.procedure.procedures import register_procedure_tools
+    from tools.procedure.procedure_nodes import register_procedure_node_tools
     
     register_think_tool(mcp)
     register_scorecard_tools(mcp)
@@ -321,7 +450,9 @@ try:
     register_documentation_tools(mcp)
     register_cost_analysis_tools(mcp)
     register_dataset_tools(mcp)
-    
+    register_procedure_tools(mcp)
+    register_procedure_node_tools(mcp)
+
     logger.info("Successfully registered separated tools")
 except ImportError as e:
     logger.warning(f"Could not import separated tools: {e}")
@@ -352,29 +483,7 @@ except Exception as e:
 
 
 
-# Setup dotenv support for loading environment variables
-def load_env_file(env_dir=None):
-    """Load environment variables from .env file."""
-    try:
-        from dotenv import load_dotenv
-        if env_dir:
-            dotenv_path = os.path.join(env_dir, '.env')
-            logger.info(f"Attempting to load .env file from specified directory: {dotenv_path}")
-            if os.path.isfile(dotenv_path):
-                loaded = load_dotenv(dotenv_path=dotenv_path, override=True)
-                if loaded:
-                    logger.info(f".env file loaded successfully from {dotenv_path}")
-                    logger.info(f"Environment contains PLEXUS_API_URL: {'Yes' if os.environ.get('PLEXUS_API_URL') else 'No'}")
-                    logger.info(f"Environment contains PLEXUS_API_KEY: {'Yes' if os.environ.get('PLEXUS_API_KEY') else 'No'}")
-                    return True
-                else:
-                    logger.warning(f"Failed to load .env file from {dotenv_path}")
-            else:
-                logger.warning(f"No .env file found at {dotenv_path}")
-        return False
-    except ImportError:
-        logger.warning("python-dotenv not installed, can't load .env file")
-        return False
+# Note: .env file loading is no longer needed - Plexus uses config files and environment variables
 
 def initialize_default_account():
     """Initialize the default account ID from the environment variable PLEXUS_ACCOUNT_KEY."""
@@ -484,24 +593,114 @@ def get_item_url(item_id: str) -> str:
 # Main function to run the server
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the Plexus MCP Server with FastMCP")
-    parser.add_argument("--env-dir", help="Directory containing .env file with Plexus credentials")
+
     parser.add_argument("--host", default="127.0.0.1", help="Host to run server on")
     parser.add_argument("--port", type=int, default=8002, help="Port to run server on")
     parser.add_argument("--transport", choices=["stdio", "sse"], default="sse", 
                         help="Transport protocol (stdio for MCP process or sse for HTTP)")
     args = parser.parse_args()
     
-    # Load environment variables from .env file if specified
-    if args.env_dir:
-        load_env_file(args.env_dir)
+    # Load Plexus configuration (including secrets) using DRY configuration loader
+    try:
+        import os
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Looking for config at: {os.path.join(os.getcwd(), '.plexus', 'config.yaml')}")
+        logger.info(f"Config exists: {os.path.exists(os.path.join(os.getcwd(), '.plexus', 'config.yaml'))}")
+
+        from plexus.config.loader import load_config
+        load_config()  # This loads .plexus/config.yaml and sets environment variables
+        logger.info("Loaded Plexus configuration at MCP server startup")
+        logger.info(f"PLEXUS_ACCOUNT_KEY after load_config: {os.environ.get('PLEXUS_ACCOUNT_KEY')}")
+    except Exception as e:
+        logger.warning(f"Failed to load Plexus configuration: {e}")
+    
+    # Credentials are now handled by Plexus config files and environment variables
     
     # Require core and initialize default account
     if not CORE_IMPORTED:
         logger.error("Plexus core not available")
         sys.exit(1)
     logger.info("Initializing default account from environment...")
+    # Use the shared initialization function so tools can access the same global
+    from shared.utils import initialize_default_account as shared_initialize_default_account
+    shared_initialize_default_account()
+    # Also initialize the local one for backward compatibility
     initialize_default_account()
-    
+
+    # Register ALL modular tools
+    print("=" * 80, file=sys.stderr)
+    print("STARTING MODULAR TOOL REGISTRATION", file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
+    try:
+        print("Importing tool registration functions...", file=sys.stderr)
+        from tools.util.think import register_think_tool
+        from tools.util.docs import register_docs_tool
+        from tools.scorecard.scorecards import register_scorecard_tools
+        from tools.score.scores import register_score_tools
+        from tools.evaluation.evaluations import register_evaluation_tools
+        from tools.procedure.procedures import register_procedure_tools
+        from tools.procedure.procedure_nodes import register_procedure_node_tools
+        from tools.report.reports import register_report_tools
+        from tools.feedback.feedback import register_feedback_tools
+        from tools.task.tasks import register_task_tools
+        from tools.item.items import register_item_tools
+        from tools.prediction.predictions import register_prediction_tools
+        print("✓ All imports successful", file=sys.stderr)
+
+        print("Registering utility tools...", file=sys.stderr)
+        register_think_tool(mcp)
+        register_docs_tool(mcp)
+        print("✓ Registered utility tools", file=sys.stderr)
+
+        print("Registering scorecard tools...", file=sys.stderr)
+        register_scorecard_tools(mcp)
+        print("✓ Registered scorecard tools", file=sys.stderr)
+
+        print("Registering score management tools...", file=sys.stderr)
+        register_score_tools(mcp)
+        print("✓ Registered score management tools", file=sys.stderr)
+
+        print("Registering evaluation tools...", file=sys.stderr)
+        register_evaluation_tools(mcp)
+        print("✓ Registered evaluation tools", file=sys.stderr)
+
+        print("Registering procedure tools...", file=sys.stderr)
+        register_procedure_tools(mcp)
+        print("✓ Registered procedure tools", file=sys.stderr)
+
+        print("Registering procedure node tools...", file=sys.stderr)
+        register_procedure_node_tools(mcp)
+        print("✓ Registered procedure node tools", file=sys.stderr)
+
+        print("Registering report tools...", file=sys.stderr)
+        register_report_tools(mcp)
+        print("✓ Registered report tools", file=sys.stderr)
+
+        print("Registering feedback tools...", file=sys.stderr)
+        register_feedback_tools(mcp)
+        print("✓ Registered feedback tools", file=sys.stderr)
+
+        print("Registering task tools...", file=sys.stderr)
+        register_task_tools(mcp)
+        print("✓ Registered task tools", file=sys.stderr)
+
+        print("Registering item tools...", file=sys.stderr)
+        register_item_tools(mcp)
+        print("✓ Registered item tools", file=sys.stderr)
+
+        print("Registering prediction tools...", file=sys.stderr)
+        register_prediction_tools(mcp)
+        print("✓ Registered prediction tools", file=sys.stderr)
+
+        print("=" * 80, file=sys.stderr)
+        print("ALL MODULAR TOOLS REGISTERED SUCCESSFULLY", file=sys.stderr)
+        print("=" * 80, file=sys.stderr)
+    except Exception as e:
+        print(f"✗ ERROR registering modular tools: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        # Continue anyway - some tools may still work
+
     # Run the server with appropriate transport
     try:
         logger.info("Starting FastMCP server")

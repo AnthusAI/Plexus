@@ -29,6 +29,10 @@ class FeedbackItemSummary:
     initial_explanation: Optional[str]
     final_explanation: Optional[str]
     edit_comment: Optional[str]
+    item_text: Optional[str] = None  # Include item text for detailed analysis
+    item_metadata: Optional[Dict[str, Any]] = None  # Include item metadata for context
+    item_description: Optional[str] = None  # Include item description
+    item_identifiers: Optional[Dict[str, Any]] = None  # Include item identifiers
 
 
 @dataclass
@@ -110,18 +114,55 @@ class FeedbackService:
         return None
 
     @staticmethod
-    def _convert_feedback_item_to_summary(item: FeedbackItem) -> FeedbackItemSummary:
+    def _convert_feedback_item_to_summary(item: FeedbackItem, include_text: bool = False) -> FeedbackItemSummary:
         """
         Convert a FeedbackItem to a token-efficient summary.
         
         Args:
             item: The FeedbackItem to convert
+            include_text: Whether to include the item text for detailed analysis
             
         Returns:
-            FeedbackItemSummary with only the fields needed for alignment work
+            FeedbackItemSummary with the fields needed for alignment work
         """
         # Extract preferred ID (form_id if available, otherwise external_id)
         external_id = FeedbackService._extract_preferred_id(item)
+        
+        # Extract item text if requested and available
+        item_text = None
+        if include_text and item.item and hasattr(item.item, 'text'):
+            item_text = item.item.text
+        
+        # Extract item metadata if available
+        item_metadata = None
+        item_description = None
+        item_identifiers = None
+        
+        if item.item:
+            if hasattr(item.item, 'metadata') and item.item.metadata:
+                # Handle both string (JSON) and dict formats
+                if isinstance(item.item.metadata, str):
+                    try:
+                        import json
+                        item_metadata = json.loads(item.item.metadata)
+                    except (json.JSONDecodeError, TypeError):
+                        item_metadata = {"raw": item.item.metadata}
+                elif isinstance(item.item.metadata, dict):
+                    item_metadata = item.item.metadata
+            
+            if hasattr(item.item, 'description') and item.item.description:
+                item_description = item.item.description
+            
+            if hasattr(item.item, 'identifiers') and item.item.identifiers:
+                # Handle both string (JSON) and dict/list formats
+                if isinstance(item.item.identifiers, str):
+                    try:
+                        import json
+                        item_identifiers = json.loads(item.item.identifiers)
+                    except (json.JSONDecodeError, TypeError):
+                        item_identifiers = {"raw": item.item.identifiers}
+                elif isinstance(item.item.identifiers, (dict, list)):
+                    item_identifiers = item.item.identifiers
         
         return FeedbackItemSummary(
             item_id=item.itemId,
@@ -130,7 +171,11 @@ class FeedbackService:
             final_value=item.finalAnswerValue,
             initial_explanation=item.initialCommentValue,
             final_explanation=item.finalCommentValue,
-            edit_comment=item.editCommentValue
+            edit_comment=item.editCommentValue,
+            item_text=item_text,
+            item_metadata=item_metadata,
+            item_description=item_description,
+            item_identifiers=item_identifiers
         )
 
     @staticmethod
@@ -374,55 +419,58 @@ class FeedbackService:
     @staticmethod
     def _generate_recommendation(analysis: Dict[str, Any]) -> str:
         """
-        Generate a recommendation based on the analysis results.
+        Generate actionable recommendations based on feedback analysis.
         
         Args:
             analysis: Dictionary containing analysis results
             
         Returns:
-            String recommendation for next steps
+            String with actionable recommendations
         """
-        if analysis["total_items"] == 0:
-            return "No feedback data available. No further analysis possible."
-        
-        accuracy = analysis.get("accuracy", 0)
+        total_items = analysis.get("total_items", 0)
+        accuracy = analysis.get("accuracy")
         ac1 = analysis.get("ac1")
-        warning = analysis.get("warning") or ""
+        warning = analysis.get("warning")
+        
+        if total_items == 0:
+            return "No feedback data available for analysis. Consider:\n" \
+                   "- Ensuring the scorecard and score identifiers are correct\n" \
+                   "- Expanding the time window (increase days parameter)\n" \
+                   "- Checking if feedback has been collected for this score"
         
         recommendations = []
         
         # Accuracy-based recommendations
-        if accuracy < 70:
-            recommendations.append("Low accuracy detected")
-            if "Single class" in warning:
-                recommendations.append("Use `find` to examine why predictions are all wrong")
-            elif "Imbalanced" in warning:
-                recommendations.append("Use `find` with specific value filters to examine false positives and negatives")
+        if accuracy is not None:
+            if accuracy < 70:
+                recommendations.append("Low accuracy detected ({}%). Consider using the 'find' command to examine specific false positives and negatives for pattern analysis.".format(accuracy))
+            elif accuracy < 85:
+                recommendations.append("Moderate accuracy ({}%). Look for specific edge cases that could be addressed in score configuration.".format(accuracy))
             else:
-                recommendations.append("Use `find` to examine disagreement patterns")
-        elif accuracy < 85:
-            recommendations.append("Moderate accuracy - room for improvement")
-            recommendations.append("Use `find` to examine specific error patterns")
+                recommendations.append("Good performance ({}%). Focus on edge cases and rare scenarios for further improvement.".format(accuracy))
         
-        # AC1-based recommendations
+        # AC1 agreement recommendations
         if ac1 is not None:
-            if ac1 < 0:
-                recommendations.append("Systematic disagreement requires immediate attention")
-            elif ac1 < 0.4:
-                recommendations.append("Poor agreement between AI and human reviewers")
-            elif ac1 < 0.6:
-                recommendations.append("Fair agreement - investigate borderline cases")
+            if ac1 < 0.4:
+                recommendations.append("Low agreement (AC1: {:.2f}). Systematic review of score logic may be needed.".format(ac1))
+            elif ac1 < 0.7:
+                recommendations.append("Moderate agreement (AC1: {:.2f}). Fine-tuning of criteria could improve consistency.".format(ac1))
         
-        # Warning-based recommendations
-        if "Single class" in warning:
-            recommendations.append("Examine why AI predictions lack diversity")
-        elif "Imbalanced" in warning:
-            recommendations.append("Focus on minority class prediction accuracy")
+        # Warning-specific recommendations
+        if warning and "Imbalanced classes" in warning:
+            recommendations.append("Imbalanced class distribution detected. When using 'find' command, examine both false positives and negatives to understand different error patterns.")
         
-        if not recommendations:
-            recommendations.append("Good performance - use `find` to examine edge cases for further improvement")
+        if warning and "Single class" in warning:
+            recommendations.append("Only one class found in feedback. This may indicate the score is working well, or feedback collection needs expansion.")
         
-        return ". ".join(recommendations) + "."
+        # General recommendations
+        if accuracy is not None and accuracy < 80:
+            recommendations.append("Use 'plexus feedback find' with initial_value and final_value filters to examine specific correction patterns.")
+        
+        recommendations.append("Review individual item details with 'plexus item info' to understand content characteristics that lead to misclassification.")
+        
+        return "\n".join(f"• {rec}" for rec in recommendations)
+
     
     @staticmethod
     async def summarize_feedback(
@@ -466,9 +514,6 @@ class FeedbackService:
         # Analyze the feedback items
         analysis = FeedbackService._analyze_feedback_items(feedback_items)
         
-        # Generate actionable recommendation
-        recommendation = FeedbackService._generate_recommendation(analysis)
-        
         # Build context
         context = FeedbackSearchContext(
             scorecard_name=scorecard_name,
@@ -479,6 +524,9 @@ class FeedbackService:
             filters={"days": days},
             total_found=analysis["total_items"]
         )
+        
+        # Generate recommendations
+        recommendation = FeedbackService._generate_recommendation(analysis)
         
         return FeedbackSummaryResult(
             context=context,
@@ -497,7 +545,7 @@ class FeedbackService:
         Returns:
             Dictionary representation suitable for JSON/YAML output
         """
-        return {
+        output_dict = {
             "context": {
                 "scorecard_name": result.context.scorecard_name,
                 "score_name": result.context.score_name,
@@ -507,9 +555,14 @@ class FeedbackService:
                 "filters": result.context.filters,
                 "total_found": result.context.total_found
             },
-            "analysis": result.analysis,
-            "recommendation": result.recommendation
+            "analysis": result.analysis
         }
+        
+        # Only include recommendation if it exists and is meaningful
+        if result.recommendation:
+            output_dict["recommendation"] = result.recommendation
+            
+        return output_dict
     
     @staticmethod
     def prioritize_feedback_with_edit_comments(
@@ -569,6 +622,7 @@ class FeedbackService:
         initial_value: Optional[str] = None,
         final_value: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: Optional[int] = None,
         prioritize_edit_comments: bool = True
     ) -> List[FeedbackItem]:
         """
@@ -583,6 +637,7 @@ class FeedbackService:
             initial_value: Optional filter for initial answer value
             final_value: Optional filter for final answer value
             limit: Optional limit on number of items to return
+            offset: Optional offset for pagination (number of items to skip)
             prioritize_edit_comments: Whether to prioritize items with edit comments when limiting
             
         Returns:
@@ -635,6 +690,7 @@ class FeedbackService:
                             externalId
                             description
                             text
+                            metadata
                         }
                     }
                     nextToken
@@ -732,6 +788,14 @@ class FeedbackService:
             all_feedback_items = filtered_items
             logger.info(f"After value filtering: {len(all_feedback_items)} items")
         
+        # Apply offset if specified
+        if offset and offset > 0:
+            if offset >= len(all_feedback_items):
+                logger.info(f"Offset {offset} >= total items {len(all_feedback_items)}, returning empty list")
+                return []
+            all_feedback_items = all_feedback_items[offset:]
+            logger.info(f"After applying offset {offset}: {len(all_feedback_items)} items remaining")
+        
         # Apply prioritization and limit if specified
         if limit:
             all_feedback_items = FeedbackService.prioritize_feedback_with_edit_comments(
@@ -757,6 +821,7 @@ class FeedbackService:
         initial_value: Optional[str] = None,
         final_value: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: Optional[int] = None,
         prioritize_edit_comments: bool = True
     ) -> FeedbackSearchResult:
         """
@@ -773,6 +838,7 @@ class FeedbackService:
             initial_value: Optional filter for initial answer value
             final_value: Optional filter for final answer value
             limit: Optional limit on number of items to return
+            offset: Optional offset for pagination (number of items to skip)
             prioritize_edit_comments: Whether to prioritize items with edit comments when limiting
             
         Returns:
@@ -788,12 +854,13 @@ class FeedbackService:
             initial_value=initial_value,
             final_value=final_value,
             limit=limit,
+            offset=offset,
             prioritize_edit_comments=prioritize_edit_comments
         )
         
-        # Convert to token-efficient summaries
+        # Convert to summaries with item text included for detailed analysis
         summaries = [
-            FeedbackService._convert_feedback_item_to_summary(item) 
+            FeedbackService._convert_feedback_item_to_summary(item, include_text=True) 
             for item in feedback_items
         ]
         
@@ -809,6 +876,7 @@ class FeedbackService:
                 "final_value": final_value,
                 "days": days,
                 "limit": limit,
+                "offset": offset,
                 "prioritize_edit_comments": prioritize_edit_comments
             },
             total_found=len(summaries)
@@ -845,7 +913,11 @@ class FeedbackService:
                     "final_value": item.final_value,
                     "initial_explanation": item.initial_explanation,
                     "final_explanation": item.final_explanation,
-                    "edit_comment": item.edit_comment
+                    "edit_comment": item.edit_comment,
+                    "item_text": item.item_text,
+                    "item_metadata": item.item_metadata,
+                    "item_description": item.item_description,
+                    "item_identifiers": item.item_identifiers
                 }
                 for item in result.feedback_items
             ]

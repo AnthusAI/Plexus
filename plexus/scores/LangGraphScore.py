@@ -127,12 +127,15 @@ class LangGraphScore(Score, LangChainUser):
     class Parameters(Score.Parameters):
         ...
         model_config = ConfigDict(protected_namespaces=())
-        model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
+        model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI", "ChatOllama"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
         model_region: Optional[str] = None
         reasoning_effort: Optional[str] = "low"
+        verbosity: Optional[str] = "medium"
         temperature: Optional[float] = 0
         max_tokens: Optional[int] = 500
+        logprobs: Optional[bool] = False
+        top_logprobs: Optional[int] = None
         graph: Optional[list[dict]] = None
         input: Optional[dict] = None
         output: Optional[dict] = None
@@ -207,8 +210,31 @@ class LangGraphScore(Score, LangChainUser):
         self.checkpointer = None
         self.db_connection = None
 
+    def _requires_confidence(self):
+        """Check if any node in the graph requires confidence calculation."""
+        if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
+            for node_config in self.parameters.graph:
+                if node_config.get('confidence') is True:
+                    return True
+        return False
+
+    def _apply_confidence_model_settings(self):
+        """Apply necessary model settings for confidence calculation."""
+        if self._requires_confidence():
+            logging.info("Confidence feature detected - enabling logprobs and setting temperature to 0")
+            # Set logprobs parameters for confidence calculation
+            self.parameters.logprobs = True
+            self.parameters.top_logprobs = 20
+            # Set temperature to 0 for consistent classification
+            if self.parameters.temperature != 0:
+                logging.info(f"Changing temperature from {self.parameters.temperature} to 0 for confidence calculation")
+                self.parameters.temperature = 0
+
     async def async_setup(self):
         """Asynchronous setup for LangGraphScore."""
+        # Apply confidence-related model settings before initializing model
+        self._apply_confidence_model_settings()
+
         self.model = await self._ainitialize_model()
         
         # Load environment variables
@@ -582,8 +608,9 @@ class LangGraphScore(Score, LangChainUser):
         node_instances = []
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
             for node_configuration_entry in self.parameters.graph:
-                for attribute in ['model_provider', 'model_name', 'model_region', 
-                                'temperature', 'max_tokens', 'reasoning_effort']:
+                for attribute in ['model_provider', 'model_name', 'model_region',
+                                'temperature', 'max_tokens', 'reasoning_effort',
+                                'logprobs', 'top_logprobs']:
                     if attribute not in node_configuration_entry:
                         node_configuration_entry[attribute] = getattr(
                             self.parameters, attribute
@@ -957,6 +984,12 @@ class LangGraphScore(Score, LangChainUser):
                         if isinstance(condition, dict) and 'output' in condition:
                             for alias, original in condition['output'].items():
                                 base_annotations[alias] = Optional[str]
+
+            # Add fields from LogicalNode output_mapping with proper types
+            if hasattr(instance.parameters, 'output_mapping') and instance.parameters.output_mapping is not None:
+                from typing import Any
+                for state_field, result_key in instance.parameters.output_mapping.items():
+                    base_annotations[state_field] = Optional[Any]
 
         # Also check the graph configuration directly from the YAML
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
@@ -1449,17 +1482,37 @@ class LangGraphScore(Score, LangChainUser):
             result = Score.Result(
                 parameters=self.parameters,
                 value=value_for_result,
+                explanation=graph_result.get('explanation'),
+                confidence=graph_result.get('confidence'),
                 metadata={
-                    'explanation': graph_result.get('explanation'),
                     'good_call': graph_result.get('good_call'),
                     'good_call_explanation': graph_result.get('good_call_explanation'),
                     'non_qualifying_reason': graph_result.get('non_qualifying_reason'),
                     'non_qualifying_explanation': graph_result.get('non_qualifying_explanation'),
-                    'confidence': graph_result.get('confidence'),
                     'classification': graph_result.get('classification'),
                     'source': graph_result.get('source')
                 }
             )
+
+            # DEBUG: Log the ScoreResult creation details
+            logging.info(f"📊 SCORE RESULT CREATED:")
+            logging.info(f"   value = {result.value!r}")
+            logging.info(f"   confidence from graph_result = {graph_result.get('confidence')!r}")
+            logging.info(f"   confidence in result = {result.confidence!r}")
+            logging.info(f"   explanation = {result.explanation!r}")
+            logging.info(f"   graph_result keys = {list(graph_result.keys())}")
+            if hasattr(result, 'metadata') and result.metadata:
+                confidence_in_metadata = result.metadata.get('confidence')
+                logging.info(f"   confidence in metadata = {confidence_in_metadata!r}")
+
+            # Log all Score.Result fields for debugging
+            logging.info(f"🔍 COMPLETE SCORE.RESULT DEBUG:")
+            for field_name in ['value', 'confidence', 'explanation', 'metadata', 'error', 'code']:
+                if hasattr(result, field_name):
+                    field_value = getattr(result, field_name)
+                    logging.info(f"   result.{field_name} = {field_value!r}")
+
+            logging.info(f"📊 END SCORE RESULT DEBUG")
             
             # Include ALL fields from graph_result in the metadata
             for key, value in graph_result.items():

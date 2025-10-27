@@ -3,6 +3,7 @@ import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
+import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/use-toast'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
@@ -1015,11 +1016,37 @@ evaluation:
   estimated_remaining_seconds: ${evaluationData.estimatedRemainingSeconds || 0}
   
   # Additional Metrics
-  metrics:${evaluationData.metrics?.map(metric => `
+  metrics:${(() => {
+    try {
+      let metricsData = evaluationData.metrics;
+      
+      // Parse if string
+      if (typeof metricsData === 'string') {
+        metricsData = JSON.parse(metricsData);
+      }
+      
+      // Ensure it's an array
+      if (!Array.isArray(metricsData)) {
+        if (metricsData && typeof metricsData === 'object') {
+          metricsData = Object.entries(metricsData).map(([key, value]) => ({
+            name: key,
+            value: value
+          }));
+        } else {
+          return '';
+        }
+      }
+      
+      return metricsData.map(metric => `
     - name: "${metric.name}"
       value: ${metric.value}
       unit: "${metric.unit || ''}"
-      priority: ${metric.priority || false}`).join('') || ''}
+      priority: ${metric.priority || false}`).join('');
+    } catch (e) {
+      console.error('Error parsing metrics:', e);
+      return '';
+    }
+  })()}
   
   # Error Information
   error_message: "${evaluationData.errorMessage || ''}"
@@ -1056,16 +1083,40 @@ evaluation:
     }
   }, [data, generateUniversalCode]);
 
-  const metrics = useMemo(() => 
-    variant === 'detail' ? 
-      (data.metrics ?? []).map(metric => ({
-        value: metric.value,
-        label: metric.name,
-        information: getMetricInformation(metric.name),
-        maximum: metric.maximum ?? 100,
-        unit: metric.unit ?? '%',
-        priority: metric.priority
-      }))
+  const metrics = useMemo(() =>
+    variant === 'detail' ?
+      (data.metrics ?? []).map(metric => {
+        // Special handling for Alignment (Gwet's AC1)
+        if (metric.name === 'Alignment') {
+          return {
+            value: metric.value,
+            label: metric.name,
+            information: getMetricInformation(metric.name),
+            min: -1,           // AC1 ranges from -1 to 1
+            max: 1,
+            valueUnit: '',     // No percentage sign
+            decimalPlaces: 2,  // Show 2 decimal places
+            priority: metric.priority,
+            segments: [
+              { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // -1 to 0
+              { start: 50, end: 60, color: 'var(--gauge-converging)' },   // 0 to 0.2
+              { start: 60, end: 75, color: 'var(--gauge-almost)' },       // 0.2 to 0.5
+              { start: 75, end: 90, color: 'var(--gauge-viable)' },       // 0.5 to 0.8
+              { start: 90, end: 100, color: 'var(--gauge-great)' }        // 0.8 to 1.0
+            ]
+          }
+        }
+
+        // Default handling for other metrics
+        return {
+          value: metric.value,
+          label: metric.name,
+          information: getMetricInformation(metric.name),
+          max: metric.maximum ?? 100,        // Fixed: was 'maximum', should be 'max'
+          valueUnit: metric.unit ?? '%',     // Fixed: was 'unit', should be 'valueUnit'
+          priority: metric.priority
+        }
+      })
       : [
         {
           value: data.accuracy ?? undefined,
@@ -1081,12 +1132,14 @@ evaluation:
       <div className="flex items-center space-x-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <CardButton
-              icon={MoreHorizontal}
-              onClick={() => {
-                console.log('MoreHorizontal button clicked - dropdown should open');
-              }}
-            />
+             <Button 
+               variant="ghost" 
+               size="icon" 
+               className="h-8 w-8 rounded-md bg-border"
+               aria-label="More options"
+             >
+               <MoreHorizontal className="h-4 w-4" />
+             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => {
@@ -1278,8 +1331,47 @@ evaluation:
             <div className="flex flex-col items-end flex-shrink-0">
               {variant === 'grid' ? (
                 <div className="flex flex-col items-center gap-1">
-                  <div className="text-muted-foreground">
-                    <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                  <div className="flex items-center gap-2">
+                    <div className="text-muted-foreground">
+                      <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                    </div>
+                    {(onShare || onDelete) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <CardButton
+                            icon={MoreHorizontal}
+                            onClick={() => {}}
+                          />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => {
+                            console.log('Get Code menu item selected');
+                            handleGetCode();
+                          }}>
+                            <MessageSquareCode className="mr-2 h-4 w-4" />
+                            Get Code
+                          </DropdownMenuItem>
+                          {onShare && (
+                            <DropdownMenuItem onSelect={() => {
+                              console.log('Share menu item selected');
+                              onShare();
+                            }}>
+                              <Share className="mr-2 h-4 w-4" />
+                              Share
+                            </DropdownMenuItem>
+                          )}
+                          {onDelete && (
+                            <DropdownMenuItem onSelect={() => {
+                              console.log('Delete menu item selected');
+                              onDelete(data.id);
+                            }}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground text-center">
                     {(() => {

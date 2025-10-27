@@ -18,7 +18,7 @@ class TestPredictionTool:
         """Test prediction parameter validation patterns"""
         def validate_prediction_params(scorecard_name, score_name, item_id=None, item_ids=None,
                                      include_input=False, include_trace=False, output_format="json",
-                                     no_cache=False, yaml_only=False):
+                                     no_cache=False, yaml_only=False, version=None, latest=False):
             if not scorecard_name or not scorecard_name.strip():
                 return False, "scorecard_name is required"
             if not score_name or not score_name.strip():
@@ -35,6 +35,10 @@ class TestPredictionTool:
             # Cannot specify both no_cache and yaml_only
             if no_cache and yaml_only:
                 return False, "Cannot specify both no_cache and yaml_only. Use one or the other"
+            
+            # Cannot specify both version and latest
+            if version and latest:
+                return False, "Cannot use both version and latest options. Choose one."
             
             # Validate boolean parameters
             if not isinstance(include_input, bool):
@@ -95,6 +99,12 @@ class TestPredictionTool:
                                                  no_cache=True, yaml_only=True)
         assert valid is False
         assert "Cannot specify both no_cache and yaml_only" in error
+        
+        # Test both version and latest
+        valid, error = validate_prediction_params("test-scorecard", "test-score", item_id="item-123",
+                                                 version="version-123", latest=True)
+        assert valid is False
+        assert "Cannot use both version and latest" in error
         
         # Test invalid boolean parameters
         valid, error = validate_prediction_params("test-scorecard", "test-score", item_id="item-123",
@@ -470,7 +480,7 @@ class TestPredictionTool:
     def test_skipped_result_handling_patterns(self):
         """Test handling of SKIPPED results due to unmet dependencies"""
         def handle_skipped_result(results, resolved_score_name, score_name, target_id):
-            if results and any(v == "SKIPPED" for v in results.values()):
+            if results and any(isinstance(v, Score.Result) and v.value == "SKIPPED" for v in results.values()):
                 return {
                     "item_id": target_id,
                     "scores": [
@@ -485,7 +495,11 @@ class TestPredictionTool:
             return None
         
         # Test with SKIPPED results
-        mock_results = {"other_score": "SKIPPED", "another_score": "Yes"}
+        from plexus.scores.Score import Score
+        mock_results = {
+            "other_score": Score.Result(value="SKIPPED", parameters=Score.Parameters(name="other_score")), 
+            "another_score": Score.Result(value="Yes", parameters=Score.Parameters(name="another_score"))
+        }
         result = handle_skipped_result(mock_results, "test-score", "test-score", "item-123")
         assert result is not None
         assert result["item_id"] == "item-123"

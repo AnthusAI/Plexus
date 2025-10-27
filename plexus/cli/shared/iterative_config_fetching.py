@@ -20,7 +20,8 @@ def iteratively_fetch_configurations(
     client,
     scorecard_data: Dict[str, Any],
     target_scores: List[Dict[str, Any]],
-    use_cache: bool = False
+    use_cache: bool = False,
+    specific_version: Optional[str] = None
 ) -> Dict[str, str]:
     """Iteratively fetch score configurations including all dependencies.
     
@@ -37,6 +38,7 @@ def iteratively_fetch_configurations(
         use_cache: Whether to use local cache files instead of always fetching from API
                   When False, will always fetch from API but still write cache files
                   When True, will check local cache first and only fetch missing configs
+        specific_version: Optional specific version ID to use instead of champion version
         
     Returns:
         Dictionary mapping score IDs to their configuration strings
@@ -110,9 +112,26 @@ def iteratively_fetch_configurations(
         logging.error(f"Error fetching complete scorecard structure for dependency resolution: {str(e)}")
         # Continue with partial mappings - this is not fatal but may cause dependency resolution issues
     
+    # Modify target_scores to use specific version if provided
+    modified_target_scores = []
+    for score in target_scores:
+        score_copy = score.copy()
+        original_version = score_copy.get('championVersionId')
+        if specific_version and score_copy.get('id'):
+            # Override championVersionId with specific_version for target scores
+            score_copy['championVersionId'] = specific_version
+            logging.info(f"==== VERSION OVERRIDE ====")
+            logging.info(f"Score: {score_copy.get('name')} (ID: {score_copy.get('id')})")
+            logging.info(f"Original champion version: {original_version}")
+            logging.info(f"Override to specific version: {specific_version}")
+            logging.info(f"==========================")
+        else:
+            logging.info(f"Score: {score_copy.get('name')} (ID: {score_copy.get('id')}) using champion version: {original_version}")
+        modified_target_scores.append(score_copy)
+    
     # Initialize tracking sets
-    all_scores = target_scores.copy()  # Keeps growing as we discover dependencies
-    all_score_ids = {score.get('id') for score in target_scores if score.get('id')}
+    all_scores = modified_target_scores.copy()  # Keeps growing as we discover dependencies
+    all_score_ids = {score.get('id') for score in modified_target_scores if score.get('id')}
     processed_ids = set()  # Scores we've processed dependencies for
     
     # Initialize our configuration store
@@ -120,10 +139,13 @@ def iteratively_fetch_configurations(
     
     # Store a mapping of score_id to version
     score_version_map = {}
-    for score in target_scores:
+    for score in modified_target_scores:
         if score.get('id') and score.get('championVersionId'):
             score_version_map[score.get('id')] = score.get('championVersionId')
-            logging.info(f"Tracking championVersionId {score.get('championVersionId')} as version for score {score.get('id')}")
+            if specific_version:
+                logging.info(f"Using specific version {score.get('championVersionId')} for score {score.get('id')}")
+            else:
+                logging.info(f"Tracking championVersionId {score.get('championVersionId')} as version for score {score.get('id')}")
     
     # Process iteratively until all dependencies are resolved
     iteration = 1
@@ -238,7 +260,7 @@ def iteratively_fetch_configurations(
             # Update our name/ID mappings
             id_to_name, name_to_id = build_name_id_mappings(all_scores)
             
-            # Update score_version_map with new dependencies
+            # Update score_version_map with new dependencies (dependencies always use champion version)
             for score in new_dependency_scores:
                 if score.get('id') and score.get('championVersionId'):
                     score_version_map[score.get('id')] = score.get('championVersionId')

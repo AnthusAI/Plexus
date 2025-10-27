@@ -170,6 +170,47 @@ class Score(BaseModel):
         return cls.from_dict(result['listScoreByExternalId']['items'][0], client)
 
     @classmethod
+    def get_by_scorecard_and_external_id(cls, scorecard_id: str, external_id: str, 
+                                         client: '_BaseAPIClient') -> Optional[Dict[str, Any]]:
+        """Get a score by scorecard ID and external ID using the GSI.
+        
+        This uses the byScorecardIdAndExternalId GSI for efficient lookup.
+        
+        Args:
+            scorecard_id: The scorecard ID to filter by
+            external_id: The score external ID to look up
+            client: The API client instance
+            
+        Returns:
+            Dict with 'id' and 'name' keys if found, None otherwise
+        """
+        query = """
+        query GetScoreByScorecardIdAndExternalId($scorecardId: String!, $externalId: String!) {
+            listScoreByScorecardIdAndExternalId(scorecardId: $scorecardId, externalId: {eq: $externalId}, limit: 1) {
+                items {
+                    id
+                    name
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "scorecardId": scorecard_id,
+            "externalId": external_id
+        }
+        
+        result = client.execute(query, variables)
+        items = result.get('listScoreByScorecardIdAndExternalId', {}).get('items', [])
+        
+        if items:
+            logger.debug(f"Found score: {items[0]['name']} ({items[0]['id']}) for scorecard {scorecard_id}")
+            return items[0]  # Return dict with id and name
+        
+        logger.debug(f"No score found with external ID {external_id} for scorecard {scorecard_id}")
+        return None
+
+    @classmethod
     def list_by_section_id(cls, section_id: str, client: '_BaseAPIClient', 
                           next_token: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
         """
@@ -208,12 +249,12 @@ class Score(BaseModel):
             'nextToken': list_result.get('nextToken')
         }
 
-    def get_configuration(self) -> Optional[Dict[str, Any]]:
+    def get_code(self) -> Optional[Dict[str, Any]]:
         """
-        Get the score's configuration from its champion version.
+        Get the score's code from its champion version.
         
         Returns:
-            Optional[Dict[str, Any]]: The parsed YAML configuration, or None if not found
+            Optional[Dict[str, Any]]: The parsed YAML code, or None if not found
         """
         if not self._client:
             raise ValueError("No API client available")
@@ -251,21 +292,21 @@ class Score(BaseModel):
             logger.error(f"Failed to get version content for version {champion_version_id}")
             return None
             
-        config_yaml = version_result['getScoreVersion'].get('configuration')
-        if not config_yaml:
-            logger.error(f"No configuration found in version {champion_version_id}")
+        code_yaml = version_result['getScoreVersion'].get('configuration')
+        if not code_yaml:
+            logger.error(f"No code found in version {champion_version_id}")
             return None
 
         try:
             # Parse the YAML content
-            return yaml.safe_load(config_yaml)
+            return yaml.safe_load(code_yaml)
         except Exception as e:
-            logger.error(f"Error parsing YAML configuration for Score {self.id}: {e}")
+            logger.error(f"Error parsing YAML code for Score {self.id}: {e}")
             return None
 
     def get_valid_classes(self) -> List[Dict[str, Any]]:
         """
-        Get the list of valid classes from the score's configuration.
+        Get the list of valid classes from the score's code.
         
         Looks for a 'classes' key in the score's YAML configuration, where each class
         has at least a 'name' field and may have additional metadata like 'positive'.
@@ -283,7 +324,7 @@ class Score(BaseModel):
                                  and any additional metadata from the configuration.
                                  Returns empty list if not found or on error.
         """
-        config = self.get_configuration()
+        config = self.get_code()
         if not config:
             return []
 
@@ -314,7 +355,7 @@ class Score(BaseModel):
         Returns:
             int: Number of valid classes, defaulting to 2 (binary classification) if not found.
         """
-        config = self.get_configuration()
+        config = self.get_code()
         if not config:
             logger.info(f"No configuration found for Score {self.id}, defaulting to 2 (binary classification)")
             return 2
@@ -341,6 +382,98 @@ class Score(BaseModel):
         logger.info(f"Found {len(valid_classes)} valid classes in configuration for Score {self.id}: {valid_classes}")
         return len(valid_classes)
 
+    def get_champion_code_yaml(self) -> Optional[str]:
+        """
+        Get the raw YAML code string from the champion version.
+        
+        Returns:
+            Optional[str]: The raw YAML code string, or None if not found
+        """
+        if not self._client:
+            raise ValueError("No API client available")
+
+        # First get the champion version ID
+        query = """
+        query GetScore($id: ID!) {
+            getScore(id: $id) {
+                championVersionId
+            }
+        }
+        """
+        
+        result = self._client.execute(query, {'id': self.id})
+        if not result or 'getScore' not in result:
+            logger.error(f"Failed to get champion version ID for Score {self.id}")
+            return None
+            
+        champion_version_id = result['getScore'].get('championVersionId')
+        if not champion_version_id:
+            logger.error(f"No champion version found for Score {self.id}")
+            return None
+
+        # Then get the version content
+        version_query = """
+        query GetScoreVersion($id: ID!) {
+            getScoreVersion(id: $id) {
+                configuration
+            }
+        }
+        """
+        
+        version_result = self._client.execute(version_query, {'id': champion_version_id})
+        if not version_result or 'getScoreVersion' not in version_result:
+            logger.error(f"Failed to get version content for version {champion_version_id}")
+            return None
+            
+        code_yaml = version_result['getScoreVersion'].get('configuration')
+        if not code_yaml:
+            logger.error(f"No code found in version {champion_version_id}")
+            return None
+
+        return code_yaml
+
+    def get_champion_configuration_yaml(self) -> Optional[str]:
+        """
+        Get the raw YAML configuration string from the champion version.
+        
+        Returns:
+            Optional[str]: The raw YAML configuration string, or None if not found
+        """
+        if not self._client:
+            raise ValueError("No API client available")
+
+        # First get the champion version ID
+        query = """
+        query GetScore($id: ID!) {
+            getScore(id: $id) {
+                championVersionId
+            }
+        }
+        """
+        
+        result = self._client.execute(query, {'id': self.id})
+        if not result or 'getScore' not in result:
+            return None
+            
+        champion_version_id = result['getScore'].get('championVersionId')
+        if not champion_version_id:
+            return None
+
+        # Then get the version content
+        version_query = """
+        query GetScoreVersion($id: ID!) {
+            getScoreVersion(id: $id) {
+                configuration
+            }
+        }
+        """
+        
+        version_result = self._client.execute(version_query, {'id': champion_version_id})
+        if not version_result or 'getScoreVersion' not in version_result:
+            return None
+            
+        return version_result['getScoreVersion'].get('configuration')
+
     def get_local_configuration_path(self, scorecard_name: Optional[str] = None) -> Path:
         """
         Get the local YAML file path for this score's configuration.
@@ -350,6 +483,85 @@ class Score(BaseModel):
             
         Returns:
             Path: Path to the local YAML configuration file
+        """
+        return self.get_local_code_path(scorecard_name)
+
+    def pull_configuration(self, scorecard_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Pull the champion version configuration to local file.
+        
+        Args:
+            scorecard_name: Optional scorecard name. If not provided, will lookup via API.
+            
+        Returns:
+            Dict containing:
+                - success: bool
+                - file_path: str (path where configuration was saved)
+                - version_id: str (the champion version ID that was pulled)
+                - error: str (error message if failed)
+        """
+        result = self.pull_code_and_guidelines(scorecard_name)
+        if result["success"]:
+            return {
+                "success": True,
+                "file_path": result["code_file_path"],
+                "version_id": result["version_id"]
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "Unknown error")
+            }
+
+    def push_configuration(self, scorecard_name: Optional[str] = None, note: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Push local configuration file as a new score version.
+        
+        Args:
+            scorecard_name: Optional scorecard name. If not provided, will lookup via API.
+            note: Optional version note.
+            
+        Returns:
+            Dict containing:
+                - success: bool
+                - version_id: str (new version ID if created, existing if no changes)
+                - champion_updated: bool (whether champion version was updated)
+                - skipped: bool (true if no changes detected)
+                - error: str (error message if failed)
+        """
+        result = self.push_code_and_guidelines(scorecard_name, note)
+        return result
+
+    def create_version_from_yaml(self, yaml_content: str, note: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Create a new score version from YAML content string.
+        
+        Args:
+            yaml_content: The YAML configuration content as a string
+            note: Optional version note.
+            
+        Returns:
+            Dict containing:
+                - success: bool
+                - version_id: str (new version ID if created, existing if no changes)
+                - champion_updated: bool (whether champion version was updated)
+                - skipped: bool (true if no changes detected)
+                - error: str (error message if failed)
+        """
+        return self.create_version_from_code(
+            yaml_content, 
+            note or 'Updated via Score.create_version_from_yaml()'
+        )
+
+    def get_local_code_path(self, scorecard_name: Optional[str] = None) -> Path:
+        """
+        Get the local YAML file path for this score's code.
+        
+        Args:
+            scorecard_name: Optional scorecard name. If not provided, will lookup via API.
+            
+        Returns:
+            Path: Path to the local YAML code file
         """
         if not scorecard_name:
             if not self._client:
@@ -372,11 +584,50 @@ class Score(BaseModel):
             scorecard = Scorecard.get_by_id(scorecard_id, self._client)
             scorecard_name = scorecard.name
             
+        # Use the existing get_score_yaml_path function for consistency
+        from plexus.cli.shared import get_score_yaml_path
         return get_score_yaml_path(scorecard_name, self.name)
 
-    def pull_configuration(self, scorecard_name: Optional[str] = None) -> Dict[str, Any]:
+    def get_local_guidelines_path(self, scorecard_name: Optional[str] = None) -> Path:
         """
-        Pull the champion version YAML configuration to a local file.
+        Get the local file path for this score's guidelines.
+        
+        Args:
+            scorecard_name: Optional scorecard name. If not provided, will lookup via API.
+            
+        Returns:
+            Path: Path to the local guidelines file
+        """
+        if not scorecard_name:
+            if not self._client:
+                raise ValueError("No API client available to lookup scorecard name")
+            
+            # Get the section to find the scorecard
+            section_query = """
+            query GetSection($id: ID!) {
+                getSection(id: $id) {
+                    scorecardId
+                }
+            }
+            """
+            
+            section_result = self._client.execute(section_query, {'id': self.sectionId})
+            if not section_result or 'getSection' not in section_result:
+                raise ValueError(f"Could not find section {self.sectionId}")
+                
+            scorecard_id = section_result['getSection']['scorecardId']
+            scorecard = Scorecard.get_by_id(scorecard_id, self._client)
+            scorecard_name = scorecard.name
+            
+        # Use the same directory structure as code, but with .md extension
+        from plexus.cli.shared import get_score_yaml_path
+        code_path = get_score_yaml_path(scorecard_name, self.name)
+        # Replace .yaml extension with .md for guidelines
+        return code_path.with_suffix('.md')
+
+    def pull_code_and_guidelines(self, scorecard_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Pull the champion version code and guidelines to local files.
         
         Args:
             scorecard_name: Optional scorecard name. If not provided, will lookup via API.
@@ -384,7 +635,8 @@ class Score(BaseModel):
         Returns:
             Dict containing:
                 - success: bool
-                - file_path: str (path where file was saved)
+                - code_file_path: str (path where code was saved)
+                - guidelines_file_path: str (path where guidelines were saved)
                 - version_id: str (the champion version ID that was pulled)
                 - message: str (success/error message)
         """
@@ -426,6 +678,7 @@ class Score(BaseModel):
             query GetScoreVersion($id: ID!) {
                 getScoreVersion(id: $id) {
                     configuration
+                    guidelines
                     createdAt
                     updatedAt
                     note
@@ -442,22 +695,25 @@ class Score(BaseModel):
                 }
                 
             version_data = version_result['getScoreVersion']
-            config_yaml = version_data.get('configuration')
-            if not config_yaml:
+            code_yaml = version_data.get('configuration')
+            guidelines = version_data.get('guidelines', '')
+            
+            if not code_yaml:
                 return {
                     "success": False,
-                    "error": "NO_CONFIGURATION",
-                    "message": f"No configuration found in version {champion_version_id}"
+                    "error": "NO_CODE",
+                    "message": f"No code found in version {champion_version_id}"
                 }
 
-            # Get the local file path
-            yaml_path = self.get_local_configuration_path(scorecard_name)
+            # Get the local file paths
+            code_path = self.get_local_code_path(scorecard_name)
+            guidelines_path = self.get_local_guidelines_path(scorecard_name)
             
             # Create directory if it doesn't exist
-            yaml_path.parent.mkdir(parents=True, exist_ok=True)
+            code_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Write to file with version metadata as comments
-            with open(yaml_path, 'w') as f:
+            # Write code to YAML file with version metadata as comments
+            with open(code_path, 'w') as f:
                 f.write(f"# Pulled from Plexus API\n")
                 f.write(f"# Score: {self.name}\n")
                 f.write(f"# Champion Version ID: {champion_version_id}\n")
@@ -466,19 +722,31 @@ class Score(BaseModel):
                 if version_data.get('note'):
                     f.write(f"# Note: {version_data['note']}\n")
                 f.write(f"#\n")
-                f.write(config_yaml)
+                f.write(code_yaml)
             
-            logger.info(f"Successfully pulled configuration for Score {self.name} to {yaml_path}")
+            # Write guidelines to markdown file
+            with open(guidelines_path, 'w') as f:
+                f.write(f"# Guidelines for {self.name}\n\n")
+                f.write(f"<!-- Pulled from Plexus API -->\n")
+                f.write(f"<!-- Champion Version ID: {champion_version_id} -->\n")
+                f.write(f"<!-- Updated: {version_data.get('updatedAt', 'Unknown')} -->\n\n")
+                if guidelines:
+                    f.write(guidelines)
+                else:
+                    f.write("*No guidelines specified for this score.*\n")
+            
+            logger.info(f"Successfully pulled code and guidelines for Score {self.name}")
             
             return {
                 "success": True,
-                "file_path": str(yaml_path),
+                "code_file_path": str(code_path),
+                "guidelines_file_path": str(guidelines_path),
                 "version_id": champion_version_id,
-                "message": f"Successfully pulled configuration to {yaml_path}"
+                "message": f"Successfully pulled code to {code_path} and guidelines to {guidelines_path}"
             }
             
         except Exception as e:
-            error_msg = f"Error pulling configuration for Score {self.name}: {str(e)}"
+            error_msg = f"Error pulling code and guidelines for Score {self.name}: {str(e)}"
             logger.error(error_msg)
             return {
                 "success": False,
@@ -486,16 +754,17 @@ class Score(BaseModel):
                 "message": error_msg
             }
 
-    def push_configuration(self, scorecard_name: Optional[str] = None, 
-                          note: Optional[str] = None) -> Dict[str, Any]:
+    def push_code_and_guidelines(self, scorecard_name: Optional[str] = None, 
+                                note: Optional[str] = None) -> Dict[str, Any]:
         """
-        Push local YAML configuration as a new score version.
+        Push local code and guidelines files as a new score version.
         
-        Only creates a new version if the content has changed from the current champion version.
+        Automatically detects which files have changed by comparing with the current champion version.
+        Only creates a new version if either code or guidelines have changed.
         
         Args:
             scorecard_name: Optional scorecard name. If not provided, will lookup via API.
-            note: Optional version note. Defaults to "Updated via Score.push_configuration()"
+            note: Optional version note. Defaults to "Updated via Score.push_code_and_guidelines()"
             
         Returns:
             Dict containing:
@@ -504,6 +773,7 @@ class Score(BaseModel):
                 - champion_updated: bool (whether champion version was updated)
                 - message: str (success/error message)
                 - skipped: bool (true if no changes detected)
+                - changes_detected: dict with 'code' and 'guidelines' booleans indicating what changed
         """
         if not self._client:
             return {
@@ -513,54 +783,120 @@ class Score(BaseModel):
             }
 
         try:
-            # Get the local file path
-            yaml_path = self.get_local_configuration_path(scorecard_name)
+            # Get the local file paths
+            code_path = self.get_local_code_path(scorecard_name)
+            guidelines_path = self.get_local_guidelines_path(scorecard_name)
             
-            if not yaml_path.exists():
+            # Check which files exist
+            code_exists = code_path.exists()
+            guidelines_exists = guidelines_path.exists()
+            
+            if not code_exists and not guidelines_exists:
                 return {
                     "success": False,
-                    "error": "FILE_NOT_FOUND",
-                    "message": f"Local YAML file not found at: {yaml_path}"
+                    "error": "NO_FILES_FOUND",
+                    "message": f"No local files found at: {code_path} or {guidelines_path}"
                 }
 
-            # Read the local YAML content
-            with open(yaml_path, 'r') as f:
-                local_content = f.read()
+            # Read local files
+            local_code = None
+            local_guidelines = None
             
-            # Strip metadata comments that we add during pull
-            # Only strip comments that match our specific metadata format
-            local_yaml_lines = []
-            metadata_prefixes = [
-                '# Pulled from Plexus API',
-                '# Score:',
-                '# Champion Version ID:',
-                '# Created:',
-                '# Updated:',
-                '# Note:'
-            ]
+            if code_exists:
+                with open(code_path, 'r') as f:
+                    local_content = f.read()
+                
+                # Strip metadata comments that we add during pull
+                local_yaml_lines = []
+                metadata_prefixes = [
+                    '# Pulled from Plexus API',
+                    '# Score:',
+                    '# Champion Version ID:',
+                    '# Created:',
+                    '# Updated:',
+                    '# Note:'
+                ]
+                
+                for line in local_content.split('\n'):
+                    # Skip our metadata comments and the separator line
+                    if line.strip() == '#':
+                        continue
+                    is_metadata = False
+                    for prefix in metadata_prefixes:
+                        if line.strip().startswith(prefix):
+                            is_metadata = True
+                            break
+                    if not is_metadata:
+                        local_yaml_lines.append(line)
+                
+                local_code = '\n'.join(local_yaml_lines).strip()
             
-            for line in local_content.split('\n'):
-                # Skip our metadata comments and the separator line
-                if line.strip() == '#':
-                    continue
-                is_metadata = False
-                for prefix in metadata_prefixes:
-                    if line.strip().startswith(prefix):
-                        is_metadata = True
-                        break
-                if not is_metadata:
-                    local_yaml_lines.append(line)
-            
-            local_yaml_clean = '\n'.join(local_yaml_lines).strip()
+            if guidelines_exists:
+                with open(guidelines_path, 'r') as f:
+                    guidelines_content = f.read()
+                
+                # Strip markdown metadata comments that we add during pull
+                guidelines_lines = []
+                in_metadata = True
+                
+                for line in guidelines_content.split('\n'):
+                    # Skip the title and metadata comments at the start
+                    if in_metadata:
+                        if line.startswith('# Guidelines for') or line.startswith('<!--') or line.strip() == '':
+                            continue
+                        else:
+                            in_metadata = False
+                    
+                    if not in_metadata:
+                        guidelines_lines.append(line)
+                
+                local_guidelines = '\n'.join(guidelines_lines).strip()
+                # Remove the placeholder text if it's there
+                if local_guidelines == "*No guidelines specified for this score.*":
+                    local_guidelines = ""
 
-            # Use the foundational create_version_from_yaml method
-            return self.create_version_from_yaml(
-                local_yaml_clean, 
-                note or 'Updated via Score.push_configuration()'
+            # Get current champion version for comparison
+            # If no local code, get current code to preserve it
+            if not code_exists:
+                champion_query = f"""
+                query GetScore {{
+                    getScore(id: "{self.id}") {{
+                        championVersionId
+                    }}
+                }}
+                """
+                champion_result = self._client.execute(champion_query, {'id': self.id})
+                current_champion_id = champion_result.get('getScore', {}).get('championVersionId')
+                
+                if current_champion_id:
+                    config_query = f"""
+                    query GetScoreVersion {{
+                        getScoreVersion(id: "{current_champion_id}") {{
+                            configuration
+                        }}
+                    }}
+                    """
+                    config_result = self._client.execute(config_query, {'id': current_champion_id})
+                    local_code = config_result.get('getScoreVersion', {}).get('configuration', '')
+
+            # Use the foundational create_version_from_code method
+            result = self.create_version_from_code(
+                local_code or '', 
+                note or 'Updated via Score.push_code_and_guidelines()',
+                guidelines=local_guidelines
             )
             
+            # Add information about what was detected/pushed
+            if result["success"]:
+                result["changes_detected"] = {
+                    "code": code_exists,
+                    "guidelines": guidelines_exists
+                }
+            
+            return result
+            
         except Exception as e:
-            error_msg = f"Error pushing configuration for Score {self.name}: {str(e)}"
+            error_msg = f"Error pushing code and guidelines for Score {self.name}: {str(e)}"
             logger.error(error_msg)
             return {
                 "success": False,
@@ -568,16 +904,17 @@ class Score(BaseModel):
                 "message": error_msg
             }
 
-    def create_version_from_yaml(self, yaml_content: str, note: Optional[str] = None) -> Dict[str, Any]:
+    def create_version_from_code(self, code_content: str, note: Optional[str] = None, guidelines: Optional[str] = None) -> Dict[str, Any]:
         """
-        Create a new score version from YAML content string.
+        Create a new score version from code and guidelines content.
         
         This is the foundational method that only creates a new version if the content 
         has changed from the current champion version.
         
         Args:
-            yaml_content: The YAML configuration content as a string
-            note: Optional version note. Defaults to "Updated via Score.create_version_from_yaml()"
+            code_content: The YAML code content as a string
+            note: Optional version note. Defaults to "Updated via Score.create_version_from_code()"
+            guidelines: Optional guidelines content as a string
             
         Returns:
             Dict containing:
@@ -595,16 +932,19 @@ class Score(BaseModel):
             }
 
         try:
-            # Validate YAML content
-            try:
-                import yaml
-                yaml.safe_load(yaml_content)
-            except yaml.YAMLError as e:
-                return {
-                    "success": False,
-                    "error": "INVALID_YAML",
-                    "message": f"Invalid YAML content: {str(e)}"
-                }
+            # Validate YAML code content if provided
+            if code_content:
+                try:
+                    import yaml
+                    yaml.safe_load(code_content)
+                    # NOTE: Guidelines are NOT extracted from YAML as they are a separate field
+                    
+                except yaml.YAMLError as e:
+                    return {
+                        "success": False,
+                        "error": "INVALID_YAML",
+                        "message": f"Invalid YAML code content: {str(e)}"
+                    }
 
             # Get current champion version for comparison
             query = """
@@ -631,16 +971,22 @@ class Score(BaseModel):
                 query GetScoreVersion($id: ID!) {
                     getScoreVersion(id: $id) {
                         configuration
+                        guidelines
                     }
                 }
                 """
                 
                 version_result = self._client.execute(version_query, {'id': current_champion_id})
                 if version_result and 'getScoreVersion' in version_result:
-                    current_yaml = version_result['getScoreVersion'].get('configuration', '').strip()
+                    current_version_data = version_result['getScoreVersion']
+                    current_yaml = (current_version_data.get('configuration') or '').strip()
+                    current_guidelines = (current_version_data.get('guidelines') or '').strip()
                     
-                    # Compare content (ignoring whitespace differences)
-                    if current_yaml == yaml_content.strip():
+                    # Compare both code and guidelines (ignoring whitespace differences)
+                    code_unchanged = current_yaml == (code_content or '').strip()
+                    guidelines_unchanged = current_guidelines == (guidelines or '').strip()
+                    
+                    if code_unchanged and guidelines_unchanged:
                         logger.info(f"No changes detected for Score {self.name}, skipping version creation")
                         return {
                             "success": True,
@@ -669,12 +1015,18 @@ class Score(BaseModel):
             
             version_input = {
                 'scoreId': self.id,
-                'configuration': yaml_content.strip(),
-                'note': note or 'Updated via Score.create_version_from_yaml()',
+                'configuration': (code_content or '').strip(),
+                'note': note or 'Updated via Score.create_version_from_code()',
                 # Mark as featured by default so the version is created as a candidate for champion
                 # (promotion will be explicitly set via updateScore below)
                 'isFeatured': True
             }
+            
+            # Add guidelines if provided
+            if guidelines:
+                stripped_guidelines = guidelines.strip()
+                if stripped_guidelines:
+                    version_input['guidelines'] = stripped_guidelines
             
             # Include parent version if available
             if current_champion_id:
@@ -692,28 +1044,8 @@ class Score(BaseModel):
             new_version = result['createScoreVersion']
             new_version_id = new_version['id']
 
-            # Promote new version to champion explicitly to match expected behavior
-            update_mutation = """
-            mutation UpdateScore($input: UpdateScoreInput!) {
-                updateScore(input: $input) {
-                    id
-                    championVersionId
-                }
-            }
-            """
-            update_input = {
-                'id': self.id,
-                'championVersionId': new_version_id
-            }
-            try:
-                update_result = self._client.execute(update_mutation, {'input': update_input})
-                # Detect GraphQL-style errors returned as part of payload
-                if not update_result or update_result.get('errors'):
-                    champion_updated = False
-                else:
-                    champion_updated = True
-            except Exception:
-                champion_updated = False
+            # MCP tools should NOT promote versions to champion - that's a separate process
+            champion_updated = False
 
             logger.info(f"Successfully created new version {new_version_id} for Score {self.name}")
             

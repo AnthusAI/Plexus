@@ -101,7 +101,11 @@ def fetch_score_configurations(
         score_name = score.get('name')
         champion_version_id = score.get('championVersionId')
         
-        logging.debug(f"Processing score: {score_name} (ID: {score_id})")
+        logging.info(f"==== FETCHING SCORE CONFIGURATION ====")
+        logging.info(f"Score Name: {score_name}")
+        logging.info(f"Score ID: {score_id}")
+        logging.info(f"Version ID to fetch: {champion_version_id}")
+        logging.info(f"======================================")
         
         if not score_id or not score_name or not champion_version_id:
             logging.error(f"Missing required properties for score: {score}")
@@ -132,6 +136,13 @@ def fetch_score_configurations(
             # Parse the YAML content to ensure it's valid
             config_yaml = version_data.get('configuration')
             
+            logging.info(f"==== FETCHED YAML CONFIGURATION ====")
+            logging.info(f"Score: {score_name}")
+            logging.info(f"Version: {champion_version_id}")
+            logging.info(f"YAML Content (first 500 chars):")
+            logging.info(f"{config_yaml[:500]}...")
+            logging.info(f"=====================================")
+            
             try:
                 # Parse the configuration to validate it
                 parsed_config = yaml.load(config_yaml)
@@ -158,6 +169,7 @@ def fetch_score_configurations(
                 
                 # Add version
                 ordered_config['version'] = champion_version_id
+                logging.info(f"YAML version field set to: {champion_version_id}")
                 
                 # Add parent if it exists
                 if 'parent' in parsed_config:
@@ -178,7 +190,11 @@ def fetch_score_configurations(
                 # Store the configuration in memory
                 configurations[score_id] = config_yaml
                 
-                logging.info(f"Saved score configuration to: {yaml_path}")
+                logging.info(f"==== CONFIGURATION SAVED ====")
+                logging.info(f"Score: {score_name}")
+                logging.info(f"Version: {champion_version_id}")
+                logging.info(f"Saved to: {yaml_path}")
+                logging.info(f"===============================")
                 
             except Exception as e:
                 logging.error(f"Error parsing YAML for score {score_name}: {str(e)}")

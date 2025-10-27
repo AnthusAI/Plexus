@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import math
 import yaml
@@ -24,6 +26,7 @@ import importlib
 import logging
 import re
 import uuid
+import traceback
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -259,6 +262,7 @@ class Evaluation:
         self.mismatches = []
         self.total_correct = 0
         self.total_questions = 0
+        self.total_skipped = 0  # Track scores skipped due to unmet conditions
 
 
     def __enter__(self):
@@ -537,8 +541,11 @@ class Evaluation:
                     self.logging.warning(f"Score result has no 'value' attribute: {score_identifier}")
                     continue
 
-                # Skip if the score result is an error
-                if isinstance(score_result.value, str) and score_result.value.upper() == "ERROR":
+                # Skip if the score result is a system error (has error attribute) or was skipped due to unmet conditions
+                # Note: Don't skip if "error" is a legitimate class label (no error attribute)
+                if isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                    continue
+                if isinstance(score_result.value, str) and score_result.value.upper() == "ERROR" and hasattr(score_result, 'error') and score_result.error:
                     continue
 
                 # Ensure parameters attribute exists before accessing name
@@ -1085,6 +1092,13 @@ class Evaluation:
             logging.info(f"Form ID: {result['form_id']}")
             for question in self.score_names():
                 score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
+                
+                # Skip counting if score was skipped due to unmet conditions
+                if score_result and isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                    logging.info(f"Question: {question}, skipped due to unmet dependency conditions")
+                    self.total_skipped += 1
+                    continue
+                
                 score_value = str(score_result.value).lower() if score_result else None
                 human_label = str(score_result.metadata['human_label']).lower() if score_result and hasattr(score_result, 'metadata') and 'human_label' in score_result.metadata else None
                 logging.info(f"Question: {question}, score Label: {score_value}, Human Label: {human_label}")
@@ -1195,9 +1209,83 @@ class Evaluation:
 
         logging.info(f"Expenses: {expenses}")
         logging.info(f"{overall_accuracy:.1f}% accuracy / {len(selected_sample_rows)} samples")
+        if self.total_skipped > 0:
+            logging.info(f"Skipped {self.total_skipped} score results due to unmet dependency conditions")
         logging.info(f"cost: ${expenses['cost_per_text']:.6f} per call / ${expenses['total_cost']:.6f} total")
 
-        report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
+        # Build confusion matrix metrics for the summary
+        confusion_metrics = self._build_confusion_metrics_from_results()
+
+        # Analyze confidence calibration if confidence features are detected (preserve raw values)
+        calibration_report = None
+        try:
+            from plexus.confidence_calibration import (
+                detect_confidence_feature_enabled,
+                extract_confidence_accuracy_pairs,
+                compute_isotonic_regression_calibration,
+                serialize_calibration_model,
+                generate_calibration_report
+            )
+
+            logging.info(f"About to check confidence detection on {len(self.all_results)} results")
+            print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+            confidence_detected = detect_confidence_feature_enabled(self.all_results)
+            logging.info(f"Confidence detection result: {confidence_detected}")
+            print(f"DEBUG: Confidence detection result: {confidence_detected}")
+
+            if confidence_detected:
+                logging.info("Confidence feature detected - computing isotonic regression calibration")
+
+                # Extract confidence-accuracy pairs
+                confidence_scores, accuracy_labels = extract_confidence_accuracy_pairs(self.all_results)
+
+                if len(confidence_scores) >= 10:
+                    # Compute calibration model
+                    calibration_model = compute_isotonic_regression_calibration(confidence_scores, accuracy_labels)
+
+                    if calibration_model is not None:
+                        # Generate calibration report with serialized model data
+                        calibration_report = generate_calibration_report(
+                            confidence_scores, accuracy_labels, calibration_model
+                        )
+
+                        # Add serialized calibration data for future use
+                        calibration_report["calibration_model"] = serialize_calibration_model(calibration_model)
+
+                        # Generate reliability diagram visualization
+                        try:
+                            from plexus.confidence_calibration import plot_reliability_diagram
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            reliability_plot_path = f"{report_folder_path}/reliability_diagram_{timestamp}.png"
+
+                            plot_reliability_diagram(
+                                confidence_scores=confidence_scores,
+                                accuracy_labels=accuracy_labels,
+                                save_path=reliability_plot_path,
+                                title="Confidence Calibration - Raw Model Output",
+                                n_bins=20  # 5% buckets
+                            )
+
+                            logging.info(f"Reliability diagram saved to: {reliability_plot_path}")
+                        except Exception as e:
+                            logging.warning(f"Could not generate reliability diagram: {e}")
+
+                        logging.info(f"Computed isotonic regression calibration from {len(confidence_scores)} confidence scores")
+                        logging.info(f"Expected Calibration Error: {calibration_report.get('expected_calibration_error', 'N/A'):.4f}")
+                        logging.info("Raw confidence values preserved - calibration data stored for future application")
+                    else:
+                        logging.warning("Could not compute calibration model")
+                else:
+                    logging.info(f"Insufficient data for calibration: {len(confidence_scores)} samples (need at least 10)")
+            else:
+                logging.debug("No confidence features detected - skipping calibration")
+
+        except ImportError:
+            logging.warning("sklearn not available - skipping confidence calibration")
+        except Exception as e:
+            logging.error(f"Error during confidence calibration: {e}")
+
+        report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows), confusion_metrics)
         logging.info(report)
 
         await asyncio.to_thread(self.generate_and_log_confusion_matrix, self.all_results, report_folder_path)
@@ -1205,7 +1293,7 @@ class Evaluation:
         for question in self.score_names():
             self.create_performance_visualization(self.all_results, question, report_folder_path)
 
-        self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
+        self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses, calibration_report)
 
     async def score_all_texts_for_score(self, selected_sample_rows, score_name: str, tracker):
         """Score all texts for a specific score with controlled concurrency"""
@@ -1254,7 +1342,24 @@ class Evaluation:
                         
                         return result
                 except Exception as e:
+                    # Enhanced error logging with more context
+                    error_context = {
+                        'score_name': score_name,
+                        'text_index': idx,
+                        'content_id': row.get('content_id', 'unknown'),
+                        'text_preview': str(row.get('text', ''))[:100] + '...' if row.get('text') else 'No text',
+                        'error_type': type(e).__name__,
+                        'error_message': str(e),
+                        'traceback': traceback.format_exc()
+                    }
                     logging.error(f"Error processing text at index {idx} for {score_name}: {e}")
+                    logging.error(f"Error context: {json.dumps(error_context, indent=2)}")
+                    
+                    # For NoneType iteration errors, provide specific guidance
+                    if 'NoneType' in str(e) and 'iterable' in str(e):
+                        logging.error("DEBUGGING TIP: This error usually occurs when None is used with 'in' operator or iteration")
+                        logging.error("Check for None values in metadata, score parameters, or workflow state")
+                    
                     raise
 
         # Create tasks for all rows but process them with controlled concurrency
@@ -1409,21 +1514,15 @@ class Evaluation:
         
         # Format metrics for API
         metrics_for_api = []
+        if metrics.get("alignment") is not None:
+            # For alignment (Gwet's AC1), store the raw value in range [-1, 1]
+            alignment_value = metrics["alignment"]
+            metrics_for_api.append({"name": "Alignment", "value": alignment_value})
+            # Added alignment to metrics
         if metrics.get("accuracy") is not None:
             metrics_for_api.append({"name": "Accuracy", "value": metrics["accuracy"] * 100})
         if metrics.get("precision") is not None:
             metrics_for_api.append({"name": "Precision", "value": metrics["precision"] * 100})
-        if metrics.get("alignment") is not None:
-            # For alignment (Gwet's AC1), we map from [-1, 1] to [0, 100] for UI display
-            # Only map if the value is negative, otherwise use the raw value scaled to percentage
-            alignment_value = metrics["alignment"]
-            # Process alignment value
-            if alignment_value < 0:
-                display_value = 0  # Map negative values to 0
-            else:
-                display_value = alignment_value * 100  # Scale to percentage
-            metrics_for_api.append({"name": "Alignment", "value": display_value})
-            # Added alignment to metrics
         if metrics.get("recall") is not None:
             metrics_for_api.append({"name": "Recall", "value": metrics["recall"] * 100})
         
@@ -1487,7 +1586,7 @@ class Evaluation:
             metric_names = [m["name"] for m in metrics_for_api]
             
             # Force append any missing metrics with default N/A value (-1 displays as N/A in UI)
-            required_metrics = ["Accuracy", "Precision", "Alignment", "Recall"]
+            required_metrics = ["Alignment", "Accuracy", "Precision", "Recall"]
             for required_metric in required_metrics:
                 if required_metric not in metric_names:
                     metrics_for_api.append({"name": required_metric, "value": -1})
@@ -1499,8 +1598,8 @@ class Evaluation:
         else:
             # Create default metrics list with all required metrics if empty
             default_metrics = [
+                {"name": "Alignment", "value": metrics.get("alignment", 0)},
                 {"name": "Accuracy", "value": metrics.get("accuracy", 0) * 100},
-                {"name": "Alignment", "value": 0 if metrics.get("alignment", 0) < 0 else metrics.get("alignment", 0) * 100},
                 {"name": "Precision", "value": metrics.get("precision", 0) * 100},
                 {"name": "Recall", "value": metrics.get("recall", 0) * 100}
             ]
@@ -1704,7 +1803,7 @@ class Evaluation:
         plt.savefig(f"{report_folder_path}/performance_{safe_question}.png", bbox_inches='tight', dpi=600)
         plt.close()
         
-    def generate_metrics_json(self, report_folder_path, sample_size, expenses):
+    def generate_metrics_json(self, report_folder_path, sample_size, expenses, calibration_report=None):
         overall_accuracy = None if self.total_questions == 0 else (self.total_correct / self.total_questions) * 100
         
         if sample_size < 120:
@@ -1718,10 +1817,15 @@ class Evaluation:
             "overall_accuracy": accuracy_format.format(overall_accuracy) if overall_accuracy is not None else 0,
             "number_correct": self.total_correct,
             "total_questions": self.total_questions,
+            "total_skipped": self.total_skipped,
             "number_of_samples": sample_size,
             "cost_per_call": f"{expenses['cost_per_text']:.7f}".rstrip('0').rstrip('.'),
             "total_cost": f"{expenses['total_cost']:.7f}".rstrip('0').rstrip('.')
         }
+
+        # Add calibration report if available
+        if calibration_report is not None:
+            metrics["confidence_calibration"] = calibration_report
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         metrics_filename = f"metrics_{timestamp}.json"
@@ -1731,7 +1835,152 @@ class Evaluation:
 
         logging.info(f"Metrics JSON file generated at {metrics_file_path}")
 
-    def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
+    def _format_confusion_matrix_for_summary(self, final_metrics):
+        """Format confusion matrix for the concise evaluation summary."""
+        confusion_matrix = final_metrics.get('confusionMatrix')
+        predicted_dist = final_metrics.get('predictedClassDistribution', {})
+        dataset_dist = final_metrics.get('datasetClassDistribution', {})
+        
+        if not confusion_matrix:
+            return ""
+        
+        summary_lines = []
+        
+        # Handle different confusion matrix formats (similar to evaluations.py)
+        matrix_dict = {}
+        all_classes = set()
+        
+        if isinstance(confusion_matrix, dict):
+            if 'matrix' in confusion_matrix and 'labels' in confusion_matrix:
+                # Format: {'matrix': [[7, 0], [2, 10]], 'labels': ['no', 'yes']}
+                matrix_2d = confusion_matrix['matrix']
+                labels = confusion_matrix['labels']
+                
+                if isinstance(matrix_2d, list) and isinstance(labels, list):
+                    all_classes = set(labels)
+                    matrix_dict = {}
+                    for i, actual_class in enumerate(labels):
+                        matrix_dict[actual_class] = {}
+                        for j, pred_class in enumerate(labels):
+                            if i < len(matrix_2d) and j < len(matrix_2d[i]):
+                                matrix_dict[actual_class][pred_class] = matrix_2d[i][j]
+                            else:
+                                matrix_dict[actual_class][pred_class] = 0
+            else:
+                # Standard nested dict format
+                matrix_dict = confusion_matrix
+                for actual, predicted_dict in confusion_matrix.items():
+                    all_classes.add(actual)
+                    if isinstance(predicted_dict, dict):
+                        all_classes.update(predicted_dict.keys())
+        
+        if not matrix_dict or not all_classes:
+            return ""
+        
+        all_classes = sorted(list(all_classes))
+        
+        # Create concise confusion matrix
+        summary_lines.append("CONFUSION MATRIX:")
+        summary_lines.append("                    Predicted")
+        header = "              "
+        for pred_class in all_classes:
+            header += f"{pred_class}".rjust(8)
+        summary_lines.append(header)
+        summary_lines.append("Actual      " + "-" * (8 * len(all_classes)))
+        
+        for actual_class in all_classes:
+            row = f"{actual_class}".ljust(10) + " | "
+            for pred_class in all_classes:
+                count = matrix_dict.get(actual_class, {}).get(pred_class, 0)
+                row += f"{count}".rjust(8)
+            summary_lines.append(row)
+        
+        # Add key insights
+        summary_lines.append("")
+        summary_lines.append("Key Insights:")
+        
+        # Find most common errors
+        errors = []
+        for actual_class in all_classes:
+            for pred_class in all_classes:
+                if actual_class != pred_class:
+                    count = matrix_dict.get(actual_class, {}).get(pred_class, 0)
+                    if count > 0:
+                        errors.append((count, actual_class, pred_class))
+        
+        errors.sort(reverse=True)  # Sort by count, highest first
+        
+        if errors:
+            summary_lines.append(f"• Most common error: {errors[0][1]} → {errors[0][2]} ({errors[0][0]} cases)")
+            if len(errors) > 1:
+                summary_lines.append(f"• Second most common: {errors[1][1]} → {errors[1][2]} ({errors[1][0]} cases)")
+        
+        # Add per-class accuracy
+        for cls in all_classes:
+            tp = matrix_dict.get(cls, {}).get(cls, 0)
+            total_actual = sum(matrix_dict.get(cls, {}).get(pred_cls, 0) for pred_cls in all_classes)
+            if total_actual > 0:
+                class_accuracy = tp / total_actual
+                summary_lines.append(f"• '{cls}' accuracy: {class_accuracy:.1%} ({tp}/{total_actual})")
+        
+        return "\n".join(summary_lines)
+
+    def _build_confusion_metrics_from_results(self):
+        """Build confusion matrix metrics from the evaluation results."""
+        if not hasattr(self, 'all_results') or not self.all_results:
+            return {}
+        
+        # For now, focus on the first score (primary score)
+        score_names = self.score_names()
+        if not score_names:
+            return {}
+        
+        primary_score_name = score_names[0]
+        
+        # Collect actual and predicted labels
+        y_true = []
+        y_pred = []
+        
+        for result in self.all_results:
+            score_result = next((r for r in result['results'].values() if r.parameters.name == primary_score_name), None)
+            if score_result:
+                true_label = score_result.metadata['human_label']
+                pred_label = str(score_result.value).lower()
+                y_true.append(true_label)
+                y_pred.append(pred_label)
+        
+        if not y_true or not y_pred:
+            return {}
+        
+        # Get unique classes
+        all_classes = sorted(list(set(y_true + y_pred)))
+        
+        # Build confusion matrix in the format expected by the summary formatter
+        matrix_dict = {}
+        for actual_class in all_classes:
+            matrix_dict[actual_class] = {}
+            for pred_class in all_classes:
+                matrix_dict[actual_class][pred_class] = 0
+        
+        # Fill in the counts
+        for actual, pred in zip(y_true, y_pred):
+            matrix_dict[actual][pred] += 1
+        
+        # Build class distributions
+        from collections import Counter
+        dataset_dist = dict(Counter(y_true))
+        predicted_dist = dict(Counter(y_pred))
+        
+        return {
+            'confusionMatrix': {
+                'matrix': [[matrix_dict[actual].get(pred, 0) for pred in all_classes] for actual in all_classes],
+                'labels': all_classes
+            },
+            'datasetClassDistribution': dataset_dist,
+            'predictedClassDistribution': predicted_dist
+        }
+
+    def generate_report(self, score_instance, overall_accuracy, expenses, sample_size, final_metrics=None):
         score_config = score_instance.parameters
 
         report = f"""
@@ -1760,12 +2009,20 @@ Transcript:
 
 ---
 """
+        # Add confusion matrix summary if available
+        confusion_summary = ""
+        if final_metrics and final_metrics.get('confusionMatrix'):
+            confusion_summary = self._format_confusion_matrix_for_summary(final_metrics)
+        
         report += f"""
 
 Overall Accuracy: {overall_accuracy:.1f}% ({self.total_correct} / {self.total_questions})
 Sample Size:      {sample_size}
+Skipped Results:  {self.total_skipped} (due to unmet dependency conditions)
 Cost per call:    ${expenses['cost_per_text']:.6f}
 Total cost:       ${expenses['total_cost']:.6f}
+
+{confusion_summary}
 """            
 
         return report
@@ -1885,6 +2142,12 @@ Total cost:       ${expenses['total_cost']:.6f}
                         # Skip if this is a dependency score and not our primary score
                         if primary_score_name and score_name != primary_score_name:
                             continue
+                        
+                        # Handle skipped scores - don't try to process them for evaluation
+                        if isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                            logging.info(f"Score '{score_name}' was skipped due to unmet dependency conditions for content_id {content_id}")
+                            self.total_skipped += 1
+                            continue
 
                         # First check for override
                         human_label = None
@@ -1928,6 +2191,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         has_processed_scores = True
 
                         # Create ScoreResult in a non-blocking way only for the primary score
+                        logging.info(f"DEBUG: About to check ScoreResult creation conditions - dry_run={getattr(self, 'dry_run', False)}, dashboard_client={self.dashboard_client is not None}, experiment_id={self.experiment_id}")
                         if getattr(self, 'dry_run', False):
                             pass  # Skip ScoreResult creation in dry run
                         elif self.dashboard_client and self.experiment_id:
@@ -1946,7 +2210,26 @@ Total cost:       ${expenses['total_cost']:.6f}
                                 # Don't re-raise - continue with evaluation but log the failure
 
                     except Exception as e:
-                        logging.exception(f"Error processing {score_identifier}: {e}")
+                        # Enhanced error logging for score processing
+                        error_info = {
+                            'score_identifier': score_identifier,
+                            'content_id': content_id,
+                            'error_type': type(e).__name__,
+                            'error_message': str(e),
+                            'text_preview': text[:200] + '...' if len(text) > 200 else text
+                        }
+                        
+                        logging.error(f"Error processing {score_identifier}: {e}")
+                        logging.error(f"Detailed error info: {json.dumps(error_info, indent=2)}")
+                        
+                        # Specific handling for NoneType iteration errors
+                        if 'NoneType' in str(e) and 'iterable' in str(e):
+                            logging.error(f"NoneType iteration error in score '{score_identifier}'")
+                            logging.error("This usually indicates None values in score configuration or workflow state")
+                            logging.error("Common causes: missing parameters, None metadata values, or None results")
+                        
+                        logging.exception(f"Full traceback for {score_identifier}:")
+                        
                         # Ensure parameters uses the correct scorecard name string
                         score_result = Score.Result(
                             value="ERROR", 
@@ -2008,6 +2291,7 @@ Total cost:       ${expenses['total_cost']:.6f}
 
     async def _create_score_result(self, *, score_result, content_id, result, feedback_item_id=None):
         """Create a score result in the dashboard."""
+        logging.info(f"DEBUG: _create_score_result called for content_id={content_id}")
         try:
             # Validate required attributes are available
             if not hasattr(self, 'experiment_id') or not self.experiment_id:
@@ -2029,7 +2313,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'results': {
                     score_result.parameters.name: {
                         'value': value,
-                        'confidence': None,
+                        'confidence': score_result.confidence,
                         'explanation': score_result.metadata.get('explanation', ''),
                         'metadata': {
                             'human_label': score_result.metadata.get('human_label', ''),
@@ -2049,6 +2333,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Use content_id as the itemId since Items are created by the data loading process
             
             # Create data dictionary with all required fields
+            # MARKER: CODE VERSION 2025-10-17-v3 - This ensures we're using the updated code
             data = {
                 'evaluationId': self.experiment_id,
                 'itemId': content_id,  # Use content_id directly
@@ -2056,20 +2341,28 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'scorecardId': self.scorecard_id,
                 'metadata': json.dumps(metadata_dict),  # Add the metadata that was created earlier
                 'value': value,  # Add the score result value
+                'confidence': score_result.confidence,  # Add confidence from Score.Result
+                'explanation': score_result.explanation,  # Add explanation from Score.Result
                 'code': '200',  # Add success code
+                'status': 'COMPLETED',  # Add status
+                'type': 'evaluation',  # Add type field required by byTypeStatusUpdated GSI
             }
+            logging.info(f"🔧 CODE VERSION 2025-10-17-v3 ACTIVE - Creating ScoreResult with type='{data.get('type')}' and status='{data.get('status')}'")
+            logging.info(f"🔧 Full data dict keys: {list(data.keys())}")
             
             # Add scoreId - try multiple sources
             score_id = None
             if hasattr(score_result, 'parameters') and hasattr(score_result.parameters, 'id'):
                 score_id = score_result.parameters.id
-            elif hasattr(self, 'score_id') and self.score_id:
+            elif hasattr(self, 'score_id') and self.score_id is not None:
                 score_id = self.score_id
             else:
                 self.logging.warning("No score ID found")
             
-            if score_id:
+            if score_id is not None:
                 data['scoreId'] = score_id
+            else:
+                logging.error("score_id is None, not adding to data")
             
             # Add feedback item ID if provided from the dataset
             if feedback_item_id:
@@ -2088,9 +2381,13 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Validate feedback_item_id if present
             feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
 
+            # Debug logging to see what's actually in the data dict
+            logging.info(f"DEBUG: ScoreResult data keys: {list(data.keys())}")
+            logging.info(f"DEBUG: type={data.get('type')}, status={data.get('status')}, updatedAt={data.get('updatedAt')}")
+
             # Validate all required fields are present and not None
-            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code']
-            missing_fields = [field for field in required_fields if not data.get(field)]
+            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'scoreId', 'value', 'metadata', 'code', 'status']
+            missing_fields = [field for field in required_fields if field not in data or data[field] is None]
             if missing_fields:
                 raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
@@ -2102,12 +2399,16 @@ Total cost:       ${expenses['total_cost']:.6f}
                     itemId
                     accountId
                     scorecardId
+                    scoreId
                     value
+                    confidence
+                    explanation
                     metadata
                     trace
                     code
                     type
                     feedbackItemId
+                    status
                 }
             }
             """
@@ -2115,7 +2416,14 @@ Total cost:       ${expenses['total_cost']:.6f}
             variables = {
                 "input": data
             }
-            
+
+            # DEBUG: Log the data being sent to GraphQL
+            logging.info(f"🚀 CREATING SCORERESULT WITH DATA:")
+            logging.info(f"   value = {data.get('value')!r}")
+            logging.info(f"   confidence = {data.get('confidence')!r}")
+            logging.info(f"   explanation = {data.get('explanation')!r}")
+            logging.info(f"   evaluationId = {data.get('evaluationId')!r}")
+
             # Execute the API call in a non-blocking way
             response = await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
             
@@ -2128,6 +2436,14 @@ Total cost:       ${expenses['total_cost']:.6f}
             
             if not response.get('createScoreResult'):
                 raise Exception("Failed to create score result - no data returned")
+
+            # DEBUG: Log the response from GraphQL
+            created_result = response.get('createScoreResult', {})
+            logging.info(f"✅ SCORERESULT CREATED SUCCESSFULLY:")
+            logging.info(f"   id = {created_result.get('id')!r}")
+            logging.info(f"   confidence = {created_result.get('confidence')!r}")
+            logging.info(f"   explanation = {created_result.get('explanation')!r}")
+            logging.info(f"   value = {created_result.get('value')!r}")
             
         except Exception as e:
             self.logging.error(f"ScoreResult creation failed: {str(e)}")
@@ -2638,44 +2954,54 @@ class AccuracyEvaluation(Evaluation):
 
     async def _run_evaluation(self, tracker):
         try:
-            # Prefer dataset specified in score YAML (data section). Fallback to labeled_samples only if provided explicitly.
+            # Use labeled_samples that were provided during AccuracyEvaluation construction
             import pandas as pd
             df = None
-            try:
-                # New path: use the data cache specified in score YAML directly
-                from plexus.data.FeedbackItems import FeedbackItems
-                target_scores = self.get_scores_to_process(self.scorecard.get_score_names())
-                primary_score_name = target_scores[0] if target_scores else None
-                score_config = None
-                for sc in self.scorecard.scores:
-                    if sc.get('name') == primary_score_name:
-                        score_config = sc
-                        break
-                if not score_config:
-                    score_config = self.scorecard.scores[0] if self.scorecard.scores else {}
 
-                data_section = score_config.get('data') or {}
-                if data_section:
-                    cls = data_section.get('class')
-                    params = data_section.get('parameters') or {}
-                    # Support shorthand where params are at root
-                    if not params:
-                        params = {k: v for k, v in data_section.items() if k != 'class'}
+            # Check if we have labeled_samples from the constructor
+            if self.labeled_samples:
+                df = pd.DataFrame(self.labeled_samples)
+                self.logging.info(f"Using {len(df)} labeled samples provided to AccuracyEvaluation")
+            elif self.labeled_samples_filename:
+                df = pd.read_csv(self.labeled_samples_filename)
+                self.logging.info(f"Loaded {len(df)} samples from file: {self.labeled_samples_filename}")
+            else:
+                # Fallback: try to load data from score YAML (for backwards compatibility)
+                try:
+                    from plexus.data.FeedbackItems import FeedbackItems
+                    # For AccuracyEvaluation, we don't have get_scores_to_process method
+                    # so we'll work with what we have in the scorecard
+                    if hasattr(self, 'subset_of_score_names') and self.subset_of_score_names:
+                        primary_score_name = self.subset_of_score_names[0]
+                    else:
+                        primary_score_name = self.scorecard.scores[0].get('name') if self.scorecard.scores else None
 
-                    # Map known aliases to fully-qualified class
-                    if cls in ['FeedbackItems', 'plexus.data.FeedbackItems']:
-                        data_cache = FeedbackItems(**params)
-                        df = data_cache.load_dataframe(data=params, fresh=True)
-            except Exception as e:
-                self.logging.warning(f"Falling back from score YAML dataset load: {e}")
+                    score_config = None
+                    for sc in self.scorecard.scores:
+                        if sc.get('name') == primary_score_name:
+                            score_config = sc
+                            break
+                    if not score_config:
+                        score_config = self.scorecard.scores[0] if self.scorecard.scores else {}
 
-            if df is None:
-                if self.labeled_samples:
-                    df = pd.DataFrame(self.labeled_samples)
-                elif self.labeled_samples_filename:
-                    df = pd.read_csv(self.labeled_samples_filename)
-                else:
-                    raise ValueError("Dataset not found. Score YAML lacks a usable 'data' section and no labeled samples were provided.")
+                    data_section = score_config.get('data') or {}
+                    if data_section:
+                        cls = data_section.get('class')
+                        params = data_section.get('parameters') or {}
+                        # Support shorthand where params are at root
+                        if not params:
+                            params = {k: v for k, v in data_section.items() if k != 'class'}
+
+                        # Map known aliases to fully-qualified class
+                        if cls in ['FeedbackItems', 'plexus.data.FeedbackItems']:
+                            data_cache = FeedbackItems(**params)
+                            df = data_cache.load_dataframe(data=params, fresh=True)
+                            self.logging.info(f"Loaded {len(df)} samples from FeedbackItems data source")
+                except Exception as e:
+                    self.logging.warning(f"Could not load data from score YAML: {e}")
+
+            if df is None or len(df) == 0:
+                raise ValueError("Dataset not found. No labeled samples were provided and score YAML data loading failed.")
 
             # Adjust the sample size if necessary
             self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
@@ -2718,12 +3044,19 @@ class AccuracyEvaluation(Evaluation):
             # Reset counters and mismatches
             self.total_correct = 0
             self.total_questions = 0
+            self.total_skipped = 0
             self.mismatches = []
             
             # Count the number correct out of all questions and collect mismatches
             for result in self.all_results:
                 for question in self.score_names():
                     score_result = next((r for r in result['results'].values() if r.parameters.name == question), None)
+                    
+                    # Skip counting if score was skipped due to unmet conditions
+                    if score_result and isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                        self.total_skipped += 1
+                        continue
+                    
                     score_value = str(score_result.value).lower() if score_result else None
                     human_label = str(score_result.metadata['human_label']).lower() if score_result and hasattr(score_result, 'metadata') and 'human_label' in score_result.metadata else None
                     
@@ -2783,7 +3116,10 @@ class AccuracyEvaluation(Evaluation):
                     # Calculate overall_accuracy from the counters we just updated
                     overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
                     
-                    report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample)
+                    # Build confusion matrix metrics for the summary
+                    confusion_metrics = self._build_confusion_metrics_from_results()
+                    
+                    report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample, confusion_metrics)
                     logging.info(f"\nEvaluation Report:\n{report}\n")
                 except ValueError as e:
                     if "not found" in str(e):
@@ -2841,10 +3177,99 @@ class AccuracyEvaluation(Evaluation):
                 # Generate metrics JSON
                 self.generate_metrics_json(report_folder_path, self.number_of_texts_to_sample, expenses)
 
+                # Analyze confidence calibration if confidence features are detected (preserve raw values)
+                calibration_report = None
+                try:
+                    from plexus.confidence_calibration import (
+                        detect_confidence_feature_enabled,
+                        extract_confidence_accuracy_pairs,
+                        compute_two_stage_calibration,
+                        serialize_calibration_model,
+                        generate_calibration_report
+                    )
+
+                    logging.info(f"About to check confidence detection on {len(self.all_results)} results")
+                    print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+                    confidence_detected = detect_confidence_feature_enabled(self.all_results)
+                    logging.info(f"Confidence detection result: {confidence_detected}")
+                    print(f"DEBUG: Confidence detection result: {confidence_detected}")
+
+                    if confidence_detected:
+                        logging.info("Confidence feature detected - computing two-stage calibration (temperature scaling + isotonic regression)")
+
+                        # Extract confidence-accuracy pairs
+                        confidence_scores, accuracy_labels = extract_confidence_accuracy_pairs(self.all_results)
+
+                        if len(confidence_scores) >= 10:
+                            # Compute two-stage calibration model
+                            optimal_temperature, isotonic_model, temp_scaled_scores = compute_two_stage_calibration(
+                                confidence_scores, accuracy_labels
+                            )
+
+                            if isotonic_model is not None:
+                                # Generate calibration report with isotonic model data
+                                calibration_report = generate_calibration_report(
+                                    temp_scaled_scores, accuracy_labels, isotonic_model
+                                )
+
+                                # Add temperature scaling info and serialized calibration data
+                                calibration_report["temperature_scaling"] = {
+                                    "optimal_temperature": float(optimal_temperature),
+                                    "method": "two_stage_calibration"
+                                }
+                                calibration_report["calibration_model"] = serialize_calibration_model(isotonic_model)
+
+                                # Generate reliability diagram visualization with all three series
+                                try:
+                                    from plexus.confidence_calibration import plot_reliability_diagram
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    reliability_plot_path = f"{report_folder_path}/reliability_diagram_{timestamp}.png"
+
+                                    # Apply final calibration to get fully calibrated confidence scores
+                                    final_calibrated_scores = isotonic_model.predict(temp_scaled_scores)
+
+                                    plot_reliability_diagram(
+                                        confidence_scores=confidence_scores,
+                                        accuracy_labels=accuracy_labels,
+                                        save_path=reliability_plot_path,
+                                        title=f"Two-Stage Confidence Calibration (T={optimal_temperature:.3f})",
+                                        n_bins=20,  # 5% buckets
+                                        temperature_scaled_scores=temp_scaled_scores,
+                                        calibrated_confidence_scores=final_calibrated_scores.tolist()
+                                    )
+
+                                    logging.info(f"Two-stage reliability diagram saved to: {reliability_plot_path}")
+                                    logging.info(f"Temperature scaling: T={optimal_temperature:.4f}")
+                                    print(f"DEBUG: Two-stage reliability diagram saved to: {reliability_plot_path}")
+                                    print(f"DEBUG: Temperature scaling: T={optimal_temperature:.4f}")
+
+                                    # Save calibration metrics to JSON file
+                                    calibration_metrics_path = f"{report_folder_path}/calibration_metrics_{timestamp}.json"
+                                    with open(calibration_metrics_path, 'w') as f:
+                                        import json
+                                        json.dump(calibration_report, f, indent=2)
+                                    logging.info(f"Calibration metrics saved to: {calibration_metrics_path}")
+
+                                except Exception as viz_error:
+                                    logging.error(f"Error generating two-stage reliability diagram: {viz_error}")
+                                    print(f"DEBUG: Error generating two-stage reliability diagram: {viz_error}")
+                            else:
+                                logging.warning("Could not compute two-stage calibration model (isotonic regression failed)")
+                        else:
+                            logging.info(f"Insufficient confidence data for calibration analysis: {len(confidence_scores)} samples (need >= 10)")
+                            print(f"DEBUG: Insufficient confidence data: {len(confidence_scores)} samples")
+                    else:
+                        logging.info("No confidence features detected - skipping calibration analysis")
+                        print(f"DEBUG: No confidence features detected")
+
+                except Exception as calib_error:
+                    logging.error(f"Error in confidence calibration analysis: {calib_error}")
+                    print(f"DEBUG: Error in calibration analysis: {calib_error}")
+
             return metrics
         except Exception as e:
             self.logging.error(f"Error in _run_evaluation: {e}", exc_info=True)
-            raise e
+            'raise e'
         finally:
             pass
 

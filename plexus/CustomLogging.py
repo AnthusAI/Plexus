@@ -16,13 +16,13 @@ console = Console()
 
 # Default log group name
 if os.getenv("environment"):
-    DEFAULT_LOG_GROUP = f'plexus/{os.getenv("environment")}'
+    DEFAULT_LOG_GROUP_NAME = f'plexus/{os.getenv("environment")}'
 else:
-    DEFAULT_LOG_GROUP = 'plexus'
+    DEFAULT_LOG_GROUP_NAME = 'plexus'
 
 # Global variables to store the current CloudWatch handler and log group
 cloudwatch_handler = None
-current_log_group = DEFAULT_LOG_GROUP
+current_log_group_name = DEFAULT_LOG_GROUP_NAME
 
 def _get_aws_credentials():
     """Helper function to check and return AWS credentials.
@@ -45,13 +45,13 @@ def _get_aws_credentials():
     
     return access_key, secret_key, region, is_configured
 
-def setup_logging(log_group=DEFAULT_LOG_GROUP):
-    global cloudwatch_handler, current_log_group
+def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
+    global cloudwatch_handler, current_log_group_name
     
     # Remove existing CloudWatch handler if present
     if cloudwatch_handler:
         logging.getLogger().removeHandler(cloudwatch_handler)
-        logging.debug(f"Removed existing CloudWatch handler for log group: {current_log_group}")
+        logging.debug(f"Removed existing CloudWatch handler for log group: {current_log_group_name}")
     
     # Create custom formatter
     class PlexusFormatter(logging.Formatter):
@@ -59,7 +59,7 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
             # Add timestamp in a consistent format
             record.asctime = datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S')
             # Add the log group if available
-            record.log_group = current_log_group if current_log_group else 'plexus'
+            record.log_group_name = current_log_group_name if current_log_group_name else 'plexus'
             # First format with our custom format string
             formatted = super().format(record)
             return formatted
@@ -74,7 +74,7 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
         show_level=False,  # Don't show level in Rich output since we include it in our format
         log_time_format='[%X]'
     )
-    rich_handler.setFormatter(PlexusFormatter('%(asctime)s [%(log_group)s] [%(levelname)s] %(message)s'))
+    rich_handler.setFormatter(PlexusFormatter('%(asctime)s [%(log_group_name)s] [%(levelname)s] %(message)s'))
 
     handlers = [rich_handler]
 
@@ -84,32 +84,31 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
     # Only add CloudWatch handler if AWS credentials are available
     if is_configured:
         try:
-            stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
+            log_stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
             if os.getenv('DEBUG'):
                 logging.debug(f"Attempting to create CloudWatch handler:")
-                logging.debug(f"- Log Group: {log_group}")
-                logging.debug(f"- Stream Name: {stream_name}")
+                logging.debug(f"- Log Group: {log_group_name}")
+                logging.debug(f"- Stream Name: {log_stream_name}")
                 logging.debug(f"- AWS Region: {region}")
             
             cloudwatch_handler = watchtower.CloudWatchLogHandler(
-                log_group=log_group,
-                stream_name=stream_name,
-                boto3_client=boto3.client('logs', region_name=region)
+                log_group_name=log_group_name,
+                log_stream_name=log_stream_name
             )
             cloudwatch_handler.setFormatter(PlexusFormatter())
             handlers.append(cloudwatch_handler)
-            current_log_group = log_group
+            current_log_group_name = log_group_name
             if os.getenv('DEBUG'):
                 logging.debug("Successfully created CloudWatch handler")
         except Exception as e:
             logging.error(f"Error creating CloudWatch handler: {str(e)}")
             cloudwatch_handler = None
-            current_log_group = None
+            current_log_group_name = None
     else:
         if os.getenv('DEBUG'):
             logging.debug("Skipping CloudWatch handler - missing AWS credentials")
         cloudwatch_handler = None
-        current_log_group = None
+        current_log_group_name = None
 
     # Configure root logger
     root_logger = logging.getLogger()
@@ -140,46 +139,45 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
 # Initial setup with default log group
 setup_logging()
 
-def set_log_group(new_log_group):
+def set_log_group(new_log_group_name):
     """
     Change the CloudWatch log group for logging.
     
-    :param new_log_group: The name of the new log group to use
+    :param new_log_group_name: The name of the new log group to use
     """
     # Skip if CloudWatch logging is not configured
     _, _, _, is_configured = _get_aws_credentials()
     if not is_configured:
-        logging.debug(f"CloudWatch logging not configured, skipping group change: {new_log_group}")
+        logging.debug(f"CloudWatch logging not configured, skipping group change: {new_log_group_name}")
         return
     
-    global current_log_group
+    global current_log_group_name
     environment = os.getenv("environment")
     if environment:
-        new_log_group = f"{new_log_group}/{environment}"
+        new_log_group_name = f"{new_log_group_name}/{environment}"
     
-    setup_logging(new_log_group)
-    current_log_group = new_log_group
-    logging.debug(f"Switched logging to group: {new_log_group}")
+    setup_logging(new_log_group_name)
+    current_log_group_name = new_log_group_name
+    logging.debug(f"Switched logging to group: {new_log_group_name}")
 
-def add_log_stream(stream_name):
+def add_log_stream(log_stream_name):
     """
     Add a new log stream to the current log group.
     
-    :param stream_name: The name of the new log stream
+    :param log_stream_name: The name of the new log stream
     """
-    global cloudwatch_handler, current_log_group
+    global cloudwatch_handler, current_log_group_name
     
     # Skip if CloudWatch logging is not configured
-    _, _, region, is_configured = _get_aws_credentials()
-    if not is_configured or not current_log_group:
-        logging.debug(f"CloudWatch logging not configured, skipping stream: {stream_name}")
+    _, _, _, is_configured = _get_aws_credentials()
+    if not is_configured or not current_log_group_name:
+        logging.debug(f"CloudWatch logging not configured, skipping stream: {log_stream_name}")
         return None
     
     # Create a new handler for the specific stream
     new_handler = watchtower.CloudWatchLogHandler(
-        log_group=current_log_group,
-        stream_name=f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}-{stream_name}",
-        boto3_client=boto3.client('logs', region_name=region),
+        log_group_name=current_log_group_name,
+        log_stream_name=f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}-{log_stream_name}",
         use_queues=False  # To ensure immediate logging for the specific stream
     )
     
@@ -188,7 +186,7 @@ def add_log_stream(stream_name):
     logger.addHandler(new_handler)
     
     # Log the addition of the new stream
-    logging.debug(f"Added new log stream: {stream_name}")
+    logging.debug(f"Added new log stream: {log_stream_name}")
     
     return new_handler
 

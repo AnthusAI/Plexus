@@ -43,10 +43,68 @@ Plexus is an orchestration system for AI/ML classification at scale. It provides
 - Do not make git changes directly (no commits or pushing)
 - Follow code style guidelines in dashboard/CLAUDE.md
 
-## Score Types
-- ProgrammaticScore: Custom code-based scoring
-- KeywordClassifier: Simple keyword matching
-- FuzzyMatchClassifier: Fuzzy text matching
-- SemanticClassifier: Embedding-based matching
-- LangGraphScore: LangGraph flow-based scoring
-- SimpleLLMScore: Direct LLM-based scoring
+- You can't test changes you make to MCP tools until we restart either the MCP server or you, so ask me to do that whenever you make changes to the MCP server tools.
+- You should use the Plexus MCP tools rather than CLI tools or custom code tools whenever possible because they're more token-efficient with the output.  You only need other options when an existing MCP tool won't work or when you have changed the MCP tool since you can't access the new version until we restart either the MCP server or you.
+
+## Configuration Loading (CRITICAL)
+
+**NEVER manually set environment variables with secrets in test scripts.** Always use the proper Plexus configuration system.
+
+### Correct Pattern for Test Scripts
+```python
+from plexus.cli.shared.client_utils import create_client
+
+# This automatically loads .plexus/config.yaml and sets all environment variables
+client = create_client()
+
+# Now environment variables like OPENAI_API_KEY are available
+import os
+api_key = os.getenv('OPENAI_API_KEY')
+```
+
+### For Non-CLI Code (like services)
+```python
+from plexus.config.loader import load_config
+import os
+
+# Load Plexus configuration from .plexus/config.yaml
+# This sets ALL environment variables including OPENAI_API_KEY
+load_config()
+
+# Now access environment variables normally
+api_key = os.getenv('OPENAI_API_KEY')
+plexus_api_url = os.getenv('PLEXUS_API_URL')
+```
+
+### How Configuration Loading Works
+1. **Configuration Files**: Plexus loads from `.plexus/config.yaml` in current directory or home directory
+2. **Environment Variable Mapping**: Configured in `plexus/config/loader.py:76` with mapping like `'openai.api_key': 'OPENAI_API_KEY'`
+3. **DRY Pattern**: All CLI commands use `create_client()` which calls `load_config()` internally
+4. **Precedence**: Environment variables > YAML config > defaults
+
+### What NOT to Do
+```python
+# WRONG - Do not manually set secrets
+PLEXUS_API_URL = "https://..."
+PLEXUS_API_KEY = "da2-..."
+OPENAI_API_KEY = "sk-..."
+
+# WRONG - Do not set environment variables manually in scripts
+os.environ['OPENAI_API_KEY'] = 'sk-...'
+```
+
+### Example Test Script (Correct Way)
+```python
+import sys
+sys.path.append('/Users/ryan.porter/Projects/Plexus')
+
+from plexus.cli.shared.client_utils import create_client
+from plexus.cli.experiment.service import ExperimentService
+
+# This loads .plexus/config.yaml automatically
+client = create_client()
+service = ExperimentService(client)
+
+# Configuration is now loaded, proceed with test
+result = service.run_experiment(experiment_id)
+```

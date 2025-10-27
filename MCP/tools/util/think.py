@@ -16,7 +16,7 @@ def register_think_tool(mcp: FastMCP):
     """Register the think tool with the MCP server."""
 
     @mcp.tool()
-    async def think(thought: str) -> str:
+    async def think(thought: str = "") -> str:
         """
         Use this tool as a scratchpad when working with Plexus tools to:
         - Plan your approach for Plexus operations
@@ -29,15 +29,27 @@ def register_think_tool(mcp: FastMCP):
         - Open the documentation: get_plexus_documentation(filename="feedback-alignment").
         - Follow the baseline-first workflow below. Do NOT edit YAML until a baseline is captured.
 
-        CRITICAL WORKFLOW POLICY (Score YAML work):
-        - Always work from a LOCAL YAML file. Pull with the score pull tool and edit the file in `scorecards/<Scorecard>/<Score>.yaml`.
-        - During iteration, DO NOT push new versions. Keep all changes local.
+        SCORE WORKFLOW RECOMMENDATIONS:
+        
+        FOR MOST SCORE UPDATES (Recommended):
+        - Use plexus_score_update with the 'code' parameter to directly update score YAML
+        - This is the simplest and most efficient approach for most score modifications
+        - Supports specifying parent_version_id for version lineage control
+        
+        FOR LOCAL DEVELOPMENT WORKFLOWS:
+        - Use pull/push when you need to work with local files for complex editing
+        - Pull with plexus_score_pull to get YAML locally in `scorecards/<Scorecard>/<Score>.yaml`
+        - Edit the local file, then push with plexus_score_push
+        - Useful for: complex multi-file workflows, external editor usage, version control integration
+        
+        FEEDBACK ALIGNMENT SPECIFIC POLICY:
+        - During feedback alignment iteration, DO NOT push new versions. Keep all changes local.
         - DO NOT PROMOTE CHAMPION. Champion promotion is disabled for agents and must not be attempted.
-        - Forbidden during iteration: plexus_score_push, plexus_score_update, any champion/promotion action.
+        - For feedback alignment: use local YAML files and evaluations with yaml=true, remote=false.
 
         REQUIRED BASELINE STEPS (no edits yet):
         1) Pull champion YAML locally (score pull). Confirm the local path.
-        2) Collect recent metrics: plexus_feedback_summary (e.g., 30 days) and plexus_feedback_find for FP (Yes→No) and FN (No→Yes).
+        2) Collect recent metrics: plexus_feedback_analysis (e.g., 30 days) and plexus_feedback_find for FP (Yes→No) and FN (No→Yes).
         3) Run a LOCAL baseline evaluation using ONLY local YAML:
            - Evaluations must set remote=false and yaml=true.
            - Path overrides are handled automatically; you do not need to pass any folder parameters.
@@ -73,8 +85,13 @@ def register_think_tool(mcp: FastMCP):
         sys.stdout = temp_stdout
 
         try:
-            logger.info(f"Think tool used: {thought[:100]}...")
-            return "Thought processed"
+            # Log the thought content
+            if thought:
+                logger.info(f"Think tool used: {thought[:200]}...")
+                return "Thought processed successfully"
+            else:
+                logger.info("Think tool used with empty thought")
+                return "Empty thought processed"
         except Exception as e:
             logger.error(f"Error in think tool: {str(e)}", exc_info=True)
             return f"Error processing thought: {str(e)}"

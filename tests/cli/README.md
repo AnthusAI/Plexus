@@ -14,39 +14,40 @@ During CLI restructuring, several critical issues went undetected:
 
 ## 📁 Test Files
 
-### `test_cli_imports_only.py` ⚡
-**Ultra-fast import validation** (< 15 seconds)
-- Tests that all CLI modules can be imported
-- Catches broken import paths after restructuring  
-- Good for quick local validation
+### `test_cli_smoke_ultra_fast.py` ⚡ **RECOMMENDED FOR DEVELOPMENT**
+**Ultra-fast comprehensive smoke tests** (< 15 seconds)
+- Essential CLI functionality validation
+- PyTorch lazy loading verification
+- Import and command registration testing
+- Perfect for development iteration
 
 ```bash
-python tests/cli/test_cli_imports_only.py
-python -m pytest tests/cli/test_cli_imports_only.py -v
+python tests/cli/test_cli_smoke_ultra_fast.py
+python -m pytest tests/cli/test_cli_smoke_ultra_fast.py -v
 ```
 
-### `test_cli_smoke.py` 🚀
-**Fast CLI functionality tests** (< 60 seconds)
-- Tests that `plexus` command exists and shows help
-- Tests core commands don't fail with import errors
-- Tests worker command basic functionality
-- Good for CI smoke testing
+### `test_cli_integration_fast.py` 🚀 **RECOMMENDED FOR CI/CD**
+**Fast comprehensive integration tests** (< 45 seconds)
+- Full CLI command validation using optimized techniques
+- In-process testing with Click's CliRunner
+- Selective subprocess testing for critical commands
+- Comprehensive coverage with excellent performance
 
 ```bash
-python tests/cli/test_cli_smoke.py
-python -m pytest tests/cli/test_cli_smoke.py -v
+python -m pytest tests/cli/test_cli_integration_fast.py -v
 ```
 
-### `test_cli_integration.py` 🔍
-**Comprehensive CLI integration tests** (5+ minutes)
-- Tests all CLI commands are registered and accessible
-- Tests command structure and error handling
-- Tests performance characteristics
-- Good for thorough validation
+### Legacy Files (Still Available)
 
-```bash
-python -m pytest tests/cli/test_cli_integration.py -v
-```
+#### `test_cli_imports_only.py` 
+**Import-only validation** (< 15 seconds)
+- Basic import validation
+- Use ultra-fast tests instead for better coverage
+
+#### `test_cli_smoke.py`
+**Basic smoke tests** (< 60 seconds)  
+- Basic CLI functionality
+- Use fast integration tests instead for better coverage
 
 ## 🛠️ Test Runners
 

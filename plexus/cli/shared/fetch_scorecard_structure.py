@@ -44,6 +44,7 @@ def fetch_scorecard_structure(client, identifier: str) -> Optional[Dict[str, Any
                 championVersionId
                 type
                 description
+                isDisabled
               }
             }
           }
