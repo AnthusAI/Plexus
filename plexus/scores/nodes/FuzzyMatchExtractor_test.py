@@ -1,11 +1,8 @@
 import pytest
 from pydantic import ValidationError
 from typing import Any # Added Any for MockGraphState typing clarity
-from plexus.scores.nodes.FuzzyMatchExtractor import (
-    FuzzyMatchExtractor,
-    FuzzyTarget,
-    FuzzyTargetGroup
-)
+from plexus.scores.nodes.FuzzyMatchExtractor import FuzzyMatchExtractor
+from plexus.scores.shared.fuzzy_matching import FuzzyTarget, FuzzyTargetGroup
 from plexus.scores.nodes.BaseNode import BaseNode # For GraphState inheritance
 import unittest.mock as mock
 import os

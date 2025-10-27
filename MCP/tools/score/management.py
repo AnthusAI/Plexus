@@ -29,17 +29,17 @@ def register_score_tools(mcp: FastMCP):
         include_versions: bool = False
     ) -> Union[str, Dict[str, Any]]:
         """
-        Get detailed information about a specific score, including its location, configuration, and optionally all versions.
+        Get detailed information about a specific score, including its location, code, and optionally all versions.
         Supports intelligent search across scorecards when scorecard_identifier is omitted.
         
         Parameters:
         - score_identifier: Identifier for the score (ID, name, key, or external ID)
         - scorecard_identifier: Optional identifier for the parent scorecard to narrow search. If omitted, searches across all scorecards.
-        - version_id: Optional specific version ID to show configuration for. If omitted, uses champion version.
+        - version_id: Optional specific version ID to show code for. If omitted, uses champion version.
         - include_versions: If True, include detailed version information and all versions list
         
         Returns:
-        - Information about the found score including its location, configuration, and optionally version details
+        - Information about the found score including its location, code, and optionally version details
         """
         # Temporarily redirect stdout to capture any unexpected output
         old_stdout = sys.stdout
@@ -286,7 +286,7 @@ def register_score_tools(mcp: FastMCP):
                                 
                                 if target_version_data:
                                     response["targetedVersionDetails"] = target_version_data
-                                    response["configuration"] = target_version_data.get('configuration')
+                                    response["code"] = target_version_data.get('configuration')
                                     
                                 if include_versions:
                                     response["allVersions"] = all_versions
@@ -295,8 +295,8 @@ def register_score_tools(mcp: FastMCP):
                         logger.error(f"Error fetching version details: {str(e)}", exc_info=True)
                         response["versionsError"] = f"Error fetching version details: {str(e)}"
                 else:
-                    # Get configuration preview if champion version exists (original behavior)
-                    config_preview = "No configuration available"
+                    # Get code preview if champion version exists (original behavior)
+                    config_preview = "No code available"
                     champion_version_id = score.get('championVersionId')
                     if champion_version_id:
                         try:
@@ -317,9 +317,9 @@ def register_score_tools(mcp: FastMCP):
                                 if len(config.split('\n')) > 5:
                                     config_preview += '\n... (truncated)'
                         except Exception as e:
-                            config_preview = f"Error loading configuration: {str(e)}"
+                            config_preview = f"Error loading code: {str(e)}"
                     
-                    response["configurationPreview"] = config_preview
+                    response["codePreview"] = config_preview
                 
                 return response
             else:

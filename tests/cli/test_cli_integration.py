@@ -72,7 +72,8 @@ class TestCLICommands:
         "data",
         "feedback",
         "dataset",
-        "count"
+        "count",
+        "procedure"
     ])
     def test_top_level_commands_available(self, command):
         """Test that all major CLI commands are registered and show help"""
@@ -94,6 +95,44 @@ class TestCLICommands:
         
         assert result.returncode == 0, f"'plexus score-chat' failed: {result.stderr}"
         assert "Usage:" in result.stdout
+    
+    def test_procedure_run_parameter_validation(self):
+        """Test that 'plexus procedure run' command validates parameters correctly"""
+        # Test with invalid procedure ID to ensure the command doesn't crash with TypeError
+        # This test would catch the missing experiment_id parameter issue
+        try:
+            result = subprocess.run(['plexus', 'procedure', 'run', 'invalid-procedure-id'], 
+                                  capture_output=True, text=True, timeout=60)
+        except subprocess.TimeoutExpired as e:
+            # If it times out, that means it didn't crash immediately - that's actually good
+            # But we can check the partial output for errors
+            stdout = e.stdout.decode() if e.stdout else ""
+            stderr = e.stderr.decode() if e.stderr else ""
+            combined_output = stdout + stderr
+            
+            # Even with timeout, should not have critical Python errors
+            assert "missing 1 required keyword-only argument: 'experiment_id'" not in combined_output, \
+                f"Procedure run command has parameter mismatch even with timeout: {combined_output[:1000]}"
+            assert "object has no attribute 'run_procedure'" not in combined_output, \
+                f"Procedure run command has missing method even with timeout: {combined_output[:1000]}"
+            
+            # If it times out without Python errors, that's acceptable for this test
+            return
+        
+        # Should not crash with TypeError about missing experiment_id parameter
+        assert "missing 1 required keyword-only argument: 'experiment_id'" not in result.stderr, \
+            f"Procedure run command has parameter mismatch: {result.stderr}"
+        
+        # Should not crash with AttributeError about missing method
+        assert "object has no attribute 'run_procedure'" not in result.stderr, \
+            f"Procedure run command has missing method: {result.stderr}"
+        
+        # Should fail gracefully with a proper error message (not Python errors)
+        # The exact error depends on implementation - could be "procedure not found" or similar
+        if result.returncode != 0:
+            # Should not be Python errors, should be domain errors
+            assert "TypeError" not in result.stderr, f"Command crashed with TypeError: {result.stderr}"
+            assert "AttributeError" not in result.stderr, f"Command crashed with AttributeError: {result.stderr}"
 
 
 class TestCLIImports:
@@ -123,7 +162,8 @@ class TestCLIImports:
             'plexus.cli.data.operations',
             'plexus.cli.feedback.commands',
             'plexus.cli.dataset.datasets',
-            'plexus.cli.record_count.counting'
+            'plexus.cli.record_count.counting',
+            'plexus.cli.procedure.procedures'
         ]
         
         for module_name in command_modules:

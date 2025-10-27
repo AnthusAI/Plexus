@@ -13,14 +13,250 @@ from fastmcp import FastMCP
 logger = logging.getLogger(__name__)
 
 
+async def _get_paginated_feedback_with_items(
+    client,
+    scorecard_name: str,
+    score_name: str,
+    scorecard_id: str,
+    score_id: str,
+    account_id: str,
+    days: int,
+    initial_value: Optional[str] = None,
+    final_value: Optional[str] = None,
+    limit: int = 5,
+    prioritize_edit_comments: bool = True,
+    offset: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Get paginated feedback items with nested item details.
+    
+    Returns:
+        Dict with 'feedback_items', 'pagination', and 'context' keys
+    """
+    from datetime import datetime, timezone, timedelta
+    import asyncio
+    
+    # Calculate date range
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days)
+    
+    # Build GraphQL query for feedback items with item details
+    query = """
+    query ListFeedbackItemsWithItems(
+        $accountId: String!,
+        $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
+        $limit: Int,
+        $nextToken: String,
+        $sortDirection: ModelSortDirection
+    ) {
+        listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+            accountId: $accountId,
+            scorecardIdScoreIdEditedAt: $composite_sk_condition,
+            limit: $limit,
+            nextToken: $nextToken,
+            sortDirection: $sortDirection
+        ) {
+            items {
+                id
+                accountId
+                scorecardId
+                scoreId
+                itemId
+                cacheKey
+                initialAnswerValue
+                finalAnswerValue
+                initialCommentValue
+                finalCommentValue
+                editCommentValue
+                editedAt
+                editorName
+                isAgreement
+                createdAt
+                updatedAt
+                item {
+                    id
+                    accountId
+                    externalId
+                    text
+                    identifiers
+                    createdAt
+                    updatedAt
+                }
+            }
+            nextToken
+        }
+    }
+    """
+    
+    # Prepare composite sort key for the GSI query using correct structure
+    start_date_str = start_date.isoformat()
+    end_date_str = end_date.isoformat()
+    
+    # Handle offset-based vs token-based pagination
+    # For offset-based pagination, we need to fetch more items to implement proper skipping
+    if offset is not None:
+        # Fetch extra items to accommodate the offset skip (even for offset=0)
+        fetch_limit = (limit * 3) + offset  # Get enough items to skip offset and return limit
+    else:
+        fetch_limit = limit * 2  # Normal limit for legacy pagination
+    
+    variables = {
+        "accountId": account_id,
+        "composite_sk_condition": {
+            "between": [
+                {
+                    "scorecardId": str(scorecard_id),
+                    "scoreId": str(score_id),
+                    "editedAt": start_date_str
+                },
+                {
+                    "scorecardId": str(scorecard_id),
+                    "scoreId": str(score_id),
+                    "editedAt": end_date_str
+                }
+            ]
+        },
+        "limit": fetch_limit,
+        "sortDirection": "DESC"  # Most recent first
+    }
+    
+    # Legacy token-based pagination has been removed - only offset method supported
+    
+    # Debug logging for GraphQL query
+    logger.info(f"[MCP DEBUG] GraphQL variables: {variables}")
+    
+    # Execute the query
+    response = await asyncio.to_thread(client.execute, query, variables)
+    
+    logger.info(f"[MCP DEBUG] GraphQL response keys: {list(response.keys()) if response else 'None'}")
+    if response and 'errors' in response:
+        logger.error(f"[MCP DEBUG] GraphQL errors: {response.get('errors')}")
+        raise Exception(f"GraphQL errors: {response.get('errors')}")
+    
+    if not response or 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt' not in response:
+        logger.error(f"[MCP DEBUG] Unexpected response format: {response}")
+        raise Exception("Unexpected response format from feedback query")
+    
+    result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt']
+    raw_items = result.get('items', [])
+    next_token = result.get('nextToken')
+    
+    logger.info(f"[MCP DEBUG] Retrieved {len(raw_items)} raw items from GraphQL")
+    
+    # Filter by initial_value and final_value if specified
+    filtered_items = []
+    for item_data in raw_items:
+        if initial_value and item_data.get('initialAnswerValue') != initial_value:
+            logger.info(f"[MCP DEBUG] Filtering out item: initial_value={item_data.get('initialAnswerValue')} != {initial_value}")
+            continue
+        if final_value and item_data.get('finalAnswerValue') != final_value:
+            logger.info(f"[MCP DEBUG] Filtering out item: final_value={item_data.get('finalAnswerValue')} != {final_value}")
+            continue
+        filtered_items.append(item_data)
+    
+    logger.info(f"[MCP DEBUG] After value filtering: {len(filtered_items)} items (from {len(raw_items)} raw items)")
+    
+    # Sort and prioritize items with edit comments if requested
+    if prioritize_edit_comments:
+        # Sort so items with edit comments come first
+        filtered_items.sort(key=lambda x: (
+            bool(x.get('editCommentValue')),  # Items with edit comments first
+            x.get('editedAt', '')  # Then by most recent
+        ), reverse=True)
+    
+    # Apply offset-based pagination if offset is specified
+    if offset is not None:
+        # Skip 'offset' items and then take 'limit' items (works for offset=0 too)
+        start_idx = offset
+        end_idx = offset + limit
+        page_items = filtered_items[start_idx:end_idx]
+    else:
+        # Legacy behavior - just take the first 'limit' items
+        page_items = filtered_items[:limit]
+    
+    # Format the items with nested item details
+    formatted_items = []
+    for item_data in page_items:
+        formatted_item = {
+            "feedback_id": item_data.get('id'),
+            "item_id": item_data.get('itemId'),
+            "external_id": item_data.get('item', {}).get('externalId'),
+            "initial_value": item_data.get('initialAnswerValue'),
+            "final_value": item_data.get('finalAnswerValue'),
+            "initial_explanation": item_data.get('initialCommentValue'),
+            "final_explanation": item_data.get('finalCommentValue'),
+            "edit_comment": item_data.get('editCommentValue'),
+            "edited_at": item_data.get('editedAt'),
+            "editor_name": item_data.get('editorName'),
+            "is_agreement": item_data.get('isAgreement'),
+            # Nested item details - this is the key addition
+            "item_details": {
+                "id": item_data.get('item', {}).get('id'),
+                "external_id": item_data.get('item', {}).get('externalId'),
+                "text": item_data.get('item', {}).get('text'),
+                "identifiers": item_data.get('item', {}).get('identifiers'),
+                "created_at": item_data.get('item', {}).get('createdAt'),
+                "updated_at": item_data.get('item', {}).get('updatedAt')
+            }
+        }
+        formatted_items.append(formatted_item)
+    
+    # Determine pagination information based on method used
+    next_page_start_id = None
+    has_next_page = False
+    current_offset = offset if offset is not None else 0
+    
+    if offset is not None:
+        # Offset-based pagination: check if there are more items after current page
+        total_available = len(filtered_items)
+        items_after_current_page = total_available - (current_offset + len(page_items))
+        has_next_page = items_after_current_page > 0
+        
+        # For offset pagination, next_page_start_id contains the next offset value
+        if has_next_page:
+            next_offset = current_offset + limit
+            next_page_start_id = str(next_offset)  # Convert to string for consistency
+    # Legacy token-based pagination removed - offset method only
+    
+    # Pagination method is always offset now
+    pagination_method = "offset"
+    
+    return {
+        "context": {
+            "scorecard_name": scorecard_name,
+            "score_name": score_name,
+            "scorecard_id": scorecard_id,
+            "score_id": score_id,
+            "account_id": account_id,
+            "days": days,
+            "filters": {
+                "initial_value": initial_value,
+                "final_value": final_value,
+                "prioritize_edit_comments": prioritize_edit_comments
+            },
+            "pagination_method": pagination_method,
+            "current_offset": current_offset,
+            "total_in_page": len(formatted_items)
+        },
+        "feedback_items": formatted_items,
+        "pagination": {
+            "limit": limit,
+            "has_next_page": has_next_page,
+            "next_page_start_id": next_page_start_id,
+            "current_offset": current_offset,
+            "pagination_method": pagination_method
+        }
+    }
+
+
 def register_feedback_tools(mcp: FastMCP):
     """Register feedback tools with the MCP server"""
     
     @mcp.tool()
-    async def plexus_feedback_summary(
+    async def plexus_feedback_analysis(
         scorecard_name: str,
         score_name: str,
-        days: Union[int, float, str] = 14,
+        days: Union[int, float, str] = 7,
         output_format: str = "json"
     ) -> str:
         """
@@ -58,11 +294,15 @@ def register_feedback_tools(mcp: FastMCP):
             # DEBUG: Log what parameters we actually received
             logger.info(f"[MCP DEBUG] Received parameters - scorecard_name: '{scorecard_name}', score_name: '{score_name}', days: '{days}', output_format: '{output_format}'")
             
-            # Convert string parameters to appropriate types
+            # Convert string parameters to appropriate types (MCP may pass strings)
             try:
                 days = int(float(str(days)))  # Handle both int and float strings
             except (ValueError, TypeError):
                 return f"Error: Invalid days parameter: {days}. Must be a number."
+            
+            # Ensure output_format is a string
+            if not isinstance(output_format, str):
+                output_format = str(output_format)
             
             logger.info(f"[MCP] Generating feedback summary for '{score_name}' on '{scorecard_name}' (last {days} days)")
             
@@ -168,8 +408,7 @@ def register_feedback_tools(mcp: FastMCP):
             # Add command context
             result_dict["command_info"] = {
                 "description": "Comprehensive feedback analysis with confusion matrix and agreement metrics",
-                "tool": f"plexus_feedback_summary(scorecard_name='{scorecard_name}', score_name='{score_name}', days={days}, output_format='{output_format}')",
-                "next_steps": result_dict["recommendation"]
+                "tool": f"plexus_feedback_analysis(scorecard_name='{scorecard_name}', score_name='{score_name}', days={days}, output_format='{output_format}')"
             }
             
             # Output in requested format
@@ -195,7 +434,7 @@ def register_feedback_tools(mcp: FastMCP):
                 return json.dumps(result_dict, indent=2, default=str)
                 
         except Exception as e:
-            logger.error(f"[MCP] Error in plexus_feedback_summary: {e}")
+            logger.error(f"[MCP] Error in plexus_feedback_analysis: {e}")
             import traceback
             logger.error(f"[MCP] Traceback: {traceback.format_exc()}")
             return f"Error generating feedback summary: {str(e)}"
@@ -203,7 +442,7 @@ def register_feedback_tools(mcp: FastMCP):
             # Check if anything was written to stdout
             captured_output = temp_stdout.getvalue()
             if captured_output:
-                logger.warning(f"Captured unexpected stdout during plexus_feedback_summary: {captured_output}")
+                logger.warning(f"Captured unexpected stdout during plexus_feedback_analysis: {captured_output}")
             # Restore original stdout
             sys.stdout = old_stdout
 
@@ -213,197 +452,68 @@ def register_feedback_tools(mcp: FastMCP):
         score_name: str,
         initial_value: Optional[str] = None,
         final_value: Optional[str] = None,
-        limit: Optional[Union[int, float, str]] = 10,
-        days: Optional[Union[int, float, str]] = 30,
-        output_format: str = "json",
-        prioritize_edit_comments: bool = True
-    ) -> Union[str, Dict[str, Any]]:
-        """
-        Find feedback items where human reviewers have corrected predictions. 
-        This helps identify cases where score configurations need improvement.
-        
-        Parameters:
-        - scorecard_name: Name of the scorecard containing the score
-        - score_name: Name of the specific score to search feedback for
-        - initial_value: Optional filter for the original AI prediction value (e.g., "No", "Yes")
-        - final_value: Optional filter for the corrected human value (e.g., "Yes", "No")
-        - limit: Maximum number of feedback items to return (default: 10)
-        - days: Number of days back to search (default: 30)
-        - output_format: Output format - "json" or "yaml" (default: "json")
-        - prioritize_edit_comments: Whether to prioritize feedback items with edit comments (default: True)
-        
-        Returns:
-        - Feedback items with correction details, edit comments, and item information
-        """
-        # Temporarily redirect stdout to capture any unexpected output
-        old_stdout = sys.stdout
-        temp_stdout = StringIO()
-        sys.stdout = temp_stdout
-        
+        limit: Optional[Union[int, float, str]] = 5,
+        days: Optional[Union[int, float, str]] = 7,
+        prioritize_edit_comments: bool = True,
+        offset: Optional[Union[int, float, str]] = None
+    ) -> str:
+        """Find feedback items using the same shared logic as the CLI."""
         try:
-            # Try to import required modules directly
-            try:
-                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
-                from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
-                from plexus.cli.feedback.feedback_service import FeedbackService
-            except ImportError as e:
-                return f"Error: Could not import required modules: {e}. Core modules may not be available."
+            # Import the shared service and utilities
+            from plexus.cli.feedback.feedback_service import FeedbackService
+            from plexus.cli.shared.client_utils import create_client
+            from plexus.cli.shared.memoized_resolvers import memoized_resolve_scorecard_identifier, memoized_resolve_score_identifier
+            from plexus.cli.report.utils import resolve_account_id_for_command
+            import json
             
-            # Check if we have the necessary credentials
-            api_url = os.environ.get('PLEXUS_API_URL', '')
-            api_key = os.environ.get('PLEXUS_API_KEY', '')
-            
-            if not api_url or not api_key:
-                logger.warning("Missing API credentials. Ensure .env file is loaded.")
-                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
-            
-            # Create the client
-            try:
-                client_stdout = StringIO()
-                saved_stdout = sys.stdout
-                sys.stdout = client_stdout
-                
-                try:
-                    client = create_dashboard_client()
-                finally:
-                    client_output = client_stdout.getvalue()
-                    if client_output:
-                        logger.warning(f"Captured unexpected stdout during client creation in plexus_feedback_find: {client_output}")
-                    sys.stdout = saved_stdout
-            except Exception as client_err:
-                logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
-                return f"Error creating dashboard client: {str(client_err)}"
-                
+            # Create client
+            client = create_client()
             if not client:
-                return "Error: Could not create dashboard client."
-
-            # Find the scorecard (accept id, key, name, externalId)
-            scorecard_id = resolve_scorecard_identifier(client, scorecard_name)
+                return json.dumps({"error": "Failed to create API client"})
+            
+            # Convert parameters to proper types
+            limit_int = int(limit) if limit is not None else None
+            days_int = int(days) if days is not None else 7
+            offset_int = int(offset) if offset is not None else None
+            
+            # Resolve account ID (using same logic as CLI)
+            account_id = resolve_account_id_for_command(client, None)  # None means use default account
+            if not account_id:
+                return json.dumps({"error": "Failed to resolve account ID"})
+            
+            # Resolve scorecard and score identifiers (using same logic as CLI)
+            scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_name)
             if not scorecard_id:
-                return f"Error: Scorecard '{scorecard_name}' not found."
-
-            # Find the score within the scorecard
-            scorecard_query = f"""
-            query GetScorecardForFeedback {{
-                getScorecard(id: "{scorecard_id}") {{
-                    id
-                    name
-                    sections {{
-                        items {{
-                            id
-                            scores {{
-                                items {{
-                                    id
-                                    name
-                                    key
-                                    externalId
-                                }}
-                            }}
-                        }}
-                    }}
-                }}
-            }}
-            """
+                return json.dumps({"error": f"Scorecard '{scorecard_name}' not found"})
             
-            scorecard_result = client.execute(scorecard_query)
-            scorecard_data = scorecard_result.get('getScorecard')
-            if not scorecard_data:
-                return f"Error: Could not retrieve scorecard data for '{scorecard_name}'."
-
-            # Find the specific score
-            found_score_id = None
-            for section in scorecard_data.get('sections', {}).get('items', []):
-                for score in section.get('scores', {}).get('items', []):
-                    if (score.get('name') == score_name or 
-                        score.get('key') == score_name or 
-                        score.get('id') == score_name or 
-                        score.get('externalId') == score_name):
-                        found_score_id = score['id']
-                        break
-                if found_score_id:
-                    break
-
-            if not found_score_id:
-                return f"Error: Score '{score_name}' not found within scorecard '{scorecard_name}'."
-
-            # Get account ID using the same method as feedback_summary
-            try:
-                from plexus.cli.report.utils import resolve_account_id_for_command
-                account_id = resolve_account_id_for_command(client, None)
-                if not account_id:
-                    return "Error: Could not determine account ID for feedback query."
-            except Exception as e:
-                logger.error(f"Error getting account ID: {e}")
-                return f"Error getting account ID: {e}"
+            score_id = memoized_resolve_score_identifier(client, scorecard_id, score_name)
+            if not score_id:
+                return json.dumps({"error": f"Score '{score_name}' not found in scorecard '{scorecard_name}'"})
             
-            # Convert days to int if provided
-            if days:
-                try:
-                    days_int = int(days)
-                except (ValueError, TypeError):
-                    return f"Error: Invalid days parameter '{days}'. Must be a number."
-            else:
-                days_int = 30  # Default to 30 days
-                
-            # Convert limit to int if provided
-            limit_int = None
-            if limit:
-                try:
-                    limit_int = int(limit)
-                except (ValueError, TypeError):
-                    return f"Error: Invalid limit parameter '{limit}'. Must be a number."
+            # Use the shared FeedbackService.search_feedback method (same as CLI)
+            result = await FeedbackService.search_feedback(
+                client=client,
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                account_id=account_id,
+                days=days_int,
+                initial_value=initial_value,
+                final_value=final_value,
+                limit=limit_int,
+                offset=offset_int,
+                prioritize_edit_comments=prioritize_edit_comments
+            )
             
-            # Use the shared FeedbackService for consistent behavior with CLI
-            try:
-                result = await FeedbackService.search_feedback(
-                    client=client,
-                    scorecard_name=scorecard_name,
-                    score_name=score_name,
-                    scorecard_id=scorecard_id,
-                    score_id=found_score_id,
-                    account_id=account_id,
-                    days=days_int,
-                    initial_value=initial_value,
-                    final_value=final_value,
-                    limit=limit_int,
-                    prioritize_edit_comments=prioritize_edit_comments
-                )
-                
-                logger.info(f"Retrieved {result.context.total_found} feedback items using shared service")
-                
-            except Exception as e:
-                logger.error(f"Error using FeedbackService: {e}")
-                return f"Error retrieving feedback items: {e}"
-
-            if not result.feedback_items:
-                filter_desc = []
-                if initial_value:
-                    filter_desc.append(f"initial value '{initial_value}'")
-                if final_value:
-                    filter_desc.append(f"final value '{final_value}'")
-                if filter_desc:
-                    filter_text = f" with {' and '.join(filter_desc)}"
-                else:
-                    filter_text = ""
-                return f"No feedback items found for score '{score_name}' in scorecard '{scorecard_name}'{filter_text} in the last {days_int} days."
-
-            # Format output using the shared service - same structure as CLI tool
+            # Convert to the same dictionary format as CLI YAML output
             result_dict = FeedbackService.format_search_result_as_dict(result)
             
-            if output_format.lower() == "yaml":
-                import yaml
-                return yaml.dump(result_dict, default_flow_style=False, sort_keys=False)
-            else:
-                # Return the same JSON structure as the CLI tool would output
-                return result_dict
+            # Return as JSON string (as expected by MCP tools)
+            return json.dumps(result_dict, indent=2, default=str)
             
         except Exception as e:
-            logger.error(f"Error finding feedback items: {str(e)}", exc_info=True)
-            return f"Error finding feedback items: {str(e)}"
-        finally:
-            # Check if anything was written to stdout
-            captured_output = temp_stdout.getvalue()
-            if captured_output:
-                logger.warning(f"Captured unexpected stdout during plexus_feedback_find: {captured_output}")
-            # Restore original stdout
-            sys.stdout = old_stdout
+            logger.error(f"Error in plexus_feedback_find: {e}")
+            import json
+            return json.dumps({"error": f"Failed to search feedback: {str(e)}"})
+

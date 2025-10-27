@@ -65,22 +65,88 @@ export const amplifyClient = {
   },
   Scorecard: {
     list: async (params?: any) => {
-      const response = await (getClient().models.Scorecard as any).list(params)
-      return response as AmplifyResponse<Schema['Scorecard']['type'][]>
+      // Use direct GraphQL query to ensure guidelines field is included
+      const filter = params?.filter;
+      const variables: any = {};
+      let filterQuery = '';
+      
+      if (filter) {
+        variables.filter = filter;
+        filterQuery = '(filter: $filter)';
+      }
+      
+      const query = `
+        query ListScorecards${filter ? '($filter: ModelScorecardFilterInput)' : ''} {
+          listScorecards${filterQuery} {
+            items {
+              id
+              name
+              key
+              description
+              guidelines
+              accountId
+              externalId
+              createdAt
+              updatedAt
+            }
+            nextToken
+          }
+        }
+      `;
+      
+      const response = await graphqlRequest<{
+        listScorecards: {
+          items: Schema['Scorecard']['type'][];
+          nextToken: string | null;
+        }
+      }>(query, variables);
+      
+      return {
+        data: response.data?.listScorecards?.items || [],
+        nextToken: response.data?.listScorecards?.nextToken || null
+      } as AmplifyResponse<Schema['Scorecard']['type'][]>;
     },
     get: async (params: any) => {
-      const response = await (getClient().models.Scorecard as any).get(params)
-      return { data: response.data as Schema['Scorecard']['type'] | null }
+      const query = `
+        query GetScorecard($id: ID!) {
+          getScorecard(id: $id) {
+            id
+            name
+            key
+            description
+            guidelines
+            accountId
+            externalId
+            createdAt
+            updatedAt
+          }
+        }
+      `;
+      
+      const response = await graphqlRequest<{
+        getScorecard: Schema['Scorecard']['type'] | null;
+      }>(query, { id: params.id });
+      
+      return { data: response.data?.getScorecard || null };
     },
     create: async (data: {
       name: string
       key: string
-      externalId: string
+      externalId?: string
       description?: string
+      guidelines?: string
       accountId: string
-      itemId?: string
     }) => {
-      const response = await (getClient().models.Scorecard as any).create(data)
+      console.log('amplifyClient.Scorecard.create called with:', data);
+      const client = getClient();
+      console.log('Client models available:', Object.keys(client.models));
+      console.log('Scorecard model available:', !!client.models.Scorecard);
+      
+      const response = await (client.models.Scorecard as any).create(data);
+      console.log('Raw Amplify response:', response);
+      console.log('Response data:', response?.data);
+      console.log('Response errors:', response?.errors);
+      
       return { data: response.data as Schema['Scorecard']['type'] }
     },
     update: async (data: {
@@ -89,7 +155,7 @@ export const amplifyClient = {
       key?: string
       externalId?: string
       description?: string
-      itemId?: string
+      guidelines?: string
     }) => {
       const response = await (getClient().models.Scorecard as any).update(data)
       return { data: response.data as Schema['Scorecard']['type'] }
@@ -143,6 +209,8 @@ export const amplifyClient = {
       type: string
       order: number
       sectionId: string
+      scorecardId: string
+      externalId: string
       accuracy?: number
       version?: string
       aiProvider?: string
@@ -401,55 +469,7 @@ export const amplifyClient = {
       return response as AmplifyResponse<Schema['ScorecardExampleItem']['type'][]>
     }
   },
-  ScorecardProcessedItem: {
-    create: async (data: {
-      itemId: string;
-      scorecardId: string;
-      processedAt?: string;
-      lastScoreResultId?: string;
-    }) => {
-      const response = await (getClient().models.ScorecardProcessedItem as any).create(data)
-      return { data: response.data as Schema['ScorecardProcessedItem']['type'] }
-    },
-    delete: async (params: {
-      itemId: string;
-      scorecardId: string;
-    }) => {
-      // First find the record by the composite key
-      const listResponse = await (getClient().models.ScorecardProcessedItem as any).list({
-        filter: {
-          and: [
-            { itemId: { eq: params.itemId } },
-            { scorecardId: { eq: params.scorecardId } }
-          ]
-        }
-      });
-      
-      if (listResponse.data && listResponse.data.length > 0) {
-        const record = listResponse.data[0];
-        const response = await (getClient().models.ScorecardProcessedItem as any).delete({ id: record.id });
-        return { data: response.data as Schema['ScorecardProcessedItem']['type'] };
-      } else {
-        throw new Error('ScorecardProcessedItem association not found');
-      }
-    },
-    listByScorecard: async (scorecardId: string) => {
-      const response = await (getClient().models.ScorecardProcessedItem as any).list({
-        filter: { scorecardId: { eq: scorecardId } }
-      });
-      return response as AmplifyResponse<Schema['ScorecardProcessedItem']['type'][]>;
-    },
-    listByItem: async (itemId: string) => {
-      const response = await (getClient().models.ScorecardProcessedItem as any).list({
-        filter: { itemId: { eq: itemId } }
-      });
-      return response as AmplifyResponse<Schema['ScorecardProcessedItem']['type'][]>;
-    },
-    list: async (params?: any) => {
-      const response = await (getClient().models.ScorecardProcessedItem as any).list(params)
-      return response as AmplifyResponse<Schema['ScorecardProcessedItem']['type'][]>
-    }
-  },
+
   ScoringJob: {
     list: async (params: any) => {
       const response = await (getClient().models.ScoringJob as any).list(params)

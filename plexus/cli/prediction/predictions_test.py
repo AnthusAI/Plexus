@@ -217,6 +217,35 @@ class TestPredictCommand:
             # If neither output nor exception contains the error, fail the test
             pytest.fail(f"Expected error message not found. Output: {repr(output_text)}, Exception: {result.exception}")
 
+    def test_predict_command_version_and_latest_conflict(self, runner):
+        """Test that --version and --latest cannot be used together"""
+        result = runner.invoke(predict, [
+            '--scorecard', 'test-scorecard',
+            '--score', 'test-score',
+            '--item', 'test-item',
+            '--version', 'version-123',
+            '--latest'
+        ])
+        
+        # Should fail with validation error
+        assert result.exit_code != 0
+        
+        # Check for error message in output or exception
+        output_text = result.output
+        if "Cannot use both --version and --latest" in output_text:
+            return
+        
+        # Fallback: Check the exception
+        if result.exception:
+            assert isinstance(result.exception, SystemExit)
+            assert result.exception.code == 1
+            
+            import traceback
+            tb_str = ''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))
+            assert "Cannot use both" in tb_str and "version" in tb_str and "latest" in tb_str
+        else:
+            pytest.fail(f"Expected error message not found. Output: {repr(output_text)}, Exception: {result.exception}")
+
     def test_predict_command_multiple_scores(self, runner, mock_scorecard_registry, sample_scorecard_class):
         """Test predict command with multiple score names"""
         mock_scorecard_registry.get.return_value = sample_scorecard_class

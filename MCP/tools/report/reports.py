@@ -352,7 +352,7 @@ def register_report_tools(mcp: FastMCP):
     async def plexus_report_configurations_list() -> Union[str, List[Dict]]:
         """
         List all report configurations in reverse chronological order.
-        
+
         Returns:
         - Array of report configuration objects with name, id, description, and updatedAt fields
         """
@@ -360,7 +360,7 @@ def register_report_tools(mcp: FastMCP):
         old_stdout = sys.stdout
         temp_stdout = StringIO()
         sys.stdout = temp_stdout
-        
+
         try:
             # Import plexus CLI inside function to keep startup fast
             try:
@@ -369,19 +369,19 @@ def register_report_tools(mcp: FastMCP):
             except ImportError as e:
                 logger.error(f"ImportError: {str(e)}", exc_info=True)
                 return f"Error: Failed to import Plexus modules: {str(e)}"
-            
+
             # Get the client
             client = create_dashboard_client()
             if not client:
                 return "Error: Could not create dashboard client."
-            
+
             # Get the default account ID
             actual_account_id = get_default_account_id()
             if not actual_account_id:
                 return "Error: Could not determine default account ID. Please check that PLEXUS_ACCOUNT_KEY is set in environment."
-                
+
             logger.info("Listing report configurations")
-            
+
             # Build and execute the query
             query = f"""
             query MyQuery {{
@@ -399,17 +399,17 @@ def register_report_tools(mcp: FastMCP):
               }}
             }}
             """
-            
+
             response = client.execute(query)
-            
+
             if 'errors' in response:
                 error_details = json.dumps(response['errors'], indent=2)
                 logger.error(f"Dashboard query for report configurations returned errors: {error_details}")
                 return f"Error from Dashboard query for report configurations: {error_details}"
-            
+
             # Extract data from response
             configs_data = response.get('listReportConfigurationByAccountIdAndUpdatedAt', {}).get('items', [])
-            
+
             # If no configurations found, try a different approach
             if not configs_data:
                 # Try with slightly different parameters as a fallback
@@ -426,14 +426,14 @@ def register_report_tools(mcp: FastMCP):
                 }}
                 """
                 retry_response = client.execute(retry_query)
-                
+
                 if 'listReportConfigurations' in retry_response:
                     configs_data = retry_response['listReportConfigurations'].get('items', [])
-                    
+
             # Format each configuration
             if not configs_data:
                 return "No report configurations found."
-            
+
             formatted_configs = []
             for config in configs_data:
                 formatted_configs.append({
@@ -442,10 +442,10 @@ def register_report_tools(mcp: FastMCP):
                     "description": config.get("description"),
                     "updatedAt": config.get("updatedAt")
                 })
-            
+
             logger.info(f"Successfully retrieved {len(formatted_configs)} report configurations")
             return formatted_configs
-        
+
         except Exception as e:
             logger.error(f"Error listing report configurations: {str(e)}", exc_info=True)
             return f"Error listing report configurations: {str(e)}"
@@ -454,5 +454,123 @@ def register_report_tools(mcp: FastMCP):
             captured_output = temp_stdout.getvalue()
             if captured_output:
                 logger.warning(f"Captured unexpected stdout during list_plexus_report_configurations: {captured_output}")
+            # Restore original stdout
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_report_run(
+        config_id: str,
+        parameters: Optional[Dict[str, Any]] = None
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Generate a new report instance from a ReportConfiguration with optional parameters.
+
+        This is the MCP equivalent of the CLI command: plexus report run --config <config_id> [key=value...]
+
+        Parameters:
+        - config_id: ID of the ReportConfiguration to use (required)
+        - parameters: Dictionary of parameters to pass to the report (e.g., {"days": "30", "scorecard": "97"})
+
+        Returns:
+        - Report information with report ID, task ID, and URL
+
+        Example:
+            plexus_report_run(
+                config_id="e555be4d-8013-419f-bb63-87b348712944",
+                parameters={"days": "30", "scorecard": "97"}
+            )
+        """
+        # Temporarily redirect stdout to capture any unexpected output
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+
+        try:
+            # Import required modules
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.reports.service import generate_report_with_parameters
+            except ImportError as e:
+                logger.error(f"ImportError: {str(e)}", exc_info=True)
+                return f"Error: Failed to import Plexus modules: {str(e)}"
+
+            # Check if we have the necessary credentials
+            api_url = os.environ.get('PLEXUS_API_URL', '')
+            api_key = os.environ.get('PLEXUS_API_KEY', '')
+
+            if not api_url or not api_key:
+                return "Error: Missing API credentials. API_URL or API_KEY not set in environment."
+
+            # Create dashboard client
+            client = create_dashboard_client()
+            if not client:
+                return "Error: Could not create dashboard client."
+
+            # Get default account ID
+            account_id = get_default_account_id()
+            if not account_id:
+                return "Error: Could not determine default account ID."
+
+            # Prepare parameters
+            params = parameters if parameters else {}
+
+            logger.info(f"[MCP] Running report from configuration: {config_id} with parameters: {params}")
+
+            # Execute report generation using shared function
+            try:
+                report_id, first_block_error, task_id = generate_report_with_parameters(
+                    config_id=config_id,
+                    parameters=params,
+                    account_id=account_id,
+                    client=client,
+                    trigger="mcp",
+                    log_prefix="[MCP]"
+                )
+
+                # Format response
+                if first_block_error is None:
+                    logger.info(f"[MCP] Report generation completed successfully: {report_id}")
+                    return {
+                        "status": "success",
+                        "report_id": report_id,
+                        "task_id": task_id,
+                        "url": get_report_url(report_id),
+                        "message": "Report generated successfully"
+                    }
+                else:
+                    logger.error(f"[MCP] Report generation failed with error: {first_block_error}")
+                    return {
+                        "status": "failed",
+                        "report_id": report_id,
+                        "task_id": task_id,
+                        "url": get_report_url(report_id) if report_id else None,
+                        "error": first_block_error,
+                        "message": "Report generation finished with errors"
+                    }
+
+            except ValueError as e:
+                # Parameter validation or configuration errors
+                error_msg = str(e)
+                logger.error(f"[MCP] Validation error: {error_msg}")
+                return {
+                    "status": "error",
+                    "error": error_msg
+                }
+            except Exception as e:
+                error_msg = f"Error during report generation: {str(e)}"
+                logger.error(f"[MCP] {error_msg}", exc_info=True)
+                return {
+                    "status": "error",
+                    "error": error_msg
+                }
+
+        except Exception as e:
+            logger.error(f"[MCP] Error in plexus_report_run: {str(e)}", exc_info=True)
+            return f"Error running report: {str(e)}"
+        finally:
+            # Check if anything was written to stdout
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(f"Captured unexpected stdout during plexus_report_run: {captured_output}")
             # Restore original stdout
             sys.stdout = old_stdout

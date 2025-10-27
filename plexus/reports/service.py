@@ -342,7 +342,6 @@ def _instantiate_and_run_block(
             logger.info(f"Set report_block_id '{report_block_id}' on block instance '{class_name}'")
 
         # Run the block's generate method (assuming it's async)
-        # output_data, log_output = asyncio.run(block_instance.generate())
         # Check if running in an existing event loop
         try:
             loop = asyncio.get_running_loop()
@@ -350,21 +349,13 @@ def _instantiate_and_run_block(
             loop = None
 
         if loop and loop.is_running():
-            # If there's a running loop, schedule generate() as a task
-            # This is typical in an async environment like a Celery worker or FastAPI
-            logger.info(f"Detected running event loop. Scheduling block '{class_name}' generation as a task.")
-            # This won't work as a direct call if _instantiate_and_run_block is synchronous.
-            # For now, we assume _generate_report_core is not itself async, so direct await or run is needed.
-            # If _generate_report_core were async, we could 'await block_instance.generate()'
-            # Let's stick to asyncio.run for now, assuming this function might be called
-            # from a synchronous context that needs to drive an async method.
-            # Re-evaluating this: if called by Celery, Celery itself might handle the loop.
-            # Plexus tasks are often async. The caller (Celery task) should manage the async context.
-            # For simplicity, let's assume we need to run it.
-            # If _instantiate_and_run_block is called from an async func, then use:
-            # output_data, log_output = await block_instance.generate()
-            # If called from sync, and generate is async:
-            output_data, log_output = asyncio.run(block_instance.generate())
+            # If there's a running loop, we need to run the async function in a separate thread
+            # with its own event loop to avoid "asyncio.run() cannot be called from a running event loop" error
+            logger.info(f"Detected running event loop. Running block '{class_name}' in separate thread.")
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, block_instance.generate())
+                output_data, log_output = future.result()
         else:
             # If no running loop, create one to run the async method
             logger.info(f"No running event loop. Creating new loop for block '{class_name}' generation.")
@@ -397,7 +388,8 @@ def _generate_report_core(
     run_parameters: Dict[str, Any],
     client: PlexusDashboardClient,
     tracker: TaskProgressTracker,
-    log_prefix_override: Optional[str] = None # For CLI context
+    log_prefix_override: Optional[str] = None, # For CLI context
+    config_content_override: Optional[str] = None # For pre-rendered configuration (e.g., with Jinja2 parameters)
 ) -> Tuple[str, Optional[str]]:
     """
     Core logic for generating a report. Assumes Task exists and tracker is initialized.
@@ -409,6 +401,8 @@ def _generate_report_core(
         client: Initialized PlexusDashboardClient.
         tracker: Initialized TaskProgressTracker for status and progress updates.
         log_prefix_override: Optional prefix for logs (e.g., for CLI context).
+        config_content_override: Optional pre-rendered configuration content (e.g., with Jinja2 parameters).
+                                 If provided, this will be used instead of loading from the database.
 
     Returns:
         A tuple containing:
@@ -431,7 +425,13 @@ def _generate_report_core(
         if not report_config_model:
             raise ValueError(f"ReportConfiguration not found or failed to load: {report_config_id}")
 
-        config_markdown = report_config_model.configuration
+        # Use override content if provided (e.g., pre-rendered with Jinja2 parameters)
+        if config_content_override:
+            config_markdown = config_content_override
+            logger.info(f"{log_prefix} Using provided configuration content override (e.g., rendered with parameters)")
+        else:
+            config_markdown = report_config_model.configuration
+        
         report_config_name = report_config_model.name
         logger.info(f"{log_prefix} Loaded ReportConfiguration: {report_config_name} ({report_config_id})")
 
@@ -439,6 +439,10 @@ def _generate_report_core(
         if account_id != report_config_model.accountId:
             logger.warning(f"{log_prefix} Report account_id ({account_id}) differs from Configuration's accountId ({report_config_model.accountId}). Proceeding with Report's accountId.")
             # Keep the account_id provided to this function (originating from Task or CLI)
+
+        # Add account_id to run_parameters so blocks can access it
+        run_parameters['account_id'] = account_id
+        logger.info(f"{log_prefix} Added account_id to run_parameters: {account_id}")
 
         tracker.advance_stage() # Advance to next stage (Initializing Report Record)
 
@@ -639,9 +643,9 @@ def _generate_report_core(
             # Final update to the ReportBlock record
             try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
-                
+
                 update_params = {
-                    'output': json.dumps(output_json if output_json is not None else {"status": "failed", "error": log_string}),
+                    'output': output_json if output_json is not None else json.dumps({"status": "failed", "error": log_string}),
                     'log': final_log_message_for_db,
                     'attachedFiles': existing_details_files_list, # Pass array directly without JSON conversion
                     'client': client
@@ -662,7 +666,7 @@ def _generate_report_core(
 
             if output_json is None and first_block_error_message is None:
                 first_block_error_message = log_string or f"Block {block_display_name} failed with unspecified error."
-            
+
             logger.info(f"{log_prefix} Completed processing for block {block_display_name} (ID: {current_report_block.id})")
             tracker.update(current_items=i + 1)
 
@@ -672,10 +676,13 @@ def _generate_report_core(
         # with their log.txt within that single loop.
         # No separate loop is needed here to create/update ReportBlock records from intermediate results.
         logger.info(f"{log_prefix} All block processing and ReportBlock record finalization completed in the main loop.")
-        
+
         tracker.advance_stage() # Advance to next stage (Finalizing Report)
 
-        # === 6. Finalize Report === (This stage was implicitly step 5 before)
+        # === 6. Finalize Report ===
+        # Report.output already contains the original markdown template (set at creation)
+        # ReportBlock records contain the individual block execution results
+        # Frontend will parse the template and fetch block results for display
         logger.info(f"{log_prefix} Report generation core logic finished.")
 
         if first_block_error_message:
@@ -858,4 +865,179 @@ def generate_report(task_id: str):
 #     # The 'block_data' needs to be structured in a way that the template can easily access it,
 #     # perhaps keyed by block name or position.
 #     return template.render(blocks=block_data)
-# --- End Placeholder --- 
+# --- End Placeholder ---
+
+
+def generate_report_with_parameters(
+    config_id: str,
+    parameters: Dict[str, Any],
+    account_id: str,
+    client: PlexusDashboardClient,
+    trigger: str = "api",
+    task_object: Optional[Task] = None,
+    log_prefix: Optional[str] = None
+) -> Tuple[str, Optional[str], str]:
+    """
+    Complete report generation workflow with parameter handling.
+
+    This is the shared implementation used by both CLI and MCP interfaces.
+    It handles parameter validation, Jinja2 rendering, task creation, and report generation.
+
+    Args:
+        config_id: Report configuration ID
+        parameters: Dictionary of parameter values (pre-collected, not interactive)
+        account_id: Account ID owning the report
+        client: Dashboard API client
+        trigger: Source of the generation request (cli_sync, mcp, etc.)
+        task_object: Optional existing Task object. If None, creates new task.
+        log_prefix: Optional log prefix override
+
+    Returns:
+        Tuple of (report_id, error_message, task_id)
+        - report_id: ID of created report
+        - error_message: First block error message (None if success)
+        - task_id: ID of the task tracking this generation
+
+    Raises:
+        ValueError: If configuration not found, parameters invalid, or rendering fails
+    """
+    # Import parameter utilities
+    from plexus.reports.parameter_utils import (
+        extract_parameters_from_config,
+        validate_all_parameters,
+        render_configuration_with_parameters,
+        normalize_parameter_value
+    )
+
+    # Setup log prefix
+    if not log_prefix:
+        log_prefix = f"[ReportGen trigger={trigger}]"
+
+    # Step 1: Load report configuration
+    logger.info(f"{log_prefix} Loading configuration {config_id}")
+    report_config = _load_report_configuration(client, config_id)
+    if not report_config:
+        raise ValueError(f"Report Configuration '{config_id}' not found")
+
+    logger.info(f"{log_prefix} Loaded configuration: {report_config.name}")
+
+    # Step 2: Extract and validate parameters
+    param_defs, _ = extract_parameters_from_config(report_config.configuration or '')
+
+    config_content_override = None
+    run_parameters = {}
+
+    if param_defs:
+        logger.info(f"{log_prefix} Configuration requires {len(param_defs)} parameters")
+
+        # Normalize parameter values to correct types
+        normalized_params = {}
+        for param_def in param_defs:
+            param_name = param_def.get('name')
+            if param_name and param_name in parameters:
+                normalized_params[param_name] = normalize_parameter_value(
+                    param_def,
+                    parameters[param_name]
+                )
+            elif param_name:
+                # Check if required but missing
+                if param_def.get('required', False):
+                    raise ValueError(f"Required parameter '{param_name}' not provided")
+                # Use default if available
+                if 'default' in param_def:
+                    normalized_params[param_name] = param_def['default']
+
+        # Validate all parameters
+        is_valid, errors = validate_all_parameters(param_defs, normalized_params)
+        if not is_valid:
+            error_msg = f"Parameter validation failed: {'; '.join(errors)}"
+            logger.error(f"{log_prefix} {error_msg}")
+            raise ValueError(error_msg)
+
+        logger.info(f"{log_prefix} Parameters validated: {normalized_params}")
+
+        # Render configuration with Jinja2
+        try:
+            rendered_config = render_configuration_with_parameters(
+                report_config.configuration or '',
+                normalized_params
+            )
+            config_content_override = rendered_config
+            logger.info(f"{log_prefix} Configuration rendered with parameters")
+        except Exception as e:
+            error_msg = f"Failed to render configuration with parameters: {e}"
+            logger.error(f"{log_prefix} {error_msg}")
+            raise ValueError(error_msg) from e
+
+        # Store parameters for metadata (with param_ prefix)
+        run_parameters.update({f"param_{k}": str(v) for k, v in normalized_params.items()})
+
+    # Step 3: Create or use Task record
+    task_metadata = {
+        "report_configuration_id": config_id,
+        "report_parameters": run_parameters,
+        "account_id": account_id,
+        "trigger": trigger
+    }
+
+    if task_object:
+        # Use existing task
+        task_id = task_object.id
+        logger.info(f"{log_prefix} Using existing task: {task_id}")
+    else:
+        # Create new task
+        task_description = f"Generate report from config '{report_config.name}' via {trigger}"
+        new_task = Task.create(
+            client=client,
+            accountId=account_id,
+            type="report_generation",
+            target=config_id,
+            command=f"generate_report_with_parameters ({trigger})",
+            description=task_description,
+            metadata=json.dumps(task_metadata),
+            dispatchStatus="SYNC",
+            status="PENDING"
+        )
+        task_id = new_task.id
+        task_object = new_task
+        logger.info(f"{log_prefix} Created task: {task_id}")
+
+    # Step 4: Initialize TaskProgressTracker
+    stage_configs = {
+        "Loading Configuration": StageConfig(order=1, status_message="Loading report configuration details."),
+        "Initializing Report Record": StageConfig(order=2, status_message="Creating initial database entry for the report."),
+        "Parsing Configuration": StageConfig(order=3, status_message="Analyzing report structure and block definitions."),
+        "Processing Report Blocks": StageConfig(order=4, status_message="Executing individual report block components.", total_items=0),
+        "Finalizing Report": StageConfig(order=5, status_message="Saving results and completing generation."),
+    }
+
+    tracker = TaskProgressTracker(
+        task_object=task_object,
+        stage_configs=stage_configs,
+        total_items=0,
+        prevent_new_task=True,
+        client=client
+    )
+    logger.info(f"{log_prefix} Progress tracker initialized")
+
+    # Step 5: Execute report generation
+    logger.info(f"{log_prefix} Executing report generation core logic")
+    report_id, first_block_error = _generate_report_core(
+        report_config_id=config_id,
+        account_id=account_id,
+        run_parameters=run_parameters,
+        client=client,
+        tracker=tracker,
+        log_prefix_override=log_prefix,
+        config_content_override=config_content_override
+    )
+
+    # Step 6: Mark task status
+    if first_block_error is None:
+        tracker.complete()
+        logger.info(f"{log_prefix} Report generation completed successfully: {report_id}")
+    else:
+        tracker.fail(first_block_error)
+        logger.error(f"{log_prefix} Report generation failed: {first_block_error}")
+
+    return report_id, first_block_error, task_id 

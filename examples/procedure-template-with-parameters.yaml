@@ -1,0 +1,88 @@
+# Example Procedure Template with Configurable Parameters
+# This demonstrates the complete parameter configuration system
+
+# Parameters that will be requested from the user before creating the procedure
+parameters:
+  - name: scorecard_id
+    label: Scorecard
+    type: scorecard_select
+    required: true
+    description: Select the scorecard for this procedure
+    
+  - name: score_id
+    label: Score
+    type: score_select
+    required: true
+    depends_on: scorecard_id
+    description: Select the score to evaluate and improve
+    
+  - name: score_version_id
+    label: Score Version (Optional)
+    type: score_version_select
+    required: false
+    depends_on: score_id
+    description: Optionally select a specific score version (defaults to champion if not specified)
+    
+  - name: max_iterations
+    label: Maximum Iterations
+    type: number
+    required: true
+    default: 10
+    min: 1
+    max: 100
+    description: Maximum number of hypothesis iterations to run
+    
+  - name: beam_width
+    label: Beam Width
+    type: number
+    required: true
+    default: 3
+    min: 1
+    max: 10
+    description: Number of parallel hypotheses to maintain during beam search
+    
+  - name: hypothesis_description
+    label: Initial Hypothesis Description
+    type: text
+    required: false
+    placeholder: Describe what you're trying to improve...
+    description: Optional description of what you're trying to achieve with this procedure
+
+# Procedure Configuration
+name: Hypothesis-Driven Score Improvement
+category: hypothesis_generation
+version: "2.0"
+
+# The actual procedure logic would go here
+# This is a simplified example showing how parameters would be used
+procedure:
+  type: beam_search
+  config:
+    # These values would be populated from the parameters above
+    scorecard_id: "{{ parameters.scorecard_id }}"
+    score_id: "{{ parameters.score_id }}"
+    score_version_id: "{{ parameters.score_version_id }}"
+    max_iterations: "{{ parameters.max_iterations }}"
+    beam_width: "{{ parameters.beam_width }}"
+    initial_description: "{{ parameters.hypothesis_description }}"
+    
+  steps:
+    - generate_hypotheses:
+        prompt: |
+          Generate {{ beam_width }} hypotheses to improve the score accuracy.
+          Current context: {{ hypothesis_description }}
+          
+    - evaluate_hypotheses:
+        for_each: hypothesis
+        evaluate_against: "{{ score_id }}"
+        
+    - select_best:
+        criteria: accuracy_improvement
+        keep_top: "{{ beam_width }}"
+        
+    - iterate:
+        max_iterations: "{{ max_iterations }}"
+        convergence_threshold: 0.01
+
+
+

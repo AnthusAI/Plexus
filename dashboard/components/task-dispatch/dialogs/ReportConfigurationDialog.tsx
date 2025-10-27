@@ -20,12 +20,15 @@ import { CardButton } from "@/components/CardButton"
 import { X } from "lucide-react"
 import { getClient } from "@/utils/amplify-client"
 import { toast } from "sonner"
+import { ConfigurableParametersDialog } from "@/components/ui/ConfigurableParametersDialog"
+import { parseParametersFromYaml, hasParameters } from "@/lib/parameter-parser"
 
 // Report configuration type definition
 interface ReportConfiguration {
   id: string
   name: string
   description?: string | null
+  configuration?: string | null
 }
 
 // GraphQL query to list report configurations
@@ -44,11 +47,27 @@ const LIST_REPORT_CONFIGURATIONS = `
   }
 `
 
+// GraphQL query to get full report configuration with content
+const GET_REPORT_CONFIGURATION = `
+  query GetReportConfiguration($id: ID!) {
+    getReportConfiguration(id: $id) {
+      id
+      name
+      description
+      configuration
+    }
+  }
+`
+
 export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch }: TaskDialogProps) {
   const [configurations, setConfigurations] = useState<ReportConfiguration[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string>("")
+  const [selectedConfig, setSelectedConfig] = useState<ReportConfiguration | null>(null)
+  const [showParametersDialog, setShowParametersDialog] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  console.log('ReportConfigurationDialog render - isOpen:', isOpen, 'selectedConfigId:', selectedConfigId, 'selectedConfig:', selectedConfig)
   
   // Fetch report configurations
   useEffect(() => {
@@ -113,26 +132,90 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
     fetchConfigurations()
   }, [isOpen, selectedConfigId])
   
-  const handleDispatch = () => {
+  // Fetch full configuration when selected config changes
+  useEffect(() => {
+    const fetchFullConfiguration = async () => {
+      if (!selectedConfigId) {
+        setSelectedConfig(null)
+        return
+      }
+      
+      console.log('Fetching full configuration for ID:', selectedConfigId)
+      
+      try {
+        const response = await getClient().graphql({
+          query: GET_REPORT_CONFIGURATION,
+          variables: { id: selectedConfigId }
+        })
+        
+        console.log('Configuration fetch response:', response)
+        
+        if ('data' in response && response.data?.getReportConfiguration) {
+          const config = response.data.getReportConfiguration
+          console.log('Fetched configuration:', config)
+          console.log('Configuration content length:', config.configuration?.length || 0)
+          setSelectedConfig(config)
+        } else {
+          console.warn('No configuration data in response')
+        }
+      } catch (err) {
+        console.error('Error fetching report configuration:', err)
+      }
+    }
+    
+    fetchFullConfiguration()
+  }, [selectedConfigId])
+  
+  const handleRunReport = async () => {
     if (!selectedConfigId) {
       toast.error("Please select a report configuration")
       return
     }
     
-    // Get the selected configuration
-    const selectedConfig = configurations.find(c => c.id === selectedConfigId)
+    console.log('handleRunReport - selectedConfig:', selectedConfig)
+    console.log('handleRunReport - configuration content:', selectedConfig?.configuration)
+    console.log('handleRunReport - hasParameters result:', selectedConfig?.configuration ? hasParameters(selectedConfig.configuration) : 'no configuration')
+    
+    // Check if this configuration has parameters
+    if (selectedConfig?.configuration && hasParameters(selectedConfig.configuration)) {
+      console.log('Showing parameters dialog')
+      // Show parameters dialog
+      setShowParametersDialog(true)
+    } else {
+      console.log('Running directly without parameters')
+      // Run directly without parameters
+      handleDispatchReport()
+    }
+  }
+  
+  const handleDispatchReport = (parameters?: Record<string, any>) => {
+    if (!selectedConfigId) return
     
     // Build the command for running this report
-    const command = `report run --config ${selectedConfigId}`
+    let command = `report run --config ${selectedConfigId}`
+    
+    // Add parameter options if provided
+    if (parameters) {
+      Object.entries(parameters).forEach(([key, value]) => {
+        command += ` --param-${key}=${value}`
+      })
+    }
     
     // Get additional metadata
     const metadata = {
       reportConfigurationId: selectedConfigId,
-      reportConfigurationName: selectedConfig?.name || 'Report'
+      reportConfigurationName: selectedConfig?.name || 'Report',
+      parameters: parameters || {}
     }
     
     // Dispatch the task with metadata
-    onDispatch(command, 'report');
+    onDispatch(command, 'report')
+    onClose()
+  }
+  
+  const handleParametersSubmit = (parameters: Record<string, any>) => {
+    setShowParametersDialog(false)
+    handleDispatchReport(parameters)
   }
   
   return (
@@ -192,7 +275,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
             Cancel
           </Button>
           <Button 
-            onClick={handleDispatch} 
+            onClick={handleRunReport} 
             className="border-0" 
             tabIndex={-1}
             disabled={!selectedConfigId || isLoading}
@@ -201,6 +284,25 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
           </Button>
         </DialogFooter>
       </DialogContent>
+      
+      {/* Parameters Dialog */}
+      {selectedConfig && selectedConfig.configuration && (
+        <ConfigurableParametersDialog
+          open={showParametersDialog}
+          onOpenChange={(open) => {
+            setShowParametersDialog(open)
+            if (!open) {
+              // User cancelled parameters - close main dialog too
+              onClose()
+            }
+          }}
+          title={`Configure ${selectedConfig.name}`}
+          description="Please provide the required parameters for this report"
+          parameters={parseParametersFromYaml(selectedConfig.configuration)}
+          onSubmit={handleParametersSubmit}
+          submitLabel="Run Report"
+        />
+      )}
     </Dialog>
   )
 } 

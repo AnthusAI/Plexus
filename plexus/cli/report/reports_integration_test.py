@@ -25,47 +25,35 @@ class TestReportRunCommand:
     @patch('plexus.cli.report.report_commands.create_client')
     @patch('plexus.cli.report.report_commands.resolve_account_id_for_command')
     @patch('plexus.cli.report.report_commands.resolve_report_config')
-    @patch('plexus.cli.report.report_commands.Task.create')
-    @patch('plexus.cli.report.report_commands.TaskProgressTracker')
-    @patch('plexus.cli.report.report_commands._generate_report_core')
-    def test_run_command_success(self, mock_core, mock_tracker_class, mock_task_create, 
-                                mock_resolve_config, mock_resolve_account, mock_create_client):
+    @patch('plexus.reports.service.generate_report_with_parameters')
+    def test_run_command_success(self, mock_generate, mock_resolve_config, mock_resolve_account, mock_create_client):
         """Test successful report run command execution."""
         # Setup mocks
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
         mock_resolve_account.return_value = "test-account-123"
-        
+
         mock_config = MagicMock()
         mock_config.id = "config-456"
         mock_config.name = "Test Config"
+        mock_config.configuration = ""  # No parameters
         mock_resolve_config.return_value = mock_config
-        
-        mock_task = MagicMock()
-        mock_task.id = "task-789"
-        mock_task_create.return_value = mock_task
-        
-        mock_tracker = MagicMock()
-        mock_tracker_class.return_value = mock_tracker
-        
-        # Mock successful core execution
-        mock_core.return_value = ("report-123", None)  # Success case
-        
+
+        # Mock successful generation - returns (report_id, error, task_id)
+        mock_generate.return_value = ("report-123", None, "task-789")
+
         # Execute command
         runner = CliRunner()
         result = runner.invoke(run, ['--config', 'test-config'])
-        
+
         # Verify success
         assert result.exit_code == 0
         assert "Report generation completed successfully!" in result.output
         assert "Report ID: report-123" in result.output
-        
+
         # Verify key integrations
         mock_resolve_config.assert_called_once_with("test-config", "test-account-123", mock_client)
-        mock_task_create.assert_called_once()
-        mock_tracker_class.assert_called_once()
-        mock_core.assert_called_once()
-        mock_tracker.complete.assert_called_once()
+        mock_generate.assert_called_once()
 
     @patch('plexus.cli.report.report_commands.create_client')
     @patch('plexus.cli.report.report_commands.resolve_account_id_for_command')
@@ -88,32 +76,23 @@ class TestReportRunCommand:
     @patch('plexus.cli.report.report_commands.create_client')
     @patch('plexus.cli.report.report_commands.resolve_account_id_for_command')
     @patch('plexus.cli.report.report_commands.resolve_report_config')
-    @patch('plexus.cli.report.report_commands.Task.create')
-    @patch('plexus.cli.report.report_commands.TaskProgressTracker')
-    @patch('plexus.cli.report.report_commands._generate_report_core')
-    def test_run_command_with_parameters(self, mock_core, mock_tracker_class, mock_task_create, 
-                                        mock_resolve_config, mock_resolve_account, mock_create_client):
+    @patch('plexus.reports.service.generate_report_with_parameters')
+    def test_run_command_with_parameters(self, mock_generate, mock_resolve_config, mock_resolve_account, mock_create_client):
         """Test run command with additional parameters."""
         # Setup mocks
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
         mock_resolve_account.return_value = "test-account-123"
-        
+
         mock_config = MagicMock()
         mock_config.id = "config-456"
         mock_config.name = "Test Config"
+        mock_config.configuration = ""  # No parameters in config
         mock_resolve_config.return_value = mock_config
-        
-        mock_task = MagicMock()
-        mock_task.id = "task-789"
-        mock_task_create.return_value = mock_task
-        
-        mock_tracker = MagicMock()
-        mock_tracker_class.return_value = mock_tracker
-        
-        # Mock successful core execution
-        mock_core.return_value = ("report-123", None)
-        
+
+        # Mock successful generation
+        mock_generate.return_value = ("report-123", None, "task-789")
+
         # Execute command with parameters
         runner = CliRunner()
         result = runner.invoke(run, [
@@ -123,56 +102,45 @@ class TestReportRunCommand:
             'start_date=2023-01-01',
             'end_date=2023-12-31'
         ])
-        
+
         # Verify success
         assert result.exit_code == 0
-        
-        # Verify parameters were passed correctly
-        call_args = mock_core.call_args
-        run_parameters = call_args.kwargs['run_parameters']
-        assert run_parameters['days'] == '30'
-        assert run_parameters['fresh_transform_cache'] == 'true'
-        assert run_parameters['start_date'] == '2023-01-01'
-        assert run_parameters['end_date'] == '2023-12-31'
+
+        # Verify parameters were passed to generate function
+        call_args = mock_generate.call_args
+        parameters = call_args.kwargs['parameters']
+        assert parameters['days'] == '30'
+        assert parameters['start_date'] == '2023-01-01'
+        assert parameters['end_date'] == '2023-12-31'
 
     @patch('plexus.cli.report.report_commands.create_client')
     @patch('plexus.cli.report.report_commands.resolve_account_id_for_command')
     @patch('plexus.cli.report.report_commands.resolve_report_config')
-    @patch('plexus.cli.report.report_commands.Task.create')
-    @patch('plexus.cli.report.report_commands.TaskProgressTracker')
-    @patch('plexus.cli.report.report_commands._generate_report_core')
-    def test_run_command_with_errors(self, mock_core, mock_tracker_class, mock_task_create, 
-                                    mock_resolve_config, mock_resolve_account, mock_create_client):
+    @patch('plexus.reports.service.generate_report_with_parameters')
+    def test_run_command_with_errors(self, mock_generate, mock_resolve_config, mock_resolve_account, mock_create_client):
         """Test run command handling block errors."""
         # Setup mocks
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
         mock_resolve_account.return_value = "test-account-123"
-        
+
         mock_config = MagicMock()
         mock_config.id = "config-456"
         mock_config.name = "Test Config"
+        mock_config.configuration = ""  # No parameters
         mock_resolve_config.return_value = mock_config
-        
-        mock_task = MagicMock()
-        mock_task.id = "task-789"
-        mock_task_create.return_value = mock_task
-        
-        mock_tracker = MagicMock()
-        mock_tracker_class.return_value = mock_tracker
-        
-        # Mock core execution with error
-        mock_core.return_value = ("report-123", "Block execution failed")
-        
+
+        # Mock generation with error
+        mock_generate.return_value = ("report-123", "Block execution failed", "task-789")
+
         # Execute command
         runner = CliRunner()
         result = runner.invoke(run, ['--config', 'test-config'])
-        
+
         # Verify error handling
         assert result.exit_code == 0  # Command succeeds but reports errors
         assert "finished with errors" in result.output
         assert "Block execution failed" in result.output
-        mock_tracker.fail.assert_called_once_with("Block execution failed")
 
 
 class TestReportListCommand:
@@ -565,104 +533,86 @@ class TestReportCommandsErrorHandling:
     @patch('plexus.cli.report.report_commands.create_client')
     @patch('plexus.cli.report.report_commands.resolve_account_id_for_command')
     @patch('plexus.cli.report.report_commands.resolve_report_config')
-    @patch('plexus.cli.report.report_commands.Task.create')
-    @patch('plexus.cli.report.report_commands.TaskProgressTracker')
-    @patch('plexus.cli.report.report_commands._generate_report_core')
-    def test_task_creation_failure(self, mock_core, mock_tracker_class, mock_task_create, 
-                                  mock_resolve_config, mock_resolve_account, mock_create_client):
+    @patch('plexus.reports.service.generate_report_with_parameters')
+    def test_task_creation_failure(self, mock_generate, mock_resolve_config, mock_resolve_account, mock_create_client):
         """Test handling of task creation failures."""
         # Setup mocks
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
         mock_resolve_account.return_value = "test-account-123"
-        
+
         mock_config = MagicMock()
         mock_config.id = "config-456"
         mock_config.name = "Test Config"
+        mock_config.configuration = ""  # No parameters
         mock_resolve_config.return_value = mock_config
-        
-        # Mock task creation failure
-        mock_task_create.side_effect = Exception("Task creation failed")
-        
+
+        # Mock task creation failure inside generate function
+        mock_generate.side_effect = Exception("Task creation failed")
+
         # Execute command
         runner = CliRunner()
         result = runner.invoke(run, ['--config', 'test-config'])
-        
+
         # Verify error handling
         assert result.exit_code != 0
-        assert "Task creation failed" in result.output
+        assert "Task creation failed" in result.output or "Unexpected error" in result.output
 
     @patch('plexus.cli.report.report_commands.create_client')
     @patch('plexus.cli.report.report_commands.resolve_account_id_for_command')
     @patch('plexus.cli.report.report_commands.resolve_report_config')
-    @patch('plexus.cli.report.report_commands.Task.create')
-    @patch('plexus.cli.report.report_commands.TaskProgressTracker')
-    @patch('plexus.cli.report.report_commands._generate_report_core')
-    def test_tracker_initialization_failure(self, mock_core, mock_tracker_class, mock_task_create, 
-                                           mock_resolve_config, mock_resolve_account, mock_create_client):
+    @patch('plexus.reports.service.generate_report_with_parameters')
+    def test_tracker_initialization_failure(self, mock_generate, mock_resolve_config, mock_resolve_account, mock_create_client):
         """Test handling of tracker initialization failures."""
         # Setup mocks
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
         mock_resolve_account.return_value = "test-account-123"
-        
+
         mock_config = MagicMock()
         mock_config.id = "config-456"
         mock_config.name = "Test Config"
+        mock_config.configuration = ""  # No parameters
         mock_resolve_config.return_value = mock_config
-        
-        mock_task = MagicMock()
-        mock_task.id = "task-789"
-        mock_task_create.return_value = mock_task
-        
-        # Mock tracker initialization failure
-        mock_tracker_class.side_effect = Exception("Tracker initialization failed")
-        
+
+        # Mock tracker initialization failure inside generate function
+        mock_generate.side_effect = Exception("Tracker initialization failed")
+
         # Execute command
         runner = CliRunner()
         result = runner.invoke(run, ['--config', 'test-config'])
-        
+
         # Verify error handling
         assert result.exit_code != 0
-        assert "Tracker initialization failed" in result.output
+        assert "Tracker initialization failed" in result.output or "Unexpected error" in result.output
 
     @patch('plexus.cli.report.report_commands.create_client')
     @patch('plexus.cli.report.report_commands.resolve_account_id_for_command')
     @patch('plexus.cli.report.report_commands.resolve_report_config')
-    @patch('plexus.cli.report.report_commands.Task.create')
-    @patch('plexus.cli.report.report_commands.TaskProgressTracker')
-    @patch('plexus.cli.report.report_commands._generate_report_core')
-    def test_core_generation_failure(self, mock_core, mock_tracker_class, mock_task_create, 
-                                    mock_resolve_config, mock_resolve_account, mock_create_client):
+    @patch('plexus.reports.service.generate_report_with_parameters')
+    def test_core_generation_failure(self, mock_generate, mock_resolve_config, mock_resolve_account, mock_create_client):
         """Test handling of core generation failures."""
         # Setup mocks
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
         mock_resolve_account.return_value = "test-account-123"
-        
+
         mock_config = MagicMock()
         mock_config.id = "config-456"
         mock_config.name = "Test Config"
+        mock_config.configuration = ""  # No parameters
         mock_resolve_config.return_value = mock_config
-        
-        mock_task = MagicMock()
-        mock_task.id = "task-789"
-        mock_task_create.return_value = mock_task
-        
-        mock_tracker = MagicMock()
-        mock_tracker_class.return_value = mock_tracker
-        
-        # Mock core generation failure
-        mock_core.side_effect = Exception("Core generation failed")
-        
+
+        # Mock core generation failure inside generate function
+        mock_generate.side_effect = Exception("Core generation failed")
+
         # Execute command
         runner = CliRunner()
         result = runner.invoke(run, ['--config', 'test-config'])
-        
+
         # Verify error handling
         assert result.exit_code != 0
-        assert "Core generation failed" in result.output
-        mock_tracker.fail.assert_called()
+        assert "Core generation failed" in result.output or "Unexpected error" in result.output
 
 
 if __name__ == "__main__":

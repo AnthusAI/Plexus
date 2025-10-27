@@ -296,9 +296,69 @@ class ScoringJob(BaseModel):
         return None
 
     @classmethod
+    def find_existing_job(
+        cls,
+        client: '_BaseAPIClient',
+        item_id: str,
+        scorecard_id: str,
+        score_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Finds an existing scoring job for the given item/score combination.
+
+        This method searches for any ScoringJob (regardless of status) that matches
+        the specified item and score. Useful for preventing duplicate job creation
+        and retrieving job status.
+
+        Note: scorecardId parameter is kept for API compatibility but not used in
+        the query since scoreId is globally unique.
+
+        :param client: API client instance
+        :param item_id: Item identifier to search for
+        :param scorecard_id: Scorecard identifier (unused, kept for compatibility)
+        :param score_id: Score identifier to search for
+        :return: Dictionary with 'id' and 'status' if found, None otherwise
+        """
+        query = """
+        query FindExistingScoringJob($itemId: String!, $scoreId: String!) {
+            listScoringJobByItemIdAndScoreId(
+                itemId: $itemId,
+                scoreId: {eq: $scoreId},
+                limit: 1
+            ) {
+                items {
+                    id
+                    status
+                }
+            }
+        }
+        """
+
+        try:
+            result = client.execute(query, {
+                'itemId': item_id,
+                'scoreId': score_id
+            })
+            items = result.get('listScoringJobByItemIdAndScoreId', {}).get('items', [])
+
+            if items:
+                job = items[0]
+                logging.info(f"Found existing ScoringJob: id={job['id']}, status={job['status']}")
+                return {
+                    'id': job['id'],
+                    'status': job['status']
+                }
+
+            logging.info(f"No existing ScoringJob found for item={item_id}, scorecard={scorecard_id}, score={score_id}")
+            return None
+
+        except Exception as e:
+            logging.error(f"Error finding existing ScoringJob: {e}")
+            return None
+
+    @classmethod
     def get_batch_job(cls, scoring_job_id: str, client: '_BaseAPIClient') -> Optional[BatchJob]:
         """Gets the associated batch job for a scoring job through the join table.
-        
+
         :param scoring_job_id: ID of the scoring job
         :param client: API client instance
         :return: BatchJob instance if found, None otherwise
@@ -314,7 +374,7 @@ class ScoringJob(BaseModel):
             }
         }
         """ % BatchJob.fields()
-        
+
         result = client.execute(query, {'scoringJobId': scoring_job_id})
         items = result.get('listBatchJobScoringJobs', {}).get('items', [])
         return BatchJob.from_dict(items[0]['batchJob'], client) if items else None

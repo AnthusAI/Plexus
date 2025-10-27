@@ -12,10 +12,16 @@ from shared.utils import load_env_file, initialize_default_account, get_default_
 # Import tool registration functions
 from tools.util.think import register_think_tool
 from tools.util.docs import register_docs_tool
-from tools.util.think import register_think_tool
 from tools.scorecard.scorecards import register_scorecard_tools
 from tools.evaluation.evaluations import register_evaluation_tools
-from tools.score.management import register_score_tools
+from tools.score.scores import register_score_tools
+from tools.procedure.procedures import register_procedure_tools
+from tools.procedure.procedure_nodes import register_procedure_node_tools
+from tools.report.reports import register_report_tools
+from tools.feedback.feedback import register_feedback_tools
+from tools.task.tasks import register_task_tools
+from tools.item.items import register_item_tools
+from tools.prediction.predictions import register_prediction_tools
 
 # Setup Plexus imports and core functionality
 setup_plexus_imports()
@@ -31,19 +37,21 @@ mcp = FastMCP(
     - plexus_scorecard_info: Get detailed information about a specific scorecard, including sections and scores
     
     ## Score Management
-    - plexus_score_info: Get detailed information about a specific score, including location, configuration, and optionally all versions. Supports intelligent search across scorecards.
-    - plexus_score_configuration: Get the YAML configuration for a specific score version
-    - plexus_score_pull: Pull a score's champion version YAML configuration to a local file
-    - plexus_score_push: Push a score's local YAML configuration file to create a new version
-    - plexus_score_update: Update a score's configuration by creating a new version with provided YAML content
+    - plexus_score_info: Get detailed information about a specific score, including location, configuration, champion version details, and version history. Supports intelligent search across scorecards.
+    - plexus_score_update: **RECOMMENDED** - Update a score's configuration by creating a new version with provided YAML content. Supports parent_version_id for version lineage. Use this for most score updates.
+    - plexus_score_pull: Pull a score's champion version YAML configuration to a local file (for local development workflows)
+    - plexus_score_push: Push a score's local YAML configuration file to create a new version (for local development workflows)
     - plexus_score_delete: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
     
     ## Evaluation Tools
-    - run_plexus_evaluation: Dispatches a scorecard evaluation to run in the background. 
-      The server will confirm dispatch but will not track progress or results. 
+    - plexus_evaluation_run: Run an accuracy evaluation on a Plexus scorecard using the same code path as the CLI.
+      The server will confirm dispatch but will not track progress or results.
       Monitor evaluation status via Plexus Dashboard or system logs.
+    - plexus_evaluation_info: Get detailed information about a specific evaluation by ID or get the latest evaluation.
+      Supports multiple output formats (json, yaml, text) and optional examples/quadrants.
     
     ## Report Tools
+    - plexus_report_run: Generate a new report instance from a ReportConfiguration with optional parameters
     - plexus_reports_list: List available reports with optional filtering by report configuration
     - plexus_report_info: Get detailed information about a specific report
     - plexus_report_last: Get the most recent report, optionally filtered by report configuration
@@ -58,13 +66,25 @@ mcp = FastMCP(
     - plexus_task_info: Get detailed information about a specific task by its ID, including task stages
     
     ## Feedback Analysis & Score Testing Tools
-    - plexus_feedback_summary: Generate comprehensive feedback summary with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
+    - plexus_feedback_analysis: Generate comprehensive feedback analysis with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
     - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
     - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
     
     ## Documentation Tools
     - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback analysis and score testing guide)
-    
+
+    ## Procedure Tools
+    - plexus_procedure_create: Create a new procedure
+    - plexus_procedure_list: List procedures for an account
+    - plexus_procedure_info: Get detailed procedure information
+    - plexus_procedure_update: Update a procedure's configuration
+    - plexus_procedure_delete: Delete a procedure and all its data
+    - plexus_procedure_yaml: Get the latest YAML configuration for a procedure
+    - plexus_procedure_run: Run a procedure
+    - plexus_procedure_template: Get the default procedure YAML template
+    - plexus_procedure_chat_sessions: Get chat sessions for a procedure (optional - shows conversation activity)
+    - plexus_procedure_chat_messages: Get detailed chat messages for debugging conversation flow and tool calls/responses
+
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
     """
@@ -92,12 +112,34 @@ def register_all_tools():
     register_evaluation_tools(mcp)
     logger.info("Registered evaluation tools")
     
-    # TODO: Register additional tool modules here as they are created
-    # register_report_tools(mcp)
-    # register_item_tools(mcp)
-    # register_task_tools(mcp)
-    # register_feedback_tools(mcp)
-    
+    # Register procedure tools
+    register_procedure_tools(mcp)
+    logger.info("Registered procedure tools")
+
+    # Register procedure node tools
+    register_procedure_node_tools(mcp)
+    logger.info("Registered procedure node tools")
+
+    # Register report tools
+    register_report_tools(mcp)
+    logger.info("Registered report tools")
+
+    # Register feedback tools
+    register_feedback_tools(mcp)
+    logger.info("Registered feedback tools")
+
+    # Register task tools
+    register_task_tools(mcp)
+    logger.info("Registered task tools")
+
+    # Register item tools
+    register_item_tools(mcp)
+    logger.info("Registered item tools")
+
+    # Register prediction tools
+    register_prediction_tools(mcp)
+    logger.info("Registered prediction tools")
+
     logger.info("All MCP tools registered successfully")
 
 # Function to run the server
@@ -106,28 +148,37 @@ def run_server(args):
     # Load environment variables from .env file if specified
     if args.env_dir:
         load_env_file(args.env_dir)
-    
+
     # Register all tools
     register_all_tools()
-    
+
     # Initialize default account as early as possible after env vars are loaded
     # but after the Plexus core is available
     logger.info("Initializing default account from environment...")
     initialize_default_account()
-    
+
+    # Setup global exception handler for uncaught exceptions
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+    sys.excepthook = handle_exception
+
     # Run the server with appropriate transport
     try:
         logger.info("Starting FastMCP server")
-        
+
         # Flush any pending writes
         sys.stderr.flush()
-        
+
         # For the actual FastMCP run, we need clean stdout for JSON-RPC
         restore_stdout()
-        
+
         # Flush to ensure clean state
         sys.stdout.flush()
-        
+
         if args.transport == "stdio":
             # For stdio transport
             mcp.run(transport="stdio")

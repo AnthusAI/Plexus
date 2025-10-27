@@ -55,7 +55,7 @@ Error Handling:
 """
 
 import os
-from typing import Optional, Dict, Any, Tuple, TYPE_CHECKING
+from typing import Optional, Dict, Any, Tuple, List, TYPE_CHECKING
 from dataclasses import dataclass
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
@@ -115,7 +115,12 @@ class _BaseAPIClient:
         
         if not all([self.api_url, self.api_key]):
             raise ValueError("Missing required API URL or API key")
-            
+
+        # Check environment variable for schema introspection setting
+        # Default to True for backward compatibility, but allow disabling for Lambda/packaging scenarios
+        fetch_schema_str = os.getenv('PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT', 'true').lower()
+        self._fetch_schema = fetch_schema_str in ('true', '1', 'yes')
+
         # Set up GQL client with API key authentication
         transport = RequestsHTTPTransport(
             url=self.api_url,
@@ -126,10 +131,10 @@ class _BaseAPIClient:
             verify=True,
             retries=3,
         )
-        
+
         self.client = Client(
             transport=transport,
-            fetch_schema_from_transport=True
+            fetch_schema_from_transport=self._fetch_schema
         )
         
         # Initialize model namespaces
@@ -232,7 +237,7 @@ class _BaseAPIClient:
             )
             client = Client(
                 transport=transport,
-                fetch_schema_from_transport=True
+                fetch_schema_from_transport=self._fetch_schema
             )
             with client as session:
                 return session.execute(gql(query), variable_values=variables)
@@ -854,3 +859,211 @@ class PlexusDashboardClient(_BaseAPIClient):
             scorecard_key=scorecard_key,
             score_name=score_name
         ))
+    
+    # Chat-related methods for GraphQL chat system
+    async def create_chat_session(self, session_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new chat session."""
+        mutation = '''
+        mutation CreateChatSession($input: CreateChatSessionInput!) {
+            createChatSession(input: $input) {
+                id
+                accountId
+                scorecardId
+                scoreId
+                procedureId
+                name
+                category
+                status
+                metadata
+                createdAt
+                updatedAt
+            }
+        }
+        '''
+        
+        variables = {"input": session_data}
+        result = await self._execute_query(mutation, variables)
+        return result['createChatSession']
+    
+    async def create_chat_message(self, message_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new chat message."""
+        mutation = '''
+        mutation CreateChatMessage($input: CreateChatMessageInput!) {
+            createChatMessage(input: $input) {
+                id
+                sessionId
+                procedureId
+                role
+                content
+                metadata
+                createdAt
+            }
+        }
+        '''
+        
+        variables = {"input": message_data}
+        result = await self._execute_query(mutation, variables)
+        return result['createChatMessage']
+    
+    async def update_chat_session(self, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing chat session."""
+        mutation = '''
+        mutation UpdateChatSession($input: UpdateChatSessionInput!) {
+            updateChatSession(input: $input) {
+                id
+                accountId
+                scorecardId
+                scoreId
+                procedureId
+                status
+                metadata
+                createdAt
+                updatedAt
+            }
+        }
+        '''
+        
+        variables = {"input": update_data}
+        result = await self._execute_query(mutation, variables)
+        return result['updateChatSession']
+    
+    async def get_chat_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get a chat session by ID."""
+        query = '''
+        query GetChatSession($id: ID!) {
+            getChatSession(id: $id) {
+                id
+                accountId
+                scorecardId
+                scoreId
+                procedureId
+                status
+                metadata
+                createdAt
+                updatedAt
+            }
+        }
+        '''
+        
+        variables = {"id": session_id}
+        result = await self._execute_query(query, variables)
+        return result.get('getChatSession')
+    
+    async def list_chat_messages(
+        self, 
+        session_id: str = None, 
+        experiment_id: str = None, 
+        limit: int = 50,
+        sort_by: str = 'createdAt'
+    ) -> List[Dict[str, Any]]:
+        """List chat messages for a session or experiment."""
+        if experiment_id:
+            # Query by experiment GSI for chronological order
+            query = '''
+            query ListChatMessagesByExperiment($procedureId: String!, $limit: Int, $sortDirection: ModelSortDirection) {
+                listChatMessages(
+                    filter: { procedureId: { eq: $procedureId } }
+                    limit: $limit
+                    sortDirection: $sortDirection
+                ) {
+                    items {
+                        id
+                        sessionId
+                        procedureId
+                        role
+                        content
+                        metadata
+                        createdAt
+                    }
+                }
+            }
+            '''
+            variables = {
+                "procedureId": experiment_id,
+                "limit": limit,
+                "sortDirection": "ASC" if sort_by == 'createdAt' else "DESC"
+            }
+        else:
+            # Query by session
+            query = '''
+            query ListChatMessagesBySession($sessionId: String!, $limit: Int) {
+                listChatMessages(
+                    filter: { sessionId: { eq: $sessionId } }
+                    limit: $limit
+                    sortDirection: ASC
+                ) {
+                    items {
+                        id
+                        sessionId
+                        procedureId
+                        role
+                        content
+                        metadata
+                        createdAt
+                    }
+                }
+            }
+            '''
+            variables = {"sessionId": session_id, "limit": limit}
+        
+        result = await self._execute_query(query, variables)
+        return result['listChatMessages']['items']
+    
+    async def list_chat_sessions(
+        self, 
+        account_id: str = None, 
+        experiment_id: str = None, 
+        limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """List chat sessions for an account or experiment."""
+        if experiment_id:
+            # Query by experiment GSI
+            query = '''
+            query ListChatSessionsByExperiment($procedureId: String!, $limit: Int) {
+                listChatSessions(
+                    filter: { procedureId: { eq: $procedureId } }
+                    limit: $limit
+                    sortDirection: DESC
+                ) {
+                    items {
+                        id
+                        accountId
+                        scorecardId
+                        scoreId
+                        procedureId
+                        status
+                        metadata
+                        createdAt
+                        updatedAt
+                    }
+                }
+            }
+            '''
+            variables = {"procedureId": experiment_id, "limit": limit}
+        else:
+            # Query by account
+            query = '''
+            query ListChatSessionsByAccount($accountId: String!, $limit: Int) {
+                listChatSessions(
+                    filter: { accountId: { eq: $accountId } }
+                    limit: $limit
+                    sortDirection: DESC
+                ) {
+                    items {
+                        id
+                        accountId
+                        scorecardId
+                        scoreId
+                        procedureId
+                        status
+                        metadata
+                        createdAt
+                        updatedAt
+                    }
+                }
+            }
+            '''
+            variables = {"accountId": account_id, "limit": limit}
+        
+        result = await self._execute_query(query, variables)
+        return result['listChatSessions']['items']

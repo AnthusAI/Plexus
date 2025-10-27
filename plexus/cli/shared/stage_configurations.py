@@ -62,6 +62,26 @@ def get_prediction_stage_configs(total_items: int = 1) -> Dict[str, StageConfig]
     }
 
 
+def get_procedure_stage_configs(total_items: int = 0) -> Dict[str, StageConfig]:
+    """Get stage configuration for procedure operations.
+
+    Delegates to the state machine configuration to ensure consistency.
+    Stage names match the state machine states: Start -> Evaluation -> Hypothesis -> Test -> Insights -> Completed.
+    The 'Completed' state is handled by the Task status, not as a separate stage.
+
+    Args:
+        total_items: Total number of items to process (currently unused as procedures don't have item counts)
+
+    Returns:
+        Dictionary mapping stage names to StageConfig objects
+    """
+    # Import here to avoid circular dependencies
+    from plexus.cli.procedure.state_machine_stages import get_stages_from_state_machine
+
+    # Use the state machine configuration as the single source of truth
+    return get_stages_from_state_machine()
+
+
 def get_stage_configs_for_operation_type(operation_type: str, total_items: int = 0) -> Dict[str, StageConfig]:
     """Get stage configuration for a specific operation type.
     
@@ -79,11 +99,16 @@ def get_stage_configs_for_operation_type(operation_type: str, total_items: int =
         return get_evaluation_stage_configs(total_items)
     elif operation_type.lower() in ['prediction', 'predict']:
         return get_prediction_stage_configs(total_items)
+    elif operation_type.lower() in ['experiment', 'experiments', 'procedure', 'procedures']:
+        return get_procedure_stage_configs(total_items)
     else:
         raise ValueError(f"Unknown operation type: {operation_type}")
 
 
 # Legacy aliases for backward compatibility
+def get_experiment_stage_configs(total_items: int = 0) -> Dict[str, StageConfig]:
+    """Legacy alias for get_procedure_stage_configs."""
+    return get_procedure_stage_configs(total_items)
 def get_evaluation_stages(total_items: int = 0) -> Dict[str, StageConfig]:
     """Legacy alias for get_evaluation_stage_configs."""
     return get_evaluation_stage_configs(total_items)
