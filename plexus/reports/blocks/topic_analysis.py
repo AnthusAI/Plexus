@@ -268,6 +268,11 @@ class TopicAnalysis(BaseReportBlock):
             max_ngram = bertopic_analysis.get("max_ngram", self.config.get("max_ngram", 2))
             min_topic_size = bertopic_analysis.get("min_topic_size", self.config.get("min_topic_size", 10))
             top_n_words = bertopic_analysis.get("top_n_words", self.config.get("top_n_words", 10))
+            
+            # Stop words filtering configuration
+            remove_stop_words = bertopic_analysis.get("remove_stop_words", False)
+            custom_stop_words = bertopic_analysis.get("custom_stop_words", [])
+            min_df = bertopic_analysis.get("min_df", 1)
 
             # Preprocessing configuration
             preprocessing = self.config.get("preprocessing", {})
@@ -296,6 +301,11 @@ class TopicAnalysis(BaseReportBlock):
             self._log(f"   • Use Representation Model: {use_representation_model}")
             self._log(f"   • Preprocessing Steps: {len(preprocessing_config)}")
             self._log(f"   • Fresh Data Fetch: {fresh_data}")
+            self._log(f"   • Remove Stop Words: {remove_stop_words}")
+            if custom_stop_words:
+                self._log(f"   • Custom Stop Words: {len(custom_stop_words)} additional words")
+            if min_df > 1:
+                self._log(f"   • Min Document Frequency: {min_df}")
             self._log("="*60)
 
             # --- 2. Apply Preprocessing (if configured) ---
@@ -609,7 +619,11 @@ class TopicAnalysis(BaseReportBlock):
                     nr_docs=nr_docs,
                     diversity=diversity,
                     doc_length=doc_length,
-                    tokenizer=tokenizer
+                    tokenizer=tokenizer,
+                    # Stop words filtering parameters
+                    remove_stop_words=remove_stop_words,
+                    custom_stop_words=custom_stop_words,
+                    min_df=min_df
                 )
 
                 # Unpack results; handle None if analysis failed internally
