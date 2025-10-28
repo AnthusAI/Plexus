@@ -1339,8 +1339,9 @@ class TopicAnalysis(BaseReportBlock):
             # === EXTRACT KEY STATISTICS FOR TEMPLATE VARIABLES ===
             # These variables provide specific metrics for the final summary template
             
-            # Original transcript/call count
-            original_transcript_count = preprocessing.get('sample_size', 'unknown')
+            # Original transcript/call count - use actual processed count, not requested sample_size
+            # The hit_rate_stats.total_processed is the actual number of transcripts that were processed
+            original_transcript_count = hit_rate_stats.get('total_processed', preprocessing.get('sample_size', 'unknown'))
             
             # Extracted document count (quotes/examples from transcripts)
             extracted_document_count = hit_rate_stats.get('successful_extractions', 0)
