@@ -229,7 +229,11 @@ def analyze_topics(
     nr_docs: int = 100,
     diversity: float = 0.1,
     doc_length: int = 500,
-    tokenizer: str = "whitespace"
+    tokenizer: str = "whitespace",
+    # Stop words filtering parameters
+    remove_stop_words: bool = False,
+    custom_stop_words: Optional[List[str]] = None,
+    min_df: int = 1
 ) -> Optional[Tuple[Any, pd.DataFrame, List[int], List[str]]]:
     """
     Perform BERTopic analysis on transformed transcripts.
@@ -253,6 +257,9 @@ def analyze_topics(
         diversity: Diversity factor for document selection, 0-1 (default: 0.1)
         doc_length: Maximum characters per document (default: 500)
         tokenizer: Tokenization method for documents (default: "whitespace")
+        remove_stop_words: Whether to remove English stop words from topics (default: False)
+        custom_stop_words: Optional list of additional stop words to remove (default: None)
+        min_df: Minimum document frequency for terms (default: 1)
         
     Returns:
         BERTopic: The fitted topic model with discovered topics, or None if analysis fails
@@ -261,6 +268,7 @@ def analyze_topics(
     from bertopic import BERTopic
     from umap import UMAP
     from bertopic.representation import OpenAI, LangChain
+    from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
     
     # Create output directory if it doesn't exist
     ensure_directory(output_dir)
@@ -381,6 +389,25 @@ def analyze_topics(
     else:
         logger.info("ℹ️  Representation model disabled - topics will use keyword-based names")
 
+    # Create custom CountVectorizer if stop words filtering is enabled
+    vectorizer_model = None
+    if remove_stop_words:
+        # Build stop words set
+        stop_words = set(ENGLISH_STOP_WORDS)
+        if custom_stop_words:
+            stop_words.update(custom_stop_words)
+        
+        vectorizer_model = CountVectorizer(
+            ngram_range=n_gram_range,
+            stop_words=list(stop_words),
+            min_df=min_df
+        )
+        logger.info(f"✅ Created CountVectorizer with {len(stop_words)} stop words (min_df={min_df})")
+        if custom_stop_words:
+            logger.info(f"   • Including {len(custom_stop_words)} custom stop words: {custom_stop_words[:5]}{'...' if len(custom_stop_words) > 5 else ''}")
+    else:
+        logger.info("ℹ️  Stop words filtering disabled - using default CountVectorizer")
+    
     # Initialize BERTopic model with n-gram range and other parameters
     logger.info(f"Initializing BERTopic model with n-gram range {n_gram_range} and custom UMAP model.")
     
@@ -395,6 +422,7 @@ def analyze_topics(
         min_topic_size=min_topic_size,
         top_n_words=top_n_words,
         umap_model=umap_model,
+        vectorizer_model=vectorizer_model,  # Add custom vectorizer if stop words enabled
         representation_model=None,  # Applied later after reduction
         verbose=True
     )
