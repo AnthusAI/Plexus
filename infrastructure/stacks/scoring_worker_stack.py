@@ -145,16 +145,6 @@ class ScoringWorkerStack(Stack):
                     "description": "Absolute path to the working directory for the service.",
                     "default": "/home/ec2-user/projects/Plexus"
                 },
-                "GunicornExecutable": {
-                    "type": "String",
-                    "description": "Absolute path to the gunicorn executable.",
-                    "default": "/home/ec2-user/miniconda3/envs/py311/bin/gunicorn"
-                },
-                "NumWorkers": {
-                    "type": "String",
-                    "description": "Number of worker processes to run.",
-                    "default": "4"
-                },
                 "ScoringRequestQueueUrl": {
                     "type": "String",
                     "description": "SQS queue URL for scoring requests.",
@@ -169,6 +159,11 @@ class ScoringWorkerStack(Stack):
                     "type": "String",
                     "description": "Plexus account key for authentication.",
                     "default": "CHANGE_ME"
+                },
+                "NumWorkers": {
+                    "type": "String",
+                    "description": "Number of worker processes to run.",
+                    "default": "4"
                 }
             },
             "mainSteps": [
@@ -192,7 +187,7 @@ class ScoringWorkerStack(Stack):
                             "User={{ ServiceUser }}",
                             "Group={{ ServiceGroup }}",
                             "WorkingDirectory={{ WorkingDirectory }}",
-                            "ExecStart={{ GunicornExecutable }} plexus.workers.ProcessScoreWorker:run --workers {{ NumWorkers }} --worker-class sync --preload --bind unix:/tmp/plexus-scoring-worker.sock",
+                            "ExecStart=/home/ec2-user/miniconda3/envs/py311/bin/python -m plexus.workers.ProcessScoreWorker",
                             "Restart=on-failure",
                             "RestartSec=5s",
                             "StandardOutput=journal",
@@ -201,6 +196,7 @@ class ScoringWorkerStack(Stack):
                             "Environment=SCORING_REQUEST_STANDARD_QUEUE_URL={{ ScoringRequestQueueUrl }}",
                             "Environment=SCORING_RESPONSE_QUEUE_URL={{ ScoringResponseQueueUrl }}",
                             "Environment=PLEXUS_ACCOUNT_KEY={{ PlexusAccountKey }}",
+                            "Environment=NUM_WORKERS={{ NumWorkers }}",
                             "",
                             "[Install]",
                             "WantedBy=multi-user.target",
@@ -244,5 +240,5 @@ class ScoringWorkerStack(Stack):
         # Add dependency to ensure Document exists before Association
         ssm_association.add_dependency(ssm_doc)
 
-        # Store document reference for potential use
+        # Store document reference
         self.worker_config_document = ssm_doc
