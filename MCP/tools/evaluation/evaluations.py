@@ -286,6 +286,7 @@ def register_evaluation_tools(mcp: FastMCP):
         latest: bool = False,
         fresh: bool = False,
         reload: bool = False,
+        allow_no_labels: bool = False,
     ) -> str:
         """Run a local YAML-based accuracy evaluation using the same code path as CLI (DRY).
 
@@ -298,6 +299,9 @@ def register_evaluation_tools(mcp: FastMCP):
         - latest: Use latest version instead of champion
         - fresh: Pull fresh, non-cached data from the data lake (default: False)
         - reload: Reload existing dataset by refreshing values for current records only (default: False)
+        - allow_no_labels: Allow evaluation without ground truth labels (default: False)
+                          When True, creates score results and predicted class distribution
+                          but skips accuracy metrics
         """
         if not scorecard_name:
             return "Error: scorecard_name must be provided"
@@ -340,6 +344,9 @@ def register_evaluation_tools(mcp: FastMCP):
 
             if reload:
                 args.append('--reload')
+
+            if allow_no_labels:
+                args.append('--allow-no-labels')
 
             # Run the CLI command in a thread pool to avoid event loop conflicts
             # This ensures we use the exact same code path as the CLI

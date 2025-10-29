@@ -1267,6 +1267,7 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--data-source-key', default=None, type=str, help='Key of the cloud data source to use (overrides score data config)')
 @click.option('--data-source-id', default=None, type=str, help='ID of the cloud data source to use (overrides score data config)')
 @click.option('--dataset-id', default=None, type=str, help='Specific dataset ID to use (overrides score data config)')
+@click.option('--allow-no-labels', is_flag=True, default=False, help='Allow evaluation without ground truth labels (creates score results and distribution metrics only)')
 def accuracy(
     scorecard: str,
     yaml: bool,
@@ -1287,7 +1288,8 @@ def accuracy(
     data_source_name: Optional[str],
     data_source_key: Optional[str],
     data_source_id: Optional[str],
-    dataset_id: Optional[str]
+    dataset_id: Optional[str],
+    allow_no_labels: bool
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -1999,7 +2001,8 @@ def accuracy(
                 scorecard_id=sc_id_for_eval,
                 score_id=score_id_for_eval,
                 score_version_id=score_version_id_for_eval,
-                override_folder=f"./overrides/{scorecard_name_resolved}"
+                override_folder=f"./overrides/{scorecard_name_resolved}",
+                allow_no_labels=allow_no_labels
             )
             logging.info(f"AccuracyEvaluation instantiated for task {task_id} and evaluation {eval_id_for_eval}")
 
