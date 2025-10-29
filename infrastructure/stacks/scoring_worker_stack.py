@@ -225,8 +225,9 @@ class ScoringWorkerStack(Stack):
             self,
             f"ScoringWorkerConfigDoc-{self.env_name}",
             content=ssm_doc_content,
-            document_type="Command",
-            name=get_resource_name("scoring", self.env_name, "worker-config-doc")
+            document_type="Command"
+            # Note: name is omitted to allow CloudFormation to auto-generate it
+            # This enables updates without requiring resource replacement
         )
 
         # Create the SSM Association to apply the document to tagged instances
