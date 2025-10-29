@@ -192,7 +192,7 @@ class ScoringWorkerStack(Stack):
                             "User={{ ServiceUser }}",
                             "Group={{ ServiceGroup }}",
                             "WorkingDirectory={{ WorkingDirectory }}",
-                            "ExecStart={{ GunicornExecutable }} plexus.workers.ProcessScoreWorker:run --workers {{ NumWorkers }} --worker-class sync --preload",
+                            "ExecStart={{ GunicornExecutable }} plexus.workers.ProcessScoreWorker:run --workers {{ NumWorkers }} --worker-class sync --preload --bind unix:/tmp/plexus-scoring-worker.sock",
                             "Restart=on-failure",
                             "RestartSec=5s",
                             "StandardOutput=journal",
