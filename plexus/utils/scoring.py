@@ -3,11 +3,17 @@ import logging
 import traceback
 import json
 import os
-from typing import Dict, Optional
+import boto3
+from datetime import datetime, timezone
+from typing import Dict, Optional, TYPE_CHECKING
 from plexus.dashboard.api.models.scorecard import Scorecard as ScorecardModel
 from plexus.dashboard.api.models.score import Score as ScoreModel
 from plexus.dashboard.api.models.account import Account
 from plexus.dashboard.api.models.score_result import ScoreResult
+from plexus.utils.score_result_s3_utils import upload_score_result_log_file, upload_score_result_trace_file
+
+if TYPE_CHECKING:
+    from plexus.dashboard.api.client import PlexusDashboardClient
 # Import Item model for upsert functionality
 try:
     from plexus.dashboard.api.models.item import Item
@@ -23,6 +29,20 @@ async def get_plexus_client():
     """Get the Plexus Dashboard client for API operations."""
     from plexus.dashboard.api.client import PlexusDashboardClient
     return PlexusDashboardClient()
+
+# Send message to standard scoring request queue
+async def send_message_to_standard_scoring_request_queue(scoring_job_id: str):
+    """Send message to AWS SQS queue with scoring_job_id"""
+    try:
+        client = boto3.client('sqs')
+        await asyncio.to_thread(client.send_message,
+            QueueUrl=os.getenv('SCORING_REQUEST_STANDARD_QUEUE_URL'),
+            MessageBody=json.dumps({'scoring_job_id': scoring_job_id})
+        )
+    except Exception as e:
+        logging.error(f"Failed to send message to scoring request queue: {e}")
+        logging.error(f"Stack trace: {traceback.format_exc()}")
+        raise
 
 def sanitize_metadata_for_graphql(metadata: dict) -> dict:
     """
@@ -299,6 +319,165 @@ async def resolve_score_id(external_id: str, scorecard_dynamo_id: str, client) -
         logging.error(f"Stack trace: {traceback.format_exc()}")
         return None
 
+async def create_score_result(
+    item_id: str,
+    scorecard_id: str,
+    score_id: str,
+    account_id: str,
+    scoring_job_id: str,
+    external_id: str,
+    value: str,
+    explanation: str,
+    trace_data: dict = None,
+    log_content: str = None,
+    cost: dict = None,
+    client: "PlexusDashboardClient" = None
+):
+    """
+    Create a ScoreResult in DynamoDB for caching worker results.
+
+    Args:
+        item_id: The DynamoDB Item ID
+        scorecard_id: The DynamoDB Scorecard ID
+        score_id: The DynamoDB Score ID
+        account_id: The DynamoDB Account ID
+        scoring_job_id: The DynamoDB ScoringJob ID
+        external_id: The externalId of the Item
+        value: The score value
+        explanation: The explanation for the score
+        trace_data: Optional trace data to upload to S3
+        log_content: Optional log content to upload to S3
+        cost: Optional cost data
+        client: The PlexusDashboardClient instance
+    """
+    try:
+        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+        score_result_metadata = {
+            "source": "Worker",
+            "cached_at": now,
+            "external_id": external_id,
+            "explanation": explanation
+        }
+
+        # Prepare cost data separately for the cost field
+        cost_data = None
+        if cost is not None:
+            try:
+                # Ensure cost is JSON-serializable
+                json.dumps(cost, default=str)
+                cost_data = cost
+            except Exception:
+                cost_data = {"raw": str(cost)}
+
+        # Create ScoreResult using model method
+        score_result = await asyncio.to_thread(
+            ScoreResult.create,
+            client=client,
+            value=value,
+            itemId=item_id,
+            accountId=account_id,
+            scorecardId=scorecard_id,
+            scoreId=score_id,
+            scoringJobId=scoring_job_id,
+            explanation=explanation,
+            metadata=score_result_metadata,
+            trace=trace_data,
+            cost=cost_data,
+            code="200",
+            type="prediction",
+            status="COMPLETED"
+        )
+
+        if not score_result:
+            logging.error(f"Failed to create ScoreResult")
+            return None
+
+        score_result_id = score_result.id
+        score_result_created_at = score_result.createdAt
+        logging.info(f"✅ Created ScoreResult with ID: {score_result_id}")
+
+        # Handle trace data and log uploads to S3
+        attachment_s3_paths = []
+        upload_errors = []
+
+        # Upload trace data if available
+        if trace_data:
+            try:
+                logging.info(f"🔄 Starting trace data upload to S3 for ScoreResult {score_result_id}")
+                s3_path = await asyncio.to_thread(upload_score_result_trace_file, score_result_id, trace_data)
+                if s3_path:
+                    attachment_s3_paths.append(s3_path)
+                    logging.info(f"✅ Successfully uploaded trace data to S3: {s3_path}")
+                else:
+                    upload_errors.append("trace: No S3 path returned")
+                    logging.warning(f"⚠️ No S3 path returned from trace upload")
+            except Exception as trace_error:
+                error_msg = f"Error uploading trace data: {str(trace_error)}"
+                upload_errors.append(f"trace: {error_msg}")
+                logging.error(f"❌ {error_msg}")
+                logging.error(traceback.format_exc())
+
+        # Upload log content if available
+        if log_content:
+            try:
+                logging.info(f"🔄 Starting log content upload to S3 for ScoreResult {score_result_id}")
+                s3_path = await asyncio.to_thread(upload_score_result_log_file, score_result_id, log_content)
+                if s3_path:
+                    attachment_s3_paths.append(s3_path)
+                    logging.info(f"✅ Successfully uploaded log content to S3: {s3_path}")
+                else:
+                    upload_errors.append("log: No S3 path returned")
+                    logging.warning(f"⚠️ No S3 path returned from log upload")
+            except Exception as log_error:
+                error_msg = f"Error uploading log content: {str(log_error)}"
+                upload_errors.append(f"log: {error_msg}")
+                logging.error(f"❌ {error_msg}")
+                logging.error(traceback.format_exc())
+
+        # Update the ScoreResult with attachments if any were uploaded successfully
+        if attachment_s3_paths:
+            try:
+                logging.info(f"📎 Updating ScoreResult {score_result_id} with {len(attachment_s3_paths)} attachment(s): {attachment_s3_paths}")
+
+                # Convert createdAt to ISO string if it's a datetime object
+                created_at_str = score_result_created_at.isoformat() if isinstance(score_result_created_at, datetime) else score_result_created_at
+                
+                # Update ScoreResult using model method
+                updated_score_result = await asyncio.to_thread(
+                    score_result.update,
+                    attachments=attachment_s3_paths,
+                    itemId=item_id,
+                    scorecardId=scorecard_id,
+                    scoreId=score_id,
+                    createdAt=created_at_str
+                )
+
+                if updated_score_result:
+                    logging.info(f"✅ Successfully updated ScoreResult with attachment")
+                else:
+                    error_msg = f"Failed to update ScoreResult with attachments"
+                    upload_errors.append(f"update_attachments: {error_msg}")
+                    logging.error(f"❌ Failed to update ScoreResult with attachment")
+            except Exception as attachment_error:
+                error_msg = f"Exception during ScoreResult attachment update: {str(attachment_error)}"
+                upload_errors.append(f"update_attachments: {error_msg}")
+                logging.error(f"❌ Error updating ScoreResult with attachment: {str(attachment_error)}")
+                logging.error(traceback.format_exc())
+
+        if upload_errors:
+            logging.warning(f"⚠️ Attachment process completed with errors: {upload_errors}")
+        elif trace_data or log_content:
+            logging.info(f"✅ Attachment process completed successfully")
+
+        return score_result_id
+
+    except Exception as e:
+        logging.error(f"Error creating score result: {e}")
+        logging.error(traceback.format_exc())
+        return None
+
+
 async def get_existing_score_result(report_id: str, scorecard_id: str, score_id: str, type: str, account_id: str) -> Optional[dict]:
     """
     Check if a score result already exists for the given report, scorecard, and score.
@@ -421,4 +600,124 @@ async def get_existing_score_result(report_id: str, scorecard_id: str, score_id:
             metric_value=1,
             dimensions={"Environment": os.getenv('environment', 'unknown')}
         )
+        return None
+
+async def get_text_from_item(item_id: str, client: "PlexusDashboardClient") -> str:
+    """
+    Get text from an Item in DynamoDB by its item_id.
+
+    Args:
+        item_id: The DynamoDB ID of the Item
+        client: The PlexusDashboardClient instance
+
+    Returns:
+        The text content of the item, or None if not found
+    """
+    try:
+        query = """
+        query GetItem($id: ID!) {
+            getItem(id: $id) {
+                id
+                text
+            }
+        }
+        """
+
+        variables = {"id": item_id}
+        result = await asyncio.to_thread(client.execute, query, variables)
+
+        item_data = result.get('getItem')
+        if not item_data:
+            logging.error(f"Item not found: {item_id}")
+            return None
+
+        return item_data.get('text')
+
+    except Exception as e:
+        logging.error(f"Error getting text from item {item_id}: {e}")
+        logging.error(traceback.format_exc())
+        return None
+
+async def get_metadata_from_item(item_id: str, client: "PlexusDashboardClient") -> dict:
+    """
+    Get metadata from an Item in DynamoDB by its item_id.
+
+    Args:
+        item_id: The DynamoDB ID of the Item
+        client: The PlexusDashboardClient instance
+
+    Returns:
+        The metadata dictionary, or empty dict if not found
+    """
+    try:
+        query = """
+        query GetItem($id: ID!) {
+            getItem(id: $id) {
+                id
+                metadata
+            }
+        }
+        """
+
+        variables = {"id": item_id}
+        result = await asyncio.to_thread(client.execute, query, variables)
+
+        item_data = result.get('getItem')
+        if not item_data:
+            logging.error(f"Item not found: {item_id}")
+            return {}
+
+        metadata_raw = item_data.get('metadata')
+
+        # metadata is stored as a JSON string in DynamoDB, parse it
+        if isinstance(metadata_raw, str):
+            try:
+                return json.loads(metadata_raw)
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse metadata JSON for item {item_id}: {metadata_raw}")
+                return {}
+        elif isinstance(metadata_raw, dict):
+            return metadata_raw
+        else:
+            return {}
+
+    except Exception as e:
+        logging.error(f"Error getting metadata from item {item_id}: {e}")
+        logging.error(traceback.format_exc())
+        return {}
+
+async def get_external_id_from_item(item_id: str, client: "PlexusDashboardClient") -> str:
+    """
+    Get externalId from an Item in DynamoDB by its item_id.
+
+    Args:
+        item_id: The DynamoDB ID of the Item
+        client: The PlexusDashboardClient instance
+
+    Returns:
+        The externalId of the item, or None if not found
+    """
+    try:
+        query = """
+        query GetItem($id: ID!) {
+            getItem(id: $id) {
+                id
+                externalId
+            }
+        }
+        """
+
+        variables = {"id": item_id}
+        result = await asyncio.to_thread(client.execute, query, variables)
+
+        item_data = result.get('getItem')
+        if not item_data:
+            logging.error(f"Item not found: {item_id}")
+            return None
+
+        return item_data.get('externalId')
+
+    except Exception as e:
+        logging.error(f"Error getting externalId from item {item_id}: {e}")
+        logging.error(traceback.format_exc())
         return None

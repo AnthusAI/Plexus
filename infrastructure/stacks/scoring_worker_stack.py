@@ -8,6 +8,7 @@ including SQS queues and related resources.
 from aws_cdk import (
     Stack,
     aws_sqs as sqs,
+    aws_ssm as ssm,
     Duration,
     Tags,
 )
@@ -65,6 +66,9 @@ class ScoringWorkerStack(Stack):
         #     "gpu-request"
         # )
 
+        # Create SSM document for scoring worker service management
+        self._create_worker_service_document()
+
     def _create_queue_with_dlq(
         self,
         logical_name: str,
@@ -108,3 +112,133 @@ class ScoringWorkerStack(Stack):
         )
 
         return queue, dlq
+
+    def _create_worker_service_document(self):
+        """
+        Create SSM document for managing the scoring worker systemd service.
+
+        This document configures a systemd service that runs the ProcessScoreWorker
+        with gunicorn managing multiple worker processes.
+        """
+        # Define the SSM Document content
+        ssm_doc_content = {
+            "schemaVersion": "2.2",
+            "description": f"Configure and manage scoring worker service for {self.env_name}",
+            "parameters": {
+                "ServiceName": {
+                    "type": "String",
+                    "description": "Name of the systemd service.",
+                    "default": "plexus-scoring-worker.service"
+                },
+                "ServiceUser": {
+                    "type": "String",
+                    "description": "User to run the service as.",
+                    "default": "ec2-user"
+                },
+                "ServiceGroup": {
+                    "type": "String",
+                    "description": "Group to run the service as.",
+                    "default": "ec2-user"
+                },
+                "WorkingDirectory": {
+                    "type": "String",
+                    "description": "Absolute path to the working directory for the service.",
+                    "default": "/home/ec2-user/projects/Plexus"
+                },
+                "ScoringRequestQueueUrl": {
+                    "type": "String",
+                    "description": "SQS queue URL for scoring requests.",
+                    "default": self.standard_request_queue.queue_url
+                },
+                "ScoringResponseQueueUrl": {
+                    "type": "String",
+                    "description": "SQS queue URL for scoring responses.",
+                    "default": self.response_queue.queue_url
+                },
+                "PlexusAccountKey": {
+                    "type": "String",
+                    "description": "Plexus account key for authentication.",
+                    "default": "CHANGE_ME"
+                },
+                "NumWorkers": {
+                    "type": "String",
+                    "description": "Number of worker processes to run.",
+                    "default": "4"
+                }
+            },
+            "mainSteps": [
+                {
+                    "action": "aws:runShellScript",
+                    "name": "configureScoringWorkerService",
+                    "inputs": {
+                        "runCommand": [
+                            "set -euxo pipefail",
+                            # Ensure working directory exists
+                            "mkdir -p {{ WorkingDirectory }}",
+                            "chown {{ ServiceUser }}:{{ ServiceGroup }} {{ WorkingDirectory }}",
+
+                            # Create the systemd service file
+                            "cat << 'EOF' | tee /etc/systemd/system/{{ ServiceName }} > /dev/null",
+                            "[Unit]",
+                            "Description=Plexus Scoring Worker Service (Managed by SSM)",
+                            "After=network.target",
+                            "",
+                            "[Service]",
+                            "User={{ ServiceUser }}",
+                            "Group={{ ServiceGroup }}",
+                            "WorkingDirectory={{ WorkingDirectory }}",
+                            "ExecStart=/home/ec2-user/miniconda3/envs/py311/bin/python -m plexus.workers.ProcessScoreWorker",
+                            "Restart=on-failure",
+                            "RestartSec=5s",
+                            "StandardOutput=journal",
+                            "StandardError=journal",
+                            "Environment=PYTHONPATH={{ WorkingDirectory }}",
+                            "Environment=SCORING_REQUEST_STANDARD_QUEUE_URL={{ ScoringRequestQueueUrl }}",
+                            "Environment=SCORING_RESPONSE_QUEUE_URL={{ ScoringResponseQueueUrl }}",
+                            "Environment=PLEXUS_ACCOUNT_KEY={{ PlexusAccountKey }}",
+                            "Environment=NUM_WORKERS={{ NumWorkers }}",
+                            "",
+                            "[Install]",
+                            "WantedBy=multi-user.target",
+                            "EOF",
+
+                            # Set permissions
+                            "chmod 644 /etc/systemd/system/{{ ServiceName }}",
+
+                            # Reload, enable, and restart
+                            "systemctl daemon-reload",
+                            "systemctl enable {{ ServiceName }}",
+                            "systemctl restart {{ ServiceName }}",
+                            "systemctl status {{ ServiceName }} --no-pager"
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # Create the SSM Document resource
+        ssm_doc = ssm.CfnDocument(
+            self,
+            f"ScoringWorkerConfigDoc-{self.env_name}",
+            content=ssm_doc_content,
+            document_type="Command"
+            # Note: name is omitted to allow CloudFormation to auto-generate it
+            # This enables updates without requiring resource replacement
+        )
+
+        # Create the SSM Association to apply the document to tagged instances
+        ssm_association = ssm.CfnAssociation(
+            self,
+            f"ScoringWorkerAssociation-{self.env_name}",
+            name=ssm_doc.ref,
+            targets=[ssm.CfnAssociation.TargetProperty(
+                key="tag:Environment",
+                values=[self.env_name]
+            )],
+        )
+
+        # Add dependency to ensure Document exists before Association
+        ssm_association.add_dependency(ssm_doc)
+
+        # Store document reference
+        self.worker_config_document = ssm_doc
