@@ -35,6 +35,9 @@ import traceback
 import json
 import os
 import boto3
+import multiprocessing
+import signal
+import time
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
@@ -464,24 +467,149 @@ class JobProcessor:
                     await asyncio.sleep(self.poll_interval)
 
 
-async def main():
+class WorkerManager:
+    """Manages multiple worker processes"""
+    
+    def __init__(self, num_workers=4, poll_interval=5):
+        self.num_workers = num_workers
+        self.poll_interval = poll_interval
+        self.workers = []
+        self.shutdown_event = multiprocessing.Event()
+        
+    def worker_process(self, worker_id, once=False):
+        """Run a single worker process"""
+        try:
+            # Set process title for easier identification
+            import setproctitle
+            setproctitle.setproctitle(f"plexus-scoring-worker-{worker_id}")
+        except ImportError:
+            pass  # setproctitle is optional
+            
+        logging.info(f"🚀 Starting worker process {worker_id}")
+        
+        async def run_worker():
+            processor = JobProcessor(poll_interval=self.poll_interval)
+            await processor.run(once=once)
+            
+        try:
+            asyncio.run(run_worker())
+        except KeyboardInterrupt:
+            logging.info(f"🛑 Worker {worker_id} stopped by signal")
+        except Exception as e:
+            logging.error(f"❌ Worker {worker_id} crashed: {e}")
+            logging.error(traceback.format_exc())
+    
+    def start_workers(self, once=False):
+        """Start all worker processes"""
+        logging.info(f"🚀 Starting {self.num_workers} worker processes")
+        
+        for i in range(self.num_workers):
+            worker = multiprocessing.Process(
+                target=self.worker_process,
+                args=(i + 1, once),
+                name=f"scoring-worker-{i + 1}"
+            )
+            worker.start()
+            self.workers.append(worker)
+            logging.info(f"✅ Started worker process {i + 1} (PID: {worker.pid})")
+    
+    def monitor_workers(self, once=False):
+        """Monitor worker processes and restart them if they crash"""
+        if once:
+            # In once mode, just wait for all workers to complete
+            for worker in self.workers:
+                worker.join()
+            return
+            
+        while not self.shutdown_event.is_set():
+            for i, worker in enumerate(self.workers):
+                if not worker.is_alive():
+                    logging.warning(f"⚠️  Worker {i + 1} (PID: {worker.pid}) died, restarting...")
+                    
+                    # Start new worker
+                    new_worker = multiprocessing.Process(
+                        target=self.worker_process,
+                        args=(i + 1, False),
+                        name=f"scoring-worker-{i + 1}"
+                    )
+                    new_worker.start()
+                    self.workers[i] = new_worker
+                    logging.info(f"✅ Restarted worker {i + 1} (PID: {new_worker.pid})")
+            
+            # Check every 5 seconds
+            time.sleep(5)
+    
+    def shutdown(self):
+        """Gracefully shutdown all workers"""
+        logging.info("🛑 Shutting down all workers...")
+        self.shutdown_event.set()
+        
+        # Send SIGTERM to all workers
+        for i, worker in enumerate(self.workers):
+            if worker.is_alive():
+                logging.info(f"🛑 Terminating worker {i + 1} (PID: {worker.pid})")
+                worker.terminate()
+        
+        # Wait for workers to exit (with timeout)
+        for i, worker in enumerate(self.workers):
+            worker.join(timeout=10)
+            if worker.is_alive():
+                logging.warning(f"⚠️  Worker {i + 1} didn't exit gracefully, killing...")
+                worker.kill()
+                worker.join()
+        
+        logging.info("✅ All workers shut down")
+
+
+async def run_single_worker():
+    """Run a single worker (for backward compatibility)"""
+    processor = JobProcessor()
+    await processor.run()
+
+
+def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description='Process async scoring jobs')
-    parser.add_argument('--once', action='store_true', help='Process one job and exit')
+    parser = argparse.ArgumentParser(description='Process async scoring jobs with multiple workers')
+    parser.add_argument('--once', action='store_true', help='Process one job per worker and exit')
     parser.add_argument('--poll-interval', type=int, default=5, help='Seconds between polls (default: 5)')
+    parser.add_argument('--workers', type=int, default=None, help='Number of worker processes (default: from env or 4)')
+    parser.add_argument('--single', action='store_true', help='Run single worker (no multiprocessing)')
     args = parser.parse_args()
 
     # Load environment - search up directory tree for .env file
     load_dotenv()
 
-    # Create and run processor
-    processor = JobProcessor(poll_interval=args.poll_interval)
-    await processor.run(once=args.once)
+    # Determine number of workers
+    num_workers = args.workers
+    if num_workers is None:
+        num_workers = int(os.environ.get('NUM_WORKERS', 4))
+
+    if args.single:
+        # Run single worker for testing/debugging
+        logging.info("🔧 Running in single worker mode")
+        asyncio.run(run_single_worker())
+    else:
+        # Run multiple workers
+        logging.info(f"🚀 Starting scoring worker manager with {num_workers} workers")
+        
+        manager = WorkerManager(num_workers=num_workers, poll_interval=args.poll_interval)
+        
+        # Set up signal handlers for graceful shutdown
+        def signal_handler(signum, frame):
+            logging.info(f"📡 Received signal {signum}, shutting down...")
+            manager.shutdown()
+            
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        try:
+            manager.start_workers(once=args.once)
+            manager.monitor_workers(once=args.once)
+        except KeyboardInterrupt:
+            logging.info("🛑 Interrupted by user")
+        finally:
+            manager.shutdown()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
-def run():
-    """Wrapper for gunicorn to run the worker"""
-    asyncio.run(main())
+    main()
