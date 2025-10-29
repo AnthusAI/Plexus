@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ReportBlockProps } from './ReportBlock';
 import ReportBlock from './ReportBlock';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText, PocketKnife } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText, Info } from 'lucide-react';
 import * as yaml from 'js-yaml';
 import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer, Sector } from 'recharts';
 import { PieSectorDataItem } from 'recharts/types/polar/Pie';
@@ -35,6 +36,28 @@ interface TopicExample {
   id?: Identifier[] | string;
   text: string;
   [key: string]: any; // Allow other properties
+}
+
+interface TopicNgram {
+  topic_id: number;
+  topic_name: string;
+  ngram: string;
+  c_tf_idf_score: number;
+  rank: number;
+}
+
+interface TopicStabilityData {
+  n_runs: number;
+  sample_fraction: number;
+  mean_stability: number;
+  std_stability?: number;
+  per_topic_stability: Record<number, number>;
+  methodology: string;
+  interpretation: {
+    high: string;
+    medium: string;
+    low: string;
+  };
 }
 
 interface TopicAnalysisData {
@@ -131,6 +154,7 @@ interface TopicAnalysisData {
     error_reading_transformed_file?: string;
   };
   block_title?: string;
+  topic_stability?: TopicStabilityData;
   errors?: string[];
 }
 
@@ -201,7 +225,8 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
     name: props.name,
     type: props.type,
     hasAttachedFiles: !!props.attachedFiles,
-    attachedFilesLength: props.attachedFiles?.length || 0
+    attachedFilesLength: props.attachedFiles?.length || 0,
+    attachedFiles: props.attachedFiles
   });
 
   if (!props.output) {
@@ -330,6 +355,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
           completeTopicsData={completeTopicsData}
           loadingCompleteData={loadingCompleteData}
           fetchCompleteTopicsData={fetchCompleteTopicsData}
+          attachedFiles={props.attachedFiles}
         />
 
         {/* Analysis Details Section */}
@@ -429,6 +455,23 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
+
+            {/* Topic Stability Section (if available) */}
+            {data.topic_stability && (
+              <Accordion type="multiple" defaultValue={[]} className="w-full">
+                <AccordionItem value="stability">
+                  <AccordionTrigger className="text-base font-medium">
+                    Topic Stability Assessment
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <TopicStabilitySection 
+                      stabilityData={data.topic_stability}
+                      topics={topics}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
           </div>
         </div>
       </div>
@@ -465,7 +508,8 @@ const TopicAnalysisResults: React.FC<{
   completeTopicsData?: any;
   loadingCompleteData?: boolean;
   fetchCompleteTopicsData?: () => void;
-}> = ({ topics, summary, bertopicAnalysis, completeTopicsData, loadingCompleteData, fetchCompleteTopicsData }) => {
+  attachedFiles?: string[];
+}> = ({ topics, summary, bertopicAnalysis, completeTopicsData, loadingCompleteData, fetchCompleteTopicsData, attachedFiles }) => {
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
 
   if (topics.length === 0) {
@@ -559,27 +603,51 @@ const TopicAnalysisResults: React.FC<{
                   </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-3 p-1">
+                    {/* Fine-tuned semantic keywords (LLM-refined) */}
                     {topic.keywords && topic.keywords.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {topic.keywords
-                          .filter(keyword => {
-                            // Ensure keyword is a non-empty string
-                            if (!keyword || typeof keyword !== 'string' || keyword.trim() === '') {
-                              return false;
-                            }
-                            // Also filter out the main topic name itself
-                            const normalizedKeyword = keyword.toLowerCase().replace(/_/g, ' ').trim();
-                            const normalizedTopicName = cleanTopicName(topic.name).toLowerCase().trim();
-                            return normalizedKeyword !== normalizedTopicName;
-                          })
-                          .slice(0, bertopicAnalysis.top_n_words || 8)
-                          .map((keyword, i) => (
-                            <Badge key={i} variant="secondary" className="text-xs">
-                              {keyword}
-                            </Badge>
-                          ))}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <h5 className="text-sm font-medium text-muted-foreground">Semantic Keywords</h5>
+                          <span className="text-xs text-muted-foreground italic">(LLM-refined)</span>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button className="inline-flex items-center">
+                                <Info className="h-3 w-3 text-muted-foreground hover:text-foreground transition-colors cursor-pointer" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="text-sm max-w-xs">
+                              These keywords are refined by AI to represent the semantic meaning of this topic.
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {topic.keywords
+                            .filter(keyword => {
+                              // Ensure keyword is a non-empty string
+                              if (!keyword || typeof keyword !== 'string' || keyword.trim() === '') {
+                                return false;
+                              }
+                              // Also filter out the main topic name itself
+                              const normalizedKeyword = keyword.toLowerCase().replace(/_/g, ' ').trim();
+                              const normalizedTopicName = cleanTopicName(topic.name).toLowerCase().trim();
+                              return normalizedKeyword !== normalizedTopicName;
+                            })
+                            .slice(0, bertopicAnalysis.top_n_words || 8)
+                            .map((keyword, i) => (
+                              <Badge key={i} variant="secondary" className="text-xs">
+                                {keyword}
+                              </Badge>
+                            ))}
+                        </div>
                       </div>
                     )}
+                    
+                    {/* N-grams with c-TF-IDF scores (raw statistical keywords) */}
+                    <TopicNgramsSection 
+                      topicId={topic.id}
+                      topicName={topic.name}
+                      attachedFiles={attachedFiles}
+                    />
                     
                     {loadingCompleteData && (
                       <div className="text-xs text-muted-foreground italic">
@@ -622,7 +690,6 @@ const TopicExamplesSection: React.FC<{
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 mt-2">
-        <FileText className="h-4 w-4 text-muted-foreground" />
         <h5 className="text-sm font-medium">Examples</h5>
       </div>
       <div className="space-y-2 pl-6">
@@ -711,6 +778,285 @@ const TopicExamplesSection: React.FC<{
           );
         })}
       </div>
+    </div>
+  );
+};
+
+/**
+ * Topic N-grams Section Component
+ * Shows complete n-gram list with c-TF-IDF scores for a topic
+ */
+const TopicNgramsSection: React.FC<{
+  topicId: number;
+  topicName: string;
+  attachedFiles?: string[];
+}> = ({ topicId, topicName, attachedFiles }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [ngrams, setNgrams] = useState<TopicNgram[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Debug: Log when component renders
+  console.log('🎨 TopicNgramsSection rendered for topic:', topicId, topicName, 'attachedFiles:', attachedFiles);
+  
+  // Fetch and parse CSV
+  const fetchNgrams = async () => {
+    if (ngrams.length > 0 || loading) return; // Already loaded or loading
+    
+    // Debug logging
+    console.log('🔍 TopicNgramsSection - Fetching n-grams for topic:', topicId, topicName);
+    console.log('🔍 attachedFiles:', attachedFiles);
+    
+    // Find the complete_topic_ngrams.csv file in attachedFiles
+    const ngramsFile = attachedFiles?.find(file => 
+      file.includes('complete_topic_ngrams.csv')
+    );
+    
+    console.log('🔍 Found ngramsFile:', ngramsFile);
+    
+    if (!ngramsFile) {
+      console.error('❌ N-grams file not found in attachedFiles');
+      setError('N-grams data not available');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Import AWS Amplify storage method
+      const { downloadData } = await import('aws-amplify/storage');
+      
+      // Fetch the CSV file from S3
+      // Report block files are stored in the reportBlockDetails bucket
+      const downloadResult = await downloadData({
+        path: ngramsFile,
+        options: { bucket: 'reportBlockDetails' }
+      }).result;
+      
+      const csvText = await downloadResult.body.text();
+      
+      // Parse CSV (simple parser for our known format)
+      const lines = csvText.split('\n');
+      const headers = lines[0].split(',');
+      
+      const parsedNgrams: TopicNgram[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        const values = line.split(',');
+        if (values.length >= 5) {
+          const ngramTopicId = parseInt(values[0]);
+          
+          // Only include n-grams for this topic
+          if (ngramTopicId === topicId) {
+            parsedNgrams.push({
+              topic_id: ngramTopicId,
+              topic_name: values[1],
+              ngram: values[2],
+              c_tf_idf_score: parseFloat(values[3]),
+              rank: parseInt(values[4])
+            });
+          }
+        }
+      }
+      
+      setNgrams(parsedNgrams);
+    } catch (err) {
+      console.error('Error fetching n-grams:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load n-grams');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fetch n-grams on mount
+  useEffect(() => {
+    fetchNgrams();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
+  
+  const handleToggle = () => {
+    if (!expanded && ngrams.length === 0) {
+      fetchNgrams();
+    }
+    setExpanded(!expanded);
+  };
+  
+  // Display top 10 by default
+  const displayNgrams = expanded ? ngrams : ngrams.slice(0, 10);
+  const hasMore = ngrams.length > 10;
+  
+  return (
+    <div className="space-y-2 mt-3">
+      <div className="flex items-center gap-2">
+        <h5 className="text-sm font-medium text-muted-foreground">Statistical Keywords</h5>
+        <span className="text-xs text-muted-foreground italic">(c-TF-IDF scores)</span>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="inline-flex items-center">
+              <Info className="h-3 w-3 text-muted-foreground hover:text-foreground transition-colors cursor-pointer" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="text-sm max-w-xs">
+            Showing the actual terms that appear most frequently and uniquely in this topic.
+          </PopoverContent>
+        </Popover>
+      </div>
+      
+      {loading && (
+        <div className="text-xs text-muted-foreground italic pl-6">
+          Loading n-grams...
+        </div>
+      )}
+      
+      {error && (
+        <div className="text-xs text-destructive pl-6">
+          {error}
+        </div>
+      )}
+      
+      {!loading && !error && displayNgrams.length > 0 && (
+        <div className="space-y-1 pl-6">
+          {displayNgrams.map((ngram, index) => (
+            <div key={index} className="flex items-center justify-between text-xs py-1 px-2 hover:bg-muted/50 rounded">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground font-mono w-6">{ngram.rank}</span>
+                <span className="font-medium">{ngram.ngram}</span>
+              </div>
+              <span 
+                className="text-muted-foreground tabular-nums"
+                title={`c-TF-IDF score: ${ngram.c_tf_idf_score.toFixed(4)}`}
+              >
+                {ngram.c_tf_idf_score.toFixed(3)}
+              </span>
+            </div>
+          ))}
+          
+          {hasMore && (
+            <>
+              <div className="border-t border-border my-2" />
+              <button
+                onClick={handleToggle}
+                className="w-full flex items-center justify-center py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={expanded ? "Show less" : `Show all ${ngrams.length} keywords`}
+              >
+                {expanded ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      
+      {!loading && !error && ngrams.length === 0 && (
+        <div className="text-xs text-muted-foreground italic pl-6">
+          No n-grams available
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Topic Stability Section Component
+ * Shows topic stability metrics from bootstrap sampling
+ */
+const TopicStabilitySection: React.FC<{
+  stabilityData: TopicStabilityData;
+  topics: Array<{id: number; name: string}>;
+}> = ({ stabilityData, topics }) => {
+  // Determine stability level and color
+  const getStabilityLevel = (score: number): { level: string; color: string; description: string } => {
+    if (score > 0.7) {
+      return { 
+        level: 'High', 
+        color: 'text-green-600 dark:text-green-400',
+        description: stabilityData.interpretation.high
+      };
+    } else if (score >= 0.5) {
+      return { 
+        level: 'Medium', 
+        color: 'text-yellow-600 dark:text-yellow-400',
+        description: stabilityData.interpretation.medium
+      };
+    } else {
+      return { 
+        level: 'Low', 
+        color: 'text-red-600 dark:text-red-400',
+        description: stabilityData.interpretation.low
+      };
+    }
+  };
+  
+  const overallStability = getStabilityLevel(stabilityData.mean_stability);
+  
+  return (
+    <div className="space-y-4 pt-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Overall Stability</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Overall Stability Score */}
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-bold">{(stabilityData.mean_stability * 100).toFixed(1)}%</span>
+                <Badge className={overallStability.color} variant="outline">
+                  {overallStability.level}
+                </Badge>
+              </div>
+              {/* Only show description for High and Medium stability */}
+              {stabilityData.mean_stability >= 0.5 && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {overallStability.description}
+                </p>
+              )}
+            </div>
+          </div>
+          
+          {/* Methodology Info */}
+          <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
+            <div><strong>Methodology:</strong> {stabilityData.methodology}</div>
+            <div><strong>Bootstrap Runs:</strong> {stabilityData.n_runs}</div>
+            <div><strong>Sample Fraction:</strong> {(stabilityData.sample_fraction * 100).toFixed(0)}% per run</div>
+          </div>
+          
+          {/* Per-Topic Stability */}
+          {Object.keys(stabilityData.per_topic_stability).length > 0 && (
+            <div className="space-y-2 pt-2 border-t">
+              <h4 className="text-sm font-medium">Per-Topic Stability</h4>
+              <div className="space-y-1">
+                {topics.map(topic => {
+                  const topicStability = stabilityData.per_topic_stability[topic.id];
+                  if (topicStability === undefined) return null;
+                  
+                  const topicLevel = getStabilityLevel(topicStability);
+                  
+                  return (
+                    <div key={topic.id} className="flex items-center justify-between text-sm py-1 px-2 hover:bg-muted/50 rounded">
+                      <span className="font-medium">{topic.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={topicLevel.color}>
+                          {(topicStability * 100).toFixed(1)}%
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {topicLevel.level}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
