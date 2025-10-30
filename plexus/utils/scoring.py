@@ -36,7 +36,7 @@ async def send_message_to_standard_scoring_request_queue(scoring_job_id: str):
     try:
         client = boto3.client('sqs')
         await asyncio.to_thread(client.send_message,
-            QueueUrl=os.getenv('SCORING_REQUEST_STANDARD_QUEUE_URL'),
+            QueueUrl=os.getenv('PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL'),
             MessageBody=json.dumps({'scoring_job_id': scoring_job_id})
         )
     except Exception as e:
