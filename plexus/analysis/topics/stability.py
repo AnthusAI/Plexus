@@ -91,6 +91,7 @@ def assess_topic_stability(
             # Create and fit BERTopic model
             # Use simplified parameters for stability assessment
             nr_topics = bertopic_params.get('nr_topics', None)  # Get nr_topics (don't pop to preserve for next iteration)
+            top_n_words = bertopic_params.get('top_n_words', 10)  # Get top_n_words for keyword extraction
             
             # Create params without nr_topics (BERTopic doesn't accept it as init param)
             model_params = {k: v for k, v in bertopic_params.items() if k != 'nr_topics'}
@@ -106,17 +107,17 @@ def assess_topic_stability(
                 except Exception as e:
                     logger.warning(f"Run {run_idx + 1}: Failed to reduce topics: {e}")
             
-            # Extract topic keywords (top 10 per topic)
+            # Extract topic keywords using top_n_words parameter
             topic_info = topic_model.get_topic_info()
             run_topic_keywords = {}
             
             for _, row in topic_info.iterrows():
                 topic_id = row.get('Topic', -1)
                 if topic_id != -1:  # Skip outlier topic
-                    # Get top 10 keywords for this topic
+                    # Get top N keywords for this topic (using configured top_n_words)
                     topic_words = topic_model.get_topic(topic_id)
                     if topic_words:
-                        keywords = set([word for word, _ in topic_words[:10]])
+                        keywords = set([word for word, _ in topic_words[:top_n_words]])
                         run_topic_keywords[topic_id] = keywords
             
             run_topics.append(run_topic_keywords)
@@ -198,6 +199,9 @@ def assess_topic_stability(
     
     logger.info(f"Stability assessment complete. Mean stability: {mean_stability:.3f}")
     
+    # Get top_n_words for methodology description
+    top_n_words_for_display = bertopic_params.get('top_n_words', 10)
+    
     return {
         "n_runs": n_runs,
         "sample_fraction": sample_fraction,
@@ -205,7 +209,7 @@ def assess_topic_stability(
         "std_stability": std_stability,
         "per_topic_stability": per_topic_stability,
         "consistency_scores": consistency_scores,
-        "methodology": "Bootstrap sampling with Jaccard similarity of top-10 keywords",
+        "methodology": f"Bootstrap sampling with Jaccard similarity of top-{top_n_words_for_display} keywords",
         "interpretation": {
             "high": "> 0.7 (topics are very stable and consistent)",
             "medium": "0.5 - 0.7 (topics are moderately stable)",
