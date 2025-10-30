@@ -8,8 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText, Info } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText } from 'lucide-react';
 import * as yaml from 'js-yaml';
 import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer, Sector } from 'recharts';
 import { PieSectorDataItem } from 'recharts/types/polar/Pie';
@@ -603,46 +602,7 @@ const TopicAnalysisResults: React.FC<{
                   </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-3 p-1">
-                    {/* Fine-tuned semantic keywords (LLM-refined) */}
-                    {topic.keywords && topic.keywords.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <h5 className="text-sm font-medium text-muted-foreground">Semantic Keywords</h5>
-                          <span className="text-xs text-muted-foreground italic">(LLM-refined)</span>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button className="inline-flex items-center">
-                                <Info className="h-3 w-3 text-muted-foreground hover:text-foreground transition-colors cursor-pointer" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent className="text-sm max-w-xs">
-                              These keywords are refined by AI to represent the semantic meaning of this topic.
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {topic.keywords
-                            .filter(keyword => {
-                              // Ensure keyword is a non-empty string
-                              if (!keyword || typeof keyword !== 'string' || keyword.trim() === '') {
-                                return false;
-                              }
-                              // Also filter out the main topic name itself
-                              const normalizedKeyword = keyword.toLowerCase().replace(/_/g, ' ').trim();
-                              const normalizedTopicName = cleanTopicName(topic.name).toLowerCase().trim();
-                              return normalizedKeyword !== normalizedTopicName;
-                            })
-                            .slice(0, bertopicAnalysis.top_n_words || 8)
-                            .map((keyword, i) => (
-                              <Badge key={i} variant="secondary" className="text-xs">
-                                {keyword}
-                              </Badge>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* N-grams with c-TF-IDF scores (raw statistical keywords) */}
+                    {/* Keywords with c-TF-IDF scores */}
                     <TopicNgramsSection 
                       topicId={topic.id}
                       topicName={topic.name}
@@ -890,19 +850,9 @@ const TopicNgramsSection: React.FC<{
   
   return (
     <div className="space-y-2 mt-3">
-      <div className="flex items-center gap-2">
-        <h5 className="text-sm font-medium text-muted-foreground">Statistical Keywords</h5>
-        <span className="text-xs text-muted-foreground italic">(c-TF-IDF scores)</span>
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="inline-flex items-center">
-              <Info className="h-3 w-3 text-muted-foreground hover:text-foreground transition-colors cursor-pointer" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="text-sm max-w-xs">
-            Showing the actual terms that appear most frequently and uniquely in this topic.
-          </PopoverContent>
-        </Popover>
+      <div className="flex items-center justify-between">
+        <h5 className="text-sm font-medium text-muted-foreground">Keywords</h5>
+        <span className="text-xs text-muted-foreground">c-TF-IDF</span>
       </div>
       
       {loading && (
