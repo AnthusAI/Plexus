@@ -14,6 +14,7 @@ import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer, Sector } from
 import { PieSectorDataItem } from 'recharts/types/polar/Pie';
 import { TopicAnalysisViewer } from '@/components/diagrams';
 import { TemplateVariables } from '@/components/diagrams/topic-analysis-diagram';
+import { WordCloud } from '@isoterik/react-word-cloud';
 import { 
   formatPreprocessor, 
   formatLLM, 
@@ -601,8 +602,8 @@ const TopicAnalysisResults: React.FC<{
                     </div>
                   </AccordionTrigger>
                 <AccordionContent>
-                  <div className="space-y-3 p-1">
-                    {/* Keywords with c-TF-IDF scores */}
+                  <div className="space-y-4 p-1">
+                    {/* Word Cloud and Keywords with c-TF-IDF scores */}
                     <TopicNgramsSection 
                       topicId={topic.id}
                       topicName={topic.name}
@@ -848,66 +849,90 @@ const TopicNgramsSection: React.FC<{
   const displayNgrams = expanded ? ngrams : ngrams.slice(0, 10);
   const hasMore = ngrams.length > 10;
   
+  // Prepare word cloud data (top 50 keywords for visualization)
+  const wordCloudData = ngrams.slice(0, 50).map(ngram => ({
+    text: ngram.ngram,
+    value: ngram.c_tf_idf_score * 1000 // Scale up for better visualization
+  }));
+  
   return (
-    <div className="space-y-2 mt-3">
-      <div className="flex items-center justify-between">
-        <h5 className="text-sm font-medium text-muted-foreground">Keywords</h5>
-        <span className="text-xs text-muted-foreground">c-TF-IDF</span>
-      </div>
-      
-      {loading && (
-        <div className="text-xs text-muted-foreground italic pl-6">
-          Loading n-grams...
+    <div className="space-y-4">
+      {/* Word Cloud Visualization */}
+      {!loading && !error && wordCloudData.length > 0 && (
+        <div className="w-full" style={{ height: '300px' }}>
+          <WordCloud
+            words={wordCloudData}
+            fontSizes={[14, 60]}
+            rotations={0}
+            rotationAngles={[0, 0]}
+            padding={3}
+            spiral="rectangular"
+            random={() => 0.5}
+          />
         </div>
       )}
       
-      {error && (
-        <div className="text-xs text-destructive pl-6">
-          {error}
+      {/* Keywords List */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h5 className="text-sm font-medium text-muted-foreground">Keywords</h5>
+          <span className="text-xs text-muted-foreground">c-TF-IDF</span>
         </div>
-      )}
-      
-      {!loading && !error && displayNgrams.length > 0 && (
-        <div className="space-y-1 pl-6">
-          {displayNgrams.map((ngram, index) => (
-            <div key={index} className="flex items-center justify-between text-xs py-1 px-2 hover:bg-muted/50 rounded">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground font-mono w-6">{ngram.rank}</span>
-                <span className="font-medium">{ngram.ngram}</span>
+        
+        {loading && (
+          <div className="text-xs text-muted-foreground italic pl-6">
+            Loading keywords...
+          </div>
+        )}
+        
+        {error && (
+          <div className="text-xs text-destructive pl-6">
+            {error}
+          </div>
+        )}
+        
+        {!loading && !error && displayNgrams.length > 0 && (
+          <div className="space-y-1 pl-6">
+            {displayNgrams.map((ngram, index) => (
+              <div key={index} className="flex items-center justify-between text-xs py-1 px-2 hover:bg-muted/50 rounded">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground font-mono w-6">{ngram.rank}</span>
+                  <span className="font-medium">{ngram.ngram}</span>
+                </div>
+                <span 
+                  className="text-muted-foreground tabular-nums"
+                  title={`c-TF-IDF score: ${ngram.c_tf_idf_score.toFixed(4)}`}
+                >
+                  {ngram.c_tf_idf_score.toFixed(3)}
+                </span>
               </div>
-              <span 
-                className="text-muted-foreground tabular-nums"
-                title={`c-TF-IDF score: ${ngram.c_tf_idf_score.toFixed(4)}`}
-              >
-                {ngram.c_tf_idf_score.toFixed(3)}
-              </span>
-            </div>
-          ))}
-          
-          {hasMore && (
-            <>
-              <div className="border-t border-border my-2" />
-              <button
-                onClick={handleToggle}
-                className="w-full flex items-center justify-center py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                aria-label={expanded ? "Show less" : `Show all ${ngrams.length} keywords`}
-              >
-                {expanded ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      
-      {!loading && !error && ngrams.length === 0 && (
-        <div className="text-xs text-muted-foreground italic pl-6">
-          No n-grams available
-        </div>
-      )}
+            ))}
+            
+            {hasMore && (
+              <>
+                <div className="border-t border-border my-2" />
+                <button
+                  onClick={handleToggle}
+                  className="w-full flex items-center justify-center py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={expanded ? "Show less" : `Show all ${ngrams.length} keywords`}
+                >
+                  {expanded ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        
+        {!loading && !error && ngrams.length === 0 && (
+          <div className="text-xs text-muted-foreground italic pl-6">
+            No keywords available
+          </div>
+        )}
+      </div>
     </div>
   );
 };
