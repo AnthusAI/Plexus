@@ -11,7 +11,7 @@ class CloudWatchLogger:
         # Debug logging for AWS credentials
         aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
         aws_secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-        aws_region = os.getenv('AWS_REGION_NAME')
+        aws_region = os.getenv('AWS_REGION') or os.getenv('AWS_REGION_NAME') or os.getenv('AWS_DEFAULT_REGION')
         
         logging.debug(f"AWS Credentials Check - Access Key: {'Present' if aws_access_key else 'Missing'}, "
                      f"Secret Key: {'Present' if aws_secret_key else 'Missing'}, "

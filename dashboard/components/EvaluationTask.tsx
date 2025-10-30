@@ -1030,7 +1030,8 @@ evaluation:
         if (metricsData && typeof metricsData === 'object') {
           metricsData = Object.entries(metricsData).map(([key, value]) => ({
             name: key,
-            value: value
+            value: value as number,
+            priority: false
           }));
         } else {
           return '';

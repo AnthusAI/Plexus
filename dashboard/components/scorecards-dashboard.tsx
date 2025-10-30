@@ -1014,7 +1014,8 @@ export default function ScorecardsComponent({
               nextToken: null
             })
           } as Schema['Scorecard']['type'] & { examples: string[] };
-        });
+        })
+        .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by name
 
       // Show scorecards immediately without any loading states
       setScorecards(quickScorecards);
