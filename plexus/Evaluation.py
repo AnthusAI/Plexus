@@ -3063,6 +3063,14 @@ class FeedbackEvaluation(Evaluation):
                     isAgreement
                     createdAt
                     updatedAt
+                    scoreResults {
+                        items {
+                            id
+                            evaluationId
+                            explanation
+                            trace
+                        }
+                    }
                 }
                 nextToken
             }
@@ -3097,6 +3105,13 @@ class FeedbackEvaluation(Evaluation):
                 break
             
             items_data = result['listFeedbackItems'].get('items', [])
+            # Debug: Log first item to see if scoreResults is in the response
+            if items_data and len(items_data) > 0:
+                first_item = items_data[0]
+                self.logger.debug(f"First FeedbackItem from GraphQL has scoreResults: {'scoreResults' in first_item}, keys: {first_item.keys()}")
+                if 'scoreResults' in first_item:
+                    self.logger.debug(f"scoreResults value: {first_item['scoreResults']}")
+            
             for item_data in items_data:
                 # Convert to FeedbackItem object
                 from plexus.dashboard.api.models.feedback_item import FeedbackItem
@@ -3124,7 +3139,9 @@ class FeedbackEvaluation(Evaluation):
         - evaluationId: Links to this feedback evaluation
         - feedbackItemId: Links back to the original FeedbackItem (which links to the production ScoreResult)
         - itemId: The item that was scored
-        - metadata: Contains the initial and final values from the feedback
+        - metadata: Contains the initial and final values from the feedback, plus text from Item
+        - explanation: From the original production ScoreResult
+        - trace: From the original production ScoreResult
         - correct: Whether the initial prediction matched the final (human-corrected) value
         - type: 'evaluation' to distinguish from production score results
         
@@ -3136,6 +3153,7 @@ class FeedbackEvaluation(Evaluation):
             account_id: ID of the account
         """
         from plexus.dashboard.api.models.score_result import ScoreResult
+        from plexus.dashboard.api.models.item import Item
         import json
         
         self.logger.info(f"Creating {len(feedback_items)} ScoreResult records for feedback evaluation")
@@ -3148,17 +3166,83 @@ class FeedbackEvaluation(Evaluation):
                 # Determine if the prediction was correct (initial matches final)
                 is_correct = feedback_item.initialAnswerValue == feedback_item.finalAnswerValue
                 
+                # Fetch the Item to get the text field
+                item_text = None
+                try:
+                    item = Item.get_by_id(feedback_item.itemId, self.api_client)
+                    if item and item.text:
+                        item_text = item.text
+                except Exception as e:
+                    self.logger.warning(f"Could not fetch Item {feedback_item.itemId}: {e}")
+                
+                # Get the original production ScoreResult by querying for it
+                # The production ScoreResult is the one that was originally scored (without evaluationId)
+                # and matches this FeedbackItem's itemId and scoreId
+                explanation = None
+                trace = None
+                try:
+                    # Query for the production ScoreResult using itemId and scoreId
+                    query = """
+                    query ListScoreResults($filter: ModelScoreResultFilterInput, $limit: Int) {
+                        listScoreResults(filter: $filter, limit: $limit) {
+                            items {
+                                id
+                                evaluationId
+                                explanation
+                                trace
+                            }
+                        }
+                    }
+                    """
+                    variables = {
+                        "filter": {
+                            "itemId": {"eq": feedback_item.itemId},
+                            "scoreId": {"eq": feedback_item.scoreId}
+                        },
+                        "limit": 10
+                    }
+                    result = self.api_client.execute(query, variables)
+                    if result and 'listScoreResults' in result:
+                        items = result['listScoreResults'].get('items', [])
+                        # Filter for production results (those without evaluationId)
+                        production_results = [
+                            item for item in items 
+                            if not item.get('evaluationId')
+                        ]
+                        
+                        if production_results:
+                            production_result = production_results[0]
+                            explanation = production_result.get('explanation')
+                            trace_str = production_result.get('trace')
+                            self.logger.debug(f"Found production ScoreResult for FeedbackItem {feedback_item.id} with explanation: {explanation is not None}, trace: {trace_str is not None}")
+                            if trace_str:
+                                try:
+                                    trace = json.loads(trace_str) if isinstance(trace_str, str) else trace_str
+                                except:
+                                    trace = None
+                        else:
+                            self.logger.debug(f"No production ScoreResult found for FeedbackItem {feedback_item.id} (found {len(items)} total, {len(production_results)} without evaluationId)")
+                except Exception as e:
+                    self.logger.warning(f"Error fetching production ScoreResult for FeedbackItem {feedback_item.id}: {e}")
+                
                 # Create metadata with feedback details
+                # IMPORTANT: Use 'human_label' for the actual/ground-truth value (finalAnswerValue)
+                # This is what the frontend expects for displaying actual vs predicted
                 metadata = {
                     'feedback_item_id': feedback_item.id,
                     'initial_value': feedback_item.initialAnswerValue,
                     'final_value': feedback_item.finalAnswerValue,
+                    'human_label': feedback_item.finalAnswerValue,  # Frontend expects this field
                     'is_agreement': feedback_item.isAgreement,
                     'correct': is_correct,
                     'evaluation_type': 'feedback',
                     'edited_at': feedback_item.editedAt.isoformat() if feedback_item.editedAt else None,
                     'editor_name': feedback_item.editorName
                 }
+                
+                # Add text to metadata if available
+                if item_text:
+                    metadata['text'] = item_text
                 
                 # Add comments if available
                 if feedback_item.editCommentValue:
@@ -3177,8 +3261,10 @@ class FeedbackEvaluation(Evaluation):
                     scorecardId=scorecard_id,
                     scoreId=score_id,
                     feedbackItemId=feedback_item.id,
-                    value=feedback_item.finalAnswerValue or 'N/A',  # Use final (corrected) value
-                    confidence=1.0 if is_correct else 0.0,  # Full confidence if correct, zero if incorrect
+                    value=feedback_item.initialAnswerValue or 'N/A',  # Use initial (predicted) value
+                    explanation=explanation,  # From production ScoreResult
+                    trace=trace,  # From production ScoreResult
+                    confidence=None,  # No confidence for feedback evaluations
                     correct=is_correct,
                     metadata=metadata,
                     code='200',

@@ -247,51 +247,74 @@ class TestFeedbackEvaluation:
             item.editorName = "Test Editor"
             mock_items.append(item)
         
-        # Mock ScoreResult.create
+        # Mock Item.get_by_id to return item with text
+        mock_item = MagicMock()
+        mock_item.text = "Sample transcript text"
+        
+        # Mock the GraphQL query for production ScoreResults
+        # This will be called once per feedback item
+        mock_api_client.execute.return_value = {
+            'listScoreResults': {
+                'items': [{
+                    'id': 'prod-result-123',
+                    'evaluationId': None,  # Production results don't have evaluationId
+                    'explanation': 'Test explanation from production',
+                    'trace': '{"step": "test"}'
+                }]
+            }
+        }
+        
+        # Mock ScoreResult.create and Item.get_by_id
         with patch('plexus.dashboard.api.models.score_result.ScoreResult.create') as mock_create:
-            mock_create.return_value = MagicMock(id="score-result-123")
-            
-            await evaluation._create_score_results_from_feedback(
-                feedback_items=mock_items,
-                evaluation_id="eval-789",
-                scorecard_id="scorecard-123",
-                score_id="score-456",
-                account_id="account-123"
-            )
-            
-            # Verify ScoreResult.create was called for each item
-            assert mock_create.call_count == 5
-            
-            # Check the first call's arguments
-            first_call = mock_create.call_args_list[0]
-            call_kwargs = first_call[1]
-            
-            assert call_kwargs['evaluationId'] == "eval-789"
-            assert call_kwargs['itemId'] == "item-0"
-            assert call_kwargs['accountId'] == "account-123"
-            assert call_kwargs['scorecardId'] == "scorecard-123"
-            assert call_kwargs['scoreId'] == "score-456"
-            assert call_kwargs['feedbackItemId'] == "feedback-0"
-            assert call_kwargs['value'] == "Yes"  # finalAnswerValue
-            assert call_kwargs['correct'] is True  # First item agrees
-            assert call_kwargs['type'] == 'evaluation'
-            assert call_kwargs['status'] == 'COMPLETED'
-            
-            # Check metadata structure
-            metadata = call_kwargs['metadata']
-            assert metadata['feedback_item_id'] == "feedback-0"
-            assert metadata['initial_value'] == "Yes"
-            assert metadata['final_value'] == "Yes"
-            assert metadata['is_agreement'] is True
-            assert metadata['correct'] is True
-            assert metadata['evaluation_type'] == 'feedback'
-            assert 'edit_comment' in metadata  # Should be present for item 0
-            
-            # Check the third call (disagreement case)
-            third_call = mock_create.call_args_list[2]
-            third_kwargs = third_call[1]
-            assert third_kwargs['correct'] is False  # Third item disagrees
-            assert third_kwargs['confidence'] == 0.0  # Zero confidence for incorrect
+            with patch('plexus.dashboard.api.models.item.Item.get_by_id', return_value=mock_item):
+                mock_create.return_value = MagicMock(id="score-result-123")
+                
+                await evaluation._create_score_results_from_feedback(
+                    feedback_items=mock_items,
+                    evaluation_id="eval-789",
+                    scorecard_id="scorecard-123",
+                    score_id="score-456",
+                    account_id="account-123"
+                )
+                
+                # Verify ScoreResult.create was called for each item
+                assert mock_create.call_count == 5
+                
+                # Check the first call's arguments
+                first_call = mock_create.call_args_list[0]
+                call_kwargs = first_call[1]
+                
+                assert call_kwargs['evaluationId'] == "eval-789"
+                assert call_kwargs['itemId'] == "item-0"
+                assert call_kwargs['accountId'] == "account-123"
+                assert call_kwargs['scorecardId'] == "scorecard-123"
+                assert call_kwargs['scoreId'] == "score-456"
+                assert call_kwargs['feedbackItemId'] == "feedback-0"
+                assert call_kwargs['value'] == "Yes"  # initialAnswerValue (predicted)
+                assert call_kwargs['explanation'] == 'Test explanation from production'  # From production ScoreResult
+                assert call_kwargs['trace'] == {"step": "test"}  # From production ScoreResult
+                assert call_kwargs['confidence'] is None  # No confidence for feedback evaluations
+                assert call_kwargs['correct'] is True  # First item agrees
+                assert call_kwargs['type'] == 'evaluation'
+                assert call_kwargs['status'] == 'COMPLETED'
+                
+                # Check metadata structure
+                metadata = call_kwargs['metadata']
+                assert metadata['feedback_item_id'] == "feedback-0"
+                assert metadata['initial_value'] == "Yes"
+                assert metadata['final_value'] == "Yes"
+                assert metadata['human_label'] == "Yes"  # Frontend expects this field
+                assert metadata['text'] == "Sample transcript text"  # From Item
+                assert metadata['is_agreement'] is True
+                assert metadata['correct'] is True
+                assert metadata['evaluation_type'] == 'feedback'
+                assert 'edit_comment' in metadata  # Should be present for item 0
+                
+                # Check the third call (disagreement case)
+                third_call = mock_create.call_args_list[2]
+                third_kwargs = third_call[1]
+                assert third_kwargs['correct'] is False  # Third item disagrees
+                assert third_kwargs['confidence'] is None  # No confidence for feedback evaluations
     
     @pytest.mark.asyncio
     async def test_create_score_results_handles_errors(self, mock_api_client):
