@@ -354,7 +354,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
           completeTopicsData={completeTopicsData}
           loadingCompleteData={loadingCompleteData}
           fetchCompleteTopicsData={fetchCompleteTopicsData}
-          attachedFiles={props.attachedFiles}
+          attachedFiles={props.attachedFiles ?? undefined}
         />
 
         {/* Analysis Details Section */}
