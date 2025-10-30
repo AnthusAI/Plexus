@@ -141,8 +141,10 @@ class Evaluation:
         score_id: str = None,
         visualize: bool = False,
         task_id: str = None,
+        allow_no_labels: bool = False,
     ):
         # Immediately store task_id so that it is available for evaluation record creation
+        self.allow_no_labels = allow_no_labels
         self.task_id = task_id
         
         # Set up logging for evaluations
@@ -1994,7 +1996,7 @@ Evaluation Report:
 ------------------
 
 Prompts:
-{yaml.dump(score_config.graph, default_flow_style=False)}
+{yaml.dump(score_config.graph, default_flow_style=False) if hasattr(score_config, 'graph') else 'N/A (non-LangGraph score)'}
 
 Mismatches (up to {self.max_mismatches_to_report}):
 """
@@ -2157,25 +2159,41 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                         # First check for override
                         human_label = None
+                        label_found = False
+                        
                         if form_id in self.override_data and score_name in self.override_data[form_id]:
                             human_label = self.override_data[form_id][score_name]
+                            label_found = True
                             logging.info(f"Using override for form {form_id}, score {score_name}: {human_label}")
                         else:
                             # Fall back to row data if no override exists
                             label_column = label_score_name + '_label'
                             if label_column in row.index:
                                 human_label = row[label_column]
+                                label_found = True
                             elif label_score_name in row.index:
                                 human_label = row[label_score_name]
+                                label_found = True
                             else:
-                                logging.warning(f"Label column not found for score: {score_identifier}")
-                                continue
+                                # Check if we're allowing evaluations without labels
+                                if not getattr(self, 'allow_no_labels', False):
+                                    logging.warning(f"Label column not found for score: {score_identifier}")
+                                    continue
+                                else:
+                                    # No label found, but that's okay - we're in label-optional mode
+                                    logging.debug(f"No label found for score: {score_identifier}, continuing in label-optional mode")
+                                    human_label = None
+                                    label_found = False
 
-                        human_label = str(human_label).lower().rstrip('.!?')
-                        if human_label == 'nan':
-                            human_label = ''
-                        if human_label == 'n/a':
-                            human_label = 'na'
+                        # Process label if found
+                        if label_found and human_label is not None:
+                            human_label = str(human_label).lower().rstrip('.!?')
+                            if human_label == 'nan':
+                                human_label = ''
+                            if human_label == 'n/a':
+                                human_label = 'na'
+                        else:
+                            human_label = ''  # Empty string for no label
 
                         human_explanation = columns.get(f"{label_score_name} comment", 'None')
 
@@ -2189,7 +2207,11 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                         score_result.metadata['human_label'] = human_label
                         score_result.metadata['human_explanation'] = human_explanation
-                        score_result.metadata['correct'] = score_result_value.strip() == human_label.strip()
+                        # Only calculate correctness if we have a label
+                        if label_found and human_label:
+                            score_result.metadata['correct'] = score_result_value.strip() == human_label.strip()
+                        else:
+                            score_result.metadata['correct'] = None  # No label to compare against
                         score_result.metadata['text'] = text
 
                         # Add to filtered results only if we get here (i.e., all conditions are met)

@@ -4,6 +4,7 @@ import logging
 import sys
 import os
 import watchtower
+import boto3
 from datetime import datetime
 import time
 
@@ -32,7 +33,7 @@ def _get_aws_credentials():
     """
     access_key = os.getenv('AWS_ACCESS_KEY_ID')
     secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-    region = os.getenv('AWS_REGION_NAME')
+    region = os.getenv('AWS_REGION') or os.getenv('AWS_REGION_NAME') or os.getenv('AWS_DEFAULT_REGION')
     
     is_configured = all([access_key, secret_key, region])
     

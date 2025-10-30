@@ -109,6 +109,104 @@ def save_topic_info(topic_model, output_dir: str, docs: List[str], topics: List[
         logger.error(f"Failed to save topic information: {e}", exc_info=True)
         raise
 
+def save_complete_topic_ngrams(topic_model, output_dir: str, max_ngrams_per_topic: int = 100) -> str:
+    """
+    Save complete n-gram lists with c-TF-IDF scores for all topics.
+    
+    Args:
+        topic_model: Fitted BERTopic model
+        output_dir: Directory to save the CSV file
+        max_ngrams_per_topic: Maximum number of n-grams to save per topic (default: 100)
+    
+    Returns:
+        Path to the saved CSV file
+    """
+    try:
+        import pandas as pd
+        
+        # Ensure the output directory exists
+        os.makedirs(output_dir, mode=0o755, exist_ok=True)
+        
+        # Get feature names (all n-grams in vocabulary)
+        feature_names = topic_model.vectorizer_model.get_feature_names_out()
+        
+        # Get c-TF-IDF matrix
+        c_tf_idf = topic_model.c_tf_idf_
+        
+        # Get topic information to map topic IDs to names
+        topic_info = topic_model.get_topic_info()
+        topic_id_to_name = {}
+        for _, row in topic_info.iterrows():
+            topic_id = row.get('Topic', -1)
+            # Clean up topic name by removing ID prefix if present
+            raw_name = row.get('Name', f'Topic {topic_id}')
+            clean_name = raw_name
+            
+            # Remove topic ID prefix (e.g., "0_" or "-1_")
+            if '_' in raw_name and raw_name.split('_')[0].lstrip('-').isdigit():
+                clean_name = '_'.join(raw_name.split('_')[1:])
+            
+            # Remove surrounding quotes if present
+            if clean_name.startswith('"') and clean_name.endswith('"'):
+                clean_name = clean_name[1:-1]
+            elif clean_name.startswith("'") and clean_name.endswith("'"):
+                clean_name = clean_name[1:-1]
+            
+            # Fallback if cleaning resulted in empty string
+            if not clean_name.strip():
+                clean_name = f'Topic {topic_id}'
+            
+            topic_id_to_name[topic_id] = clean_name.strip()
+        
+        # Create comprehensive list of n-grams for all topics
+        all_topic_ngrams = []
+        
+        for topic_idx in range(len(topic_info)):
+            # Get the actual topic ID (accounting for -1 outlier topic)
+            topic_id = topic_info.iloc[topic_idx]['Topic']
+            
+            # Skip outlier topic (-1)
+            if topic_id == -1:
+                logger.debug(f"Skipping outlier topic -1 in n-gram export")
+                continue
+            
+            # Get the row for this topic from c-TF-IDF matrix
+            topic_row = c_tf_idf[topic_idx].toarray().flatten()
+            
+            # Get indices sorted by score (descending)
+            sorted_indices = topic_row.argsort()[::-1][:max_ngrams_per_topic]
+            
+            # Extract n-grams and scores
+            rank = 1
+            for idx in sorted_indices:
+                score = topic_row[idx]
+                if score > 0:  # Only include n-grams with positive scores
+                    all_topic_ngrams.append({
+                        'topic_id': int(topic_id),
+                        'topic_name': topic_id_to_name.get(topic_id, f'Topic {topic_id}'),
+                        'ngram': feature_names[idx],
+                        'c_tf_idf_score': float(score),
+                        'rank': rank
+                    })
+                    rank += 1
+        
+        # Create DataFrame and save to CSV
+        df = pd.DataFrame(all_topic_ngrams)
+        output_path = os.path.join(output_dir, "complete_topic_ngrams.csv")
+        df.to_csv(output_path, index=False)
+        
+        # Set appropriate permissions
+        os.chmod(output_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+        
+        logger.info(f"Saved complete n-gram analysis to {output_path}")
+        logger.info(f"Total n-grams saved: {len(df)} across {len(df['topic_id'].unique())} topics")
+        
+        return output_path
+        
+    except Exception as e:
+        logger.error(f"Failed to save complete topic n-grams: {e}", exc_info=True)
+        raise
+
 def create_topics_per_class_visualization(
     topic_model, 
     topics, 
@@ -229,7 +327,17 @@ def analyze_topics(
     nr_docs: int = 100,
     diversity: float = 0.1,
     doc_length: int = 500,
-    tokenizer: str = "whitespace"
+    tokenizer: str = "whitespace",
+    # Stop words filtering parameters
+    remove_stop_words: bool = False,
+    custom_stop_words: Optional[List[str]] = None,
+    min_df: int = 1,
+    # N-gram export configuration
+    max_ngrams_per_topic: int = 100,
+    # Topic stability assessment configuration
+    compute_stability: bool = False,
+    stability_n_runs: int = 10,
+    stability_sample_fraction: float = 0.8
 ) -> Optional[Tuple[Any, pd.DataFrame, List[int], List[str]]]:
     """
     Perform BERTopic analysis on transformed transcripts.
@@ -253,6 +361,9 @@ def analyze_topics(
         diversity: Diversity factor for document selection, 0-1 (default: 0.1)
         doc_length: Maximum characters per document (default: 500)
         tokenizer: Tokenization method for documents (default: "whitespace")
+        remove_stop_words: Whether to remove English stop words from topics (default: False)
+        custom_stop_words: Optional list of additional stop words to remove (default: None)
+        min_df: Minimum document frequency for terms (default: 1)
         
     Returns:
         BERTopic: The fitted topic model with discovered topics, or None if analysis fails
@@ -261,6 +372,7 @@ def analyze_topics(
     from bertopic import BERTopic
     from umap import UMAP
     from bertopic.representation import OpenAI, LangChain
+    from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
     
     # Create output directory if it doesn't exist
     ensure_directory(output_dir)
@@ -381,6 +493,67 @@ def analyze_topics(
     else:
         logger.info("ℹ️  Representation model disabled - topics will use keyword-based names")
 
+    # Create custom CountVectorizer if stop words filtering is enabled
+    vectorizer_model = None
+    if remove_stop_words:
+        # Build stop words set
+        stop_words = set(ENGLISH_STOP_WORDS)
+        if custom_stop_words:
+            # Normalize custom stop words to lowercase
+            custom_stop_words = [word.lower() for word in custom_stop_words]
+            stop_words.update(custom_stop_words)
+        
+        # Create a custom analyzer that filters out n-grams containing stop words
+        from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS as sklearn_stop_words
+        
+        def custom_analyzer(text):
+            """
+            Custom analyzer that creates n-grams but filters out any n-gram
+            that contains a stop word.
+            
+            This ensures that phrases like "customer called to" are excluded
+            if "customer", "called", or "to" are in the stop words list.
+            """
+            # Lowercase and tokenize
+            text = text.lower()
+            tokens = text.split()
+            
+            # Generate n-grams based on n_gram_range
+            min_n, max_n = n_gram_range
+            ngrams = []
+            
+            for n in range(min_n, max_n + 1):
+                for i in range(len(tokens) - n + 1):
+                    ngram_tokens = tokens[i:i+n]
+                    
+                    # Check if any token in this n-gram is a stop word
+                    contains_stop_word = any(token in stop_words for token in ngram_tokens)
+                    
+                    if not contains_stop_word:
+                        # Join tokens with space to create n-gram
+                        ngram = ' '.join(ngram_tokens)
+                        ngrams.append(ngram)
+            
+            return ngrams
+        
+        # Log a sample to verify the analyzer works
+        sample_text = "the customer called to request"
+        sample_ngrams = custom_analyzer(sample_text)
+        logger.info(f"   • Sample analyzer output for '{sample_text}': {sample_ngrams}")
+        
+        vectorizer_model = CountVectorizer(
+            analyzer=custom_analyzer,
+            min_df=min_df,
+            lowercase=False  # Already handled in analyzer
+        )
+        logger.info(f"✅ Created CountVectorizer with custom analyzer filtering {len(stop_words)} stop words (min_df={min_df})")
+        logger.info(f"   • N-grams containing any stop word will be completely excluded from analysis")
+        logger.info(f"   • Stop words include: {sorted(list(stop_words))[:20]}...")
+        if custom_stop_words:
+            logger.info(f"   • Custom stop words: {custom_stop_words}")
+    else:
+        logger.info("ℹ️  Stop words filtering disabled - using default CountVectorizer")
+    
     # Initialize BERTopic model with n-gram range and other parameters
     logger.info(f"Initializing BERTopic model with n-gram range {n_gram_range} and custom UMAP model.")
     
@@ -395,6 +568,7 @@ def analyze_topics(
         min_topic_size=min_topic_size,
         top_n_words=top_n_words,
         umap_model=umap_model,
+        vectorizer_model=vectorizer_model,  # Add custom vectorizer if stop words enabled
         representation_model=None,  # Applied later after reduction
         verbose=True
     )
@@ -418,6 +592,29 @@ def analyze_topics(
         topics, probs = topic_model.fit_transform(docs)
         
         logger.info(f"✅ BERTopic analysis completed in {time.time() - start_time:.2f} seconds")
+        
+        # Verify vectorizer is still our custom one
+        if hasattr(topic_model, 'vectorizer_model'):
+            vectorizer = topic_model.vectorizer_model
+            logger.info(f"🔍 VECTORIZER_DEBUG: BERTopic is using vectorizer: {type(vectorizer).__name__}")
+            if hasattr(vectorizer, 'analyzer'):
+                logger.info(f"🔍 VECTORIZER_DEBUG: Vectorizer has custom analyzer: {vectorizer.analyzer is not None}")
+                # Test the analyzer with a sample
+                if callable(vectorizer.analyzer):
+                    test_result = vectorizer.analyzer("the customer called to request")
+                    logger.info(f"🔍 VECTORIZER_DEBUG: Analyzer test result: {test_result}")
+            # Check feature names
+            if hasattr(vectorizer, 'get_feature_names_out'):
+                feature_names = vectorizer.get_feature_names_out()
+                logger.info(f"🔍 VECTORIZER_DEBUG: Total features in vocabulary: {len(feature_names)}")
+                logger.info(f"🔍 VECTORIZER_DEBUG: Sample features: {list(feature_names[:20])}")
+                # Check if stop words are in features
+                contains_customer = 'customer' in feature_names
+                contains_called = 'called' in feature_names
+                contains_customer_called = 'customer called' in feature_names
+                logger.info(f"🔍 VECTORIZER_DEBUG: Features contain 'customer': {contains_customer}")
+                logger.info(f"🔍 VECTORIZER_DEBUG: Features contain 'called': {contains_called}")
+                logger.info(f"🔍 VECTORIZER_DEBUG: Features contain 'customer called': {contains_customer_called}")
         
         # EXPECTED: No custom labels during initial discovery (representation model applied later)
         logger.info("🔍 REPR_DEBUG: Initial discovery completed with keyword-based naming")
@@ -557,11 +754,27 @@ def analyze_topics(
     # Reduce topics if requested (safe since no representation model attached yet)
     if nr_topics is not None and n_topics > 0 and nr_topics < n_topics:
         logger.info(f"Reducing topics from {n_topics} to {nr_topics}")
+        
+        # Check vectorizer BEFORE reduction
+        if hasattr(topic_model, 'vectorizer_model'):
+            vectorizer_before = topic_model.vectorizer_model
+            features_before = vectorizer_before.get_feature_names_out()
+            logger.info(f"🔍 VECTORIZER_DEBUG: Before reduce_topics - vocabulary size: {len(features_before)}")
+            logger.info(f"🔍 VECTORIZER_DEBUG: Before reduce_topics - 'customer' in vocab: {'customer' in features_before}")
+        
         try:
             topic_model.reduce_topics(docs, nr_topics=nr_topics)
             topics = topic_model.topics_ # Update topics after reduction
             n_topics = len(set(topics)) - 1 # Update n_topics after reduction
             logger.info(f"Reduced to {n_topics} topics")
+            
+            # Check vectorizer AFTER reduction
+            if hasattr(topic_model, 'vectorizer_model'):
+                vectorizer_after = topic_model.vectorizer_model
+                features_after = vectorizer_after.get_feature_names_out()
+                logger.info(f"🔍 VECTORIZER_DEBUG: After reduce_topics - vocabulary size: {len(features_after)}")
+                logger.info(f"🔍 VECTORIZER_DEBUG: After reduce_topics - 'customer' in vocab: {'customer' in features_after}")
+                logger.info(f"🔍 VECTORIZER_DEBUG: After reduce_topics - sample features: {list(features_after[:10])}")
             
         except Exception as e:
             logger.error("Failed to reduce topics", exc_info=True)
@@ -603,10 +816,87 @@ def analyze_topics(
             logger.error(f"Failed to capture 'before' state: {e}", exc_info=True)
             before_topics_data = {}
         
+        # VECTORIZER_FIX: Check vectorizer state BEFORE update_topics
+        logger.info("=" * 80)
+        logger.info("VECTORIZER_FIX: Preparing to apply LLM representation model")
+        logger.info("=" * 80)
+        
+        vectorizer_before = None
+        features_before = []
+        vocab_size_before = 0
+        
+        if hasattr(topic_model, 'vectorizer_model') and topic_model.vectorizer_model is not None:
+            vectorizer_before = topic_model.vectorizer_model
+            features_before = vectorizer_before.get_feature_names_out()
+            vocab_size_before = len(features_before)
+            has_customer_before = 'customer' in features_before
+            has_called_before = 'called' in features_before
+            has_the_before = 'the' in features_before
+            
+            logger.info(f"VECTORIZER_FIX: BEFORE update_topics:")
+            logger.info(f"  • Vocabulary size: {vocab_size_before}")
+            logger.info(f"  • Contains 'customer': {has_customer_before}")
+            logger.info(f"  • Contains 'called': {has_called_before}")
+            logger.info(f"  • Contains 'the': {has_the_before}")
+            logger.info(f"  • Sample features: {list(features_before[:10])}")
+            logger.info(f"  • Vectorizer type: {type(vectorizer_before).__name__}")
+            logger.info(f"  • Has custom analyzer: {hasattr(vectorizer_before, 'analyzer') and callable(vectorizer_before.analyzer)}")
+        
         # Apply the representation model
         try:
-            topic_model.update_topics(docs, representation_model=saved_representation_model)
+            logger.info("VECTORIZER_FIX: Calling update_topics() with custom vectorizer...")
+            
+            # CRITICAL: Pass the custom vectorizer to update_topics() to prevent re-vectorization with defaults
+            if vectorizer_before is not None and remove_stop_words:
+                logger.info("VECTORIZER_FIX: Passing custom vectorizer_model to update_topics()")
+                topic_model.update_topics(
+                    docs, 
+                    representation_model=saved_representation_model,
+                    vectorizer_model=vectorizer_before  # <-- This preserves our custom analyzer!
+                )
+            else:
+                logger.info("VECTORIZER_FIX: No custom vectorizer to pass (stop words filtering disabled)")
+                topic_model.update_topics(docs, representation_model=saved_representation_model)
+            
             logger.info("✅ Successfully applied LLM representation model to final topics")
+            
+            # VECTORIZER_FIX: Check vectorizer state AFTER update_topics
+            logger.info("-" * 80)
+            if hasattr(topic_model, 'vectorizer_model') and topic_model.vectorizer_model is not None:
+                vectorizer_after = topic_model.vectorizer_model
+                features_after = vectorizer_after.get_feature_names_out()
+                vocab_size_after = len(features_after)
+                has_customer_after = 'customer' in features_after
+                has_called_after = 'called' in features_after
+                has_the_after = 'the' in features_after
+                
+                logger.info(f"VECTORIZER_FIX: AFTER update_topics:")
+                logger.info(f"  • Vocabulary size: {vocab_size_after}")
+                logger.info(f"  • Contains 'customer': {has_customer_after}")
+                logger.info(f"  • Contains 'called': {has_called_after}")
+                logger.info(f"  • Contains 'the': {has_the_after}")
+                logger.info(f"  • Sample features: {list(features_after[:10])}")
+                logger.info(f"  • Vectorizer type: {type(vectorizer_after).__name__}")
+                
+                # Verify the vectorizer was preserved
+                if vocab_size_before > 0:
+                    vocab_changed = vocab_size_after != vocab_size_before
+                    if vocab_changed:
+                        logger.error(f"VECTORIZER_FIX: ❌ VOCABULARY CHANGED! Before: {vocab_size_before}, After: {vocab_size_after}")
+                        logger.error(f"VECTORIZER_FIX: This indicates update_topics() ignored our custom vectorizer!")
+                    else:
+                        logger.info(f"VECTORIZER_FIX: ✅ Vocabulary size preserved ({vocab_size_after} features)")
+                    
+                    # Check if stop words appeared
+                    if remove_stop_words:
+                        stop_words_appeared = has_customer_after or has_called_after or has_the_after
+                        if stop_words_appeared:
+                            logger.error(f"VECTORIZER_FIX: ❌ STOP WORDS DETECTED IN OUTPUT!")
+                            logger.error(f"VECTORIZER_FIX: customer={has_customer_after}, called={has_called_after}, the={has_the_after}")
+                        else:
+                            logger.info(f"VECTORIZER_FIX: ✅ Stop words successfully excluded from vocabulary")
+            
+            logger.info("=" * 80)
         except Exception as e:
             logger.error(f"Failed to apply representation model: {e}", exc_info=True)
             logger.warning("Continuing with keyword-based topic names")
@@ -614,6 +904,58 @@ def analyze_topics(
     # Final topic assignments are stable after optional reduction and representation model application
     logger.info("🔍 REPR_DEBUG: Topic modeling pipeline completed")
     logger.info(f"🔍 REPR_DEBUG: Final topic assignments - total: {len(topics)}, unique: {sorted(set(topics))}")
+
+    # --- Save Complete N-grams with c-TF-IDF Scores ---
+    # IMPORTANT: This must happen AFTER representation model is applied to get fine-tuned topic names
+    try:
+        ngrams_csv_path = save_complete_topic_ngrams(topic_model, output_dir, max_ngrams_per_topic=max_ngrams_per_topic)
+        logger.info(f"✅ Saved complete n-grams to {ngrams_csv_path}")
+    except Exception as e:
+        logger.error(f"❌ Failed to save complete n-grams: {e}", exc_info=True)
+        # Continue with analysis even if n-gram export fails
+
+    # --- Assess Topic Stability (Optional) ---
+    if compute_stability:
+        logger.info("🔍 Computing topic stability metrics...")
+        logger.info(f"   • Stability runs: {stability_n_runs}")
+        logger.info(f"   • Sample fraction: {stability_sample_fraction}")
+        
+        try:
+            from plexus.analysis.topics.stability import assess_topic_stability
+            
+            # Prepare BERTopic parameters for stability assessment
+            stability_bertopic_params = {
+                'n_gram_range': n_gram_range,
+                'min_topic_size': min_topic_size,
+                'top_n_words': top_n_words,
+                'umap_model': umap_model,
+                'vectorizer_model': vectorizer_model,
+                'nr_topics': nr_topics,  # Pass topic reduction parameter for consistent topic counts
+                'verbose': False  # Reduce logging during stability runs
+            }
+            
+            stability_results = assess_topic_stability(
+                docs,
+                n_runs=stability_n_runs,
+                sample_fraction=stability_sample_fraction,
+                **stability_bertopic_params
+            )
+            
+            # Save stability results to JSON
+            stability_path = os.path.join(output_dir, "topic_stability.json")
+            with open(stability_path, 'w', encoding='utf-8') as f:
+                json.dump(stability_results, f, indent=2, ensure_ascii=False)
+            
+            # Set appropriate permissions
+            os.chmod(stability_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+            
+            logger.info(f"✅ Saved topic stability metrics to {stability_path}")
+            logger.info(f"   • Mean stability: {stability_results['mean_stability']:.3f}")
+            logger.info(f"   • Interpretation: {stability_results['interpretation']}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to compute topic stability: {e}", exc_info=True)
+            # Continue with analysis even if stability assessment fails
 
     # --- Extract and Save Representative Documents ---
     # IMPORTANT: This must happen AFTER representation model is applied since topic assignments may change

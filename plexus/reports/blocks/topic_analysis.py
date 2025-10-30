@@ -268,6 +268,20 @@ class TopicAnalysis(BaseReportBlock):
             max_ngram = bertopic_analysis.get("max_ngram", self.config.get("max_ngram", 2))
             min_topic_size = bertopic_analysis.get("min_topic_size", self.config.get("min_topic_size", 10))
             top_n_words = bertopic_analysis.get("top_n_words", self.config.get("top_n_words", 10))
+            
+            # Stop words filtering configuration
+            remove_stop_words = bertopic_analysis.get("remove_stop_words", False)
+            custom_stop_words = bertopic_analysis.get("custom_stop_words", [])
+            min_df = bertopic_analysis.get("min_df", 1)
+            
+            # N-gram export configuration
+            max_ngrams_per_topic = bertopic_analysis.get("max_ngrams_per_topic", 100)
+            
+            # Topic stability assessment configuration
+            stability_config = bertopic_analysis.get("stability", {})
+            compute_stability = stability_config.get("enabled", False)
+            stability_n_runs = stability_config.get("n_runs", 10)
+            stability_sample_fraction = stability_config.get("sample_fraction", 0.8)
 
             # Preprocessing configuration
             preprocessing = self.config.get("preprocessing", {})
@@ -296,6 +310,11 @@ class TopicAnalysis(BaseReportBlock):
             self._log(f"   • Use Representation Model: {use_representation_model}")
             self._log(f"   • Preprocessing Steps: {len(preprocessing_config)}")
             self._log(f"   • Fresh Data Fetch: {fresh_data}")
+            self._log(f"   • Remove Stop Words: {remove_stop_words}")
+            if custom_stop_words:
+                self._log(f"   • Custom Stop Words: {len(custom_stop_words)} additional words")
+            if min_df > 1:
+                self._log(f"   • Min Document Frequency: {min_df}")
             self._log("="*60)
 
             # --- 2. Apply Preprocessing (if configured) ---
@@ -609,7 +628,17 @@ class TopicAnalysis(BaseReportBlock):
                     nr_docs=nr_docs,
                     diversity=diversity,
                     doc_length=doc_length,
-                    tokenizer=tokenizer
+                    tokenizer=tokenizer,
+                    # Stop words filtering parameters
+                    remove_stop_words=remove_stop_words,
+                    custom_stop_words=custom_stop_words,
+                    min_df=min_df,
+                    # N-gram export configuration
+                    max_ngrams_per_topic=max_ngrams_per_topic,
+                    # Topic stability assessment configuration
+                    compute_stability=compute_stability,
+                    stability_n_runs=stability_n_runs,
+                    stability_sample_fraction=stability_sample_fraction
                 )
 
                 # Unpack results; handle None if analysis failed internally
@@ -643,6 +672,29 @@ class TopicAnalysis(BaseReportBlock):
                     except Exception as e:
                         self._log(f"❌ Failed to load 'before' topics data: {e}", level="ERROR")
                 
+                # Load topic stability results if they exist
+                stability_data = None
+                if compute_stability:
+                    try:
+                        import json
+                        
+                        # Look for the stability file in the temp directory
+                        for root, dirs, files in os.walk(main_temp_dir):
+                            if "topic_stability.json" in files:
+                                stability_path = os.path.join(root, "topic_stability.json")
+                                with open(stability_path, 'r', encoding='utf-8') as f:
+                                    stability_data = json.load(f)
+                                    
+                                self._log(f"✅ Loaded topic stability data from {stability_path}")
+                                self._log(f"🔍 Mean stability score: {stability_data.get('mean_stability', 'N/A'):.3f}")
+                                self._log(f"🔍 Number of runs: {stability_data.get('n_runs', 'N/A')}")
+                                break
+                        
+                        if not stability_data:
+                            self._log("⚠️  No stability data found (stability assessment may have failed)")
+                    except Exception as e:
+                        self._log(f"❌ Failed to load stability data: {e}", level="ERROR")
+                
                 # 3. BERTopic Analysis section
                 final_output_data["bertopic_analysis"] = {
                     "num_topics_requested": num_topics,
@@ -652,6 +704,13 @@ class TopicAnalysis(BaseReportBlock):
                     "max_ngram": max_ngram,
                     "skip_analysis": skip_analysis
                 }
+                
+                # Add stability data to output if available
+                if stability_data:
+                    final_output_data["topic_stability"] = stability_data
+                    self._log(f"✅ Added stability data to report output")
+                    self._log(f"   • Mean stability: {stability_data.get('mean_stability', 0):.3f}")
+                    self._log(f"   • Per-topic stability scores: {len(stability_data.get('per_topic_stability', {}))}")
                 
                 # Extract topic information and add to the final output data
                 if topic_model and topic_info is not None:
@@ -678,24 +737,53 @@ class TopicAnalysis(BaseReportBlock):
                                 topic_id = row.get('Topic', -1)
                                 if topic_id != -1:  # Skip the -1 topic which is usually "noise"
                                     valid_topic_count += 1
-                                    # Get simple keywords list (no weights)
-                                    keywords = []
+                                    # Get TWO types of keywords:
+                                    # 1. Fine-tuned keywords (from representation model / LLM)
+                                    # 2. Raw c-TF-IDF keywords (statistical, pre-LLM)
                                     
-                                    # If we have before_topics_data, use the original keywords
+                                    keywords_fine_tuned = []  # LLM-refined, semantic keywords
+                                    keywords_raw = []  # Raw statistical c-TF-IDF keywords
+                                    
+                                    # Get fine-tuned keywords (after LLM representation)
                                     if before_topics_data and str(topic_id) in before_topics_data:
                                         before_topic = before_topics_data[str(topic_id)]
-                                        keywords = before_topic.get('keywords', [])
+                                        keywords_fine_tuned = before_topic.get('keywords', [])
                                     else:
                                         # Get keywords from BERTopic's get_topic method
                                         try:
                                             if hasattr(topic_model, 'get_topic'):
                                                 words_weights = topic_model.get_topic(topic_id)
                                                 if words_weights:
-                                                    keywords = [word for word, _ in words_weights[:8]]  # Top 8 keywords
-                                                    self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} extracted {len(keywords)} keywords: {keywords[:5]}")
+                                                    keywords_fine_tuned = [word for word, _ in words_weights[:8]]  # Top 8 keywords
+                                                    self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} extracted {len(keywords_fine_tuned)} fine-tuned keywords: {keywords_fine_tuned[:5]}")
                                         except Exception as e:
-                                            self._log(f"🔍 KEYWORDS_DEBUG: Failed to extract keywords for topic {topic_id}: {e}")
-                                            keywords = []
+                                            self._log(f"🔍 KEYWORDS_DEBUG: Failed to extract fine-tuned keywords for topic {topic_id}: {e}")
+                                            keywords_fine_tuned = []
+                                    
+                                    # Get raw c-TF-IDF keywords (before LLM representation)
+                                    # These come directly from the c-TF-IDF matrix
+                                    try:
+                                        if hasattr(topic_model, 'c_tf_idf_') and hasattr(topic_model, 'vectorizer_model'):
+                                            # Find the index for this topic in the c-TF-IDF matrix
+                                            topic_idx = None
+                                            for idx, row_topic_id in enumerate(topic_info['Topic']):
+                                                if row_topic_id == topic_id:
+                                                    topic_idx = idx
+                                                    break
+                                            
+                                            if topic_idx is not None:
+                                                feature_names = topic_model.vectorizer_model.get_feature_names_out()
+                                                c_tf_idf_row = topic_model.c_tf_idf_[topic_idx].toarray().flatten()
+                                                # Get top keywords by c-TF-IDF score
+                                                top_indices = c_tf_idf_row.argsort()[-8:][::-1]  # Top 8
+                                                keywords_raw = [feature_names[i] for i in top_indices if c_tf_idf_row[i] > 0]
+                                                self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} extracted {len(keywords_raw)} raw c-TF-IDF keywords: {keywords_raw[:5]}")
+                                    except Exception as e:
+                                        self._log(f"🔍 KEYWORDS_DEBUG: Failed to extract raw keywords for topic {topic_id}: {e}")
+                                        keywords_raw = []
+                                    
+                                    # For backward compatibility, use fine-tuned as default "keywords"
+                                    keywords = keywords_fine_tuned
                                     
                                     # Clean up topic name by removing ID prefix and quotes
                                     raw_name = row.get('Name', f'Topic {topic_id}')
@@ -720,7 +808,9 @@ class TopicAnalysis(BaseReportBlock):
                                         "name": clean_name.strip(),
                                         "count": int(row.get('Count', 0)),
                                         "representation": row.get('Representation', ''),
-                                        "keywords": keywords,
+                                        "keywords": keywords,  # Fine-tuned keywords (for backward compatibility)
+                                        "keywords_fine_tuned": keywords_fine_tuned,  # LLM-refined semantic keywords
+                                        "keywords_raw": keywords_raw,  # Raw c-TF-IDF statistical keywords
                                         "examples": []  # Will be populated later
                                     })
                                 else:
@@ -1325,8 +1415,9 @@ class TopicAnalysis(BaseReportBlock):
             # === EXTRACT KEY STATISTICS FOR TEMPLATE VARIABLES ===
             # These variables provide specific metrics for the final summary template
             
-            # Original transcript/call count
-            original_transcript_count = preprocessing.get('sample_size', 'unknown')
+            # Original transcript/call count - use actual processed count, not requested sample_size
+            # The hit_rate_stats.total_processed is the actual number of transcripts that were processed
+            original_transcript_count = hit_rate_stats.get('total_processed', preprocessing.get('sample_size', 'unknown'))
             
             # Extracted document count (quotes/examples from transcripts)
             extracted_document_count = hit_rate_stats.get('successful_extractions', 0)

@@ -286,6 +286,9 @@ def register_evaluation_tools(mcp: FastMCP):
         yaml: bool = True,
         version: Optional[str] = None,
         latest: bool = False,
+        fresh: bool = False,
+        reload: bool = False,
+        allow_no_labels: bool = False,
     ) -> str:
         """
         Run an evaluation using the same code path as CLI.
@@ -299,6 +302,11 @@ def register_evaluation_tools(mcp: FastMCP):
         - yaml: Load scorecard from YAML files for accuracy evaluation (default: True)
         - version: Specific score version ID. For accuracy: version to evaluate. For feedback: if provided, runs accuracy eval with FeedbackItems dataset
         - latest: Use latest score version for accuracy evaluation (default: False)
+        - fresh: Pull fresh, non-cached data from the data lake (default: False)
+        - reload: Reload existing dataset by refreshing values for current records only (default: False)
+        - allow_no_labels: Allow evaluation without ground truth labels (default: False)
+                          When True, creates score results and predicted class distribution
+                          but skips accuracy metrics
         
         Returns:
         - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL
@@ -359,8 +367,7 @@ def register_evaluation_tools(mcp: FastMCP):
                 args = [
                     '--scorecard', scorecard_name,
                     '--number-of-samples', str(n_samples),
-                    '--sampling-method', 'random',
-                    '--fresh'
+                    '--sampling-method', 'random'
                 ]
 
                 if yaml:
@@ -374,6 +381,15 @@ def register_evaluation_tools(mcp: FastMCP):
 
                 if latest:
                     args.append('--latest')
+
+                if fresh:
+                    args.append('--fresh')
+
+                if reload:
+                    args.append('--reload')
+
+                if allow_no_labels:
+                    args.append('--allow-no-labels')
 
                 # Run the CLI command in a thread pool to avoid event loop conflicts
                 def run_cli_command():
