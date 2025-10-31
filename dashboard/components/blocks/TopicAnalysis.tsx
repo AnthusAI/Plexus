@@ -14,6 +14,7 @@ import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer, Sector } from
 import { PieSectorDataItem } from 'recharts/types/polar/Pie';
 import { TopicAnalysisViewer } from '@/components/diagrams';
 import { TemplateVariables } from '@/components/diagrams/topic-analysis-diagram';
+import { WordCloud, Word } from '@isoterik/react-word-cloud';
 import { 
   formatPreprocessor, 
   formatLLM, 
@@ -156,6 +157,64 @@ interface TopicAnalysisData {
   topic_stability?: TopicStabilityData;
   errors?: string[];
 }
+
+/**
+ * Word Cloud Wrapper Component
+ * Separate component to avoid IIFE issues and handle colors properly
+ */
+const WordCloudWrapper: React.FC<{ words: Word[] }> = ({ words }) => {
+  const [colors, setColors] = React.useState<string[]>([]);
+  
+  React.useEffect(() => {
+    // Get computed colors from CSS variables at runtime - use darker variants
+    if (typeof window !== 'undefined') {
+      const style = getComputedStyle(document.documentElement);
+      setColors([
+        style.getPropertyValue('--primary-selected').trim() || '#3b82f6',
+        style.getPropertyValue('--secondary-selected').trim() || '#ec4899',
+        style.getPropertyValue('--accent-selected').trim() || '#8b5cf6',
+      ]);
+    }
+  }, []);
+  
+  if (colors.length === 0) return null;
+  
+  return (
+    <div className="w-full">
+      <WordCloud
+        words={words}
+        width={1200}
+        height={400}
+        padding={3}
+        spiral="rectangular"
+        rotate={() => 0}
+        timeInterval={Infinity}
+        font="Arial"
+        fontSize={(word) => {
+          // Use linear scaling with a wider range for more words
+          const minSize = 24;
+          const maxSize = 96;
+          const minValue = Math.min(...words.map(w => w.value));
+          const maxValue = Math.max(...words.map(w => w.value));
+          const range = maxValue - minValue;
+          if (range === 0) return maxSize;
+          return minSize + ((word.value - minValue) / range) * (maxSize - minSize);
+        }}
+        fill={(_, index) => colors[index % colors.length]}
+        onWordClick={() => {}} // Add no-op click handler to prevent runtime error
+        svgProps={{
+          style: {
+            width: '100%',
+            height: '100%',
+            display: 'block',
+          },
+          viewBox: '0 0 1200 400',
+          preserveAspectRatio: 'xMidYMid meet'
+        }}
+      />
+    </div>
+  );
+};
 
 /**
  * Topic Analysis Report Block Component
@@ -354,7 +413,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
           completeTopicsData={completeTopicsData}
           loadingCompleteData={loadingCompleteData}
           fetchCompleteTopicsData={fetchCompleteTopicsData}
-          attachedFiles={props.attachedFiles}
+          attachedFiles={props.attachedFiles || undefined}
         />
 
         {/* Analysis Details Section */}
@@ -601,8 +660,8 @@ const TopicAnalysisResults: React.FC<{
                     </div>
                   </AccordionTrigger>
                 <AccordionContent>
-                  <div className="space-y-3 p-1">
-                    {/* Keywords with c-TF-IDF scores */}
+                  <div className="space-y-4 p-1">
+                    {/* Word Cloud and Keywords with c-TF-IDF scores */}
                     <TopicNgramsSection 
                       topicId={topic.id}
                       topicName={topic.name}
@@ -755,13 +814,16 @@ const TopicNgramsSection: React.FC<{
   const [ngrams, setNgrams] = useState<TopicNgram[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasFetched, setHasFetched] = useState(false);
   
   // Debug: Log when component renders
   console.log('🎨 TopicNgramsSection rendered for topic:', topicId, topicName, 'attachedFiles:', attachedFiles);
   
-  // Fetch and parse CSV
+  // Fetch and parse CSV with non-blocking parsing
   const fetchNgrams = async () => {
-    if (ngrams.length > 0 || loading) return; // Already loaded or loading
+    if (ngrams.length > 0 || loading || hasFetched) return; // Already loaded or loading
+    
+    setHasFetched(true); // Mark as fetched to prevent multiple calls
     
     // Debug logging
     console.log('🔍 TopicNgramsSection - Fetching n-grams for topic:', topicId, topicName);
@@ -777,6 +839,7 @@ const TopicNgramsSection: React.FC<{
     if (!ngramsFile) {
       console.error('❌ N-grams file not found in attachedFiles');
       setError('N-grams data not available');
+      setLoading(false);
       return;
     }
     
@@ -796,32 +859,59 @@ const TopicNgramsSection: React.FC<{
       
       const csvText = await downloadResult.body.text();
       
-      // Parse CSV (simple parser for our known format)
-      const lines = csvText.split('\n');
-      const headers = lines[0].split(',');
-      
-      const parsedNgrams: TopicNgram[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        
-        const values = line.split(',');
-        if (values.length >= 5) {
-          const ngramTopicId = parseInt(values[0]);
-          
-          // Only include n-grams for this topic
-          if (ngramTopicId === topicId) {
-            parsedNgrams.push({
-              topic_id: ngramTopicId,
-              topic_name: values[1],
-              ngram: values[2],
-              c_tf_idf_score: parseFloat(values[3]),
-              rank: parseInt(values[4])
-            });
+      // Parse CSV in a non-blocking way using requestIdleCallback or setTimeout
+      const parseCSVAsync = () => {
+        return new Promise<TopicNgram[]>((resolve, reject) => {
+          try {
+            const lines = csvText.split('\n');
+            const parsedNgrams: TopicNgram[] = [];
+            let currentIndex = 1; // Skip header row
+            
+            const processChunk = () => {
+              const chunkSize = 100; // Process 100 lines at a time
+              const endIndex = Math.min(currentIndex + chunkSize, lines.length);
+              
+              for (let i = currentIndex; i < endIndex; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                
+                const values = line.split(',');
+                if (values.length >= 5) {
+                  const ngramTopicId = parseInt(values[0]);
+                  
+                  // Only include n-grams for this topic
+                  if (ngramTopicId === topicId) {
+                    parsedNgrams.push({
+                      topic_id: ngramTopicId,
+                      topic_name: values[1],
+                      ngram: values[2],
+                      c_tf_idf_score: parseFloat(values[3]),
+                      rank: parseInt(values[4])
+                    });
+                  }
+                }
+              }
+              
+              currentIndex = endIndex;
+              
+              if (currentIndex < lines.length) {
+                // More lines to process, schedule next chunk
+                setTimeout(processChunk, 0);
+              } else {
+                // Done processing
+                resolve(parsedNgrams);
+              }
+            };
+            
+            // Start processing
+            processChunk();
+          } catch (err) {
+            reject(err);
           }
-        }
-      }
+        });
+      };
       
+      const parsedNgrams = await parseCSVAsync();
       setNgrams(parsedNgrams);
     } catch (err) {
       console.error('Error fetching n-grams:', err);
@@ -831,14 +921,19 @@ const TopicNgramsSection: React.FC<{
     }
   };
   
-  // Fetch n-grams on mount
+  // Fetch n-grams when component mounts (but don't block rendering)
   useEffect(() => {
-    fetchNgrams();
+    // Use a small delay to ensure the accordion animation completes first
+    const timer = setTimeout(() => {
+      fetchNgrams();
+    }, 100);
+    
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
   
   const handleToggle = () => {
-    if (!expanded && ngrams.length === 0) {
+    if (!expanded && ngrams.length === 0 && !loading) {
       fetchNgrams();
     }
     setExpanded(!expanded);
@@ -848,66 +943,81 @@ const TopicNgramsSection: React.FC<{
   const displayNgrams = expanded ? ngrams : ngrams.slice(0, 10);
   const hasMore = ngrams.length > 10;
   
+  // Prepare word cloud data (top 100 keywords for visualization)
+  const wordCloudWords: Word[] = ngrams.slice(0, 100).map(ngram => ({
+    text: ngram.ngram,
+    value: ngram.c_tf_idf_score // Use raw scores
+  }));
+  
   return (
-    <div className="space-y-2 mt-3">
-      <div className="flex items-center justify-between">
-        <h5 className="text-sm font-medium text-muted-foreground">Keywords</h5>
-        <span className="text-xs text-muted-foreground">c-TF-IDF</span>
-      </div>
-      
-      {loading && (
-        <div className="text-xs text-muted-foreground italic pl-6">
-          Loading n-grams...
-        </div>
+    <div className="space-y-4">
+      {/* Word Cloud Visualization */}
+      {!loading && !error && wordCloudWords.length > 0 && (
+        <WordCloudWrapper words={wordCloudWords} />
       )}
       
-      {error && (
-        <div className="text-xs text-destructive pl-6">
-          {error}
+      {/* Keywords List */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h5 className="text-sm font-medium text-muted-foreground">Keywords</h5>
+          <span className="text-xs text-muted-foreground">c-TF-IDF</span>
         </div>
-      )}
-      
-      {!loading && !error && displayNgrams.length > 0 && (
-        <div className="space-y-1 pl-6">
-          {displayNgrams.map((ngram, index) => (
-            <div key={index} className="flex items-center justify-between text-xs py-1 px-2 hover:bg-muted/50 rounded">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground font-mono w-6">{ngram.rank}</span>
-                <span className="font-medium">{ngram.ngram}</span>
+        
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground italic pl-6">
+            <div className="animate-spin h-3 w-3 border-2 border-muted-foreground border-t-transparent rounded-full"></div>
+            Loading keywords...
+          </div>
+        )}
+        
+        {error && (
+          <div className="text-xs text-destructive pl-6">
+            {error}
+          </div>
+        )}
+        
+        {!loading && !error && displayNgrams.length > 0 && (
+          <div className="space-y-1 pl-6">
+            {displayNgrams.map((ngram, index) => (
+              <div key={index} className="flex items-center justify-between text-xs py-1 px-2 hover:bg-muted/50 rounded">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground font-mono w-6">{ngram.rank}</span>
+                  <span className="font-medium">{ngram.ngram}</span>
+                </div>
+                <span 
+                  className="text-muted-foreground tabular-nums"
+                  title={`c-TF-IDF score: ${ngram.c_tf_idf_score.toFixed(4)}`}
+                >
+                  {ngram.c_tf_idf_score.toFixed(3)}
+                </span>
               </div>
-              <span 
-                className="text-muted-foreground tabular-nums"
-                title={`c-TF-IDF score: ${ngram.c_tf_idf_score.toFixed(4)}`}
-              >
-                {ngram.c_tf_idf_score.toFixed(3)}
-              </span>
-            </div>
-          ))}
-          
-          {hasMore && (
-            <>
-              <div className="border-t border-border my-2" />
-              <button
-                onClick={handleToggle}
-                className="w-full flex items-center justify-center py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                aria-label={expanded ? "Show less" : `Show all ${ngrams.length} keywords`}
-              >
-                {expanded ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      
-      {!loading && !error && ngrams.length === 0 && (
-        <div className="text-xs text-muted-foreground italic pl-6">
-          No n-grams available
-        </div>
-      )}
+            ))}
+            
+            {hasMore && (
+              <>
+                <div className="border-t border-border my-2" />
+                <button
+                  onClick={handleToggle}
+                  className="w-full flex items-center justify-center py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={expanded ? "Show less" : `Show all ${ngrams.length} keywords`}
+                >
+                  {expanded ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        
+        {!loading && !error && ngrams.length === 0 && (
+          <div className="text-xs text-muted-foreground italic pl-6">
+            No keywords available
+          </div>
+        )}
+      </div>
     </div>
   );
 };

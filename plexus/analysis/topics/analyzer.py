@@ -338,7 +338,7 @@ def analyze_topics(
     compute_stability: bool = False,
     stability_n_runs: int = 10,
     stability_sample_fraction: float = 0.8
-) -> Optional[Tuple[Any, pd.DataFrame, List[int], List[str]]]:
+) -> Optional[Dict[str, Any]]:
     """
     Perform BERTopic analysis on transformed transcripts.
     
@@ -364,9 +364,15 @@ def analyze_topics(
         remove_stop_words: Whether to remove English stop words from topics (default: False)
         custom_stop_words: Optional list of additional stop words to remove (default: None)
         min_df: Minimum document frequency for terms (default: 1)
+        max_ngrams_per_topic: Maximum n-grams to export per topic (default: 100)
+        compute_stability: Whether to assess topic stability (default: False)
+        stability_n_runs: Number of bootstrap runs for stability (default: 10)
+        stability_sample_fraction: Fraction of data to sample per run (default: 0.8)
         
     Returns:
-        BERTopic: The fitted topic model with discovered topics, or None if analysis fails
+        Dict with keys: 'topic_model', 'topic_info', 'topics', 'docs', 
+                        'topic_similarity_metrics' (optional), 'topic_stability' (optional)
+        Returns None if analysis fails
     """
     # Lazy imports to avoid loading PyTorch unless actually needed
     from bertopic import BERTopic
@@ -713,7 +719,8 @@ def analyze_topics(
     except Exception as e:
         logger.error(f"Failed to generate or save topic hierarchy visualization: {e}", exc_info=True)
 
-    # Visualize Topic Similarity (Heatmap)
+    # Visualize Topic Similarity (Heatmap) and extract metrics
+    topic_similarity_metrics = None
     try:
         fig_similarity = topic_model.visualize_heatmap()
         save_visualization(fig_similarity, str(Path(output_dir) / "topic_similarity.html"))
@@ -724,6 +731,65 @@ def analyze_topics(
             logger.info(f"Saved topic similarity visualization to {similarity_png_path}")
         except Exception as e:
             logger.error(f"Failed to save topic similarity visualization as PNG: {e}", exc_info=True)
+        
+        # Extract similarity metrics for final summary
+        try:
+            from sklearn.metrics.pairwise import cosine_similarity
+            
+            logger.info("Extracting topic similarity metrics for analysis summary...")
+            
+            # Get c-TF-IDF matrix
+            c_tf_idf = topic_model.c_tf_idf_
+            
+            # Calculate pairwise cosine similarities
+            similarity_matrix = cosine_similarity(c_tf_idf)
+            
+            # Extract useful statistics (excluding diagonal, which is always 1.0)
+            n_topics = similarity_matrix.shape[0]
+            if n_topics > 1:
+                # Create mask to exclude diagonal
+                off_diagonal_mask = ~np.eye(n_topics, dtype=bool)
+                off_diagonal_similarities = similarity_matrix[off_diagonal_mask]
+                
+                topic_similarity_metrics = {
+                    'mean_similarity': float(np.mean(off_diagonal_similarities)),
+                    'max_similarity': float(np.max(off_diagonal_similarities)),
+                    'min_similarity': float(np.min(off_diagonal_similarities)),
+                    'std_similarity': float(np.std(off_diagonal_similarities)),
+                    'high_similarity_pairs': [],
+                    'interpretation': ''
+                }
+                
+                # Find high-similarity pairs (potential redundancy) - threshold at 0.6
+                high_sim_threshold = 0.6
+                for i in range(n_topics):
+                    for j in range(i + 1, n_topics):
+                        if similarity_matrix[i, j] > high_sim_threshold:
+                            topic_similarity_metrics['high_similarity_pairs'].append({
+                                'topic_1_id': int(i),
+                                'topic_2_id': int(j),
+                                'similarity': float(similarity_matrix[i, j])
+                            })
+                
+                # Add interpretation based on mean similarity
+                mean_sim = topic_similarity_metrics['mean_similarity']
+                if mean_sim < 0.3:
+                    topic_similarity_metrics['interpretation'] = 'Topics are highly distinct with minimal overlap'
+                elif mean_sim < 0.5:
+                    topic_similarity_metrics['interpretation'] = 'Topics show good separation with some natural overlap'
+                else:
+                    topic_similarity_metrics['interpretation'] = 'Topics show significant overlap - consider reducing topic count'
+                
+                logger.info(f"✅ Extracted similarity metrics: mean={mean_sim:.3f}, max={topic_similarity_metrics['max_similarity']:.3f}")
+                logger.info(f"   Interpretation: {topic_similarity_metrics['interpretation']}")
+                if topic_similarity_metrics['high_similarity_pairs']:
+                    logger.info(f"   Found {len(topic_similarity_metrics['high_similarity_pairs'])} high-similarity pairs (>{high_sim_threshold})")
+            else:
+                logger.info("Only one topic found - skipping similarity metrics")
+                
+        except Exception as e:
+            logger.error(f"Failed to extract similarity metrics: {e}", exc_info=True)
+            
     except Exception as e:
         logger.error(f"Error during topic similarity visualization: {e}", exc_info=True)
         logger.warning(f"Skipping topic similarity visualization as it requires at least two topics.")
@@ -1104,7 +1170,25 @@ def analyze_topics(
     
     logger.info(f"Analysis complete. Results saved to {output_dir}")
     
-    # Return the topic model for further use
+    # Return the topic model and analysis results
     final_topic_info = topic_model.get_topic_info()
     logger.info(f"Returning final topic info with {len(final_topic_info)} topics.")
-    return topic_model, final_topic_info, topics, docs
+    
+    # Build comprehensive analysis results dictionary
+    analysis_results = {
+        'topic_model': topic_model,
+        'topic_info': final_topic_info,
+        'topics': topics,
+        'docs': docs
+    }
+    
+    # Add optional metrics if they were computed
+    if topic_similarity_metrics is not None:
+        analysis_results['topic_similarity_metrics'] = topic_similarity_metrics
+        logger.info("✅ Included topic similarity metrics in results")
+    
+    if stability_results is not None:
+        analysis_results['topic_stability'] = stability_results
+        logger.info("✅ Included topic stability metrics in results")
+    
+    return analysis_results
