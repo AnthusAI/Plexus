@@ -7,25 +7,25 @@ corresponding ScoringJob from DynamoDB, performs the scoring work, and
 creates ScoreResults in DynamoDB for caching.
 
 The worker:
-- Polls an SQS queue (SCORING_REQUEST_STANDARD_QUEUE_URL) for job messages
+- Polls an SQS queue (PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL) for job messages
 - Retrieves text and metadata directly from DynamoDB Item records
 - Performs scoring using the Plexus scorecard system
 - Creates ScoreResult records in DynamoDB
-- Sends response message with score_result_id to another SQS queue (SCORING_RESPONSE_QUEUE_URL)
+- Sends response message with score_result_id to another SQS queue (PLEXUS_RESPONSE_WORKER_QUEUE_URL)
 - Deletes SQS messages after successful processing
 
 This worker interacts with DynamoDB and SQS.
 
 Usage:
-    python ProcessScoreWorker.py [--once] [--poll-interval SECONDS]
+    python ProcessScoreWorker.py [--once] [--error-retry-delay SECONDS]
 
 Options:
     --once: Process one job and exit (for testing)
-    --poll-interval: Seconds to wait between error retries (default: 5)
+    --error-retry-delay: Seconds to wait before retrying after errors (default: 5)
 
 Environment Variables:
-    SCORING_REQUEST_STANDARD_QUEUE_URL: SQS queue URL for receiving scoring requests
-    SCORING_RESPONSE_QUEUE_URL: SQS queue URL for sending score result responses
+    PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL: SQS queue URL for receiving scoring requests
+    PLEXUS_RESPONSE_WORKER_QUEUE_URL: SQS queue URL for sending score result responses
     PLEXUS_ACCOUNT_KEY: Plexus account key
 """
 
@@ -41,9 +41,8 @@ import time
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
-# Setup logging
+# Setup logging - import but don't configure yet (will configure in each worker process after fork)
 from plexus.CustomLogging import logging, set_log_group
-set_log_group('plexus/score/worker')
 
 # Import Plexus components
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -58,22 +57,22 @@ from plexus.utils.scoring import get_text_from_item, get_metadata_from_item, get
 class JobProcessor:
     """Handles polling and processing of scoring jobs"""
 
-    def __init__(self, poll_interval=5):
+    def __init__(self, error_retry_delay=5):
         """
         Initialize the job processor
 
         Args:
-            poll_interval: Number of seconds to wait between polls for new jobs
+            error_retry_delay: Number of seconds to wait before retrying after errors
         """
-        self.poll_interval = poll_interval
+        self.error_retry_delay = error_retry_delay
         self.client = PlexusDashboardClient()
         self.sqs_client = boto3.client('sqs')
-        self.request_queue_url = os.environ.get('SCORING_REQUEST_STANDARD_QUEUE_URL')
-        self.response_queue_url = os.environ.get('SCORING_RESPONSE_QUEUE_URL')
+        self.request_queue_url = os.environ.get('PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL')
+        self.response_queue_url = os.environ.get('PLEXUS_RESPONSE_WORKER_QUEUE_URL')
         self.account_key = os.environ.get('PLEXUS_ACCOUNT_KEY')
 
         if not self.request_queue_url or not self.response_queue_url or not self.account_key:
-            raise ValueError("Missing required environment variables: SCORING_REQUEST_STANDARD_QUEUE_URL, SCORING_RESPONSE_QUEUE_URL, PLEXUS_ACCOUNT_KEY")
+            raise ValueError("Missing required environment variables: PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL, PLEXUS_RESPONSE_WORKER_QUEUE_URL, PLEXUS_ACCOUNT_KEY")
 
     async def initialize(self):
         """Initialize the processor by resolving account ID"""
@@ -355,7 +354,7 @@ class JobProcessor:
                     
                     logging.info(f"✅ Successfully created ScoreResult cache entry: {score_result_id}")
                     
-                    # Send response message to SCORING_RESPONSE_QUEUE_URL
+                    # Send response message to PLEXUS_RESPONSE_WORKER_QUEUE_URL
                     try:
                         response_message = {
                             "score_result_id": score_result_id
@@ -464,15 +463,15 @@ class JobProcessor:
                     break
                 else:
                     # Wait before retrying on error
-                    await asyncio.sleep(self.poll_interval)
+                    await asyncio.sleep(self.error_retry_delay)
 
 
 class WorkerManager:
     """Manages multiple worker processes"""
-    
-    def __init__(self, num_workers=4, poll_interval=5):
+
+    def __init__(self, num_workers=4, error_retry_delay=5):
         self.num_workers = num_workers
-        self.poll_interval = poll_interval
+        self.error_retry_delay = error_retry_delay
         self.workers = []
         self.shutdown_event = multiprocessing.Event()
         
@@ -484,11 +483,27 @@ class WorkerManager:
             setproctitle.setproctitle(f"plexus-scoring-worker-{worker_id}")
         except ImportError:
             pass  # setproctitle is optional
-            
+        
+        # Pre-import heavy modules BEFORE setting up CloudWatch logging
+        # These imports can take 60+ seconds. If CloudWatch logging is active during imports,
+        # the background thread gets stuck and times out.
+        print(f"[Worker {worker_id}] 📦 Pre-loading heavy modules...")
+        try:
+            from plexus.Scorecard import Scorecard
+            from plexus.cli.shared.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
+            from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
+            from plexus.cli.shared.identify_target_scores import identify_target_scores
+            from plexus.cli.shared.iterative_config_fetching import iteratively_fetch_configurations
+            print(f"[Worker {worker_id}] ✅ Heavy modules pre-loaded")
+        except Exception as e:
+            print(f"[Worker {worker_id}] ⚠️  Failed to pre-load some modules: {e}")
+        
+        # NOW set up CloudWatch logging after all heavy imports are done
+        set_log_group('plexus/score/worker')
         logging.info(f"🚀 Starting worker process {worker_id}")
         
         async def run_worker():
-            processor = JobProcessor(poll_interval=self.poll_interval)
+            processor = JobProcessor(error_retry_delay=self.error_retry_delay)
             await processor.run(once=once)
             
         try:
@@ -563,6 +578,22 @@ class WorkerManager:
 
 async def run_single_worker():
     """Run a single worker (for backward compatibility)"""
+    # Pre-import heavy modules BEFORE setting up CloudWatch logging
+    print("📦 Pre-loading heavy modules...")
+    try:
+        from plexus.Scorecard import Scorecard
+        from plexus.cli.shared.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
+        from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
+        from plexus.cli.shared.identify_target_scores import identify_target_scores
+        from plexus.cli.shared.iterative_config_fetching import iteratively_fetch_configurations
+        print("✅ Heavy modules pre-loaded")
+    except Exception as e:
+        print(f"⚠️  Failed to pre-load some modules: {e}")
+    
+    # NOW configure logging after imports are complete
+    set_log_group('plexus/score/worker')
+    logging.info("🚀 Starting single worker mode")
+    
     processor = JobProcessor()
     await processor.run()
 
@@ -571,7 +602,7 @@ def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Process async scoring jobs with multiple workers')
     parser.add_argument('--once', action='store_true', help='Process one job per worker and exit')
-    parser.add_argument('--poll-interval', type=int, default=5, help='Seconds between polls (default: 5)')
+    parser.add_argument('--error-retry-delay', type=int, default=None, help='Seconds to wait before retrying after errors (default: from env or 5)')
     parser.add_argument('--workers', type=int, default=None, help='Number of worker processes (default: from env or 4)')
     parser.add_argument('--single', action='store_true', help='Run single worker (no multiprocessing)')
     args = parser.parse_args()
@@ -582,7 +613,11 @@ def main():
     # Determine number of workers
     num_workers = args.workers
     if num_workers is None:
-        num_workers = int(os.environ.get('NUM_WORKERS', 4))
+        num_workers = int(os.environ.get('PLEXUS_SCORING_WORKER_NUM_WORKERS', 4))
+
+    error_retry_delay = args.error_retry_delay
+    if error_retry_delay is None:
+        error_retry_delay = int(os.environ.get('PLEXUS_SCORING_WORKER_ERROR_RETRY_DELAY', 5))
 
     if args.single:
         # Run single worker for testing/debugging
@@ -590,9 +625,9 @@ def main():
         asyncio.run(run_single_worker())
     else:
         # Run multiple workers
-        logging.info(f"🚀 Starting scoring worker manager with {num_workers} workers")
-        
-        manager = WorkerManager(num_workers=num_workers, poll_interval=args.poll_interval)
+        logging.info(f"🚀 Starting scoring worker manager with {num_workers} workers and error retry delay of {error_retry_delay} seconds")
+
+        manager = WorkerManager(num_workers=num_workers, error_retry_delay=error_retry_delay)
         
         # Set up signal handlers for graceful shutdown
         def signal_handler(signum, frame):
