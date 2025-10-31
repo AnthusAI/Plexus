@@ -229,6 +229,9 @@ class TopicAnalysis(BaseReportBlock):
             api_key_env_var = llm_extraction.get("api_key_env_var", self.config.get("openai_api_key_env_var", "OPENAI_API_KEY"))
             max_retries_itemize = llm_extraction.get("max_retries", self.config.get("max_retries_itemize", 2))
             
+            # Parallelization configuration
+            max_workers = llm_extraction.get("max_workers", self.config.get("max_workers"))  # None = use provider defaults
+            
             # Add support for simple_format option to avoid validation errors
             simple_format = llm_extraction.get("simple_format", self.config.get("simple_format", True))
             
@@ -405,7 +408,8 @@ class TopicAnalysis(BaseReportBlock):
                     max_retries=max_retries_itemize,
                     simple_format=simple_format,
                     openai_api_key=openai_api_key,
-                    sample_size=sample_size
+                    sample_size=sample_size,
+                    max_workers=max_workers
                 )
             elif transform_method == 'llm':
                 self._log(f"🤖 TRANSFORMATION METHOD: LLM")
@@ -643,9 +647,13 @@ class TopicAnalysis(BaseReportBlock):
 
                 # Unpack results; handle None if analysis failed internally
                 if analysis_results:
-                    topic_model, topic_info, _, _ = analysis_results
+                    topic_model = analysis_results.get('topic_model')
+                    topic_info = analysis_results.get('topic_info')
+                    topic_similarity_metrics = analysis_results.get('topic_similarity_metrics')
+                    topic_stability = analysis_results.get('topic_stability')
                 else:
                     topic_model, topic_info = None, None
+                    topic_similarity_metrics, topic_stability = None, None
 
                 self._log("✅ BERTopic analysis completed successfully")
                 self._log("="*60)
@@ -951,19 +959,115 @@ class TopicAnalysis(BaseReportBlock):
                                 self._log(f"❌ Failed to load representative documents: {e}", level="ERROR")
                                 # Continue without representative documents
                             
+                            # Enrich topics with per-topic similarity and stability metrics
+                            if topic_similarity_metrics or topic_stability:
+                                self._log("🔍 Enriching topics with similarity and stability metrics...")
+                                
+                                # Add similarity information to each topic
+                                if topic_similarity_metrics and topic_similarity_metrics.get('high_similarity_pairs'):
+                                    for topic in topics_list:
+                                        topic_id = topic['id']
+                                        similar_topics = []
+                                        
+                                        # Find all topics similar to this one
+                                        for pair in topic_similarity_metrics['high_similarity_pairs']:
+                                            if pair['topic_1_id'] == topic_id:
+                                                similar_topics.append({
+                                                    'topic_id': pair['topic_2_id'],
+                                                    'similarity': pair['similarity']
+                                                })
+                                            elif pair['topic_2_id'] == topic_id:
+                                                similar_topics.append({
+                                                    'topic_id': pair['topic_1_id'],
+                                                    'similarity': pair['similarity']
+                                                })
+                                        
+                                        if similar_topics:
+                                            # Add topic names to similar topics
+                                            for sim_topic in similar_topics:
+                                                matching_topic = next((t for t in topics_list if t['id'] == sim_topic['topic_id']), None)
+                                                if matching_topic:
+                                                    sim_topic['name'] = matching_topic['name']
+                                            
+                                            topic['similar_topics'] = similar_topics
+                                            self._log(f"   Topic {topic_id} has {len(similar_topics)} similar topics")
+                                
+                                # Add stability score to each topic with interpretation
+                                if topic_stability and topic_stability.get('per_topic_stability'):
+                                    per_topic_stability = topic_stability['per_topic_stability']
+                                    for topic in topics_list:
+                                        topic_id = topic['id']
+                                        if topic_id in per_topic_stability:
+                                            stability_score = per_topic_stability[topic_id]
+                                            topic['stability_score'] = stability_score
+                                            
+                                            # Add human-readable interpretation
+                                            if stability_score > 0.7:
+                                                topic['stability_interpretation'] = 'high (very reliable)'
+                                            elif stability_score >= 0.5:
+                                                topic['stability_interpretation'] = 'moderate (reasonably reliable)'
+                                            else:
+                                                topic['stability_interpretation'] = 'low (unstable, varies between runs)'
+                                            
+                                            self._log(f"   Topic {topic_id} stability: {stability_score:.3f} ({topic['stability_interpretation']})")
+                                
+                                self._log("✅ Topic enrichment complete")
+                            
                             # Store full topic data as attached file to avoid DynamoDB size limits
                             # Create a summary for the main record with just essential info
                             topics_summary = []
                             for topic in topics_list:
-                                topics_summary.append({
+                                summary_topic = {
                                     "id": topic["id"],
                                     "name": topic["name"],
                                     "count": topic["count"],
                                     "keywords": topic["keywords"][:5],  # Limit keywords to reduce size
                                     "examples_count": len(topic.get("examples", []))  # Just count, not full examples
-                                })
+                                }
+                                
+                                # Include metrics in summary if present
+                                if 'stability_score' in topic:
+                                    summary_topic['stability_score'] = topic['stability_score']
+                                    summary_topic['stability_interpretation'] = topic.get('stability_interpretation', '')
+                                if 'similar_topics' in topic:
+                                    summary_topic['similar_topics_count'] = len(topic['similar_topics'])
+                                
+                                topics_summary.append(summary_topic)
                             
                             final_output_data["topics"] = topics_summary
+                            
+                            # Add aggregate analysis metrics
+                            if topic_similarity_metrics or topic_stability:
+                                analysis_metrics = {}
+                                
+                                if topic_similarity_metrics:
+                                    analysis_metrics['topic_similarity'] = {
+                                        'mean_similarity': topic_similarity_metrics['mean_similarity'],
+                                        'max_similarity': topic_similarity_metrics['max_similarity'],
+                                        'min_similarity': topic_similarity_metrics['min_similarity'],
+                                        'interpretation': topic_similarity_metrics['interpretation'],
+                                        'high_similarity_pairs_count': len(topic_similarity_metrics.get('high_similarity_pairs', []))
+                                    }
+                                
+                                if topic_stability:
+                                    analysis_metrics['topic_stability'] = {
+                                        'mean_stability': topic_stability['mean_stability'],
+                                        'n_runs': topic_stability['n_runs'],
+                                        'sample_fraction': topic_stability['sample_fraction'],
+                                        'methodology': topic_stability['methodology']
+                                    }
+                                    
+                                    # Add interpretation
+                                    mean_stability = topic_stability['mean_stability']
+                                    if mean_stability > 0.7:
+                                        analysis_metrics['topic_stability']['interpretation'] = 'Topics are highly stable and reliable'
+                                    elif mean_stability >= 0.5:
+                                        analysis_metrics['topic_stability']['interpretation'] = 'Topics show moderate stability'
+                                    else:
+                                        analysis_metrics['topic_stability']['interpretation'] = 'Topics are less stable - consider adjusting parameters'
+                                
+                                final_output_data['analysis_metrics'] = analysis_metrics
+                                self._log(f"✅ Added aggregate analysis metrics to output")
                             
                             # Save full topic data to attached file
                             if report_block_id:
@@ -1051,7 +1155,8 @@ class TopicAnalysis(BaseReportBlock):
                                             'bertopic_analysis': final_output_data.get('bertopic_analysis', {}),
                                             'total_topics': len(topics_list),
                                             'total_documents': sum(topic.get('count', 0) for topic in topics_list)
-                                        }
+                                        },
+                                        full_output_data=final_output_data  # NEW: Pass entire universal code structure
                                     )
                                     
                                     if final_summary:
@@ -1071,9 +1176,12 @@ class TopicAnalysis(BaseReportBlock):
                                         self._log("⚠️  Final summary generation failed or returned empty result")
                                         
                                 except Exception as e:
+                                    import traceback
                                     error_msg = f"Error generating final summary: {str(e)}"
+                                    traceback_str = traceback.format_exc()
                                     self._log(error_msg, level="ERROR")
-                                    final_output_data["errors"].append(error_msg)
+                                    self._log(f"Traceback:\n{traceback_str}", level="ERROR")
+                                    final_output_data["errors"].append(f"{error_msg}\n{traceback_str}")
                                     
                                 self._log("="*60)
                             else:
@@ -1313,7 +1421,8 @@ class TopicAnalysis(BaseReportBlock):
         task_context: str, 
         openai_api_key: Optional[str],
         final_summarization_config: Optional[Dict[str, Any]] = None,
-        analysis_stats: Optional[Dict[str, Any]] = None
+        analysis_stats: Optional[Dict[str, Any]] = None,
+        full_output_data: Optional[Dict[str, Any]] = None
     ) -> Optional[str]:
         """
         Generate a final summary using all topic buckets and the task context.
@@ -1324,6 +1433,7 @@ class TopicAnalysis(BaseReportBlock):
             openai_api_key: OpenAI API key for LLM calls
             final_summarization_config: Configuration for final summarization (model, prompt, etc.)
             analysis_stats: Aggregate statistics from preprocessing, extraction, and analysis
+            full_output_data: Complete output data structure (universal code) to pass to LLM
             
         Returns:
             Final summary string or None if generation fails
@@ -1337,163 +1447,38 @@ class TopicAnalysis(BaseReportBlock):
                 self._log("No OpenAI API key available for final summary generation", level="WARNING")
                 return None
             
-            # Prepare comprehensive analysis data for the prompt
+            # NEW APPROACH: Serialize full_output_data as YAML for the LLM
+            # This is much cleaner than building custom text strings
+            import yaml
+            
             analysis_stats = analysis_stats or {}
+            full_output_data = full_output_data or {}
             
-            # 1. Overall Analysis Statistics
-            stats_summary = "\n=== ANALYSIS OVERVIEW ===\n"
-            
-            # Preprocessing stats
-            preprocessing = analysis_stats.get('preprocessing', {})
-            if preprocessing:
-                stats_summary += f"Data Processing:\n"
-                stats_summary += f"  • Original sample size: {preprocessing.get('sample_size', 'unknown')}\n"
-                stats_summary += f"  • Preprocessed rows: {preprocessing.get('preprocessed_rows', 'unknown')}\n"
-                if preprocessing.get('customer_only'):
-                    stats_summary += f"  • Customer-only filter: Applied\n"
-                stats_summary += f"\n"
-            
-            # LLM Extraction stats
-            llm_extraction = analysis_stats.get('llm_extraction', {})
-            hit_rate_stats = llm_extraction.get('hit_rate_stats', {})
-            if hit_rate_stats:
-                stats_summary += f"LLM Extraction Performance:\n"
-                stats_summary += f"  • Total processed: {hit_rate_stats.get('total_processed', 0):,}\n"
-                stats_summary += f"  • Successful extractions: {hit_rate_stats.get('successful_extractions', 0):,}\n"
-                stats_summary += f"  • Failed extractions: {hit_rate_stats.get('failed_extractions', 0):,}\n"
-                stats_summary += f"  • Hit rate: {hit_rate_stats.get('hit_rate_percentage', 0):.1f}%\n"
-                stats_summary += f"\n"
-            
-            # Topic Analysis stats
-            bertopic_analysis = analysis_stats.get('bertopic_analysis', {})
-            total_topics = analysis_stats.get('total_topics', len(topics_list))
-            total_documents = analysis_stats.get('total_documents', sum(topic.get('count', 0) for topic in topics_list))
-            
-            stats_summary += f"Topic Analysis Results:\n"
-            stats_summary += f"  • Total topics discovered: {total_topics}\n"
-            stats_summary += f"  • Total documents analyzed: {total_documents:,}\n"
-            if bertopic_analysis.get('min_topic_size'):
-                stats_summary += f"  • Minimum topic size: {bertopic_analysis['min_topic_size']}\n"
-            if bertopic_analysis.get('num_topics_requested'):
-                stats_summary += f"  • Topics requested: {bertopic_analysis['num_topics_requested']}\n"
-            stats_summary += f"\n"
-            
-            # 2. Detailed Topic Information (include ALL topics, not just top 10)
-            # Sort topics by document count (descending) to ensure consistent ordering
-            sorted_topics = sorted(topics_list, key=lambda t: t.get('count', 0), reverse=True)
-            
-            topic_summaries = []
-            for i, topic in enumerate(sorted_topics):
-                # Use 1-indexed numbering for human-readable output (i+1 instead of topic['id'])
-                human_topic_number = i + 1
-                topic_summary = f"Topic {human_topic_number}: {topic['name']}\n"
-                topic_summary += f"  • Keywords: {', '.join(topic.get('keywords', [])[:8])}\n"
-                topic_summary += f"  • Document count: {topic.get('count', 0):,}\n"
-                
-                # Calculate percentage of total documents
-                if total_documents > 0:
-                    percentage = (topic.get('count', 0) / total_documents) * 100
-                    topic_summary += f"  • Percentage of total: {percentage:.1f}%\n"
-                
-                # Add multiple examples (10-20) for better context, full text not truncated
-                examples = topic.get('examples', [])
-                if examples:
-                    # Include up to 20 examples per topic for comprehensive analysis
-                    num_examples_to_include = min(20, len(examples))
-                    topic_summary += f"  • Sample conversations ({num_examples_to_include} examples):\n"
-                    for j, example in enumerate(examples[:num_examples_to_include]):
-                        example_text = example.get('text', '').strip()
-                        if example_text:
-                            # Include full example text, not truncated
-                            topic_summary += f"    [{j+1}] {example_text}\n"
-                
-                topic_summaries.append(topic_summary)
-            
-            # Combine all information
-            topics_text = stats_summary + "\n=== TOPIC DETAILS ===\n\n" + "\n".join(topic_summaries)
-            
-            # === EXTRACT KEY STATISTICS FOR TEMPLATE VARIABLES ===
-            # These variables provide specific metrics for the final summary template
-            
-            # Original transcript/call count - use actual processed count, not requested sample_size
-            # The hit_rate_stats.total_processed is the actual number of transcripts that were processed
-            original_transcript_count = hit_rate_stats.get('total_processed', preprocessing.get('sample_size', 'unknown'))
-            
-            # Extracted document count (quotes/examples from transcripts)
-            extracted_document_count = hit_rate_stats.get('successful_extractions', 0)
-            
-            # Total documents analyzed by topic modeling (sum of all topic counts)
-            total_documents_analyzed = total_documents
-            
-            # Extraction success rate
-            extraction_success_rate = hit_rate_stats.get('hit_rate_percentage', 0)
-            
-            # Number of topics discovered
-            topics_discovered = len(topics_list)
-            
-            # Create summary statistics for template interpolation
-            stats_variables = {
-                'original_transcript_count': original_transcript_count,
-                'extracted_document_count': extracted_document_count, 
-                'total_documents_analyzed': total_documents_analyzed,
-                'extraction_success_rate': extraction_success_rate,
-                'topics_discovered': topics_discovered
+            # Build a clean data structure for the LLM prompt
+            # Include only the essential data, excluding logs and errors
+            prompt_data = {
+                'preprocessing': full_output_data.get('preprocessing', {}),
+                'llm_extraction': full_output_data.get('llm_extraction', {}),
+                'bertopic_analysis': full_output_data.get('bertopic_analysis', {}),
+                'topics': topics_list,  # Full topics list with all metrics
+                'analysis_metrics': full_output_data.get('analysis_metrics', {}),
             }
             
-            self._log(f"📊 STATISTICS VARIABLES FOR TEMPLATE:")
-            self._log(f"   • Original transcripts processed: {original_transcript_count}")
-            self._log(f"   • Documents extracted from transcripts: {extracted_document_count}")
-            self._log(f"   • Total documents analyzed by topic modeling: {total_documents_analyzed}")
-            self._log(f"   • Extraction success rate: {extraction_success_rate}%")
-            self._log(f"   • Topics discovered: {topics_discovered}")
+            # Add fine-tuning comparison if available
+            if 'fine_tuning' in full_output_data:
+                prompt_data['fine_tuning'] = full_output_data['fine_tuning']
             
-            # === FINAL TOPIC FORMATTING VERIFICATION ===
-            self._log(f"🔍 FINAL TOPIC FORMATTING VERIFICATION:")
+            # Serialize to YAML for the prompt
+            analysis_results_yaml = yaml.dump(prompt_data, indent=2, allow_unicode=True, sort_keys=False)
             
-            # Verify that topics_text contains all critical information
-            topics_text_checks = []
+            self._log(f"📄 Generated YAML representation for LLM prompt ({len(analysis_results_yaml):,} characters)")
             
-            # Check 1: Are all topic names present?
-            for topic in sorted_topics:
-                topic_name = topic.get('name', '')
-                if topic_name and topic_name in topics_text:
-                    topics_text_checks.append(f"✅ Topic '{topic_name}' found in final text")
-                else:
-                    topics_text_checks.append(f"❌ Topic '{topic_name}' missing from final text")
-            
-            # Check 2: Are example conversations included?
-            total_examples_in_text = 0
-            for topic in sorted_topics:
-                examples = topic.get('examples', [])
-                for example in examples[:5]:  # Check first 5 examples
-                    example_text = example.get('text', '').strip()
-                    if example_text and example_text in topics_text:
-                        total_examples_in_text += 1
-            
-            # Check 3: Are keywords included?
-            keywords_in_text = 0
-            for topic in sorted_topics:
-                keywords = topic.get('keywords', [])
-                for keyword in keywords[:3]:  # Check first 3 keywords
-                    if keyword and keyword in topics_text:
-                        keywords_in_text += 1
-            
-            # Log the checks
-            for check in topics_text_checks[:5]:  # Show first 5 topic checks
-                self._log(f"   {check}")
-            
-            self._log(f"   • Examples included in final text: {total_examples_in_text}")
-            self._log(f"   • Keywords included in final text: {keywords_in_text}")
-            self._log(f"   • Final topics_text length: {len(topics_text):,} characters")
-            
-            # Verify structure
-            has_stats_section = "=== ANALYSIS OVERVIEW ===" in topics_text
-            has_topic_section = "=== TOPIC DETAILS ===" in topics_text
-            self._log(f"   • Analysis overview section present: {has_stats_section}")
-            self._log(f"   • Topic details section present: {has_topic_section}")
-            
-            if not has_stats_section or not has_topic_section:
-                self._log("   ⚠️  WARNING: Missing required sections in topics_text")
+            # Verify YAML contains key information
+            self._log(f"🔍 YAML DATA VERIFICATION:")
+            self._log(f"   • Topics in YAML: {len(topics_list)}")
+            self._log(f"   • Has analysis_metrics: {'analysis_metrics' in prompt_data}")
+            self._log(f"   • Has llm_extraction stats: {'llm_extraction' in prompt_data}")
+            self._log(f"   • YAML size: {len(analysis_results_yaml):,} characters")
             
             # Get final summarization configuration
             config = final_summarization_config or {}
@@ -1503,71 +1488,58 @@ class TopicAnalysis(BaseReportBlock):
             temperature = config.get("temperature", 0.05)  # Lower default for factual analysis
             custom_prompt = config.get("prompt")
             
-            # Default user prompt if none provided
-            default_user_prompt = """CRITICAL: You MUST analyze ONLY the actual topic analysis results provided below. DO NOT generate generic content, make up categories, or create fictional data. Your analysis must be based EXCLUSIVELY on the specific topics, their exact names, document counts, percentages, and example conversations shown in the data.
+            # NEW SIMPLIFIED APPROACH: Use YAML data directly in the prompt
+            # No need for complex variable substitution
+            
+            default_user_prompt = """Based on the topic analysis results below, provide a concise summary.
 
-Analysis Results:
-{{topics_text}}
+# Topic Analysis Results (YAML format)
 
-MANDATORY REQUIREMENTS for your final summary:
+```yaml
+{{analysis_results}}
+```
 
-1. **Statistical Overview**: Report the EXACT statistics provided:
-   - **Original transcripts processed**: {{original_transcript_count}} call center conversations
-   - **Documents extracted**: {{extracted_document_count}} individual quotes/statements extracted from those transcripts
-   - **Total documents analyzed**: {{total_documents_analyzed}} documents processed by topic modeling
-   - **Extraction success rate**: {{extraction_success_rate}}%
-   - **Topics discovered**: {{topics_discovered}} distinct topics identified
-   
-   IMPORTANT: Explain that the "documents" in topic analysis are individual quotes/statements extracted from the original transcripts, not the full transcripts themselves. Multiple documents can come from a single transcript.
+## Summary Requirements
 
-2. **Top Topics Analysis**: List the top 5-7 most significant topics by document count:
-   - Use their EXACT names as shown in the data (do not paraphrase or rename)
-   - Use their ACTUAL percentages from the data (do not estimate)
-   - Reference specific example conversations from each topic
-   - Quote directly from the sample conversations provided
+1. **Data Overview**: 
+   - Explain the distinction between original transcripts (in `llm_extraction.hit_rate_stats.total_processed`) and extracted documents/quotes (in `topics` array)
+   - Report the extraction success rate (`llm_extraction.hit_rate_stats.hit_rate_percentage`)
 
-3. **Data Quality Assessment**: 
-   - Comment on the extraction hit rate using the exact percentage shown
-   - Assess data reliability based on the actual numbers provided
+2. **Top Topics**: 
+   - Discuss the top 2-3 topics from the `topics` array (sorted by `count`)
+   - Use the exact topic `name` and calculate or use `percentage` fields
+   - Reference specific `keywords` and `examples` if helpful
+
+3. **Quality Metrics** (if present):
+   - If `analysis_metrics.topic_similarity` exists, comment on topic distinctness:
+     * `mean_similarity` < 0.3 = highly distinct topics
+     * `mean_similarity` > 0.6 = potential topic overlap
+     * Check `high_similarity_pairs_count` for specific redundant topics
+   - If `analysis_metrics.topic_stability` exists, comment on reliability:
+     * `mean_stability` > 0.7 = highly reliable topics
+     * `mean_stability` < 0.5 = topics vary between runs
+   - If individual topics have `stability_score` and `stability_interpretation`, mention any low-stability topics
 
 4. **Key Insights**: 
-   - Analyze what the ACTUAL topic distribution reveals
-   - Reference specific topic names exactly as they appear in the data
-   - Use the actual document counts and percentages
-   - Quote from the example conversations to support your insights
+   - Interpret patterns from the actual topic distribution
+   - Use active voice, not passive
 
-5. **Actionable Recommendations**: 
-   - Base recommendations on the ACTUAL topics discovered
-   - Reference specific topic names and their relative importance
-   - Use the actual data to support your recommendations
+Keep the summary concise and focused on interpretation rather than recommendations.
 
-VERIFICATION CHECKLIST:
-- Are you using the exact topic names from the data? ✓
-- Are you using the exact percentages from the data? ✓
-- Are you referencing actual example conversations? ✓
-- Are you avoiding generic or made-up content? ✓
-
-Final Summary:"""
+You are writing copy for a Markdown document that already has an H1 at the top, so your top-level headers should be H2. Don't start with a header, just start with copy.
+"""
             
-            # Handle custom prompt - ensure it includes topics_text placeholder
-            # Note: We use Jinja2 template format ({{topics_text}}) for consistency with the codebase
+            # Handle custom prompt - ensure it includes analysis_results placeholder
             if custom_prompt:
-                if '{{topics_text}}' not in custom_prompt:
-                    self._log("⚠️  WARNING: Custom prompt does not contain {{topics_text}} placeholder!")
-                    self._log("⚠️  Adding topic data to custom prompt to ensure LLM receives actual analysis results")
-                    # Prepend topic data to custom prompt using Jinja2 syntax
-                    user_prompt = "Analysis Results:\n{{topics_text}}\n\n" + custom_prompt
+                if '{{analysis_results}}' not in custom_prompt:
+                    self._log("⚠️  WARNING: Custom prompt does not contain {{analysis_results}} placeholder!")
+                    self._log("⚠️  Prepending YAML data to custom prompt")
+                    # Prepend YAML data to custom prompt
+                    user_prompt = "# Topic Analysis Results (YAML format)\n\n```yaml\n{{analysis_results}}\n```\n\n" + custom_prompt
                 else:
                     user_prompt = custom_prompt
                     
-                # Log available statistical variables for user reference
-                self._log("📊 AVAILABLE STATISTICAL VARIABLES FOR CUSTOM PROMPTS:")
-                self._log("   • {{original_transcript_count}} - Number of original transcripts/calls processed")
-                self._log("   • {{extracted_document_count}} - Number of documents extracted from transcripts")
-                self._log("   • {{total_documents_analyzed}} - Total documents processed by topic modeling")
-                self._log("   • {{extraction_success_rate}} - Extraction success rate percentage")
-                self._log("   • {{topics_discovered}} - Number of topics discovered")
-                self._log("   • {{topics_text}} - Complete topic analysis results (required)")
+                self._log("📊 YAML-BASED PROMPT: Custom prompt will receive full analysis_results YAML")
             else:
                 user_prompt = default_user_prompt
             
@@ -1577,10 +1549,9 @@ Final Summary:"""
                 ("user", user_prompt)
             ], template_format="jinja2")
             
-            # Verify the prompt template recognizes the required variables
+            # Verify the prompt template recognizes the analysis_results variable
             expected_variables = prompt_template.input_variables
-            required_vars = ['topics_text']  # Core required variable
-            available_vars = list(stats_variables.keys())  # Statistical variables
+            required_vars = ['analysis_results']  # Core required variable
             
             missing_required = [var for var in required_vars if var not in expected_variables]
             if missing_required:
@@ -1591,13 +1562,6 @@ Final Summary:"""
             else:
                 self._log(f"✅ LangChain template correctly recognizes required variables")
                 self._log(f"   All template variables: {expected_variables}")
-                
-                # Log which statistical variables are available for use
-                available_in_template = [var for var in available_vars if var in expected_variables]
-                if available_in_template:
-                    self._log(f"   Statistical variables used in template: {available_in_template}")
-                else:
-                    self._log(f"   No statistical variables used in template (available: {available_vars})")
             
             # Initialize the LLM based on provider
             if provider == "openai":
@@ -1624,8 +1588,7 @@ Final Summary:"""
             self._log(f"   • Provider: {provider}")
             self._log(f"   • Temperature: {temperature}")
             self._log(f"   • Custom prompt: {'Yes' if custom_prompt else 'No (using default)'}")
-            self._log(f"   • Total analysis data: {len(topics_text)} characters")
-            self._log(f"   • Including aggregate stats: {'Yes' if analysis_stats else 'No'}")
+            self._log(f"   • Total YAML data: {len(analysis_results_yaml):,} characters")
             
             # === COMPREHENSIVE LLM DATA VERIFICATION LOGGING ===
             self._log("🔍 LLM DATA VERIFICATION - START")
@@ -1662,11 +1625,6 @@ Final Summary:"""
                 else:
                     self._log(f"   ✅ Topic {topic['id']} complete: {example_count} examples")
             
-            # 2. Log constructed topics_text that will be sent to LLM
-            self._log(f"📝 Constructed topics_text ({len(topics_text)} chars):")
-            self._log(f"--- BEGIN TOPICS_TEXT ---")
-            self._log(topics_text[:2000] + "..." if len(topics_text) > 2000 else topics_text)
-            self._log(f"--- END TOPICS_TEXT ---")
             
             # 3. Log the exact prompt template being used
             self._log(f"📋 User prompt template:")
@@ -1674,46 +1632,14 @@ Final Summary:"""
             self._log(user_prompt[:1000] + "..." if len(user_prompt) > 1000 else user_prompt)
             self._log(f"--- END USER PROMPT ---")
             
-            # 4. Log the filled prompt (with data interpolated) - using Jinja2 format
-            import jinja2
-            template = jinja2.Template(user_prompt)
-            # Combine topics_text with statistical variables for template rendering
+            # 4. Prepare template variables with YAML data
             template_vars = {
-                'topics_text': topics_text,
-                **stats_variables
+                'analysis_results': analysis_results_yaml
             }
-            filled_prompt = template.render(**template_vars)
-            self._log(f"📨 Final filled prompt ({len(filled_prompt)} chars):")
-            self._log(f"--- BEGIN FILLED PROMPT ---")
-            self._log(filled_prompt[:2000] + "..." if len(filled_prompt) > 2000 else filled_prompt)
-            self._log(f"--- END FILLED PROMPT ---")
             
-            # 4.5. Verify topics are properly included in the filled prompt
-            self._log(f"🔍 PROMPT CONTENT VERIFICATION:")
-            topic_names_in_prompt = 0
-            for topic in sorted_topics[:5]:  # Check top 5 topics
-                topic_name = topic.get('name', '')
-                if topic_name and topic_name in filled_prompt:
-                    topic_names_in_prompt += 1
-                    self._log(f"   ✅ Found topic '{topic_name}' in prompt")
-                else:
-                    self._log(f"   ❌ Topic '{topic_name}' NOT found in prompt")
+            self._log(f"📨 Template variables prepared:")
+            self._log(f"   • analysis_results (YAML): {len(analysis_results_yaml):,} characters")
             
-            self._log(f"   • Topics found in prompt: {topic_names_in_prompt}/{min(5, len(sorted_topics))}")
-            
-            # Check if example text is included
-            example_texts_found = 0
-            for topic in sorted_topics[:3]:  # Check top 3 topics
-                examples = topic.get('examples', [])
-                if examples:
-                    first_example = examples[0].get('text', '')[:50]  # Check first 50 chars
-                    if first_example and first_example in filled_prompt:
-                        example_texts_found += 1
-                        self._log(f"   ✅ Found example text from topic {topic['id']} in prompt")
-                    else:
-                        self._log(f"   ❌ Example text from topic {topic['id']} NOT found in prompt")
-            
-            self._log(f"   • Example texts found in prompt: {example_texts_found}/{min(3, len(sorted_topics))}")
             
             # 5. Log system prompt
             self._log(f"⚙️ System prompt: {task_context[:500]}...")
@@ -1725,7 +1651,7 @@ Final Summary:"""
             self._log("🔧 CHAIN INVOCATION DEBUG:")
             try:
                 # Test what happens when we invoke the chain
-                self._log(f"   • About to invoke chain with topics_text length: {len(topics_text)}")
+                self._log(f"   • About to invoke chain with YAML data length: {len(analysis_results_yaml):,} characters")
                 self._log(f"   • Chain input keys expected: {prompt_template.input_variables}")
                 
                 # Try to format the prompt manually to see what LangChain will actually send
@@ -1763,13 +1689,13 @@ Final Summary:"""
             
             # === VALIDATE RESPONSE AGAINST ACTUAL DATA ===
             self._log("🔍 RESPONSE VALIDATION:")
-            sorted_topics = sorted(topics_list, key=lambda t: t.get('count', 0), reverse=True)
+            sorted_topics_for_validation = sorted(topics_list, key=lambda t: t.get('count', 0), reverse=True)
             self._log(f"Expected top 3 topics by count:")
-            for i, topic in enumerate(sorted_topics[:3]):
+            for i, topic in enumerate(sorted_topics_for_validation[:3]):
                 self._log(f"   {i+1}. Topic {topic['id']}: '{topic['name']}' ({topic['count']} docs)")
             
             # Check if any of the top topic names appear in the response
-            top_3_names = [topic['name'] for topic in sorted_topics[:3]]
+            top_3_names = [topic['name'] for topic in sorted_topics_for_validation[:3]]
             matches_found = []
             for name in top_3_names:
                 if name.lower() in response_text.lower():
