@@ -369,7 +369,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                 <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[40rem]:grid-cols-4 gap-3">
                   {score.ac1 !== undefined && score.ac1 !== null && (
                     <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                      <div style={{ width: '200px' }}>
                         <Gauge 
                           value={score.ac1} 
                           title="Agreement"
@@ -386,7 +386,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   
                   {score.ac1 === null && (
                     <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                      <div style={{ width: '200px' }}>
                         <Gauge 
                           title="Agreement"
                           valueUnit=""
@@ -402,7 +402,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   
                   {score.accuracy !== undefined && score.accuracy !== null && (
                     <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                      <div style={{ width: '200px' }}>
                         <Gauge 
                           value={score.accuracy} 
                           title="Accuracy"
@@ -415,7 +415,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   
                   {score.accuracy === null && (
                     <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                      <div style={{ width: '200px' }}>
                         <Gauge 
                           title="Accuracy"
                           segments={accuracySegments}
@@ -427,7 +427,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   
                   {showPrecisionRecall && score.precision !== undefined && score.precision !== null && (
                     <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                      <div style={{ width: '200px' }}>
                         <Gauge 
                           value={score.precision} 
                           title="Precision"
@@ -440,7 +440,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   
                   {showPrecisionRecall && score.precision === null && (
                     <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                      <div style={{ width: '200px' }}>
                         <Gauge 
                           title="Precision"
                           segments={accuracySegments}
@@ -452,7 +452,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   
                   {showPrecisionRecall && score.recall !== undefined && score.recall !== null && (
                     <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                      <div style={{ width: '200px' }}>
                         <Gauge 
                           value={score.recall} 
                           title="Recall"
@@ -465,7 +465,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   
                   {showPrecisionRecall && score.recall === null && (
                     <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                      <div style={{ width: '200px' }}>
                         <Gauge 
                           title="Recall"
                           segments={accuracySegments}

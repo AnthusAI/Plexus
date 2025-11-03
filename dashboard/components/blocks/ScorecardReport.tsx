@@ -31,6 +31,7 @@ export interface ScorecardReportProps extends ReportBlockProps {
   onCellSelection?: (selection: { predicted: string | null; actual: string | null }) => void;
   drillDownContent?: React.ReactNode;
   showTitle?: boolean;
+  hideSummary?: boolean; // NEW: Control whether to hide the summary section
   // Props for on-demand analysis drill-down
   scorecardId?: string;
   accountId?: string;
@@ -48,6 +49,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   onCellSelection,
   drillDownContent,
   showTitle,
+  hideSummary = false,
   scorecardId,
   accountId,
   children,
@@ -61,7 +63,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   }
 
   const hasData = scoreData.scores && scoreData.scores.length > 0;
-  const showSummary = hasData && scoreData.scores.length > 1;
+  const showSummary = hasData && scoreData.scores.length > 1 && !hideSummary;
 
   // Calculate accuracy segments if label distribution is available
   const accuracySegments: Segment[] = scoreData.label_distribution 
