@@ -42,7 +42,8 @@ class FeedbackItems(DataCache):
         """Parameters for FeedbackItems data cache."""
         
         scorecard: Union[str, int] = Field(..., description="Scorecard identifier (name, key, ID, or external ID)")
-        score: Union[str, int] = Field(..., description="Score identifier (name, key, ID, or external ID)")  
+        score: Optional[Union[str, int]] = Field(None, description="Single score identifier (deprecated, use scores)")
+        scores: Optional[List[Union[str, int]]] = Field(None, description="List of score identifiers to include as columns (name, key, ID, or external ID)")
         days: int = Field(..., description="Number of days back to search for feedback items")
         limit: Optional[int] = Field(None, description="Maximum total number of items in the dataset")
         limit_per_cell: Optional[int] = Field(None, description="Maximum number of items to sample from each confusion matrix cell")
@@ -53,6 +54,19 @@ class FeedbackItems(DataCache):
         column_mappings: Optional[Dict[str, str]] = Field(None, description="Optional mapping of original score names to new column names (e.g., {'Agent Misrepresentation': 'Agent Misrepresentation - With Confidence'})")
         cache_file: str = Field(default="feedback_items_cache.parquet", description="Cache file name")
         local_cache_directory: str = Field(default='./.plexus_training_data_cache/', description="Local cache directory")
+        
+        @validator('scores', always=True)
+        def validate_scores(cls, v, values):
+            """Ensure either 'score' or 'scores' is provided, not both. Convert single score to list."""
+            score = values.get('score')
+            if score and v:
+                raise ValueError("Cannot specify both 'score' and 'scores'. Use 'scores' for multiple scores.")
+            if not score and not v:
+                raise ValueError("Must specify either 'score' or 'scores'")
+            # Convert single score to list for uniform handling
+            if score and not v:
+                return [score]
+            return v
         
         @validator('days')
         def days_must_be_positive(cls, v):
@@ -92,9 +106,9 @@ class FeedbackItems(DataCache):
             self.identifier_extractor = self._load_identifier_extractor(self.parameters.identifier_extractor)
         
         if self.parameters.feedback_id:
-            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for specific feedback_id='{self.parameters.feedback_id}' in scorecard='{self.parameters.scorecard}', score='{self.parameters.score}'")
+            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for specific feedback_id='{self.parameters.feedback_id}' in scorecard='{self.parameters.scorecard}', scores={self.parameters.scores}'")
         else:
-            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
+            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', scores={self.parameters.scores}, days={self.parameters.days}")
 
     def _perform_reload(self, cache_identifier: str, scorecard_id: str, score_id: str, 
                         scorecard_name: str, score_name: str) -> pd.DataFrame:
@@ -256,12 +270,12 @@ class FeedbackItems(DataCache):
             logger.warning(f"Failed to load identifier extractor '{extractor_class_name}': {e}")
             return None
 
-    def _resolve_identifiers(self) -> Tuple[str, str, str, str]:
+    def _resolve_identifiers(self) -> Tuple[str, str, List[Tuple[str, str]]]:
         """
         Resolve scorecard and score identifiers to their IDs and names.
         
         Returns:
-            Tuple of (scorecard_id, scorecard_name, score_id, score_name)
+            Tuple of (scorecard_id, scorecard_name, [(score_id, score_name), ...])
         """
         # Resolve scorecard
         scorecard_id = resolve_scorecard_identifier(self.client, str(self.parameters.scorecard))
@@ -281,35 +295,44 @@ class FeedbackItems(DataCache):
             result = self.client.execute(query)
             scorecard_name = result.get('getScorecard', {}).get('name', self.parameters.scorecard)
         except Exception:
-            scorecard_name = self.parameters.scorecard
+            scorecard_name = str(self.parameters.scorecard)
         
-        # Resolve score within the scorecard
-        score_id = resolve_score_identifier(self.client, scorecard_id, str(self.parameters.score))
-        if not score_id:
-            raise ValueError(f"Could not resolve score identifier '{self.parameters.score}' within scorecard '{scorecard_id}'")
-        
-        # Get score name for display
-        try:
-            query = f"""
-            query GetScore {{
-                getScore(id: "{score_id}") {{
-                    id
-                    name
+        # Resolve all scores
+        resolved_scores = []
+        for score_identifier in self.parameters.scores:
+            score_id = resolve_score_identifier(self.client, scorecard_id, str(score_identifier))
+            if not score_id:
+                raise ValueError(f"Could not resolve score identifier '{score_identifier}' within scorecard '{scorecard_id}'")
+            
+            # Get score name for display
+            try:
+                query = f"""
+                query GetScore {{
+                    getScore(id: "{score_id}") {{
+                        id
+                        name
+                    }}
                 }}
-            }}
-            """
-            result = self.client.execute(query)
-            score_name = result.get('getScore', {}).get('name', self.parameters.score)
-        except Exception:
-            score_name = self.parameters.score
+                """
+                result = self.client.execute(query)
+                score_name = result.get('getScore', {}).get('name', score_identifier)
+            except Exception:
+                score_name = str(score_identifier)
+            
+            resolved_scores.append((score_id, score_name))
+            logger.info(f"Resolved score '{score_identifier}' to ID: {score_id}, name: {score_name}")
         
-        return scorecard_id, scorecard_name, score_id, score_name
+        return scorecard_id, scorecard_name, resolved_scores
 
-    def _generate_cache_identifier(self, scorecard_id: str, score_id: str) -> str:
+    def _generate_cache_identifier(self, scorecard_id: str, resolved_scores: List[Tuple[str, str]]) -> str:
         """Generate a unique cache identifier for the given parameters."""
+        # Sort score IDs for consistent cache keys regardless of order
+        score_ids = sorted([score_id for score_id, _ in resolved_scores])
+        score_ids_str = '_'.join(score_ids[:3])  # Use first 3 score IDs in filename
+        
         params = {
             'scorecard_id': scorecard_id,
-            'score_id': score_id,
+            'score_ids': score_ids,  # Include all score IDs in hash
             'days': self.parameters.days,
             'limit': self.parameters.limit,
             'limit_per_cell': self.parameters.limit_per_cell,
@@ -322,9 +345,9 @@ class FeedbackItems(DataCache):
         
         # If a specific feedback_id is provided, include it in the identifier
         if self.parameters.feedback_id:
-            return f"feedback_items_{scorecard_id}_{score_id}_single_{self.parameters.feedback_id[:8]}_{params_hash}"
+            return f"feedback_items_{scorecard_id}_single_{self.parameters.feedback_id[:8]}_{params_hash}"
         else:
-            return f"feedback_items_{scorecard_id}_{score_id}_{self.parameters.days}d_{params_hash}"
+            return f"feedback_items_{scorecard_id}_{len(score_ids)}scores_{self.parameters.days}d_{params_hash}"
 
     def _get_cache_file_path(self, identifier: str) -> str:
         """Get the full path to the cache file."""
@@ -354,93 +377,114 @@ class FeedbackItems(DataCache):
 
     def load_dataframe(self, *, data=None, fresh=False, reload=False) -> pd.DataFrame:
         """
-        Load a dataframe of feedback items sampled from confusion matrix cells.
+        Load a dataframe with feedback items and score results for multiple scores.
         
         Args:
             data: Not used - parameters come from class initialization
             fresh: If True, bypass cache and fetch fresh data (generates new parquet)
-            reload: If True, reload existing cache with current values, preserving form IDs
+            reload: If True, reload existing cache with current values (NOT SUPPORTED for multi-score)
             
         Returns:
-            DataFrame with sampled feedback items
+            DataFrame with items and columns for each score
         """
         # Resolve identifiers
-        scorecard_id, scorecard_name, score_id, score_name = self._resolve_identifiers()
+        scorecard_id, scorecard_name, resolved_scores = self._resolve_identifiers()
         
         # Generate cache identifier
-        cache_identifier = self._generate_cache_identifier(scorecard_id, score_id)
+        cache_identifier = self._generate_cache_identifier(scorecard_id, resolved_scores)
         
-        # Handle reload mode - reload existing cache with current values
+        # Handle reload mode - NOT SUPPORTED for multi-score yet
         if reload:
-            logger.error(f"🔍 RELOAD DEBUG: reload=True, checking cache existence")
-            if not self._cache_exists(cache_identifier):
-                logger.error(f"🔍 RELOAD DEBUG: No existing cache found, falling through to fresh load")
-                logger.warning("No existing cache found for reload mode. Performing fresh load instead.")
-                # Fall through to fresh load
-            else:
-                logger.error(f"🔍 RELOAD DEBUG: Cache exists, calling _perform_reload")
-                logger.info(f"Reload mode: Loading existing cache and fetching current data for {scorecard_name} / {score_name}")
-                return self._perform_reload(cache_identifier, scorecard_id, score_id, scorecard_name, score_name)
+            logger.warning("Reload mode is not yet supported for multi-score datasets. Performing fresh load instead.")
+            fresh = True
         
-        # For dataset generation, we should always generate fresh data
-        # The cache is only used for internal optimization during the same run
-        # TODO: Remove caching entirely for dataset generation commands  
-        if not fresh and not reload and self._cache_exists(cache_identifier):
+        # Check cache
+        if not fresh and self._cache_exists(cache_identifier):
+            logger.info(f"Loading from cache: {cache_identifier}")
             return self._load_from_cache(cache_identifier)
         
-        logger.error(f"🔍 FRESH LOAD DEBUG: Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
-        logger.info(f"Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
+        logger.info(f"Fetching fresh data for {scorecard_name} with {len(resolved_scores)} scores (last {self.parameters.days} days)")
         
-        # Fetch feedback items
+        # Fetch feedback items for all scores
         try:
-            # Try to get the current event loop
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                # If we're in a running loop, create a task
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(
-                        lambda: asyncio.run(self._fetch_feedback_items(scorecard_id, score_id, scorecard_name, score_name))
+                        lambda: asyncio.run(self._fetch_feedback_items_for_scores(scorecard_id, resolved_scores))
                     )
-                    feedback_items = future.result()
+                    feedback_by_score = future.result()
             else:
-                # If no running loop, use asyncio.run
-                feedback_items = asyncio.run(self._fetch_feedback_items(
-                    scorecard_id, score_id, scorecard_name, score_name
+                feedback_by_score = asyncio.run(self._fetch_feedback_items_for_scores(
+                    scorecard_id, resolved_scores
                 ))
         except RuntimeError:
-            # Fallback: create new event loop
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
             try:
-                feedback_items = new_loop.run_until_complete(self._fetch_feedback_items(
-                    scorecard_id, score_id, scorecard_name, score_name
+                feedback_by_score = new_loop.run_until_complete(self._fetch_feedback_items_for_scores(
+                    scorecard_id, resolved_scores
                 ))
             finally:
                 new_loop.close()
         
-        if not feedback_items:
-            logger.warning("No feedback items found")
+        if not feedback_by_score:
+            logger.warning("No feedback items found for any score")
             return pd.DataFrame()
         
-        logger.info(f"Found {len(feedback_items)} feedback items")
+        # Log feedback counts per score
+        for score_id, score_name in resolved_scores:
+            count = len(feedback_by_score.get(score_id, []))
+            logger.info(f"Score '{score_name}': {count} feedback items")
         
-        # If a specific feedback_id was provided, skip sampling and use the single item
-        if self.parameters.feedback_id:
-            sampled_items = feedback_items
-            logger.info(f"Using single feedback item {self.parameters.feedback_id} without sampling")
-        else:
-            # Build confusion matrix and sample items
-            sampled_items = self._sample_items_from_confusion_matrix(feedback_items)
-            
-            if not sampled_items:
-                logger.warning("No items after sampling")
-                return pd.DataFrame()
-            
-            logger.info(f"Sampled {len(sampled_items)} items from confusion matrix")
+        # Sample items from confusion matrix if needed (only for first score for now)
+        # TODO: Implement proper multi-score sampling strategy
+        if not self.parameters.feedback_id and len(resolved_scores) > 0:
+            first_score_id, first_score_name = resolved_scores[0]
+            if first_score_id in feedback_by_score:
+                logger.info(f"Sampling based on confusion matrix for score '{first_score_name}'")
+                sampled_items = self._sample_items_from_confusion_matrix(feedback_by_score[first_score_id])
+                
+                # Update the feedback_by_score with sampled items for the first score
+                feedback_by_score[first_score_id] = sampled_items
+                logger.info(f"Sampled {len(sampled_items)} items from confusion matrix")
         
-        # Create dataset rows
-        df = self._create_dataset_rows(sampled_items, score_name)
+        # Collect all unique item IDs
+        all_item_ids = set()
+        for feedback_items in feedback_by_score.values():
+            for feedback_item in feedback_items:
+                all_item_ids.add(feedback_item.itemId)
+        
+        logger.info(f"Total unique items across all scores: {len(all_item_ids)}")
+        
+        # Fetch ScoreResults as fallback for items without FeedbackItems
+        logger.info("Fetching ScoreResults as fallback for missing feedback items")
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        lambda: asyncio.run(self._fetch_score_results_for_items(list(all_item_ids), resolved_scores))
+                    )
+                    score_results_map = future.result()
+            else:
+                score_results_map = asyncio.run(self._fetch_score_results_for_items(
+                    list(all_item_ids), resolved_scores
+                ))
+        except RuntimeError:
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                score_results_map = new_loop.run_until_complete(self._fetch_score_results_for_items(
+                    list(all_item_ids), resolved_scores
+                ))
+            finally:
+                new_loop.close()
+        
+        # Create dataset rows with fallback logic
+        df = self._create_dataset_rows(feedback_by_score, resolved_scores, score_results_map)
         
         # Save to cache
         self._save_to_cache(df, cache_identifier)
@@ -537,9 +581,103 @@ class FeedbackItems(DataCache):
         logger.info(f"Fetched {len(all_items)} out of {len(feedback_item_ids)} feedback items ({errors} errors)")
         return all_items
     
-    async def _fetch_feedback_items(self, scorecard_id: str, score_id: str, 
-                                   scorecard_name: str, score_name: str) -> List[FeedbackItem]:
-        """Fetch feedback items using the FeedbackService or specific feedback ID."""
+    async def _fetch_score_results_for_items(
+        self, 
+        item_ids: List[str], 
+        resolved_scores: List[Tuple[str, str]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Fetch the most recent ScoreResult for each item/score combination as fallback.
+        
+        Args:
+            item_ids: List of item IDs to fetch ScoreResults for
+            resolved_scores: List of (score_id, score_name) tuples
+            
+        Returns:
+            Dict mapping item_id -> score_id -> ScoreResult data
+            Example: {
+                "item-123": {
+                    "score-456": {"value": "yes", "explanation": "...", "confidence": 0.95, ...},
+                    "score-789": {"value": "no", "explanation": "...", "confidence": 0.88, ...}
+                }
+            }
+        """
+        logger.info(f"Fetching ScoreResults for {len(item_ids)} items across {len(resolved_scores)} scores")
+        score_results_map = {}
+        
+        for item_id in item_ids:
+            score_results_map[item_id] = {}
+            
+            for score_id, score_name in resolved_scores:
+                try:
+                    # Query for the most recent ScoreResult for this item/score combination
+                    # Filter out evaluation-type results (we only want production ScoreResults)
+                    query = """
+                    query ListScoreResultsByItemAndScore(
+                        $itemId: ID!
+                        $scoreId: ID!
+                    ) {
+                        listScoreResults(
+                            filter: {
+                                itemId: { eq: $itemId }
+                                scoreId: { eq: $scoreId }
+                                type: { ne: "evaluation" }
+                            }
+                            limit: 1
+                        ) {
+                            items {
+                                id
+                                itemId
+                                scoreId
+                                value
+                                explanation
+                                confidence
+                                metadata
+                                updatedAt
+                                createdAt
+                            }
+                        }
+                    }
+                    """
+                    
+                    result = self.client.execute(query, {
+                        "itemId": item_id,
+                        "scoreId": score_id
+                    })
+                    
+                    if result and result.get('listScoreResults', {}).get('items'):
+                        score_result = result['listScoreResults']['items'][0]
+                        score_results_map[item_id][score_id] = score_result
+                        logger.debug(f"Found ScoreResult for item {item_id}, score {score_name}: {score_result.get('value')}")
+                    else:
+                        logger.debug(f"No ScoreResult found for item {item_id}, score {score_name}")
+                
+                except Exception as e:
+                    logger.warning(f"Error fetching ScoreResult for item {item_id}, score {score_name}: {e}")
+                    # Continue with other items/scores even if one fails
+        
+        # Count how many items have at least one ScoreResult
+        items_with_results = sum(1 for item_results in score_results_map.values() if item_results)
+        logger.info(f"Found ScoreResults for {items_with_results}/{len(item_ids)} items")
+        
+        return score_results_map
+    
+    async def _fetch_feedback_items_for_scores(
+        self, 
+        scorecard_id: str, 
+        resolved_scores: List[Tuple[str, str]]
+    ) -> Dict[str, List[FeedbackItem]]:
+        """
+        Fetch feedback items for multiple scores.
+        
+        Args:
+            scorecard_id: ID of the scorecard
+            resolved_scores: List of (score_id, score_name) tuples
+            
+        Returns:
+            Dict mapping score_id -> List[FeedbackItem]
+        """
+        feedback_by_score = {}
         
         # If a specific feedback_id is provided, fetch only that item
         if self.parameters.feedback_id:
@@ -548,69 +686,68 @@ class FeedbackItems(DataCache):
             
             if not specific_items:
                 logger.warning(f"Feedback item {self.parameters.feedback_id} not found")
-                return []
+                return {}
             
-            # Validate that the item belongs to the correct scorecard and score
+            # Validate that the item belongs to the correct scorecard
             item = specific_items[0]
-            if item.scorecardId != scorecard_id or item.scoreId != score_id:
-                logger.error(f"Feedback item {self.parameters.feedback_id} belongs to scorecard {item.scorecardId}/score {item.scoreId}, "
-                           f"but expected scorecard {scorecard_id}/score {score_id}")
-                return []
+            if item.scorecardId != scorecard_id:
+                logger.error(f"Feedback item {self.parameters.feedback_id} belongs to scorecard {item.scorecardId}, "
+                           f"but expected scorecard {scorecard_id}")
+                return {}
             
-            logger.info(f"Successfully fetched specific feedback item {self.parameters.feedback_id}")
-            return specific_items
+            # Add the item to the appropriate score's list
+            score_id = item.scoreId
+            if score_id not in feedback_by_score:
+                feedback_by_score[score_id] = []
+            feedback_by_score[score_id].append(item)
+            
+            logger.info(f"Successfully fetched specific feedback item {self.parameters.feedback_id} for score {score_id}")
+            return feedback_by_score
         
-        # Otherwise, fetch items using the normal FeedbackService approach
-        logger.error(f"🔍 FEEDBACK SERVICE DEBUG: About to call FeedbackService.find_feedback_items")
-        all_items = await FeedbackService.find_feedback_items(
-            client=self.client,
-            scorecard_id=scorecard_id,
-            score_id=score_id,
-            account_id=self.account_id,
-            days=self.parameters.days,
-            initial_value=None,  # Don't filter at service level
-            final_value=None,    # Don't filter at service level
-            limit=None,  # We'll apply limits after sampling
-            prioritize_edit_comments=False
-        )
-        logger.error(f"🔍 FEEDBACK SERVICE DEBUG: Received {len(all_items)} items from FeedbackService")
-        
-        # Debug the first item to see what metadata structure we get
-        if all_items:
-            first_item = all_items[0]
-            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item ID: {first_item.id}")
-            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has .item: {hasattr(first_item, 'item')}")
-            if hasattr(first_item, 'item') and first_item.item:
-                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.id: {first_item.item.id}")
-                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.metadata: {getattr(first_item.item, 'metadata', 'NOT_FOUND')}")
+        # Otherwise, fetch items for each score using the normal FeedbackService approach
+        for score_id, score_name in resolved_scores:
+            logger.info(f"Fetching feedback items for score '{score_name}' ({score_id})")
+            
+            all_items = await FeedbackService.find_feedback_items(
+                client=self.client,
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                account_id=self.account_id,
+                days=self.parameters.days,
+                initial_value=None,  # Don't filter at service level
+                final_value=None,    # Don't filter at service level
+                limit=None,  # We'll apply limits after sampling
+                prioritize_edit_comments=False
+            )
+            logger.info(f"Received {len(all_items)} feedback items for score '{score_name}'")
+            
+            # Apply case-insensitive filtering locally if needed
+            if self.parameters.initial_value or self.parameters.final_value:
+                filtered_items = []
+                for item in all_items:
+                    matches = True
+                    
+                    # Case-insensitive initial_value filtering
+                    if self.parameters.initial_value:
+                        item_initial = self._normalize_item_value(item.initialAnswerValue)
+                        if item_initial != self.normalized_initial_value:
+                            matches = False
+                    
+                    # Case-insensitive final_value filtering  
+                    if self.parameters.final_value:
+                        item_final = self._normalize_item_value(item.finalAnswerValue)
+                        if item_final != self.normalized_final_value:
+                            matches = False
+                    
+                    if matches:
+                        filtered_items.append(item)
+                
+                logger.info(f"After case-insensitive filtering for score '{score_name}': {len(filtered_items)} items (from {len(all_items)} total)")
+                feedback_by_score[score_id] = filtered_items
             else:
-                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has no .item or .item is None")
+                feedback_by_score[score_id] = all_items
         
-        # Apply case-insensitive filtering locally if needed
-        if self.parameters.initial_value or self.parameters.final_value:
-            filtered_items = []
-            for item in all_items:
-                matches = True
-                
-                # Case-insensitive initial_value filtering
-                if self.parameters.initial_value:
-                    item_initial = self._normalize_item_value(item.initialAnswerValue)
-                    if item_initial != self.normalized_initial_value:
-                        matches = False
-                
-                # Case-insensitive final_value filtering  
-                if self.parameters.final_value:
-                    item_final = self._normalize_item_value(item.finalAnswerValue)
-                    if item_final != self.normalized_final_value:
-                        matches = False
-                
-                if matches:
-                    filtered_items.append(item)
-            
-            logger.info(f"After case-insensitive filtering: {len(filtered_items)} items (from {len(all_items)} total)")
-            return filtered_items
-        
-        return all_items
+        return feedback_by_score
 
     def _sample_items_from_confusion_matrix(self, feedback_items: List[FeedbackItem]) -> List[FeedbackItem]:
         """
@@ -698,150 +835,150 @@ class FeedbackItems(DataCache):
             random.shuffle(items_with_comments)
             return items_with_comments[:limit]
 
-    def _create_dataset_rows(self, feedback_items: List[FeedbackItem], score_name: str) -> pd.DataFrame:
+    def _create_dataset_rows(
+        self, 
+        feedback_by_score: Dict[str, List[FeedbackItem]],
+        resolved_scores: List[Tuple[str, str]],
+        score_results_map: Dict[str, Dict[str, Any]]
+    ) -> pd.DataFrame:
         """
-        Create dataset rows from feedback items in CallCriteriaDBCache format.
+        Create dataset rows from feedback items for multiple scores with ScoreResult fallback.
         
-        Expected columns (EXACTLY these, no extras):
+        Expected columns:
         - content_id: DynamoDB item ID
-        - feedback_item_id: Feedback item ID
+        - feedback_item_id: Feedback item ID (comma-separated if multiple)
         - text: Item.text content
         - metadata: JSON string of metadata structure
         - IDs: Hash of identifiers with name/value/URL structure
-        - {score_name}: Final answer value (ground truth)
-        - {score_name} comment: Final explanation/comment with complex logic
+        - call_date: Extracted call date from metadata
+        - {score_name}: Score value (from FeedbackItem or ScoreResult fallback)
+        - {score_name} comment: Explanation/comment
         - {score_name} edit comment: Edit comment from feedback item
         
         Args:
-            feedback_items: Sampled feedback items
-            score_name: Name of the score for column naming
+            feedback_by_score: Dict mapping score_id -> List[FeedbackItem]
+            resolved_scores: List of (score_id, score_name) tuples
+            score_results_map: Dict mapping item_id -> score_id -> ScoreResult data
             
         Returns:
-            DataFrame with properly formatted rows matching CallCriteriaDBCache format
+            DataFrame with properly formatted rows
         """
-        logger.debug(f"FeedbackItems: Creating dataset with {len(feedback_items)} items for score: {score_name}")
+        logger.info(f"Creating dataset with {len(resolved_scores)} scores")
         
-        # Apply column mapping if specified
-        mapped_score_name = score_name
-        if self.parameters.column_mappings and score_name in self.parameters.column_mappings:
-            mapped_score_name = self.parameters.column_mappings[score_name]
-            logger.info(f"Column mapping applied: '{score_name}' -> '{mapped_score_name}'")
+        # Collect all unique item IDs across all scores
+        all_item_ids = set()
+        for feedback_items in feedback_by_score.values():
+            for feedback_item in feedback_items:
+                all_item_ids.add(feedback_item.itemId)
         
-        # Create properly formatted dataset rows
-        rows = []
+        logger.info(f"Found {len(all_item_ids)} unique items across all scores")
         
-        for i, feedback_item in enumerate(feedback_items):
-            # content_id: Use DynamoDB item ID
-            content_id = feedback_item.itemId
-            
-            # feedback_item_id: Use feedback item ID
-            feedback_item_id = feedback_item.id
-            
-            # text: Get the text content from Item.text (the transcript)
-            text = ""
-            if feedback_item.item:
-                # First try the direct text field
-                text = feedback_item.item.text
-                
-                # If text is None, try to reload the item with full data
-                if text is None and hasattr(feedback_item.item, 'get_by_id'):
-                    try:
-                        full_item = feedback_item.item.get_by_id(feedback_item.item.id)
-                        if full_item and full_item.text:
-                            text = full_item.text
-                            print(f"DEBUG: Loaded text from full item: {len(text)} characters")
-                        else:
-                            print(f"DEBUG: Full item still has no text")
-                    except Exception as e:
-                        print(f"DEBUG: Error loading full item: {e}")
-                
-                # Convert None to empty string
-                text = text or ""
-                
-                # Text content retrieved for processing
-            
-            # metadata: Create JSON string of metadata structure
-            metadata = self._create_metadata_structure(feedback_item)
-            
-            # IDs: Create hash of identifiers from Item
-            ids_hash = self._create_ids_hash(feedback_item)
-            
-            # Score value: Final answer value (ground truth)
-            score_value = feedback_item.finalAnswerValue
-            
-            # Score comment: Complex logic for determining the comment
-            score_comment = self._determine_score_comment(feedback_item)
-            
-            # Edit comment: Direct edit comment from feedback item
-            edit_comment = getattr(feedback_item, 'editCommentValue', None) or ""
-            
-            # Extract call_date from metadata for separate column
-            call_date = None
-            try:
-                metadata_dict = json.loads(metadata) if isinstance(metadata, str) else metadata
-                call_date = metadata_dict.get('call_date')
-            except:
-                pass
-            
-            # Build the row with ONLY the specified columns (IDs first, then metadata, then text)
-            row = {
-                'content_id': content_id,
-                'feedback_item_id': feedback_item_id,
-                'IDs': ids_hash,
-                'metadata': metadata,
-                'text': text,
-                'call_date': call_date,
-                mapped_score_name: score_value,
-                f"{mapped_score_name} comment": score_comment,
-                f"{mapped_score_name} edit comment": edit_comment
+        # Create rows indexed by item_id
+        rows_by_item = {}
+        
+        for item_id in all_item_ids:
+            # Initialize row with base columns (will be populated from first feedback item we encounter)
+            rows_by_item[item_id] = {
+                'content_id': item_id,
+                'feedback_item_ids': [],  # Collect all feedback item IDs for this item
+                'text': None,
+                'metadata': None,
+                'IDs': None,
+                'call_date': None
             }
-            
-            rows.append(row)
-            
-            # Only debug first few items to avoid too much output
-            # Processing feedback items for dataset creation
         
-        # Create DataFrame with proper column structure even when empty
+        # Process each score and add columns
+        for score_id, score_name in resolved_scores:
+            logger.info(f"Processing score '{score_name}' ({score_id})")
+            
+            # Apply column mapping if specified
+            mapped_score_name = score_name
+            if self.parameters.column_mappings and score_name in self.parameters.column_mappings:
+                mapped_score_name = self.parameters.column_mappings[score_name]
+                logger.info(f"Column mapping applied: '{score_name}' -> '{mapped_score_name}'")
+            
+            # Get feedback items for this score
+            feedback_items = feedback_by_score.get(score_id, [])
+            
+            # Create a map of item_id -> FeedbackItem for quick lookup
+            feedback_by_item = {fi.itemId: fi for fi in feedback_items}
+            
+            # Process each item
+            for item_id in all_item_ids:
+                row = rows_by_item[item_id]
+                
+                # Check if we have a FeedbackItem for this item/score combination
+                feedback_item = feedback_by_item.get(item_id)
+                
+                if feedback_item:
+                    # Populate base columns if not already done
+                    if row['text'] is None:
+                        if feedback_item.item:
+                            text = feedback_item.item.text or ""
+                            row['text'] = text
+                        else:
+                            row['text'] = ""
+                        
+                        row['metadata'] = self._create_metadata_structure(feedback_item)
+                        row['IDs'] = self._create_ids_hash(feedback_item)
+                        
+                        # Extract call_date
+                        try:
+                            metadata_dict = json.loads(row['metadata']) if isinstance(row['metadata'], str) else row['metadata']
+                            row['call_date'] = metadata_dict.get('call_date')
+                        except:
+                            pass
+                    
+                    # Add feedback item ID to the list
+                    row['feedback_item_ids'].append(feedback_item.id)
+                    
+                    # Use FeedbackItem values (priority)
+                    row[mapped_score_name] = feedback_item.finalAnswerValue
+                    row[f"{mapped_score_name} comment"] = self._determine_score_comment(feedback_item)
+                    row[f"{mapped_score_name} edit comment"] = getattr(feedback_item, 'editCommentValue', None) or ""
+                    
+                    logger.debug(f"Item {item_id}: Using FeedbackItem value for score '{score_name}': {feedback_item.finalAnswerValue}")
+                
+                else:
+                    # Fallback to ScoreResult if available
+                    score_result = score_results_map.get(item_id, {}).get(score_id)
+                    
+                    if score_result:
+                        row[mapped_score_name] = score_result.get('value')
+                        row[f"{mapped_score_name} comment"] = score_result.get('explanation', '')
+                        row[f"{mapped_score_name} edit comment"] = ""  # No edit comment for ScoreResults
+                        
+                        logger.debug(f"Item {item_id}: Using ScoreResult fallback for score '{score_name}': {score_result.get('value')}")
+                    else:
+                        # No data available for this item/score combination
+                        row[mapped_score_name] = None
+                        row[f"{mapped_score_name} comment"] = ""
+                        row[f"{mapped_score_name} edit comment"] = ""
+                        
+                        logger.debug(f"Item {item_id}: No data available for score '{score_name}'")
+        
+        # Convert to list of rows and join feedback_item_ids
+        rows = []
+        for item_id, row in rows_by_item.items():
+            # Join feedback item IDs with commas
+            row['feedback_item_id'] = ','.join(row.pop('feedback_item_ids', []))
+            rows.append(row)
+        
+        # Create DataFrame
         if not rows:
-            # Create empty DataFrame with expected columns (IDs first, then metadata, then text)
-            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', 'call_date', mapped_score_name, f"{mapped_score_name} comment", f"{mapped_score_name} edit comment"]
+            # Create empty DataFrame with expected columns
+            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', 'call_date']
+            for score_id, score_name in resolved_scores:
+                mapped_score_name = self.parameters.column_mappings.get(score_name, score_name) if self.parameters.column_mappings else score_name
+                columns.extend([mapped_score_name, f"{mapped_score_name} comment", f"{mapped_score_name} edit comment"])
             df = pd.DataFrame(columns=columns)
         else:
             df = pd.DataFrame(rows)
-            
+        
         logger.info(f"Created dataset with {len(df)} rows and {len(df.columns)} columns: {list(df.columns)}")
-        logger.debug(f"Sample row data: {rows[0] if rows else 'No rows'}")
         
         # Use the comprehensive debug utility from base class
         self.debug_dataframe(df, "FEEDBACK_ITEMS_DATASET", logger)
-        
-        # Additional FeedbackItems-specific debugging
-        logger.info("FEEDBACK_ITEMS_SPECIFIC_CHECKS:")
-        
-        # Check for missing required columns specific to FeedbackItems format
-        required_columns = ['content_id', 'feedback_item_id', 'text', 'metadata', 'IDs', mapped_score_name, f"{mapped_score_name} comment", f"{mapped_score_name} edit comment"]
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            logger.error(f"Missing required FeedbackItems columns: {missing_columns}")
-        else:
-            logger.info("All required FeedbackItems columns present")
-        
-        # Special debugging for IDs column structure
-        if 'IDs' in df.columns and len(df) > 0:
-            logger.info("FEEDBACK_ITEMS_IDS_DEBUG: Analyzing IDs column structure...")
-            sample_ids = df.iloc[0]['IDs']
-            logger.info(f"Sample IDs value type: {type(sample_ids)}")
-            logger.info(f"Sample IDs value: {sample_ids}")
-            try:
-                if isinstance(sample_ids, str):
-                    ids_parsed = json.loads(sample_ids)
-                    logger.info(f"Successfully parsed {len(ids_parsed)} identifiers")
-                    for idx, identifier in enumerate(ids_parsed):
-                        logger.info(f"Identifier {idx}: {identifier}")
-                else:
-                    logger.warning(f"IDs is not a JSON string, type: {type(sample_ids)}")
-            except Exception as e:
-                logger.warning(f"Could not parse IDs JSON: {e}")
         
         return df
     
