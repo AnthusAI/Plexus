@@ -7,6 +7,7 @@ import stat
 import logging
 import re
 import time
+import sys
 from typing import List, Tuple, Dict, Any, Optional
 import pandas as pd
 import numpy as np
@@ -698,7 +699,10 @@ def analyze_topics(
 
     # Visualize Documents (HTML only, as it's highly interactive and large)
     # Check if there are enough documents and topics for document visualization
-    if len(docs) >= umap_n_neighbors and num_topics >= 1:
+    # macOS: Skip to avoid OpenMP segfault (visualize_documents re-encodes with sentence-transformers)
+    if sys.platform == 'darwin':
+        logger.warning("⚠️  macOS: Skipping document visualization (causes OpenMP segfault)")
+    elif len(docs) >= umap_n_neighbors and num_topics >= 1:
         try:
             fig_documents = topic_model.visualize_documents(docs, topics=topics) # Pass topics, remove umap_model
             save_visualization(fig_documents, str(Path(output_dir) / "document_visualization.html"))
@@ -709,15 +713,19 @@ def analyze_topics(
         logger.warning(f"Skipping document visualization due to insufficient documents ({len(docs)} docs, need {umap_n_neighbors}) or topics ({num_topics} topics, need 1).")
 
     # Visualize Topic Hierarchy (HTML only)
-    try:
-        hierarchical_topics_df = topic_model.hierarchical_topics(docs) # Rename for clarity
-        if hierarchical_topics_df is not None and not hierarchical_topics_df.empty:
-            fig_hierarchy = topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics_df, orientation='left') # Pass as keyword arg
-            save_visualization(fig_hierarchy, str(Path(output_dir) / "hierarchy.html"))
-        else:
-            logger.warning("No hierarchical topics found to visualize.")
-    except Exception as e:
-        logger.error(f"Failed to generate or save topic hierarchy visualization: {e}", exc_info=True)
+    # macOS: Skip to avoid OpenMP segfault (hierarchical_topics re-encodes with sentence-transformers)
+    if sys.platform == 'darwin':
+        logger.warning("⚠️  macOS: Skipping hierarchy visualization (causes OpenMP segfault)")
+    else:
+        try:
+            hierarchical_topics_df = topic_model.hierarchical_topics(docs) # Rename for clarity
+            if hierarchical_topics_df is not None and not hierarchical_topics_df.empty:
+                fig_hierarchy = topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics_df, orientation='left') # Pass as keyword arg
+                save_visualization(fig_hierarchy, str(Path(output_dir) / "hierarchy.html"))
+            else:
+                logger.warning("No hierarchical topics found to visualize.")
+        except Exception as e:
+            logger.error(f"Failed to generate or save topic hierarchy visualization: {e}", exc_info=True)
 
     # Visualize Topic Similarity (Heatmap) and extract metrics
     topic_similarity_metrics = None
@@ -909,63 +917,68 @@ def analyze_topics(
             logger.info(f"  • Has custom analyzer: {hasattr(vectorizer_before, 'analyzer') and callable(vectorizer_before.analyzer)}")
         
         # Apply the representation model
-        try:
-            logger.info("VECTORIZER_FIX: Calling update_topics() with custom vectorizer...")
-            
-            # CRITICAL: Pass the custom vectorizer to update_topics() to prevent re-vectorization with defaults
-            if vectorizer_before is not None and remove_stop_words:
-                logger.info("VECTORIZER_FIX: Passing custom vectorizer_model to update_topics()")
-                topic_model.update_topics(
-                    docs, 
-                    representation_model=saved_representation_model,
-                    vectorizer_model=vectorizer_before  # <-- This preserves our custom analyzer!
-                )
-            else:
-                logger.info("VECTORIZER_FIX: No custom vectorizer to pass (stop words filtering disabled)")
-                topic_model.update_topics(docs, representation_model=saved_representation_model)
-            
-            logger.info("✅ Successfully applied LLM representation model to final topics")
-            
-            # VECTORIZER_FIX: Check vectorizer state AFTER update_topics
-            logger.info("-" * 80)
-            if hasattr(topic_model, 'vectorizer_model') and topic_model.vectorizer_model is not None:
-                vectorizer_after = topic_model.vectorizer_model
-                features_after = vectorizer_after.get_feature_names_out()
-                vocab_size_after = len(features_after)
-                has_customer_after = 'customer' in features_after
-                has_called_after = 'called' in features_after
-                has_the_after = 'the' in features_after
+        # macOS: Skip to avoid OpenMP segfault (update_topics re-encodes with sentence-transformers)
+        if sys.platform == 'darwin':
+            logger.warning("⚠️  macOS: Skipping LLM representation model (causes OpenMP segfault)")
+            logger.warning("⚠️  Topics will use keyword-based names instead of LLM-generated names")
+        else:
+            try:
+                logger.info("VECTORIZER_FIX: Calling update_topics() with custom vectorizer...")
                 
-                logger.info(f"VECTORIZER_FIX: AFTER update_topics:")
-                logger.info(f"  • Vocabulary size: {vocab_size_after}")
-                logger.info(f"  • Contains 'customer': {has_customer_after}")
-                logger.info(f"  • Contains 'called': {has_called_after}")
-                logger.info(f"  • Contains 'the': {has_the_after}")
-                logger.info(f"  • Sample features: {list(features_after[:10])}")
-                logger.info(f"  • Vectorizer type: {type(vectorizer_after).__name__}")
+                # CRITICAL: Pass the custom vectorizer to update_topics() to prevent re-vectorization with defaults
+                if vectorizer_before is not None and remove_stop_words:
+                    logger.info("VECTORIZER_FIX: Passing custom vectorizer_model to update_topics()")
+                    topic_model.update_topics(
+                        docs, 
+                        representation_model=saved_representation_model,
+                        vectorizer_model=vectorizer_before  # <-- This preserves our custom analyzer!
+                    )
+                else:
+                    logger.info("VECTORIZER_FIX: No custom vectorizer to pass (stop words filtering disabled)")
+                    topic_model.update_topics(docs, representation_model=saved_representation_model)
                 
-                # Verify the vectorizer was preserved
-                if vocab_size_before > 0:
-                    vocab_changed = vocab_size_after != vocab_size_before
-                    if vocab_changed:
-                        logger.error(f"VECTORIZER_FIX: ❌ VOCABULARY CHANGED! Before: {vocab_size_before}, After: {vocab_size_after}")
-                        logger.error(f"VECTORIZER_FIX: This indicates update_topics() ignored our custom vectorizer!")
-                    else:
-                        logger.info(f"VECTORIZER_FIX: ✅ Vocabulary size preserved ({vocab_size_after} features)")
+                logger.info("✅ Successfully applied LLM representation model to final topics")
+                
+                # VECTORIZER_FIX: Check vectorizer state AFTER update_topics
+                logger.info("-" * 80)
+                if hasattr(topic_model, 'vectorizer_model') and topic_model.vectorizer_model is not None:
+                    vectorizer_after = topic_model.vectorizer_model
+                    features_after = vectorizer_after.get_feature_names_out()
+                    vocab_size_after = len(features_after)
+                    has_customer_after = 'customer' in features_after
+                    has_called_after = 'called' in features_after
+                    has_the_after = 'the' in features_after
                     
-                    # Check if stop words appeared
-                    if remove_stop_words:
-                        stop_words_appeared = has_customer_after or has_called_after or has_the_after
-                        if stop_words_appeared:
-                            logger.error(f"VECTORIZER_FIX: ❌ STOP WORDS DETECTED IN OUTPUT!")
-                            logger.error(f"VECTORIZER_FIX: customer={has_customer_after}, called={has_called_after}, the={has_the_after}")
+                    logger.info(f"VECTORIZER_FIX: AFTER update_topics:")
+                    logger.info(f"  • Vocabulary size: {vocab_size_after}")
+                    logger.info(f"  • Contains 'customer': {has_customer_after}")
+                    logger.info(f"  • Contains 'called': {has_called_after}")
+                    logger.info(f"  • Contains 'the': {has_the_after}")
+                    logger.info(f"  • Sample features: {list(features_after[:10])}")
+                    logger.info(f"  • Vectorizer type: {type(vectorizer_after).__name__}")
+                    
+                    # Verify the vectorizer was preserved
+                    if vocab_size_before > 0:
+                        vocab_changed = vocab_size_after != vocab_size_before
+                        if vocab_changed:
+                            logger.error(f"VECTORIZER_FIX: ❌ VOCABULARY CHANGED! Before: {vocab_size_before}, After: {vocab_size_after}")
+                            logger.error(f"VECTORIZER_FIX: This indicates update_topics() ignored our custom vectorizer!")
                         else:
-                            logger.info(f"VECTORIZER_FIX: ✅ Stop words successfully excluded from vocabulary")
-            
-            logger.info("=" * 80)
-        except Exception as e:
-            logger.error(f"Failed to apply representation model: {e}", exc_info=True)
-            logger.warning("Continuing with keyword-based topic names")
+                            logger.info(f"VECTORIZER_FIX: ✅ Vocabulary size preserved ({vocab_size_after} features)")
+                        
+                        # Check if stop words appeared
+                        if remove_stop_words:
+                            stop_words_appeared = has_customer_after or has_called_after or has_the_after
+                            if stop_words_appeared:
+                                logger.error(f"VECTORIZER_FIX: ❌ STOP WORDS DETECTED IN OUTPUT!")
+                                logger.error(f"VECTORIZER_FIX: customer={has_customer_after}, called={has_called_after}, the={has_the_after}")
+                            else:
+                                logger.info(f"VECTORIZER_FIX: ✅ Stop words successfully excluded from vocabulary")
+                
+                logger.info("=" * 80)
+            except Exception as e:
+                logger.error(f"Failed to apply representation model: {e}", exc_info=True)
+                logger.warning("Continuing with keyword-based topic names")
     
     # Final topic assignments are stable after optional reduction and representation model application
     logger.info("🔍 REPR_DEBUG: Topic modeling pipeline completed")
