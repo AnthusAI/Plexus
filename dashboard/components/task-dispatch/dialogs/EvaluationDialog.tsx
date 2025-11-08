@@ -22,7 +22,11 @@ interface EvaluationOptions {
   scorecardName: string
   scoreName: string
   numberOfSamples: number
+  samplingMethod: 'random' | 'sequential'
   loadFresh: boolean
+  randomSeed?: number
+  visualize: boolean
+  logToLanggraph: boolean
 }
 
 export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialOptions }: TaskDialogProps & { initialOptions?: Partial<EvaluationOptions> }) {
@@ -30,7 +34,11 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
     scorecardName: initialOptions?.scorecardName || 'termlifev1',
     scoreName: initialOptions?.scoreName || 'Assumptive Close',
     numberOfSamples: initialOptions?.numberOfSamples || 10,
-    loadFresh: initialOptions?.loadFresh || false
+    samplingMethod: initialOptions?.samplingMethod || 'random',
+    loadFresh: initialOptions?.loadFresh || false,
+    randomSeed: initialOptions?.randomSeed,
+    visualize: initialOptions?.visualize || false,
+    logToLanggraph: initialOptions?.logToLanggraph || false
   })
 
   const handleDispatch = () => {

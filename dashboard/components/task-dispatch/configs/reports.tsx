@@ -1,3 +1,4 @@
+import React from "react"
 import { Play } from "lucide-react"
 import { TaskDispatchConfig } from "../types"
 import { ReportConfigurationDialog } from "../dialogs/ReportConfigurationDialog"

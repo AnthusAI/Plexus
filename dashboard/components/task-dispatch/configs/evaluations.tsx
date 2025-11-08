@@ -1,3 +1,4 @@
+import React from "react"
 import { FlaskConical, FlaskRound, TestTubes } from "lucide-react"
 import { TaskDispatchConfig } from "../types"
 import { EvaluationDialog } from "../dialogs/EvaluationDialog"
