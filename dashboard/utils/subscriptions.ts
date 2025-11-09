@@ -141,7 +141,11 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
         const currentClient = getClient();
 
         // Get the account ID by key
-        const ACCOUNT_KEY = 'call-criteria';
+        const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || '';
+        if (!ACCOUNT_KEY) {
+          console.error('NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY environment variable not set');
+          return;
+        }
         const accountResponse = await (currentClient.models.Account as any).list({ 
           filter: { key: { eq: ACCOUNT_KEY } } 
         }) as AmplifyListResult<Schema['Account']['type']>;

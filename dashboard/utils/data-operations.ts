@@ -445,7 +445,10 @@ export async function listRecentEvaluations(
     
     // Get the account ID if not provided
     if (!accountId) {
-      const ACCOUNT_KEY = 'call-criteria';
+      const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || '';
+      if (!ACCOUNT_KEY) {
+        throw new Error('NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY environment variable not set');
+      }
       const accountResponse = await (client.models.Account as any).list({ 
         filter: { key: { eq: ACCOUNT_KEY } } 
       });

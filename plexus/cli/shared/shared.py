@@ -136,9 +136,13 @@ def select_sample_csv(csv_path, content_id):
     scorecard_key = csv_path.split('/')[1]
     
     # Add required metadata for batch processing
+    account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+    if not account_key:
+        raise ValueError("PLEXUS_ACCOUNT_KEY environment variable must be set")
+    
     metadata = {
         "content_id": str(used_content_id),
-        "account_key": "call-criteria",
+        "account_key": account_key,
         "scorecard_key": scorecard_key,
         "score_name": "accuracy"
     }

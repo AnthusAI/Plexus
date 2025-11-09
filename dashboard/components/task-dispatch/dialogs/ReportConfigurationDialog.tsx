@@ -91,7 +91,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
             }
           `,
           variables: {
-            filter: { key: { eq: 'call-criteria' } }
+            filter: { key: { eq: process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || '' } }
           }
         })
         

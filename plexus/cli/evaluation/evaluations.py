@@ -1369,11 +1369,14 @@ def accuracy(
             client = PlexusDashboardClient()  # Create client at the top level
             account = None  # Initialize account at the top level
             
-            # Get the account ID for call-criteria regardless of path
-            logging.info("Looking up call-criteria account...")
-            account = Account.list_by_key(key="call-criteria", client=client)
+            # Get the account ID from PLEXUS_ACCOUNT_KEY environment variable
+            account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+            if not account_key:
+                raise Exception("PLEXUS_ACCOUNT_KEY environment variable must be set")
+            logging.info(f"Looking up account with key: {account_key}...")
+            account = Account.list_by_key(key=account_key, client=client)
             if not account:
-                raise Exception("Could not find account with key: call-criteria")
+                raise Exception(f"Could not find account with key: {account_key}")
             logging.info(f"Found account: {account.name} ({account.id})")
             
             if task_id:
@@ -2523,7 +2526,7 @@ def evaluations():
     pass
 
 @evaluations.command()
-@click.option('--account-key', default='call-criteria', help='Account key identifier')
+@click.option('--account-key', default=lambda: os.getenv('PLEXUS_ACCOUNT_KEY'), help='Account key identifier')
 @click.option('--type', required=True, help='Type of evaluation (e.g., accuracy, consistency)')
 @click.option('--task-id', required=True, help='Associated task ID')
 @click.option('--parameters', type=str, help='JSON string of evaluation parameters')
@@ -2909,7 +2912,7 @@ def info(evaluation_id: str, include_score_results: bool):
         click.echo(f"Error: {str(e)}", err=True)
 
 @evaluations.command()
-@click.option('--account-key', default='call-criteria', help='Account key to filter by')
+@click.option('--account-key', default=lambda: os.getenv('PLEXUS_ACCOUNT_KEY'), help='Account key to filter by')
 @click.option('--type', help='Filter by evaluation type (e.g., accuracy, consistency)')
 def last(account_key: str, type: Optional[str]):
     """Get information about the most recent evaluation"""
