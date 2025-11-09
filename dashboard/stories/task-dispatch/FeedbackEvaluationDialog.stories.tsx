@@ -49,8 +49,8 @@ export const WithInitialValues: Story = {
       console.log('Dispatching command:', { command, target })
     },
     initialOptions: {
-      scorecardName: 'Call Criteria',
-      scoreName: 'Greeting',
+      scorecardName: 'SampleScorecard',
+      scoreName: 'SampleScore',
       days: 30
     }
   }

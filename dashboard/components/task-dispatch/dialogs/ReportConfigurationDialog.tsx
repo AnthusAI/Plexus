@@ -78,7 +78,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       setError(null)
       
       try {
-        // First get the account ID - using call-criteria as default
+        // First get the account ID
         const accountResponse = await getClient().graphql({
           query: `
             query ListAccounts($filter: ModelAccountFilterInput) {
