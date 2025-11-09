@@ -364,7 +364,6 @@ class ThreadLocalLogCapture:
             'plexus.scores',
             'plexus.CustomLogging',
             'plexus.dashboard',
-            'Call-Criteria-Python',
             '__main__'  # In case any logs use the main module logger
         ]
         

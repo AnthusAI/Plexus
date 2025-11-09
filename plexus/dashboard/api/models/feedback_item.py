@@ -24,8 +24,8 @@ class FeedbackItem(BaseModel):
     id: Optional[str] = None
     accountId: Optional[str] = None
     scorecardId: Optional[str] = None
-    cacheKey: Optional[str] = None # Maps to Call Criteria form_id
-    scoreId: Optional[str] = None # Maps to Call Criteria question_id
+    cacheKey: Optional[str] = None # External system identifier (e.g., form_id)
+    scoreId: Optional[str] = None # Score identifier
     itemId: Optional[str] = None # Add the itemId field
     initialAnswerValue: Optional[str] = None
     finalAnswerValue: Optional[str] = None

@@ -3033,10 +3033,10 @@ def feedback(
     
     Examples:
         # Analyze feedback edits (default mode)
-        plexus evaluate feedback --scorecard "Call Criteria" --score "Greeting" --days 14
+        plexus evaluate feedback --scorecard "SampleScorecard" --score "SampleScore" --days 14
         
         # Test a specific version against feedback
-        plexus evaluate feedback --scorecard "Call Criteria" --score "Greeting" --days 30 --version abc123
+        plexus evaluate feedback --scorecard "SampleScorecard" --score "SampleScore" --days 30 --version abc123
     """
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier

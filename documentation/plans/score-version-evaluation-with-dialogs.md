@@ -184,8 +184,8 @@ Both commands append `--version ${versionId}` when evaluating a specific version
 ### Accuracy Evaluation
 ```bash
 plexus evaluate accuracy \
-  --scorecard "Call Criteria" \
-  --score "Greeting" \
+  --scorecard "SampleScorecard" \
+  --score "SampleScore" \
   --number-of-samples 10 \
   --sampling-method random \
   --version <version-id>
@@ -194,8 +194,8 @@ plexus evaluate accuracy \
 ### Feedback Evaluation
 ```bash
 plexus evaluate feedback \
-  --scorecard "Call Criteria" \
-  --score "Greeting" \
+  --scorecard "SampleScorecard" \
+  --score "SampleScore" \
   --days 7 \
   --version <version-id>
 ```
