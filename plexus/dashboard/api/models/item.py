@@ -404,12 +404,6 @@ class Item(BaseModel):
                 if external_id:
                     update_kwargs['externalId'] = external_id
                 
-                # Add legacy identifiers format for backwards compatibility
-                if identifiers:
-                    legacy_identifiers = cls._convert_identifiers_to_legacy_format(identifiers)
-                    if legacy_identifiers:
-                        update_kwargs['identifiers'] = legacy_identifiers
-                
                 # Get existing item object and update it
                 item_obj = cls.get_by_id(item_id, client)
                 if item_obj:
@@ -464,12 +458,6 @@ class Item(BaseModel):
                     create_kwargs['metadata'] = metadata
                 if score_id:
                     create_kwargs['scoreId'] = score_id
-                
-                # Add legacy identifiers format for backwards compatibility
-                if identifiers:
-                    legacy_identifiers = cls._convert_identifiers_to_legacy_format(identifiers)
-                    if legacy_identifiers:
-                        create_kwargs['identifiers'] = legacy_identifiers
                 
                 # Create the Item - evaluationId, text, and metadata are positional/named parameters
                 # Remove these from kwargs since they're handled separately
@@ -903,39 +891,6 @@ class Item(BaseModel):
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error creating identifier records: {e}")
             return []
-    
-    @classmethod
-    def _convert_identifiers_to_legacy_format(cls, identifiers: Dict[str, Any]) -> Optional[str]:
-        """
-        Convert identifiers dict to legacy JSON format for backwards compatibility.
-        
-        Args:
-            identifiers: Modern identifiers dict
-            
-        Returns:
-            JSON string in legacy format, or None if conversion fails
-        """
-        try:
-            legacy_identifiers = []
-            if isinstance(identifiers, dict):
-                for key, value in identifiers.items():
-                    if value:
-                        if key == 'formId':
-                            legacy_identifiers.append({
-                                "name": "form ID", 
-                                "id": str(value),
-                                "url": f"https://app.callcriteria.com/r/{value}"
-                            })
-                        elif key == 'reportId':
-                            legacy_identifiers.append({"name": "report ID", "id": str(value)})
-                        elif key == 'sessionId':
-                            legacy_identifiers.append({"name": "session ID", "id": str(value)})
-                        elif key == 'ccId':
-                            legacy_identifiers.append({"name": "CC ID", "id": str(value)})
-            
-            return json.dumps(legacy_identifiers) if legacy_identifiers else None
-        except Exception:
-            return None
     
     @classmethod
     def find_by_identifier(
