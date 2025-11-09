@@ -53,7 +53,7 @@ type ReportDisplayData = {
   task?: Task | null;
 };
 
-const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || 'call-criteria'
+const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
 
 // GraphQL query to list accounts
 const LIST_ACCOUNTS = `
