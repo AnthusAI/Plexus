@@ -600,7 +600,9 @@ def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None
     client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
 
     # Get the account ID by key
-    ACCOUNT_KEY = 'call-criteria'
+    ACCOUNT_KEY = os.getenv('PLEXUS_ACCOUNT_KEY')
+    if not ACCOUNT_KEY:
+        raise ValueError("PLEXUS_ACCOUNT_KEY environment variable must be set")
     # Use GraphQL query to get account by key
     response = client.execute(
         """
