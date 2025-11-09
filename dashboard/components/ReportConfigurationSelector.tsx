@@ -42,7 +42,7 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
   useEffect(() => {
     const fetchAccountId = async () => {
       try {
-        const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || 'call-criteria'
+        const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
         const accountResponse = await client.graphql({
           query: `
             query ListAccounts($filter: ModelAccountFilterInput) {
