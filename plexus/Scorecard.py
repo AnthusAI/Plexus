@@ -244,7 +244,21 @@ class Scorecard:
 
     @classmethod
     def score_names(cls):
-        return [score['name'] for score in cls.scores]
+        # Support both class-level (from create_from_yaml) and instance-level (from create_instance_from_api_data) usage
+        # When called on an instance, cls is still the class, but we need to check if it's being called on an instance
+        # that has instance-level scores
+        if hasattr(cls, 'scores') and isinstance(cls.scores, list):
+            return [score['name'] for score in cls.scores]
+        # If no class-level scores, this might be an instance call - but classmethods can't access instance attributes
+        # So we need a separate instance method
+        return []
+    
+    def get_score_names(self):
+        """Instance method to get score names. Works for instances created via create_instance_from_api_data."""
+        if hasattr(self, 'scores') and isinstance(self.scores, list):
+            return [score['name'] for score in self.scores]
+        # Fall back to class method for backwards compatibility
+        return self.__class__.score_names()
 
     def name(self):
         """
@@ -396,7 +410,12 @@ class Scorecard:
         score_class = self.score_registry.get(score)
         if score_class is None:
             logging.error(f"Score with name '{score}' not found.")
-            return [Score.Result(value="ERROR", error=f"Score with name '{score}' not found.")]
+            logging.error(f"Available scores in registry: {list(self.score_registry._registry.keys())}")
+            return [Score.Result(
+                value="ERROR", 
+                error=f"Score with name '{score}' not found.",
+                parameters=Score.Parameters(name=score)
+            )]
 
         score_configuration = self.score_registry.get_properties(score)
         if (score_class is not None):
@@ -457,6 +476,35 @@ class Scorecard:
                         ))
                     else:
                         raise TypeError(f"Expected Score.Result or dict but got {type(result)}")
+
+                # Apply processors to text before prediction (if configured)
+                # Check for processors at both score and scorecard level
+                # Score-level processors take precedence over scorecard-level
+                processors_config = None
+                
+                # Check score-level processors first
+                if 'data' in score_configuration and 'processors' in score_configuration['data']:
+                    processors_config = score_configuration['data']['processors']
+                    logging.info(f"Using score-level processors for '{score}': {[p.get('class') for p in processors_config]}")
+                # Fall back to scorecard-level processors
+                elif hasattr(self, 'properties') and 'processors' in self.properties:
+                    processors_config = self.properties['processors']
+                    logging.info(f"Using scorecard-level processors for '{score}': {[p.get('class') for p in processors_config]}")
+                
+                # Apply processors if configured
+                if processors_config:
+                    try:
+                        original_text_preview = text[:100] if text else ""
+                        processed_text = Score.apply_processors_to_text(text, processors_config)
+                        processed_text_preview = processed_text[:100] if processed_text else ""
+                        logging.info(f"Applied {len(processors_config)} processor(s) to text for score '{score}'")
+                        logging.debug(f"Original text preview: {original_text_preview}...")
+                        logging.debug(f"Processed text preview: {processed_text_preview}...")
+                        text = processed_text
+                    except Exception as e:
+                        logging.error(f"Error applying processors for score '{score}': {e}")
+                        # Continue with unprocessed text rather than failing the prediction
+                        logging.warning("Continuing with unprocessed text")
 
                 # Enhanced error handling for predict call
                 try:

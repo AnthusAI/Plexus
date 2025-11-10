@@ -24,8 +24,8 @@ class FeedbackItem(BaseModel):
     id: Optional[str] = None
     accountId: Optional[str] = None
     scorecardId: Optional[str] = None
-    cacheKey: Optional[str] = None # Maps to Call Criteria form_id
-    scoreId: Optional[str] = None # Maps to Call Criteria question_id
+    cacheKey: Optional[str] = None # External system identifier (e.g., form_id)
+    scoreId: Optional[str] = None # Score identifier
     itemId: Optional[str] = None # Add the itemId field
     initialAnswerValue: Optional[str] = None
     finalAnswerValue: Optional[str] = None
@@ -43,6 +43,7 @@ class FeedbackItem(BaseModel):
     scorecard: Optional['Scorecard'] = field(default=None, repr=False)
     score: Optional['Score'] = field(default=None, repr=False)
     item: Optional['Item'] = field(default=None, repr=False)  # Add the item relationship
+    scoreResults: Optional[Any] = field(default=None, repr=False)  # Add scoreResults relationship (can be dict or list)
 
     _client: Optional['PlexusDashboardClient'] = field(default=None, repr=False)
     _raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
@@ -105,6 +106,10 @@ class FeedbackItem(BaseModel):
             # Import here to avoid circular imports
             from plexus.dashboard.api.models.item import Item
             instance.item = Item.from_dict(data['item'], client=client)
+        
+        # Handle scoreResults relationship if present (keep as raw dict/list for flexibility)
+        if 'scoreResults' in data and data['scoreResults']:
+            instance.scoreResults = data['scoreResults']
         
         return instance
 

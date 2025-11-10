@@ -811,7 +811,8 @@ async def transform_transcripts_itemize(
     simple_format: bool = True,
     retry_delay: float = 1.0,
     openai_api_key: str = None,
-    sample_size: Optional[int] = None
+    sample_size: Optional[int] = None,
+    max_workers: Optional[int] = None
 ) -> Tuple[str, str, Dict[str, Any], Optional[pd.DataFrame]]:
     """
     Transform transcript data using a language model with itemization.
@@ -850,7 +851,8 @@ async def transform_transcripts_itemize(
         simple_format=simple_format,
         retry_delay=retry_delay, 
         openai_api_key=openai_api_key, 
-        sample_size=sample_size
+        sample_size=sample_size,
+        max_workers=max_workers
     )
     return result
 
@@ -1216,16 +1218,26 @@ async def _process_itemize_transcript_async(
         return False, error_message
 
 async def _process_itemize_batch_async(
-    llm, prompt, rows, indices, parser, retry_parser, provider, total_count, max_retries, retry_delay, content_column, simple_format
+    llm, prompt, rows, indices, parser, retry_parser, provider, total_count, max_retries, retry_delay, content_column, simple_format, max_workers=None
 ):
-    """Process a batch of transcripts asynchronously with concurrency limits to prevent deadlocks."""
+    """Process a batch of transcripts asynchronously with concurrency limits to prevent deadlocks.
     
-    # Set concurrency limits based on provider to prevent overwhelming the system
-    if provider.lower() == 'openai':
-        max_concurrent = 10  # Conservative limit for OpenAI API
+    Args:
+        max_workers: Maximum number of concurrent workers. If None, uses provider-specific defaults.
+                     For OpenAI: default 50 (can handle high concurrency with rate limits)
+                     For others: default 100 (local providers like Ollama)
+    """
+    
+    # Set concurrency limits based on provider or use custom value
+    if max_workers is not None:
+        max_concurrent = max_workers
+        batch_delay = 0.05
+        logger.info(f"Using custom max_workers: {max_concurrent}")
+    elif provider.lower() == 'openai':
+        max_concurrent = 50  # OpenAI can handle much higher concurrency with rate limiting
         batch_delay = 0.1    # Small delay between batches to respect rate limits
     else:
-        max_concurrent = 50  # Higher limit for local providers like Ollama
+        max_concurrent = 100  # Higher limit for local providers like Ollama
         batch_delay = 0.05
     
     logger.info(f"Processing {len(rows)} transcripts with max concurrency of {max_concurrent}")
@@ -1335,10 +1347,15 @@ async def _transform_transcripts_itemize_async(
     simple_format: bool = True,
     retry_delay: float = 1.0,
     openai_api_key: str = None,
-    sample_size: Optional[int] = None
+    sample_size: Optional[int] = None,
+    max_workers: Optional[int] = None
 ) -> Tuple[str, str, Dict[str, Any], Optional[pd.DataFrame]]:
     """
     Async implementation of transform_transcripts_itemize.
+    
+    Args:
+        max_workers: Maximum number of concurrent workers for parallel processing.
+                     If None, uses provider-specific defaults (OpenAI: 50, others: 100).
     """
     base_path = os.path.splitext(input_file)[0]
     suffix = "-customer-only" if customer_only else ""
@@ -1552,7 +1569,7 @@ async def _transform_transcripts_itemize_async(
         
         all_results = await _process_itemize_batch_async(
             llm, prompt, valid_rows, valid_indices, parser, retry_parser, 
-            provider, len(df), max_retries, retry_delay, content_column, simple_format
+            provider, len(df), max_retries, retry_delay, content_column, simple_format, max_workers
         )
         
         with open(text_file_path, 'w') as f:

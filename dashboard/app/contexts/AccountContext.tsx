@@ -87,9 +87,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       
       // Reset selected account if it's no longer in the list
       if (selectedAccount && !accountsWithParsedSettings.find(a => a.id === selectedAccount.id)) {
-        const defaultAccount = accountsWithParsedSettings.find(
-          account => account.key === 'call-criteria'
-        ) || accountsWithParsedSettings[0]
+        const defaultAccountKey = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY
+        const defaultAccount = (defaultAccountKey 
+          ? accountsWithParsedSettings.find(account => account.key === defaultAccountKey)
+          : null) || accountsWithParsedSettings[0]
         
         if (defaultAccount) {
           setSelectedAccount(defaultAccount)
@@ -144,9 +145,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         
         // Set default account if none is selected
         if (!selectedAccount && accountsWithParsedSettings.length > 0) {
-          const defaultAccount = accountsWithParsedSettings.find(
-            account => account.key === 'call-criteria'
-          ) || accountsWithParsedSettings[0]
+          const defaultAccountKey = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY
+          const defaultAccount = (defaultAccountKey 
+            ? accountsWithParsedSettings.find(account => account.key === defaultAccountKey)
+            : null) || accountsWithParsedSettings[0]
           
           console.log('Setting default account:', defaultAccount)
           if (defaultAccount) {

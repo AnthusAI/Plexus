@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ReportBlockProps } from './ReportBlock';
 import ReportBlock from './ReportBlock';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,12 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText, PocketKnife } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText } from 'lucide-react';
 import * as yaml from 'js-yaml';
 import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer, Sector } from 'recharts';
 import { PieSectorDataItem } from 'recharts/types/polar/Pie';
 import { TopicAnalysisViewer } from '@/components/diagrams';
 import { TemplateVariables } from '@/components/diagrams/topic-analysis-diagram';
+import { WordCloud, Word } from '@isoterik/react-word-cloud';
 import { 
   formatPreprocessor, 
   formatLLM, 
@@ -35,6 +36,28 @@ interface TopicExample {
   id?: Identifier[] | string;
   text: string;
   [key: string]: any; // Allow other properties
+}
+
+interface TopicNgram {
+  topic_id: number;
+  topic_name: string;
+  ngram: string;
+  c_tf_idf_score: number;
+  rank: number;
+}
+
+interface TopicStabilityData {
+  n_runs: number;
+  sample_fraction: number;
+  mean_stability: number;
+  std_stability?: number;
+  per_topic_stability: Record<number, number>;
+  methodology: string;
+  interpretation: {
+    high: string;
+    medium: string;
+    low: string;
+  };
 }
 
 interface TopicAnalysisData {
@@ -131,8 +154,67 @@ interface TopicAnalysisData {
     error_reading_transformed_file?: string;
   };
   block_title?: string;
+  topic_stability?: TopicStabilityData;
   errors?: string[];
 }
+
+/**
+ * Word Cloud Wrapper Component
+ * Separate component to avoid IIFE issues and handle colors properly
+ */
+const WordCloudWrapper: React.FC<{ words: Word[] }> = ({ words }) => {
+  const [colors, setColors] = React.useState<string[]>([]);
+  
+  React.useEffect(() => {
+    // Get computed colors from CSS variables at runtime - use darker variants
+    if (typeof window !== 'undefined') {
+      const style = getComputedStyle(document.documentElement);
+      setColors([
+        style.getPropertyValue('--primary-selected').trim() || '#3b82f6',
+        style.getPropertyValue('--secondary-selected').trim() || '#ec4899',
+        style.getPropertyValue('--accent-selected').trim() || '#8b5cf6',
+      ]);
+    }
+  }, []);
+  
+  if (colors.length === 0) return null;
+  
+  return (
+    <div className="w-full">
+      <WordCloud
+        words={words}
+        width={1200}
+        height={400}
+        padding={3}
+        spiral="rectangular"
+        rotate={() => 0}
+        timeInterval={Infinity}
+        font="Arial"
+        fontSize={(word) => {
+          // Use linear scaling with a wider range for more words
+          const minSize = 24;
+          const maxSize = 96;
+          const minValue = Math.min(...words.map(w => w.value));
+          const maxValue = Math.max(...words.map(w => w.value));
+          const range = maxValue - minValue;
+          if (range === 0) return maxSize;
+          return minSize + ((word.value - minValue) / range) * (maxSize - minSize);
+        }}
+        fill={(_, index) => colors[index % colors.length]}
+        onWordClick={() => {}} // Add no-op click handler to prevent runtime error
+        svgProps={{
+          style: {
+            width: '100%',
+            height: '100%',
+            display: 'block',
+          },
+          viewBox: '0 0 1200 400',
+          preserveAspectRatio: 'xMidYMid meet'
+        }}
+      />
+    </div>
+  );
+};
 
 /**
  * Topic Analysis Report Block Component
@@ -201,7 +283,8 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
     name: props.name,
     type: props.type,
     hasAttachedFiles: !!props.attachedFiles,
-    attachedFilesLength: props.attachedFiles?.length || 0
+    attachedFilesLength: props.attachedFiles?.length || 0,
+    attachedFiles: props.attachedFiles
   });
 
   if (!props.output) {
@@ -330,6 +413,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
           completeTopicsData={completeTopicsData}
           loadingCompleteData={loadingCompleteData}
           fetchCompleteTopicsData={fetchCompleteTopicsData}
+          attachedFiles={props.attachedFiles ?? undefined}
         />
 
         {/* Analysis Details Section */}
@@ -429,6 +513,23 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
+
+            {/* Topic Stability Section (if available) */}
+            {data.topic_stability && (
+              <Accordion type="multiple" defaultValue={[]} className="w-full">
+                <AccordionItem value="stability">
+                  <AccordionTrigger className="text-base font-medium">
+                    Topic Stability Assessment
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <TopicStabilitySection 
+                      stabilityData={data.topic_stability}
+                      topics={topics}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
           </div>
         </div>
       </div>
@@ -465,7 +566,8 @@ const TopicAnalysisResults: React.FC<{
   completeTopicsData?: any;
   loadingCompleteData?: boolean;
   fetchCompleteTopicsData?: () => void;
-}> = ({ topics, summary, bertopicAnalysis, completeTopicsData, loadingCompleteData, fetchCompleteTopicsData }) => {
+  attachedFiles?: string[];
+}> = ({ topics, summary, bertopicAnalysis, completeTopicsData, loadingCompleteData, fetchCompleteTopicsData, attachedFiles }) => {
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
 
   if (topics.length === 0) {
@@ -558,28 +660,13 @@ const TopicAnalysisResults: React.FC<{
                     </div>
                   </AccordionTrigger>
                 <AccordionContent>
-                  <div className="space-y-3 p-1">
-                    {topic.keywords && topic.keywords.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {topic.keywords
-                          .filter(keyword => {
-                            // Ensure keyword is a non-empty string
-                            if (!keyword || typeof keyword !== 'string' || keyword.trim() === '') {
-                              return false;
-                            }
-                            // Also filter out the main topic name itself
-                            const normalizedKeyword = keyword.toLowerCase().replace(/_/g, ' ').trim();
-                            const normalizedTopicName = cleanTopicName(topic.name).toLowerCase().trim();
-                            return normalizedKeyword !== normalizedTopicName;
-                          })
-                          .slice(0, bertopicAnalysis.top_n_words || 8)
-                          .map((keyword, i) => (
-                            <Badge key={i} variant="secondary" className="text-xs">
-                              {keyword}
-                            </Badge>
-                          ))}
-                      </div>
-                    )}
+                  <div className="space-y-4 p-1">
+                    {/* Word Cloud and Keywords with c-TF-IDF scores */}
+                    <TopicNgramsSection 
+                      topicId={topic.id}
+                      topicName={topic.name}
+                      attachedFiles={attachedFiles}
+                    />
                     
                     {loadingCompleteData && (
                       <div className="text-xs text-muted-foreground italic">
@@ -622,7 +709,6 @@ const TopicExamplesSection: React.FC<{
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 mt-2">
-        <FileText className="h-4 w-4 text-muted-foreground" />
         <h5 className="text-sm font-medium">Examples</h5>
       </div>
       <div className="space-y-2 pl-6">
@@ -711,6 +797,326 @@ const TopicExamplesSection: React.FC<{
           );
         })}
       </div>
+    </div>
+  );
+};
+
+/**
+ * Topic N-grams Section Component
+ * Shows complete n-gram list with c-TF-IDF scores for a topic
+ */
+const TopicNgramsSection: React.FC<{
+  topicId: number;
+  topicName: string;
+  attachedFiles?: string[];
+}> = ({ topicId, topicName, attachedFiles }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [ngrams, setNgrams] = useState<TopicNgram[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasFetched, setHasFetched] = useState(false);
+  
+  // Debug: Log when component renders
+  console.log('🎨 TopicNgramsSection rendered for topic:', topicId, topicName, 'attachedFiles:', attachedFiles);
+  
+  // Fetch and parse CSV with non-blocking parsing
+  const fetchNgrams = async () => {
+    if (ngrams.length > 0 || loading || hasFetched) return; // Already loaded or loading
+    
+    setHasFetched(true); // Mark as fetched to prevent multiple calls
+    
+    // Debug logging
+    console.log('🔍 TopicNgramsSection - Fetching n-grams for topic:', topicId, topicName);
+    console.log('🔍 attachedFiles:', attachedFiles);
+    
+    // Find the complete_topic_ngrams.csv file in attachedFiles
+    const ngramsFile = attachedFiles?.find(file => 
+      file.includes('complete_topic_ngrams.csv')
+    );
+    
+    console.log('🔍 Found ngramsFile:', ngramsFile);
+    
+    if (!ngramsFile) {
+      console.error('❌ N-grams file not found in attachedFiles');
+      setError('N-grams data not available');
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Import AWS Amplify storage method
+      const { downloadData } = await import('aws-amplify/storage');
+      
+      // Fetch the CSV file from S3
+      // Report block files are stored in the reportBlockDetails bucket
+      const downloadResult = await downloadData({
+        path: ngramsFile,
+        options: { bucket: 'reportBlockDetails' }
+      }).result;
+      
+      const csvText = await downloadResult.body.text();
+      
+      // Parse CSV in a non-blocking way using requestIdleCallback or setTimeout
+      const parseCSVAsync = () => {
+        return new Promise<TopicNgram[]>((resolve, reject) => {
+          try {
+            const lines = csvText.split('\n');
+            const parsedNgrams: TopicNgram[] = [];
+            let currentIndex = 1; // Skip header row
+            
+            const processChunk = () => {
+              const chunkSize = 100; // Process 100 lines at a time
+              const endIndex = Math.min(currentIndex + chunkSize, lines.length);
+              
+              for (let i = currentIndex; i < endIndex; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                
+                const values = line.split(',');
+                if (values.length >= 5) {
+                  const ngramTopicId = parseInt(values[0]);
+                  
+                  // Only include n-grams for this topic
+                  if (ngramTopicId === topicId) {
+                    parsedNgrams.push({
+                      topic_id: ngramTopicId,
+                      topic_name: values[1],
+                      ngram: values[2],
+                      c_tf_idf_score: parseFloat(values[3]),
+                      rank: parseInt(values[4])
+                    });
+                  }
+                }
+              }
+              
+              currentIndex = endIndex;
+              
+              if (currentIndex < lines.length) {
+                // More lines to process, schedule next chunk
+                setTimeout(processChunk, 0);
+              } else {
+                // Done processing
+                resolve(parsedNgrams);
+              }
+            };
+            
+            // Start processing
+            processChunk();
+          } catch (err) {
+            reject(err);
+          }
+        });
+      };
+      
+      const parsedNgrams = await parseCSVAsync();
+      setNgrams(parsedNgrams);
+    } catch (err) {
+      console.error('Error fetching n-grams:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load n-grams');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fetch n-grams when component mounts (but don't block rendering)
+  useEffect(() => {
+    // Use a small delay to ensure the accordion animation completes first
+    const timer = setTimeout(() => {
+      fetchNgrams();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
+  
+  const handleToggle = () => {
+    if (!expanded && ngrams.length === 0 && !loading) {
+      fetchNgrams();
+    }
+    setExpanded(!expanded);
+  };
+  
+  // Display top 10 by default
+  const displayNgrams = expanded ? ngrams : ngrams.slice(0, 10);
+  const hasMore = ngrams.length > 10;
+  
+  // Prepare word cloud data (top 100 keywords for visualization)
+  const wordCloudWords: Word[] = ngrams.slice(0, 100).map(ngram => ({
+    text: ngram.ngram,
+    value: ngram.c_tf_idf_score // Use raw scores
+  }));
+  
+  return (
+    <div className="space-y-4">
+      {/* Word Cloud Visualization */}
+      {!loading && !error && wordCloudWords.length > 0 && (
+        <WordCloudWrapper words={wordCloudWords} />
+      )}
+      
+      {/* Keywords List */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h5 className="text-sm font-medium text-muted-foreground">Keywords</h5>
+          <span className="text-xs text-muted-foreground">c-TF-IDF</span>
+        </div>
+        
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground italic pl-6">
+            <div className="animate-spin h-3 w-3 border-2 border-muted-foreground border-t-transparent rounded-full"></div>
+            Loading keywords...
+          </div>
+        )}
+        
+        {error && (
+          <div className="text-xs text-destructive pl-6">
+            {error}
+          </div>
+        )}
+        
+        {!loading && !error && displayNgrams.length > 0 && (
+          <div className="space-y-1 pl-6">
+            {displayNgrams.map((ngram, index) => (
+              <div key={index} className="flex items-center justify-between text-xs py-1 px-2 hover:bg-muted/50 rounded">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground font-mono w-6">{ngram.rank}</span>
+                  <span className="font-medium">{ngram.ngram}</span>
+                </div>
+                <span 
+                  className="text-muted-foreground tabular-nums"
+                  title={`c-TF-IDF score: ${ngram.c_tf_idf_score.toFixed(4)}`}
+                >
+                  {ngram.c_tf_idf_score.toFixed(3)}
+                </span>
+              </div>
+            ))}
+            
+            {hasMore && (
+              <>
+                <div className="border-t border-border my-2" />
+                <button
+                  onClick={handleToggle}
+                  className="w-full flex items-center justify-center py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={expanded ? "Show less" : `Show all ${ngrams.length} keywords`}
+                >
+                  {expanded ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        
+        {!loading && !error && ngrams.length === 0 && (
+          <div className="text-xs text-muted-foreground italic pl-6">
+            No keywords available
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Topic Stability Section Component
+ * Shows topic stability metrics from bootstrap sampling
+ */
+const TopicStabilitySection: React.FC<{
+  stabilityData: TopicStabilityData;
+  topics: Array<{id: number; name: string}>;
+}> = ({ stabilityData, topics }) => {
+  // Determine stability level and color
+  const getStabilityLevel = (score: number): { level: string; color: string; description: string } => {
+    if (score > 0.7) {
+      return { 
+        level: 'High', 
+        color: 'text-green-600 dark:text-green-400',
+        description: stabilityData.interpretation.high
+      };
+    } else if (score >= 0.5) {
+      return { 
+        level: 'Medium', 
+        color: 'text-yellow-600 dark:text-yellow-400',
+        description: stabilityData.interpretation.medium
+      };
+    } else {
+      return { 
+        level: 'Low', 
+        color: 'text-red-600 dark:text-red-400',
+        description: stabilityData.interpretation.low
+      };
+    }
+  };
+  
+  const overallStability = getStabilityLevel(stabilityData.mean_stability);
+  
+  return (
+    <div className="space-y-4 pt-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Overall Stability</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Overall Stability Score */}
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-bold">{(stabilityData.mean_stability * 100).toFixed(1)}%</span>
+                <Badge className={overallStability.color} variant="outline">
+                  {overallStability.level}
+                </Badge>
+              </div>
+              {/* Only show description for High and Medium stability */}
+              {stabilityData.mean_stability >= 0.5 && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {overallStability.description}
+                </p>
+              )}
+            </div>
+          </div>
+          
+          {/* Methodology Info */}
+          <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
+            <div><strong>Methodology:</strong> {stabilityData.methodology}</div>
+            <div><strong>Bootstrap Runs:</strong> {stabilityData.n_runs}</div>
+            <div><strong>Sample Fraction:</strong> {(stabilityData.sample_fraction * 100).toFixed(0)}% per run</div>
+          </div>
+          
+          {/* Per-Topic Stability */}
+          {Object.keys(stabilityData.per_topic_stability).length > 0 && (
+            <div className="space-y-2 pt-2 border-t">
+              <h4 className="text-sm font-medium">Per-Topic Stability</h4>
+              <div className="space-y-1">
+                {topics.map(topic => {
+                  const topicStability = stabilityData.per_topic_stability[topic.id];
+                  if (topicStability === undefined) return null;
+                  
+                  const topicLevel = getStabilityLevel(topicStability);
+                  
+                  return (
+                    <div key={topic.id} className="flex items-center justify-between text-sm py-1 px-2 hover:bg-muted/50 rounded">
+                      <span className="font-medium">{topic.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={topicLevel.color}>
+                          {(topicStability * 100).toFixed(1)}%
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {topicLevel.level}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

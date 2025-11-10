@@ -436,12 +436,12 @@ class TestGenerateBatchImpl:
             mock_get_jobs.return_value = []
             mock_load_dotenv.return_value = None
             
-            await _generate_batch(
-                'test-account', 'test-scorecard', 'test-score', 
-                False, False, False
-            )
-            
-            mock_get_jobs.assert_called_once()
+            # The function now raises NotImplementedError
+            with pytest.raises(NotImplementedError, match="Batch generation functionality is not currently available"):
+                await _generate_batch(
+                    'test-account', 'test-scorecard', 'test-score', 
+                    False, False, False
+                )
     
     # Complex batch generation test removed - would require extensive database mocking
 

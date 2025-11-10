@@ -378,7 +378,7 @@ def register_scorecard_tools(mcp: FastMCP):
                 return "Error: Could not create Dashboard client."
             
             # Resolve the account ID - if account_identifier is provided, use it; otherwise use default
-            if account_identifier.lower() in ['default', 'call-criteria']:
+            if account_identifier.lower() == 'default':
                 account_id = resolve_account_id_for_command(client, None)  # Use default account
             else:
                 # For now, we'll use the CLI scorecard function for other account identifiers

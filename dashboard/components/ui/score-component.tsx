@@ -33,6 +33,7 @@ import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, ge
 import { useYamlLinter, useLintMessageHandler } from '@/hooks/use-yaml-linter'
 import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
+import { EvaluationDialog, FeedbackEvaluationDialog } from '@/components/task-dispatch'
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
@@ -665,6 +666,11 @@ const DetailContent = React.memo(({
   
   // Add state for test score dialog
   const [isTestDialogOpen, setIsTestDialogOpen] = React.useState(false);
+  const [isEvaluationDialogOpen, setIsEvaluationDialogOpen] = React.useState(false)
+  const [evaluationAction, setEvaluationAction] = React.useState<{name: string, type: string, versionId?: string} | null>(null)
+  const [isFeedbackDialogOpen, setIsFeedbackDialogOpen] = React.useState(false)
+  const [feedbackAction, setFeedbackAction] = React.useState<{name: string, versionId?: string} | null>(null)
+
   
 
   
@@ -729,12 +735,11 @@ const DetailContent = React.memo(({
     setIsTestDialogOpen(false);
   };
 
-  const handleEvaluateAccuracy = async () => {
+  const handleEvaluationDispatch = async (command: string, target?: string) => {
     try {
-      const command = `evaluate accuracy --score-id ${score.id}`;
       const task = await createTask({
-        type: 'Accuracy Evaluation',
-        target: 'evaluation',
+        type: evaluationAction?.name || 'Evaluation',
+        target: target || 'evaluation',
         command: command,
         accountId: selectedAccount?.id || 'call-criteria',
         dispatchStatus: 'PENDING',
@@ -742,24 +747,29 @@ const DetailContent = React.memo(({
       });
       
       if (task) {
-        toast.success("Accuracy evaluation dispatched", {
+        toast.success(`${evaluationAction?.name} dispatched`, {
           description: <span className="font-mono text-sm truncate block">{command}</span>
         });
+        
+        // Notify parent component about task creation
+        onTaskCreated?.(task);
+        
+        // Close the dialog
+        setIsEvaluationDialogOpen(false);
       } else {
-        toast.error("Failed to dispatch accuracy evaluation");
+        toast.error(`Failed to dispatch ${evaluationAction?.name}`);
       }
     } catch (error) {
-      console.error("Error dispatching accuracy evaluation:", error);
-      toast.error("Error dispatching accuracy evaluation");
+      console.error(`Error dispatching ${evaluationAction?.name}:`, error);
+      toast.error(`Error dispatching ${evaluationAction?.name}`);
     }
   };
 
-  const handleEvaluateConsistency = async () => {
+  const handleFeedbackDispatch = async (command: string, target?: string) => {
     try {
-      const command = `evaluate consistency --score-id ${score.id}`;
       const task = await createTask({
-        type: 'Consistency Evaluation',
-        target: 'evaluation',
+        type: feedbackAction?.name || 'Feedback Evaluation',
+        target: target || 'evaluation',
         command: command,
         accountId: selectedAccount?.id || 'call-criteria',
         dispatchStatus: 'PENDING',
@@ -767,41 +777,47 @@ const DetailContent = React.memo(({
       });
       
       if (task) {
-        toast.success("Consistency evaluation dispatched", {
+        toast.success(`${feedbackAction?.name} dispatched`, {
           description: <span className="font-mono text-sm truncate block">{command}</span>
         });
+        
+        // Notify parent component about task creation
+        onTaskCreated?.(task);
+        
+        // Close the dialog
+        setIsFeedbackDialogOpen(false);
       } else {
-        toast.error("Failed to dispatch consistency evaluation");
+        toast.error(`Failed to dispatch ${feedbackAction?.name}`);
       }
     } catch (error) {
-      console.error("Error dispatching consistency evaluation:", error);
-      toast.error("Error dispatching consistency evaluation");
+      console.error(`Error dispatching ${feedbackAction?.name}:`, error);
+      toast.error(`Error dispatching ${feedbackAction?.name}`);
     }
   };
 
-  const handleEvaluateAlignment = async () => {
-    try {
-      const command = `evaluate alignment --score-id ${score.id}`;
-      const task = await createTask({
-        type: 'Alignment Evaluation',
-        target: 'evaluation',
-        command: command,
-        accountId: selectedAccount?.id || 'call-criteria',
-        dispatchStatus: 'PENDING',
-        status: 'PENDING'
-      });
-      
-      if (task) {
-        toast.success("Alignment evaluation dispatched", {
-          description: <span className="font-mono text-sm truncate block">{command}</span>
-        });
-      } else {
-        toast.error("Failed to dispatch alignment evaluation");
-      }
-    } catch (error) {
-      console.error("Error dispatching alignment evaluation:", error);
-      toast.error("Error dispatching alignment evaluation");
-    }
+  const handleEvaluateAccuracy = () => {
+    setEvaluationAction({ name: 'Evaluate Accuracy', type: 'accuracy' });
+    setIsEvaluationDialogOpen(true);
+  };
+
+  const handleEvaluateConsistency = () => {
+    setEvaluationAction({ name: 'Evaluate Consistency', type: 'consistency' });
+    setIsEvaluationDialogOpen(true);
+  };
+
+  const handleEvaluateAlignment = () => {
+    setEvaluationAction({ name: 'Evaluate Alignment', type: 'alignment' });
+    setIsEvaluationDialogOpen(true);
+  };
+
+  const handleEvaluateAccuracyForVersion = (versionId: string) => {
+    setEvaluationAction({ name: 'Evaluate Accuracy', type: 'accuracy', versionId });
+    setIsEvaluationDialogOpen(true);
+  };
+
+  const handleEvaluateFeedbackForVersion = (versionId: string) => {
+    setFeedbackAction({ name: 'Evaluate Feedback', versionId });
+    setIsFeedbackDialogOpen(true);
   };
 
 
@@ -1003,7 +1019,16 @@ const DetailContent = React.memo(({
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => onPromoteToChampion(selectedVersion.id)}>
                             <Crown className="mr-2 h-4 w-4" />
-                            Promote
+                            Promote to Champion
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleEvaluateAccuracyForVersion(selectedVersion.id)}>
+                            <FlaskConical className="mr-2 h-4 w-4" />
+                            Evaluate Accuracy
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEvaluateFeedbackForVersion(selectedVersion.id)}>
+                            <MessageCircleMore className="mr-2 h-4 w-4" />
+                            Evaluate Feedback
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </ShadcnDropdownMenu>
@@ -1383,6 +1408,58 @@ const DetailContent = React.memo(({
 
 
 
+
+      {/* Evaluation Dialog */}
+      {isEvaluationDialogOpen && evaluationAction && (
+        <EvaluationDialog
+          action={{
+            name: evaluationAction.name,
+            icon: null,
+            command: evaluationAction.type,
+            target: 'evaluation',
+            dialogType: 'evaluation'
+          }}
+          isOpen={isEvaluationDialogOpen}
+          onClose={() => setIsEvaluationDialogOpen(false)}
+          onDispatch={async (command, target) => {
+            // Add version parameter to the command if this is for a specific version
+            const finalCommand = evaluationAction.versionId 
+              ? `${command} --version ${evaluationAction.versionId}`
+              : command;
+            await handleEvaluationDispatch(finalCommand, target);
+          }}
+          initialOptions={{
+            scorecardName: scorecardName || '',
+            scoreName: score.name || ''
+          }}
+        />
+      )}
+
+      {/* Feedback Evaluation Dialog */}
+      {isFeedbackDialogOpen && feedbackAction && (
+        <FeedbackEvaluationDialog
+          action={{
+            name: feedbackAction.name,
+            icon: null,
+            command: 'evaluate feedback',
+            target: 'evaluation',
+            dialogType: 'feedback'
+          }}
+          isOpen={isFeedbackDialogOpen}
+          onClose={() => setIsFeedbackDialogOpen(false)}
+          onDispatch={async (command, target) => {
+            // Add version parameter to the command if this is for a specific version
+            const finalCommand = feedbackAction.versionId 
+              ? `${command} --version ${feedbackAction.versionId}`
+              : command;
+            await handleFeedbackDispatch(finalCommand, target);
+          }}
+          initialOptions={{
+            scorecardName: scorecardName || '',
+            scoreName: score.name || ''
+          }}
+        />
+      )}
 
       {/* Test Score Dialog */}
       <TestScoreDialog

@@ -73,7 +73,9 @@ def create(account: Optional[str], scorecard: str, score: str, yaml: Optional[st
     # Use default account if not specified
     if not account:
         import os
-        account = os.environ.get('PLEXUS_ACCOUNT_KEY', 'call-criteria')
+        account = os.environ.get('PLEXUS_ACCOUNT_KEY')
+        if not account:
+            raise ValueError("PLEXUS_ACCOUNT_KEY environment variable must be set")
     
     console.print(f"Creating procedure for scorecard '{scorecard}' and score '{score}'...")
     
@@ -156,7 +158,9 @@ def list(account: Optional[str], scorecard: Optional[str], limit: int, output: s
     # Use default account if not specified
     if not account:
         import os
-        account = os.environ.get('PLEXUS_ACCOUNT_KEY', 'call-criteria')
+        account = os.environ.get('PLEXUS_ACCOUNT_KEY')
+        if not account:
+            raise ValueError("PLEXUS_ACCOUNT_KEY environment variable must be set")
     
     experiments = service.list_procedures(
         account_identifier=account,

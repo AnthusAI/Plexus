@@ -400,22 +400,25 @@ class FeedbackItems(DataCache):
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(
-                        lambda: asyncio.run(self._fetch_feedback_items(scorecard_id, score_id, scorecard_name, score_name))
+                        lambda: asyncio.run(self._fetch_feedback_items_for_scores(scorecard_id, [(score_id, score_name)]))
                     )
-                    feedback_items = future.result()
+                    result = future.result()
+                    feedback_items = result.get(score_id, [])
             else:
                 # If no running loop, use asyncio.run
-                feedback_items = asyncio.run(self._fetch_feedback_items(
-                    scorecard_id, score_id, scorecard_name, score_name
+                result = asyncio.run(self._fetch_feedback_items_for_scores(
+                    scorecard_id, [(score_id, score_name)]
                 ))
+                feedback_items = result.get(score_id, [])
         except RuntimeError:
             # Fallback: create new event loop
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
             try:
-                feedback_items = new_loop.run_until_complete(self._fetch_feedback_items(
-                    scorecard_id, score_id, scorecard_name, score_name
+                result = new_loop.run_until_complete(self._fetch_feedback_items_for_scores(
+                    scorecard_id, [(score_id, score_name)]
                 ))
+                feedback_items = result.get(score_id, [])
             finally:
                 new_loop.close()
         
@@ -536,81 +539,182 @@ class FeedbackItems(DataCache):
         
         logger.info(f"Fetched {len(all_items)} out of {len(feedback_item_ids)} feedback items ({errors} errors)")
         return all_items
+
+    async def _fetch_score_results_for_items(
+        self, 
+        item_ids: List[str], 
+        resolved_scores: List[Tuple[str, str]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Fetch the most recent ScoreResult for each item/score combination as fallback.
+        
+        Args:
+            item_ids: List of item IDs to fetch ScoreResults for
+            resolved_scores: List of (score_id, score_name) tuples
+            
+        Returns:
+            Dict mapping item_id -> score_id -> ScoreResult data
+            Example: {
+                "item-123": {
+                    "score-456": {"value": "yes", "explanation": "...", "confidence": 0.95, ...},
+                    "score-789": {"value": "no", "explanation": "...", "confidence": 0.88, ...}
+                }
+            }
+        """
+        logger.info(f"Fetching ScoreResults for {len(item_ids)} items across {len(resolved_scores)} scores")
+        score_results_map = {}
+        
+        for item_id in item_ids:
+            score_results_map[item_id] = {}
+            
+            for score_id, score_name in resolved_scores:
+                try:
+                    # Query for the most recent ScoreResult for this item/score combination
+                    # Filter out evaluation-type results (we only want production ScoreResults)
+                    query = """
+                    query ListScoreResultsByItemAndScore(
+                        $itemId: String!
+                        $scoreId: String!
+                    ) {
+                        listScoreResults(
+                            filter: {
+                                itemId: { eq: $itemId }
+                                scoreId: { eq: $scoreId }
+                                type: { ne: "evaluation" }
+                            }
+                            limit: 1
+                        ) {
+                            items {
+                                id
+                                itemId
+                                scoreId
+                                value
+                                explanation
+                                confidence
+                                metadata
+                                updatedAt
+                                createdAt
+                            }
+                        }
+                    }
+                    """
+                    
+                    result = self.client.execute(query, {
+                        "itemId": item_id,
+                        "scoreId": score_id
+                    })
+                    
+                    if result and result.get('listScoreResults', {}).get('items'):
+                        score_result = result['listScoreResults']['items'][0]
+                        score_results_map[item_id][score_id] = score_result
+                        logger.debug(f"Found ScoreResult for item {item_id}, score {score_name}: {score_result.get('value')}")
+                    else:
+                        logger.debug(f"No ScoreResult found for item {item_id}, score {score_name}")
+                
+                except Exception as e:
+                    logger.warning(f"Error fetching ScoreResult for item {item_id}, score {score_name}: {e}")
+                    # Continue with other items/scores even if one fails
+        
+        # Count how many items have at least one ScoreResult
+        items_with_results = sum(1 for item_results in score_results_map.values() if item_results)
+        logger.info(f"Found ScoreResults for {items_with_results}/{len(item_ids)} items")
+        
+        return score_results_map
     
-    async def _fetch_feedback_items(self, scorecard_id: str, score_id: str, 
-                                   scorecard_name: str, score_name: str) -> List[FeedbackItem]:
-        """Fetch feedback items using the FeedbackService or specific feedback ID."""
+    async def _fetch_feedback_items_for_scores(
+        self, 
+        scorecard_id: str, 
+        resolved_scores: List[Tuple[str, str]]
+    ) -> Dict[str, List[FeedbackItem]]:
+        """
+        Fetch feedback items for multiple scores.
         
-        # If a specific feedback_id is provided, fetch only that item
-        if self.parameters.feedback_id:
-            logger.info(f"Fetching specific feedback item: {self.parameters.feedback_id}")
-            specific_items = await self._fetch_specific_feedback_items([self.parameters.feedback_id])
+        Args:
+            scorecard_id: ID of the scorecard
+            resolved_scores: List of (score_id, score_name) tuples
             
-            if not specific_items:
-                logger.warning(f"Feedback item {self.parameters.feedback_id} not found")
-                return []
-            
-            # Validate that the item belongs to the correct scorecard and score
-            item = specific_items[0]
-            if item.scorecardId != scorecard_id or item.scoreId != score_id:
-                logger.error(f"Feedback item {self.parameters.feedback_id} belongs to scorecard {item.scorecardId}/score {item.scoreId}, "
-                           f"but expected scorecard {scorecard_id}/score {score_id}")
-                return []
-            
-            logger.info(f"Successfully fetched specific feedback item {self.parameters.feedback_id}")
-            return specific_items
+        Returns:
+            Dict mapping score_id -> List[FeedbackItem]
+        """
+        feedback_by_score = {}
         
-        # Otherwise, fetch items using the normal FeedbackService approach
-        logger.error(f"🔍 FEEDBACK SERVICE DEBUG: About to call FeedbackService.find_feedback_items")
-        all_items = await FeedbackService.find_feedback_items(
-            client=self.client,
-            scorecard_id=scorecard_id,
-            score_id=score_id,
-            account_id=self.account_id,
-            days=self.parameters.days,
-            initial_value=None,  # Don't filter at service level
-            final_value=None,    # Don't filter at service level
-            limit=None,  # We'll apply limits after sampling
-            prioritize_edit_comments=False
-        )
-        logger.error(f"🔍 FEEDBACK SERVICE DEBUG: Received {len(all_items)} items from FeedbackService")
-        
-        # Debug the first item to see what metadata structure we get
-        if all_items:
-            first_item = all_items[0]
-            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item ID: {first_item.id}")
-            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has .item: {hasattr(first_item, 'item')}")
-            if hasattr(first_item, 'item') and first_item.item:
-                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.id: {first_item.item.id}")
-                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.metadata: {getattr(first_item.item, 'metadata', 'NOT_FOUND')}")
+        # Process each score
+        for score_id, score_name in resolved_scores:
+            # If a specific feedback_id is provided, fetch only that item
+            if self.parameters.feedback_id:
+                logger.info(f"Fetching specific feedback item: {self.parameters.feedback_id}")
+                specific_items = await self._fetch_specific_feedback_items([self.parameters.feedback_id])
+                
+                if not specific_items:
+                    logger.warning(f"Feedback item {self.parameters.feedback_id} not found")
+                    feedback_by_score[score_id] = []
+                    continue
+                
+                # Validate that the item belongs to the correct scorecard and score
+                item = specific_items[0]
+                if item.scorecardId != scorecard_id or item.scoreId != score_id:
+                    logger.error(f"Feedback item {self.parameters.feedback_id} belongs to scorecard {item.scorecardId}/score {item.scoreId}, "
+                               f"but expected scorecard {scorecard_id}/score {score_id}")
+                    feedback_by_score[score_id] = []
+                    continue
+                
+                logger.info(f"Successfully fetched specific feedback item {self.parameters.feedback_id}")
+                feedback_by_score[score_id] = specific_items
+                continue
+            
+            # Otherwise, fetch items using the normal FeedbackService approach
+            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: About to call FeedbackService.find_feedback_items for score {score_name}")
+            all_items = await FeedbackService.find_feedback_items(
+                client=self.client,
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                account_id=self.account_id,
+                days=self.parameters.days,
+                initial_value=None,  # Don't filter at service level
+                final_value=None,    # Don't filter at service level
+                limit=None,  # We'll apply limits after sampling
+                prioritize_edit_comments=False
+            )
+            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: Received {len(all_items)} items from FeedbackService for score {score_name}")
+            
+            # Debug the first item to see what metadata structure we get
+            if all_items:
+                first_item = all_items[0]
+                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item ID: {first_item.id}")
+                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has .item: {hasattr(first_item, 'item')}")
+                if hasattr(first_item, 'item') and first_item.item:
+                    logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.id: {first_item.item.id}")
+                    logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.metadata: {getattr(first_item.item, 'metadata', 'NOT_FOUND')}")
+                else:
+                    logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has no .item or .item is None")
+            
+            # Apply case-insensitive filtering locally if needed
+            if self.parameters.initial_value or self.parameters.final_value:
+                filtered_items = []
+                for item in all_items:
+                    matches = True
+                    
+                    # Case-insensitive initial_value filtering
+                    if self.parameters.initial_value:
+                        item_initial = self._normalize_item_value(item.initialAnswerValue)
+                        if item_initial != self.normalized_initial_value:
+                            matches = False
+                    
+                    # Case-insensitive final_value filtering  
+                    if self.parameters.final_value:
+                        item_final = self._normalize_item_value(item.finalAnswerValue)
+                        if item_final != self.normalized_final_value:
+                            matches = False
+                    
+                    if matches:
+                        filtered_items.append(item)
+                
+                logger.info(f"After case-insensitive filtering: {len(filtered_items)} items (from {len(all_items)} total)")
+                feedback_by_score[score_id] = filtered_items
             else:
-                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has no .item or .item is None")
+                feedback_by_score[score_id] = all_items
         
-        # Apply case-insensitive filtering locally if needed
-        if self.parameters.initial_value or self.parameters.final_value:
-            filtered_items = []
-            for item in all_items:
-                matches = True
-                
-                # Case-insensitive initial_value filtering
-                if self.parameters.initial_value:
-                    item_initial = self._normalize_item_value(item.initialAnswerValue)
-                    if item_initial != self.normalized_initial_value:
-                        matches = False
-                
-                # Case-insensitive final_value filtering  
-                if self.parameters.final_value:
-                    item_final = self._normalize_item_value(item.finalAnswerValue)
-                    if item_final != self.normalized_final_value:
-                        matches = False
-                
-                if matches:
-                    filtered_items.append(item)
-            
-            logger.info(f"After case-insensitive filtering: {len(filtered_items)} items (from {len(all_items)} total)")
-            return filtered_items
-        
-        return all_items
+        return feedback_by_score
 
     def _sample_items_from_confusion_matrix(self, feedback_items: List[FeedbackItem]) -> List[FeedbackItem]:
         """

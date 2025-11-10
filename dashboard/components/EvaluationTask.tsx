@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2 } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import isEqual from 'lodash/isEqual'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
 import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
+import Link from 'next/link'
 
 export interface EvaluationMetric {
   name: string
@@ -158,6 +159,9 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     completedAt?: string
     errorMessage?: string
     statusMessage?: string
+    scorecardId?: string
+    scoreId?: string
+    scoreVersionId?: string
   }
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
@@ -1016,11 +1020,38 @@ evaluation:
   estimated_remaining_seconds: ${evaluationData.estimatedRemainingSeconds || 0}
   
   # Additional Metrics
-  metrics:${evaluationData.metrics?.map(metric => `
+  metrics:${(() => {
+    try {
+      let metricsData = evaluationData.metrics;
+      
+      // Parse if string
+      if (typeof metricsData === 'string') {
+        metricsData = JSON.parse(metricsData);
+      }
+      
+      // Ensure it's an array
+      if (!Array.isArray(metricsData)) {
+        if (metricsData && typeof metricsData === 'object') {
+          metricsData = Object.entries(metricsData).map(([key, value]) => ({
+            name: key,
+            value: value as number,
+            priority: false
+          }));
+        } else {
+          return '';
+        }
+      }
+      
+      return metricsData.map(metric => `
     - name: "${metric.name}"
       value: ${metric.value}
       unit: "${metric.unit || ''}"
-      priority: ${metric.priority || false}`).join('') || ''}
+      priority: ${metric.priority || false}`).join('');
+    } catch (e) {
+      console.error('Error parsing metrics:', e);
+      return '';
+    }
+  })()}
   
   # Error Information
   error_message: "${evaluationData.errorMessage || ''}"
@@ -1200,7 +1231,10 @@ evaluation:
     celeryTaskId: taskData?.celeryTaskId,
     workerNodeId: taskData?.workerNodeId,
     completedAt: taskData?.completedAt || undefined,
-    errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined
+    errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined,
+    scorecardId: task.scorecardId,
+    scoreId: task.scoreId,
+    scoreVersionId: task.scoreVersionId
   }), [task, taskData, variant]);
 
   // Type assertion to ensure all properties match BaseTaskProps
@@ -1295,10 +1329,44 @@ evaluation:
                 </div>
               )}
               {props.task.scorecard && props.task.scorecard.trim() !== '' && (
-                <div className="font-semibold text-sm truncate">{props.task.scorecard}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.scorecard}</span>
+                  {variant === 'detail' && task.scorecardId && (
+                    <Link 
+                      href={`/lab/scorecards/${task.scorecardId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+                </div>
               )}
               {props.task.score && props.task.score.trim() !== '' && (
-                <div className="font-semibold text-sm truncate">{props.task.score}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.score}</span>
+                  {variant === 'detail' && task.scorecardId && task.scoreId && (
+                    <Link 
+                      href={`/lab/scorecards/${task.scorecardId}/scores/${task.scoreId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+                </div>
+              )}
+              {variant === 'detail' && task.scoreVersionId && task.scorecardId && task.scoreId && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+                  <span className="truncate">Version: {task.scoreVersionId.slice(0, 8)}</span>
+                  <Link 
+                    href={`/lab/scorecards/${task.scorecardId}/scores/${task.scoreId}/versions/${task.scoreVersionId}`}
+                    className="flex-shrink-0 hover:text-foreground transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
               )}
               <Timestamp time={props.task.time} variant="relative" />
             </div>

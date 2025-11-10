@@ -283,8 +283,13 @@ class TestExecuteTestPhase(unittest.IsolatedAsyncioTestCase):
         # Create a mock node with hypothesis
         node = self._create_mock_node('node-1', has_version=True)
 
-        # Mock LLM call
-        with patch('langchain_openai.ChatOpenAI') as mock_llm_class:
+        # Mock LLM call and API key
+        with patch('langchain_openai.ChatOpenAI') as mock_llm_class, \
+             patch('os.getenv') as mock_getenv:
+
+            # Mock API key to be present (prevents fallback in CI)
+            mock_getenv.return_value = 'sk-test-key-123'
+
             mock_llm = Mock()
             mock_llm_class.return_value = mock_llm
 
@@ -318,8 +323,14 @@ class TestExecuteTestPhase(unittest.IsolatedAsyncioTestCase):
         # Create a mock node
         node = self._create_mock_node('node-1', has_version=True)
 
-        # Mock LLM to raise an error
-        with patch('langchain_openai.ChatOpenAI') as mock_llm_class:
+        # Mock LLM to raise an error, but provide API key so it tries to call LLM
+        with patch('langchain_openai.ChatOpenAI') as mock_llm_class, \
+             patch('os.getenv') as mock_getenv:
+
+            # Mock API key to be present (so it attempts LLM call)
+            mock_getenv.return_value = 'sk-test-key-123'
+
+            # Mock LLM to raise an error
             mock_llm_class.side_effect = Exception("API error")
 
             # Execute

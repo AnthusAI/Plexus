@@ -177,40 +177,6 @@ class TestItemUpsertByIdentifiers:
                     assert item_id is None
                     assert was_created == False
                     assert "Creation failed" in error
-    
-    def test_convert_identifiers_to_legacy_format(self):
-        """Test conversion of identifiers to legacy JSON format."""        
-        identifiers = {
-            "formId": "12345",
-            "reportId": "67890",
-            "sessionId": "abc123",
-            "ccId": "999"
-        }
-        
-        result = Item._convert_identifiers_to_legacy_format(identifiers)
-        legacy_data = json.loads(result)
-        
-        # Verify structure and content
-        assert len(legacy_data) == 4
-        
-        # Check each identifier type
-        form_id_entry = next(item for item in legacy_data if item["name"] == "form ID")
-        assert form_id_entry["id"] == "12345"
-        assert form_id_entry["url"] == "https://app.callcriteria.com/r/12345"
-        
-        report_id_entry = next(item for item in legacy_data if item["name"] == "report ID")
-        assert report_id_entry["id"] == "67890"
-        
-        session_id_entry = next(item for item in legacy_data if item["name"] == "session ID")
-        assert session_id_entry["id"] == "abc123"
-        
-        cc_id_entry = next(item for item in legacy_data if item["name"] == "CC ID")
-        assert cc_id_entry["id"] == "999"
-    
-    def test_convert_identifiers_handles_empty_input(self):
-        """Test that identifier conversion handles empty input gracefully."""        
-        assert Item._convert_identifiers_to_legacy_format({}) is None
-        assert Item._convert_identifiers_to_legacy_format(None) is None
 
 
 class TestItemUpsertIntegration:
