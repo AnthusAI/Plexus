@@ -26,20 +26,19 @@ class FeedbackAnalysis(BaseReportBlock):
     This block retrieves FeedbackItem records and compares initial and final answer values
     to calculate agreement scores using Gwet's AC1.
 
-    If a specific 'score_id' (Call Criteria Question ID) is provided in the config,
-    it analyzes only that score. Otherwise, it analyzes all scores associated with
-    the provided 'scorecard' (Call Criteria Scorecard ID) that have a mapping
-    to a Plexus Score with an externalId.
+    If a specific 'score_id' is provided in the config, it analyzes only that score.
+    Otherwise, it analyzes all scores associated with the provided 'scorecard' that
+    have a mapping to a Plexus Score with an externalId.
     
     Config:
-        scorecard (str): Call Criteria Scorecard ID (e.g., "1438"). This is REQUIRED.
+        scorecard (str): Scorecard identifier. This is REQUIRED.
         days (int, optional): Number of days in the past to analyze (default: 14).
                               FeedbackItems updated within this period will be considered.
         start_date (str, optional): Start date for analysis in YYYY-MM-DD format.
                                    If provided, overrides 'days'.
         end_date (str, optional): End date for analysis in YYYY-MM-DD format.
                                  Defaults to today if not specified.
-        score_id (str, optional): Specific Call Criteria Question ID to analyze.
+        score_id (str, optional): Specific score ID to analyze.
                                  If specified, only this score will be analyzed.
     """
     
@@ -60,9 +59,9 @@ class FeedbackAnalysis(BaseReportBlock):
             # --- 1. Extract and Validate Configuration ---
             cc_scorecard_id_param = self.config.get("scorecard")
             if not cc_scorecard_id_param:
-                self._log("ERROR: 'scorecard' (Call Criteria Scorecard ID) missing in block configuration.", level="ERROR")
+                self._log("ERROR: 'scorecard' missing in block configuration.", level="ERROR")
                 raise ValueError("'scorecard' is required in the block configuration.")
-            self._log(f"Call Criteria Scorecard ID from config: {cc_scorecard_id_param}")
+            self._log(f"Scorecard ID from config: {cc_scorecard_id_param}")
 
             # Check if "all" mode is requested
             if str(cc_scorecard_id_param).lower() == "all":

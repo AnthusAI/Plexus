@@ -288,133 +288,16 @@ class FeedbackService:
         Analyze feedback items to produce summary statistics including confusion matrix,
         accuracy, AC1 agreement, precision/recall.
         
+        This method now delegates to the shared feedback_analyzer module to avoid code duplication.
+        
         Args:
             feedback_items: List of FeedbackItem objects to analyze
             
         Returns:
             Dictionary with analysis results including confusion matrix and metrics
         """
-        if not feedback_items:
-            return {
-                "ac1": None,
-                "accuracy": None,
-                "total_items": 0,
-                "agreements": 0,
-                "disagreements": 0,
-                "confusion_matrix": None,
-                "precision": None,
-                "recall": None,
-                "class_distribution": [],
-                "predicted_class_distribution": [],
-                "warning": "No feedback items found"
-            }
-        
-        # Extract valid pairs
-        valid_pairs = []
-        for item in feedback_items:
-            if item.initialAnswerValue is not None and item.finalAnswerValue is not None:
-                valid_pairs.append((item.initialAnswerValue, item.finalAnswerValue))
-        
-        if not valid_pairs:
-            return {
-                "ac1": None,
-                "accuracy": None,
-                "total_items": 0,
-                "agreements": 0,
-                "disagreements": 0,
-                "confusion_matrix": None,
-                "precision": None,
-                "recall": None,
-                "class_distribution": [],
-                "predicted_class_distribution": [],
-                "warning": "No valid feedback pairs found"
-            }
-        
-        # Separate into lists for analysis
-        # Final values are the "reference" (ground truth from human reviewers)
-        # Initial values are the "predictions" (AI predictions being evaluated)
-        initial_values = [pair[0] for pair in valid_pairs]  # AI predictions
-        final_values = [pair[1] for pair in valid_pairs]    # Human corrections (ground truth)
-        
-        # Calculate basic statistics
-        total_items = len(valid_pairs)
-        agreements = sum(1 for i, f in valid_pairs if i == f)
-        disagreements = total_items - agreements
-        accuracy = (agreements / total_items * 100) if total_items > 0 else 0
-        
-        # Calculate distributions
-        final_distribution = dict(Counter(final_values))
-        initial_distribution = dict(Counter(initial_values))
-        
-        # Format distributions for visualization
-        class_distribution = [
-            {"label": str(label), "count": count}
-            for label, count in final_distribution.items()
-        ]
-        class_distribution.sort(key=lambda x: x["count"], reverse=True)
-        
-        predicted_class_distribution = [
-            {"label": str(label), "count": count}
-            for label, count in initial_distribution.items()
-        ]
-        predicted_class_distribution.sort(key=lambda x: x["count"], reverse=True)
-        
-        # Build confusion matrix
-        confusion_matrix = FeedbackService._build_confusion_matrix(final_values, initial_values)
-        
-        # Calculate precision and recall
-        all_classes = list(final_distribution.keys())
-        precision_recall = FeedbackService._calculate_precision_recall(final_values, initial_values, all_classes)
-        
-        # Calculate Gwet's AC1
-        ac1_value = None
-        try:
-            gwet_ac1_calculator = GwetAC1()
-            reference_list = [str(f) for f in final_values]
-            predictions_list = [str(i) for i in initial_values]
-            metric_input = Metric.Input(reference=reference_list, predictions=predictions_list)
-            calculation_result = gwet_ac1_calculator.calculate(metric_input)
-            ac1_value = calculation_result.value
-        except Exception as e:
-            logger.warning(f"Error calculating Gwet's AC1: {e}")
-        
-        # Generate warnings
-        warnings = []
-        if ac1_value is not None and ac1_value < 0:
-            warnings.append("Systematic disagreement")
-        elif ac1_value is not None and ac1_value == 0:
-            warnings.append("Random chance agreement")
-        
-        if len(final_distribution) == 1:
-            single_class = list(final_distribution.keys())[0]
-            warnings.append(f"Single class ({single_class})")
-        elif len(final_distribution) > 1:
-            # Check for imbalanced distribution
-            total = sum(final_distribution.values())
-            expected_count = total / len(final_distribution)
-            tolerance = 0.2  # 20% tolerance
-            is_balanced = all(
-                abs(count - expected_count) <= expected_count * tolerance 
-                for count in final_distribution.values()
-            )
-            if not is_balanced:
-                warnings.append("Imbalanced classes")
-        
-        warning = "; ".join(warnings) if warnings else None
-        
-        return {
-            "ac1": ac1_value,
-            "accuracy": accuracy,
-            "total_items": total_items,
-            "agreements": agreements,
-            "disagreements": disagreements,
-            "confusion_matrix": confusion_matrix,
-            "precision": precision_recall.get("precision"),
-            "recall": precision_recall.get("recall"),
-            "class_distribution": class_distribution,
-            "predicted_class_distribution": predicted_class_distribution,
-            "warning": warning
-        }
+        from plexus.analysis.feedback_analyzer import analyze_feedback_items
+        return analyze_feedback_items(feedback_items)
 
     @staticmethod
     def _generate_recommendation(analysis: Dict[str, Any]) -> str:

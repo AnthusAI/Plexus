@@ -205,10 +205,13 @@ async def predict_impl(
                 client = PlexusDashboardClient()
                 
                 # Get the account ID
-                logging.info("Looking up call-criteria account...")
-                account = Account.list_by_key(key="call-criteria", client=client)
+                account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+                if not account_key:
+                    raise Exception("PLEXUS_ACCOUNT_KEY environment variable must be set")
+                logging.info(f"Looking up account with key: {account_key}...")
+                account = Account.list_by_key(key=account_key, client=client)
                 if not account:
-                    raise Exception("Could not find account with key: call-criteria")
+                    raise Exception(f"Could not find account with key: {account_key}")
                 logging.info(f"Found account: {account.name} ({account.id})")
                 
                 # Get existing task if task_id provided
@@ -1028,7 +1031,7 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
             # Prepare metadata by combining Item metadata with required CLI metadata
             base_metadata = {
                 "item_id": item.id,
-                "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
+                "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', ''),
                 "scorecard_identifier": scorecard_identifier,  # Use identifier instead of scorecard_key
                 "score_name": score_name
             }
@@ -1104,7 +1107,7 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
             'item_id': item.id,
             'metadata': json.dumps({
                 "item_id": item.id,
-                "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
+                "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', ''),
                 "scorecard_identifier": scorecard_identifier,  # Use identifier instead of scorecard_key
                 "score_name": score_name
             }),

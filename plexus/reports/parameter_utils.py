@@ -255,3 +255,133 @@ def normalize_parameter_value(param_def: Dict[str, Any], value: str) -> Any:
         # text, date, select, and others - keep as string
         return str(value)
 
+
+def enrich_parameters_with_names(
+    param_defs: List[Dict[str, Any]],
+    parameters: Dict[str, Any],
+    client: Any
+) -> Dict[str, Any]:
+    """
+    Enrich parameters by adding name variables for scorecard_select and score_select types.
+    
+    For each parameter of type 'scorecard_select' or 'score_select', this function:
+    1. Resolves the identifier (ID, key, external ID, or name) to the actual object
+    2. Adds a new parameter '{parameter_name}_name' with the resolved name
+    
+    This allows templates to reference both the identifier and the human-readable name.
+    
+    Args:
+        param_defs: List of parameter definitions from the configuration
+        parameters: Dictionary of parameter name -> value mappings
+        client: PlexusDashboardClient instance for API lookups
+        
+    Returns:
+        Enriched parameters dictionary with additional _name variables
+        
+    Example:
+        If parameters = {'scorecard': 'some-id-123', 'days': 30}
+        And 'scorecard' is type 'scorecard_select'
+        Returns: {'scorecard': 'some-id-123', 'scorecard_name': 'My Scorecard', 'days': 30}
+    """
+    from plexus.dashboard.api.models.scorecard import Scorecard
+    from plexus.dashboard.api.models.score import Score
+    
+    enriched = parameters.copy()
+    
+    for param_def in param_defs:
+        param_name = param_def.get('name')
+        param_type = param_def.get('type')
+        
+        if not param_name or param_name not in parameters:
+            continue
+            
+        identifier = parameters[param_name]
+        if not identifier:
+            continue
+        
+        # Handle scorecard_select parameters
+        if param_type == 'scorecard_select':
+            try:
+                # Try to resolve the scorecard by trying each lookup method
+                scorecard = None
+                for lookup_method in [
+                    lambda: Scorecard.get_by_id(str(identifier), client),
+                    lambda: Scorecard.get_by_key(str(identifier), client),
+                    lambda: Scorecard.get_by_external_id(str(identifier), client),
+                    lambda: Scorecard.get_by_name(str(identifier), client)
+                ]:
+                    try:
+                        scorecard = lookup_method()
+                        if scorecard:
+                            break
+                    except Exception:
+                        continue
+                
+                if scorecard:
+                    enriched[f"{param_name}_name"] = scorecard.name
+                    logger.debug(f"Enriched parameter '{param_name}' with name: {scorecard.name}")
+                else:
+                    # Fallback: use the identifier as the name
+                    enriched[f"{param_name}_name"] = str(identifier)
+                    logger.warning(f"Could not resolve scorecard '{identifier}', using identifier as name")
+                    
+            except Exception as e:
+                # Fallback: use the identifier as the name
+                enriched[f"{param_name}_name"] = str(identifier)
+                logger.warning(f"Error resolving scorecard '{identifier}': {e}, using identifier as name")
+        
+        # Handle score_select parameters
+        elif param_type == 'score_select':
+            try:
+                # For score_select, we need the scorecard context
+                # Look for a depends_on field or a scorecard parameter
+                scorecard_param = param_def.get('depends_on')
+                scorecard_id = None
+                
+                if scorecard_param and scorecard_param in parameters:
+                    scorecard_id = parameters[scorecard_param]
+                
+                if not scorecard_id:
+                    # Try to find any scorecard_select parameter
+                    for other_param in param_defs:
+                        if other_param.get('type') == 'scorecard_select':
+                            other_param_name = other_param.get('name')
+                            if other_param_name and other_param_name in parameters:
+                                scorecard_id = parameters[other_param_name]
+                                break
+                
+                if scorecard_id:
+                    # Try to resolve the score
+                    score = None
+                    for lookup_method in [
+                        lambda: Score.get_by_id(str(identifier), client),
+                        lambda: Score.get_by_key(str(identifier), str(scorecard_id), client),
+                        lambda: Score.get_by_external_id(str(identifier), str(scorecard_id), client),
+                        lambda: Score.get_by_name(str(identifier), str(scorecard_id), client)
+                    ]:
+                        try:
+                            score = lookup_method()
+                            if score:
+                                break
+                        except Exception:
+                            continue
+                    
+                    if score:
+                        enriched[f"{param_name}_name"] = score.name
+                        logger.debug(f"Enriched parameter '{param_name}' with name: {score.name}")
+                    else:
+                        # Fallback: use the identifier as the name
+                        enriched[f"{param_name}_name"] = str(identifier)
+                        logger.warning(f"Could not resolve score '{identifier}', using identifier as name")
+                else:
+                    # No scorecard context available
+                    enriched[f"{param_name}_name"] = str(identifier)
+                    logger.warning(f"No scorecard context for score '{identifier}', using identifier as name")
+                    
+            except Exception as e:
+                # Fallback: use the identifier as the name
+                enriched[f"{param_name}_name"] = str(identifier)
+                logger.warning(f"Error resolving score '{identifier}': {e}, using identifier as name")
+    
+    return enriched
+

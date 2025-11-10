@@ -31,6 +31,7 @@ export interface ScorecardReportProps extends ReportBlockProps {
   onCellSelection?: (selection: { predicted: string | null; actual: string | null }) => void;
   drillDownContent?: React.ReactNode;
   showTitle?: boolean;
+  hideSummary?: boolean; // NEW: Control whether to hide the summary section
   // Props for on-demand analysis drill-down
   scorecardId?: string;
   accountId?: string;
@@ -48,6 +49,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   onCellSelection,
   drillDownContent,
   showTitle,
+  hideSummary = false,
   scorecardId,
   accountId,
   children,
@@ -61,7 +63,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   }
 
   const hasData = scoreData.scores && scoreData.scores.length > 0;
-  const showSummary = hasData && scoreData.scores.length > 1;
+  const showSummary = hasData && scoreData.scores.length > 1 && !hideSummary;
 
   // Calculate accuracy segments if label distribution is available
   const accuracySegments: Segment[] = scoreData.label_distribution 
@@ -139,85 +141,79 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
         </div>
       )}
 
-      {/* Summary Card - Conditionally Rendered with flat styling */}
+      {/* Overall Card - Conditionally Rendered with flat styling */}
       {showSummary && (
         <div className="bg-card rounded-lg p-4 mt-4">
           <div className="flex justify-between items-start mb-4">
-            <h3 className="text-base font-medium">Summary</h3>
+            <h3 className="text-base font-medium">Overall</h3>
           </div>
           
-          <div className="@container">
-            <div className="grid grid-cols-1 @[30rem]:grid-cols-12 gap-3 items-start">
-              <div className="@[30rem]:col-span-4">
-                {/* Space reserved for notes if needed in summary */}
-              </div>
-              
-              <div className="@[30rem]:col-span-8">
-                <div className="@container">
-                  <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[40rem]:grid-cols-4 gap-3">
-                    {/* Agreement Gauge - Only show if available */}
-                    {hasAgreementGauge && (
-                      <div className="flex flex-col items-center px-2">
-                        <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                          <Gauge
-                            value={scoreData.overall_agreement ?? 0}
-                            title="Agreement"
-                            valueUnit=""
-                            min={-1}
-                            max={1}
-                            decimalPlaces={2}
-                            segments={ac1GaugeSegments}
-                            showTicks={true}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Accuracy Gauge */}
-                    {hasAccuracyGauge && (
-                      <div className="flex flex-col items-center px-2">
-                        <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                          <Gauge 
-                            value={accuracy ?? 0} 
-                            title="Accuracy"
-                            segments={accuracySegments}
-                            showTicks={true}
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Precision and Recall gauges - only if showPrecisionRecall is true and we have values */}
-                    {hasPrecisionGauge && (
-                      <div className="flex flex-col items-center px-2">
-                        <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                          <Gauge 
-                            value={averagePrecision}
-                            title="Precision"
-                            segments={accuracySegments}
-                            showTicks={true}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    
-                    {hasRecallGauge && (
-                      <div className="flex flex-col items-center px-2">
-                        <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                          <Gauge 
-                            value={averageRecall}
-                            title="Recall"
-                            segments={accuracySegments}
-                            showTicks={true}
-                          />
-                        </div>
-                      </div>
-                    )}
+          {/* Gauges - using same layout structure as per-score gauges */}
+          <div className="@[30rem]:float-right @[30rem]:w-2/3 @[30rem]:pl-4">
+            <div className="@container">
+              <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[40rem]:grid-cols-4 gap-3">
+                {/* Agreement Gauge - Only show if available */}
+                {hasAgreementGauge && (
+                  <div className="flex flex-col items-center px-2">
+                    <div style={{ width: '200px' }}>
+                      <Gauge
+                        value={scoreData.overall_agreement ?? 0}
+                        title="Agreement"
+                        valueUnit=""
+                        min={-1}
+                        max={1}
+                        decimalPlaces={2}
+                        segments={ac1GaugeSegments}
+                        showTicks={true}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
+                
+                {/* Accuracy Gauge */}
+                {hasAccuracyGauge && (
+                  <div className="flex flex-col items-center px-2">
+                    <div style={{ width: '200px' }}>
+                      <Gauge 
+                        value={accuracy ?? 0} 
+                        title="Accuracy"
+                        segments={accuracySegments}
+                        showTicks={true}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Precision and Recall gauges - only if showPrecisionRecall is true and we have values */}
+                {hasPrecisionGauge && (
+                  <div className="flex flex-col items-center px-2">
+                    <div style={{ width: '200px' }}>
+                      <Gauge 
+                        value={averagePrecision}
+                        title="Precision"
+                        segments={accuracySegments}
+                        showTicks={true}
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {hasRecallGauge && (
+                  <div className="flex flex-col items-center px-2">
+                    <div style={{ width: '200px' }}>
+                      <Gauge 
+                        value={averageRecall}
+                        title="Recall"
+                        segments={accuracySegments}
+                        showTicks={true}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
+          <div className="clear-both"></div>
           
           {/* Raw Agreement Bar */}
           <div className="mt-4">

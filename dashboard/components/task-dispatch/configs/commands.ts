@@ -52,11 +52,7 @@ const createEvaluationCommand = (type: string) => {
       `--number-of-samples ${options.numberOfSamples}`,
       `--scorecard "${options.scorecardName}"`,
       `--score "${options.scoreName}"`,
-      `--sampling-method ${options.samplingMethod}`,
-      options.loadFresh ? '--fresh' : '',
-      options.randomSeed ? `--random-seed ${options.randomSeed}` : '',
-      options.visualize ? '--visualize' : '',
-      options.logToLanggraph ? '--log-to-langgraph' : ''
+      options.loadFresh ? '--fresh' : ''
     ].filter(Boolean).join(' ')
     
     const command = `evaluate ${type} ${args}`

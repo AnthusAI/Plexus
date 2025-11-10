@@ -51,7 +51,7 @@ import { AdHocCostAnalysis } from "@/components/ui/ad-hoc-cost-analysis"
 import { motion, AnimatePresence } from 'framer-motion'
 import { FilterInput } from '@/components/FilterInput'
 
-const ACCOUNT_KEY = 'call-criteria'
+const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
 
 export default function ScorecardsComponent({
   initialSelectedScorecardId = null,
@@ -1014,7 +1014,8 @@ export default function ScorecardsComponent({
               nextToken: null
             })
           } as Schema['Scorecard']['type'] & { examples: string[] };
-        });
+        })
+        .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by name
 
       // Show scorecards immediately without any loading states
       setScorecards(quickScorecards);

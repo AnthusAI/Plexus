@@ -222,9 +222,11 @@ def register_prediction_tools(mcp: FastMCP):
                     # Derive account_id once (prefer env account key when available)
                     account_id = None
                     try:
-                        account = _Account.list_by_key(key="call-criteria", client=client)
-                        if account:
-                            account_id = account.id
+                        account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+                        if account_key:
+                            account = _Account.list_by_key(key=account_key, client=client)
+                            if account:
+                                account_id = account.id
                     except Exception:
                         account_id = None
 

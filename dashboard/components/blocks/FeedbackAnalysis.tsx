@@ -2,6 +2,11 @@ import React from 'react';
 import { ReportBlockProps } from './ReportBlock';
 import { FeedbackAnalysisDisplay, type FeedbackAnalysisDisplayData } from '@/components/ui/feedback-analysis-display';
 import * as yaml from 'js-yaml';
+import { Gauge, type Segment } from '@/components/gauge';
+import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
+import { ac1GaugeSegments } from '@/components/ui/scorecard-evaluation';
+import { RawAgreementBar } from '@/components/RawAgreementBar';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
 // Re-export the interface for backward compatibility
 export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {}
@@ -79,51 +84,105 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
         {scorecards.length === 0 ? (
           <p className="text-muted-foreground">No scorecards found.</p>
         ) : (
-          <div className="space-y-2">
+          <div>
             {scorecards.map((scorecardData: any, index: number) => {
               const scorecardId = scorecardData.scorecard_id || index.toString();
               const isExpanded = expandedScorecardId === scorecardId;
 
+              // Calculate accuracy segments if label distribution is available
+              const accuracySegments: Segment[] = scorecardData.label_distribution 
+                ? GaugeThresholdComputer.createSegments(
+                    GaugeThresholdComputer.computeThresholds(scorecardData.label_distribution)
+                  )
+                : [{ start: 0, end: 100, color: 'var(--gauge-inviable)' }];
+
+              // Calculate accuracy value  
+              const accuracy = scorecardData.accuracy !== undefined 
+                ? scorecardData.accuracy 
+                : scorecardData.mismatch_percentage !== undefined
+                  ? (100 - scorecardData.mismatch_percentage)
+                  : scorecardData.total_items > 0
+                    ? (scorecardData.total_agreements / scorecardData.total_items) * 100
+                    : 100.0;
+
               return (
-                <div key={scorecardId} className="border rounded-lg">
-                  {/* Collapsed summary view */}
-                  <button
-                    onClick={() => setExpandedScorecardId(isExpanded ? null : scorecardId)}
-                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/30 transition-colors text-left"
-                  >
-                    <div className="flex-1 flex items-center gap-4">
-                      <span className="text-sm text-muted-foreground font-mono">#{scorecardData.rank || index + 1}</span>
-                      <span className="font-semibold">{scorecardData.scorecard_name || scorecardData.scorecard_id}</span>
-                      <div className="flex gap-4 text-sm">
-                        <span className="text-muted-foreground">
-                          AC1: <span className="font-medium text-foreground">{scorecardData.overall_ac1?.toFixed(3) || 'N/A'}</span>
-                        </span>
-                        <span className="text-muted-foreground">
-                          Items: <span className="font-medium text-foreground">{scorecardData.total_items || 0}</span>
-                        </span>
-                        <span className="text-muted-foreground">
-                          Accuracy: <span className="font-medium text-foreground">{scorecardData.accuracy ? `${scorecardData.accuracy.toFixed(1)}%` : 'N/A'}</span>
-                        </span>
+                <div key={scorecardId} style={{ marginBottom: (index < scorecards.length - 1 && !isExpanded) ? '2em' : '0' }}>
+                  {/* Scorecard card */}
+                  <div className="bg-card rounded-lg">
+                    <div className="px-4 py-4">
+                      <div className="flex items-start justify-between gap-4 mb-4">
+                        {/* Left side: Rank, name, and items count */}
+                        <div className="flex items-start gap-4 flex-1">
+                          <span className="text-sm text-muted-foreground font-mono pt-1">#{scorecardData.rank || index + 1}</span>
+                          <div className="flex-1">
+                            <div className="font-semibold mb-1">{scorecardData.scorecard_name || scorecardData.scorecard_id}</div>
+                            <div className="text-sm text-muted-foreground">
+                              Items: <span className="font-medium text-foreground">{scorecardData.total_items || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right side: Larger gauges */}
+                        <div className="flex items-center gap-6">
+                          <div className="flex flex-col items-center" style={{ width: '200px' }}>
+                            <Gauge
+                              value={scorecardData.overall_ac1 ?? 0}
+                              title="Agreement"
+                              valueUnit=""
+                              min={-1}
+                              max={1}
+                              decimalPlaces={2}
+                              segments={ac1GaugeSegments}
+                              showTicks={true}
+                            />
+                          </div>
+                          <div className="flex flex-col items-center" style={{ width: '200px' }}>
+                            <Gauge 
+                              value={accuracy ?? 0} 
+                              title="Accuracy"
+                              segments={accuracySegments}
+                              showTicks={true}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Raw Agreement Bar */}
+                      <div className="mb-4">
+                        <h5 className="text-sm font-medium mb-2">Raw Agreement</h5>
+                        <RawAgreementBar 
+                          agreements={scorecardData.total_agreements || 0}
+                          totalItems={scorecardData.total_items || 0}
+                        />
+                      </div>
+
+                      {/* Expand/Collapse button - matching individual score pattern */}
+                      <div className="flex flex-col items-center mt-4">
+                        <div className="w-full h-px bg-border mb-1"></div>
+                        <button
+                          onClick={() => setExpandedScorecardId(isExpanded ? null : scorecardId)}
+                          className="flex items-center justify-center rounded-full hover:bg-muted/50 transition-colors"
+                          aria-label={isExpanded ? "Collapse details" : "Expand details"}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                          )}
+                        </button>
                       </div>
                     </div>
-                    <svg
-                      className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                  </div>
 
-                  {/* Expanded detailed view - only rendered when expanded */}
+                  {/* Expanded detailed view - rendered below the card when expanded */}
                   {isExpanded && (
-                    <div className="px-4 py-4 border-t">
+                    <div className="pt-3" style={{ marginBottom: index < scorecards.length - 1 ? '4em' : '0' }}>
                       <FeedbackAnalysisDisplay
                         data={scorecardData}
                         showHeader={false}
                         showDateRange={false}
                         showPrecisionRecall={false}
+                        hideSummary={true}
                         attachedFiles={props.attachedFiles}
                         log={props.log}
                         rawOutput={typeof props.output === 'string' ? props.output : undefined}

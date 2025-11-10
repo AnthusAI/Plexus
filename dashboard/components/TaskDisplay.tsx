@@ -52,6 +52,9 @@ interface TaskDisplayProps {
     predictedClassDistribution?: any
     isPredictedClassDistributionBalanced?: boolean | null
     scoreResults?: any // Accept any type for score results - we'll standardize it internally
+    scorecardId?: string | null | undefined
+    scoreId?: string | null | undefined
+    scoreVersionId?: string | null | undefined
   }
   reportData?: {
     id: string
@@ -289,23 +292,47 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         ...commonTaskProps,
         scorecard: evaluationData.scorecard?.name || '-',
         score: evaluationData.score?.name || '-',
+        scorecardId: evaluationData.scorecardId,
+        scoreId: evaluationData.scoreId,
+        scoreVersionId: evaluationData.scoreVersionId,
         data: {
           id: displayId,
           title: displayTitle,
-          metrics: typeof evaluationData.metrics === 'string' ?
-            JSON.parse(evaluationData.metrics).map((m: any) => ({
-              name: m.name || 'Unknown',
-              value: m.value || 0,
-              unit: m.unit,
-              maximum: m.maximum,
-              priority: m.priority || false
-            })) : (evaluationData.metrics || []).map((m: any) => ({
-              name: m.name || 'Unknown',
-              value: m.value || 0,
-              unit: m.unit,
-              maximum: m.maximum,
-              priority: m.priority || false
-            })),
+          metrics: (() => {
+            try {
+              let metricsData = evaluationData.metrics;
+              
+              // Parse if string
+              if (typeof metricsData === 'string') {
+                metricsData = JSON.parse(metricsData);
+              }
+              
+              // Ensure it's an array
+              if (!Array.isArray(metricsData)) {
+                // If it's an object (like {ac1: 0.87, accuracy: 89.5}), convert to array
+                if (metricsData && typeof metricsData === 'object') {
+                  metricsData = Object.entries(metricsData).map(([key, value]) => ({
+                    name: key,
+                    value: value as number
+                  }));
+                } else {
+                  metricsData = [];
+                }
+              }
+              
+              // Map to expected format
+              return metricsData.map((m: any) => ({
+                name: m.name || 'Unknown',
+                value: m.value || 0,
+                unit: m.unit,
+                maximum: m.maximum,
+                priority: m.priority || false
+              }));
+            } catch (e) {
+              console.error('Error parsing metrics:', e);
+              return [];
+            }
+          })(),
           accuracy: evaluationData.accuracy || null,
           processedItems: Number(evaluationData.processedItems || 0),
           totalItems: Number(evaluationData.totalItems || 0),

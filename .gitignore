@@ -15,3 +15,6 @@ node_modules
 node_modules/*
 plexus/scores/reports/Test_scorecard/None/configuration.json
 .env.docker
+score_results/
+infrastructure/cdk.out/
+fine-tuning/dataset/

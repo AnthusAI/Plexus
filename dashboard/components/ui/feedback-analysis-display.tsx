@@ -31,6 +31,7 @@ export interface FeedbackAnalysisDisplayProps {
   showDateRange?: boolean;
   showPrecisionRecall?: boolean;
   showHeader?: boolean; // NEW: Control whether to show the header at all
+  hideSummary?: boolean; // NEW: Control whether to hide the summary section
   className?: string;
   onCellSelection?: (selection: { predicted: string | null; actual: string | null }) => void;
   // ReportBlock-specific props for server-side usage
@@ -59,6 +60,7 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps> = (
   showDateRange = true,
   showPrecisionRecall = false,
   showHeader = true, // Default to true for backward compatibility
+  hideSummary = false, // Default to false to maintain existing behavior
   className,
   onCellSelection,
   // ReportBlock-specific props
@@ -139,6 +141,7 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps> = (
         showPrecisionRecall={showPrecisionRecall}
         onCellSelection={handleOnDemandCellSelection}
         showTitle={showHeader}
+        hideSummary={hideSummary}
         scorecardId={scorecardId}
         accountId={selectedAccount?.id}
         // No drill-down content at scorecard level - individual scores handle their own

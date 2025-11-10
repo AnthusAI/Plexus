@@ -137,13 +137,21 @@ class Evaluation:
         subset_of_score_names = None,
         experiment_label = None,
         max_mismatches_to_report=5,
-        account_key: str = 'call-criteria',
+        account_key: str = None,
         score_id: str = None,
         visualize: bool = False,
         task_id: str = None,
+        allow_no_labels: bool = False,
     ):
         # Immediately store task_id so that it is available for evaluation record creation
+        self.allow_no_labels = allow_no_labels
         self.task_id = task_id
+        
+        # Use PLEXUS_ACCOUNT_KEY environment variable if no account_key provided
+        if account_key is None:
+            account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+            if account_key is None:
+                raise ValueError("account_key must be provided or PLEXUS_ACCOUNT_KEY environment variable must be set")
         
         # Set up logging for evaluations
         self.logging = logging.getLogger('plexus/evaluation')
@@ -278,7 +286,13 @@ class Evaluation:
         pass
 
     def score_names(self):
-        return self.subset_of_score_names if self.subset_of_score_names is not None else self.scorecard.score_names()
+        if self.subset_of_score_names is not None:
+            return self.subset_of_score_names
+        # Use instance method if available (for instances from create_instance_from_api_data)
+        # Otherwise fall back to class method (for classes from create_from_yaml)
+        if hasattr(self.scorecard, 'get_score_names'):
+            return self.scorecard.get_score_names()
+        return self.scorecard.score_names()
 
     def score_names_to_process(self):
         all_score_names_to_process = self.scorecard.score_names_to_process()
@@ -1514,21 +1528,15 @@ class Evaluation:
         
         # Format metrics for API
         metrics_for_api = []
+        if metrics.get("alignment") is not None:
+            # For alignment (Gwet's AC1), store the raw value in range [-1, 1]
+            alignment_value = metrics["alignment"]
+            metrics_for_api.append({"name": "Alignment", "value": alignment_value})
+            # Added alignment to metrics
         if metrics.get("accuracy") is not None:
             metrics_for_api.append({"name": "Accuracy", "value": metrics["accuracy"] * 100})
         if metrics.get("precision") is not None:
             metrics_for_api.append({"name": "Precision", "value": metrics["precision"] * 100})
-        if metrics.get("alignment") is not None:
-            # For alignment (Gwet's AC1), we map from [-1, 1] to [0, 100] for UI display
-            # Only map if the value is negative, otherwise use the raw value scaled to percentage
-            alignment_value = metrics["alignment"]
-            # Process alignment value
-            if alignment_value < 0:
-                display_value = 0  # Map negative values to 0
-            else:
-                display_value = alignment_value * 100  # Scale to percentage
-            metrics_for_api.append({"name": "Alignment", "value": display_value})
-            # Added alignment to metrics
         if metrics.get("recall") is not None:
             metrics_for_api.append({"name": "Recall", "value": metrics["recall"] * 100})
         
@@ -1592,7 +1600,7 @@ class Evaluation:
             metric_names = [m["name"] for m in metrics_for_api]
             
             # Force append any missing metrics with default N/A value (-1 displays as N/A in UI)
-            required_metrics = ["Accuracy", "Precision", "Alignment", "Recall"]
+            required_metrics = ["Alignment", "Accuracy", "Precision", "Recall"]
             for required_metric in required_metrics:
                 if required_metric not in metric_names:
                     metrics_for_api.append({"name": required_metric, "value": -1})
@@ -1604,8 +1612,8 @@ class Evaluation:
         else:
             # Create default metrics list with all required metrics if empty
             default_metrics = [
+                {"name": "Alignment", "value": metrics.get("alignment", 0)},
                 {"name": "Accuracy", "value": metrics.get("accuracy", 0) * 100},
-                {"name": "Alignment", "value": 0 if metrics.get("alignment", 0) < 0 else metrics.get("alignment", 0) * 100},
                 {"name": "Precision", "value": metrics.get("precision", 0) * 100},
                 {"name": "Recall", "value": metrics.get("recall", 0) * 100}
             ]
@@ -1994,7 +2002,7 @@ Evaluation Report:
 ------------------
 
 Prompts:
-{yaml.dump(score_config.graph, default_flow_style=False)}
+{yaml.dump(score_config.graph, default_flow_style=False) if hasattr(score_config, 'graph') else 'N/A (non-LangGraph score)'}
 
 Mismatches (up to {self.max_mismatches_to_report}):
 """
@@ -2157,25 +2165,41 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                         # First check for override
                         human_label = None
+                        label_found = False
+                        
                         if form_id in self.override_data and score_name in self.override_data[form_id]:
                             human_label = self.override_data[form_id][score_name]
+                            label_found = True
                             logging.info(f"Using override for form {form_id}, score {score_name}: {human_label}")
                         else:
                             # Fall back to row data if no override exists
                             label_column = label_score_name + '_label'
                             if label_column in row.index:
                                 human_label = row[label_column]
+                                label_found = True
                             elif label_score_name in row.index:
                                 human_label = row[label_score_name]
+                                label_found = True
                             else:
-                                logging.warning(f"Label column not found for score: {score_identifier}")
-                                continue
+                                # Check if we're allowing evaluations without labels
+                                if not getattr(self, 'allow_no_labels', False):
+                                    logging.warning(f"Label column not found for score: {score_identifier}")
+                                    continue
+                                else:
+                                    # No label found, but that's okay - we're in label-optional mode
+                                    logging.debug(f"No label found for score: {score_identifier}, continuing in label-optional mode")
+                                    human_label = None
+                                    label_found = False
 
-                        human_label = str(human_label).lower().rstrip('.!?')
-                        if human_label == 'nan':
-                            human_label = ''
-                        if human_label == 'n/a':
-                            human_label = 'na'
+                        # Process label if found
+                        if label_found and human_label is not None:
+                            human_label = str(human_label).lower().rstrip('.!?')
+                            if human_label == 'nan':
+                                human_label = ''
+                            if human_label == 'n/a':
+                                human_label = 'na'
+                        else:
+                            human_label = ''  # Empty string for no label
 
                         human_explanation = columns.get(f"{label_score_name} comment", 'None')
 
@@ -2189,7 +2213,11 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                         score_result.metadata['human_label'] = human_label
                         score_result.metadata['human_explanation'] = human_explanation
-                        score_result.metadata['correct'] = score_result_value.strip() == human_label.strip()
+                        # Only calculate correctness if we have a label
+                        if label_found and human_label:
+                            score_result.metadata['correct'] = score_result_value.strip() == human_label.strip()
+                        else:
+                            score_result.metadata['correct'] = None  # No label to compare against
                         score_result.metadata['text'] = text
 
                         # Add to filtered results only if we get here (i.e., all conditions are met)
@@ -2720,7 +2748,9 @@ Total cost:       ${expenses['total_cost']:.6f}
         try:
             # Use PLEXUS_ACCOUNT_KEY environment variable if no account_key provided
             if account_key is None:
-                account_key = os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria')
+                account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+                if account_key is None:
+                    raise ValueError("account_key must be provided or PLEXUS_ACCOUNT_KEY environment variable must be set")
             
             client = PlexusDashboardClient()
             
@@ -2808,11 +2838,499 @@ class ConsistencyEvaluation(Evaluation):
     def log_parameters(self):
         super().log_parameters()
 
+
+class FeedbackEvaluation(Evaluation):
+    """
+    Evaluation that analyzes feedback items to measure agreement between AI predictions
+    and human corrections over a time period.
+    
+    This evaluation type:
+    - Fetches feedback items for a scorecard/score over a specified time period
+    - Calculates Gwet's AC1 agreement coefficient (primary metric)
+    - Calculates accuracy, precision, recall
+    - Generates confusion matrix
+    - Creates an evaluation record with all metrics
+    
+    Unlike AccuracyEvaluation which runs predictions on a dataset, FeedbackEvaluation
+    analyzes existing feedback corrections to measure real-world performance.
+    """
+    
+    def __init__(
+        self,
+        *,
+        days: int = 7,
+        scorecard_id: Optional[str] = None,
+        score_id: Optional[str] = None,
+        evaluation_id: Optional[str] = None,
+        account_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        api_client=None,
+        **kwargs
+    ):
+        """
+        Initialize a FeedbackEvaluation.
+        
+        Args:
+            days: Number of days to look back for feedback items (default: 7)
+            scorecard_id: ID of the scorecard to evaluate
+            score_id: Optional ID of specific score to evaluate (if None, evaluates all scores)
+            evaluation_id: ID of the evaluation record
+            account_id: Account ID
+            task_id: Optional task ID for progress tracking
+            api_client: Optional API client (if not provided, will be created from kwargs)
+            **kwargs: Additional arguments passed to parent Evaluation class
+        """
+        # Store api_client before calling super().__init__
+        # Remove it from kwargs since parent Evaluation doesn't accept it
+        self.api_client = api_client
+        
+        # Call parent init (which expects scorecard_name and scorecard at minimum)
+        # For FeedbackEvaluation, we don't need a full scorecard object
+        super().__init__(**kwargs)
+        
+        # Set api_client after parent init
+        if api_client:
+            self.api_client = api_client
+        elif hasattr(self, 'dashboard_client'):
+            self.api_client = self.dashboard_client
+        
+        self.days = days
+        self.scorecard_id = scorecard_id
+        self.score_id = score_id
+        self.evaluation_id = evaluation_id
+        self.account_id = account_id
+        self.task_id = task_id
+        self.logger = logging.getLogger('plexus/evaluation')
+    
+    async def run(self, tracker=None):
+        """
+        Run the feedback evaluation.
+        
+        Args:
+            tracker: Optional TaskProgressTracker for progress updates
+            
+        Returns:
+            Dictionary with evaluation results
+        """
+        from datetime import datetime, timedelta, timezone
+        from plexus.dashboard.api.models.feedback_item import FeedbackItem
+        from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+        from plexus.dashboard.api.models.score import Score as DashboardScore
+        from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+        from plexus.analysis.feedback_analyzer import analyze_feedback_items
+        
+        self.logger.info(f"Starting feedback evaluation for scorecard {self.scorecard_id}, score {self.score_id}, days={self.days}")
+        
+        try:
+            # Get evaluation record
+            if not self.evaluation_id:
+                raise ValueError("evaluation_id is required for FeedbackEvaluation")
+            
+            evaluation_record = DashboardEvaluation.get_by_id(
+                self.evaluation_id,
+                client=self.api_client
+            )
+            
+            # Update status to RUNNING
+            evaluation_record.update(status="RUNNING")
+            
+            # Calculate date range
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=self.days)
+            
+            # Get scorecard
+            scorecard = DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
+            
+            # Feedback evaluation MUST have a score_id
+            if not self.score_id:
+                raise ValueError("score_id is required for FeedbackEvaluation. Feedback evaluations must be run on a single score, not an entire scorecard.")
+            
+            self.logger.info(f"Analyzing feedback for score {self.score_id}")
+            
+            # Fetch feedback items for this specific score
+            feedback_items = await self._fetch_feedback_items(
+                scorecard_id=self.scorecard_id,
+                score_id=self.score_id,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            self.logger.info(f"Fetched {len(feedback_items)} feedback items")
+            
+            # Perform analysis on the feedback items
+            overall_analysis = analyze_feedback_items(feedback_items, score_id=self.score_id)
+            
+            # Prepare metrics array for API (frontend expects array format)
+            # Alignment (Gwet's AC1) is listed first as the primary metric
+            metrics_for_api = []
+            
+            # Get AC1 from analysis and store as "Alignment" to match existing convention
+            ac1 = overall_analysis.get("ac1")
+            if ac1 is not None:
+                # Alignment is Gwet's AC1, ranges from -1 to 1
+                # Store as-is (no mapping needed - this matches accuracy evaluation behavior)
+                metrics_for_api.append({"name": "Alignment", "value": ac1})
+            
+            accuracy = overall_analysis.get("accuracy")
+            if accuracy is not None:
+                # Accuracy from feedback_analyzer is already a percentage (0-100)
+                # Store as-is to match the format from accuracy evaluation (which multiplies by 100)
+                metrics_for_api.append({"name": "Accuracy", "value": accuracy})
+            
+            precision = overall_analysis.get("precision")
+            if precision is not None:
+                # Precision from feedback_analyzer is already a percentage (0-100)
+                metrics_for_api.append({"name": "Precision", "value": precision})
+            
+            recall = overall_analysis.get("recall")
+            if recall is not None:
+                # Recall from feedback_analyzer is already a percentage (0-100)
+                metrics_for_api.append({"name": "Recall", "value": recall})
+            
+            # Also keep a dictionary version for the return value
+            metrics_dict = {
+                "ac1": ac1,
+                "accuracy": accuracy,
+                "precision": precision,
+                "recall": recall,
+                "total_items": overall_analysis.get("total_items"),
+                "agreements": overall_analysis.get("agreements"),
+                "disagreements": overall_analysis.get("disagreements"),
+            }
+            
+            # Create ScoreResult records for each FeedbackItem to link the evaluation to the original production data
+            self.logger.info(f"Creating ScoreResult records for {len(feedback_items)} feedback items")
+            await self._create_score_results_from_feedback(
+                feedback_items=feedback_items,
+                evaluation_id=self.evaluation_id,
+                scorecard_id=self.scorecard_id,
+                score_id=self.score_id,
+                account_id=self.account_id
+            )
+            
+            # Update evaluation record with results
+            # Ensure accuracy is never None (GraphQL schema requires Float!)
+            evaluation_record.update(
+                status="COMPLETED",
+                accuracy=accuracy if accuracy is not None else 0.0,
+                metrics=__import__('json').dumps(metrics_for_api),  # Store as array for frontend
+                confusionMatrix=__import__('json').dumps(overall_analysis.get("confusion_matrix")),
+                totalItems=overall_analysis.get("total_items"),
+                processedItems=overall_analysis.get("total_items"),
+                datasetClassDistribution=__import__('json').dumps(overall_analysis.get("class_distribution")),
+                predictedClassDistribution=__import__('json').dumps(overall_analysis.get("predicted_class_distribution")),
+            )
+            
+            # Format log message with safe handling of None values
+            ac1_str = f"{ac1:.3f}" if ac1 is not None else "N/A"
+            accuracy_str = f"{accuracy:.1f}%" if accuracy is not None else "N/A"
+            self.logger.info(f"Feedback evaluation completed. AC1={ac1_str}, Accuracy={accuracy_str}")
+            
+            return {
+                "status": "success",
+                "evaluation_id": self.evaluation_id,
+                "metrics": metrics_dict,
+                "analysis": overall_analysis
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error during feedback evaluation: {e}", exc_info=True)
+            
+            # Update evaluation record with error
+            if self.evaluation_id:
+                try:
+                    evaluation_record = DashboardEvaluation.get_by_id(
+                        self.evaluation_id,
+                        client=self.api_client
+                    )
+                    evaluation_record.update(
+                        status="FAILED",
+                        errorMessage=str(e)
+                    )
+                except Exception as update_error:
+                    self.logger.error(f"Failed to update evaluation record with error: {update_error}")
+            
+            raise
+    
+    async def _fetch_feedback_items(
+        self,
+        scorecard_id: str,
+        score_id: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> List:
+        """
+        Fetch feedback items for a specific score within a date range.
+        
+        Args:
+            scorecard_id: Scorecard ID
+            score_id: Score ID
+            start_date: Start of date range
+            end_date: End of date range
+            
+        Returns:
+            List of FeedbackItem objects
+        """
+        from plexus.dashboard.api.models.feedback_item import FeedbackItem
+        
+        # Query feedback items using the API client
+        # Note: This uses the same approach as the FeedbackAnalysis report block
+        query = """
+        query ListFeedbackItems(
+            $filter: ModelFeedbackItemFilterInput
+            $limit: Int
+            $nextToken: String
+        ) {
+            listFeedbackItems(filter: $filter, limit: $limit, nextToken: $nextToken) {
+                items {
+                    id
+                    accountId
+                    scorecardId
+                    scoreId
+                    itemId
+                    initialAnswerValue
+                    finalAnswerValue
+                    isAgreement
+                    createdAt
+                    updatedAt
+                    scoreResults {
+                        items {
+                            id
+                            evaluationId
+                            explanation
+                            trace
+                        }
+                    }
+                }
+                nextToken
+            }
+        }
+        """
+        
+        # Build filter
+        filter_input = {
+            "scorecardId": {"eq": scorecard_id},
+            "scoreId": {"eq": score_id},
+            "updatedAt": {
+                "between": [
+                    start_date.isoformat().replace('+00:00', 'Z'),
+                    end_date.isoformat().replace('+00:00', 'Z')
+                ]
+            }
+        }
+        
+        all_items = []
+        next_token = None
+        
+        while True:
+            variables = {
+                "filter": filter_input,
+                "limit": 1000,
+                "nextToken": next_token
+            }
+            
+            result = self.api_client.execute(query, variables)
+            
+            if not result or 'listFeedbackItems' not in result:
+                break
+            
+            items_data = result['listFeedbackItems'].get('items', [])
+            # Debug: Log first item to see if scoreResults is in the response
+            if items_data and len(items_data) > 0:
+                first_item = items_data[0]
+                self.logger.debug(f"First FeedbackItem from GraphQL has scoreResults: {'scoreResults' in first_item}, keys: {first_item.keys()}")
+                if 'scoreResults' in first_item:
+                    self.logger.debug(f"scoreResults value: {first_item['scoreResults']}")
+            
+            for item_data in items_data:
+                # Convert to FeedbackItem object
+                from plexus.dashboard.api.models.feedback_item import FeedbackItem
+                item = FeedbackItem.from_dict(item_data, self.api_client)
+                all_items.append(item)
+            
+            next_token = result['listFeedbackItems'].get('nextToken')
+            if not next_token:
+                break
+        
+        return all_items
+    
+    async def _create_score_results_from_feedback(
+        self,
+        feedback_items: List,
+        evaluation_id: str,
+        scorecard_id: str,
+        score_id: str,
+        account_id: str
+    ):
+        """
+        Create ScoreResult records for each FeedbackItem to link the evaluation to the original production data.
+        
+        This creates ScoreResult records with:
+        - evaluationId: Links to this feedback evaluation
+        - feedbackItemId: Links back to the original FeedbackItem (which links to the production ScoreResult)
+        - itemId: The item that was scored
+        - metadata: Contains the initial and final values from the feedback, plus text from Item
+        - explanation: From the original production ScoreResult
+        - trace: From the original production ScoreResult
+        - correct: Whether the initial prediction matched the final (human-corrected) value
+        - type: 'evaluation' to distinguish from production score results
+        
+        Args:
+            feedback_items: List of FeedbackItem objects
+            evaluation_id: ID of the evaluation record
+            scorecard_id: ID of the scorecard
+            score_id: ID of the score
+            account_id: ID of the account
+        """
+        from plexus.dashboard.api.models.score_result import ScoreResult
+        from plexus.dashboard.api.models.item import Item
+        import json
+        
+        self.logger.info(f"Creating {len(feedback_items)} ScoreResult records for feedback evaluation")
+        
+        created_count = 0
+        failed_count = 0
+        
+        for feedback_item in feedback_items:
+            try:
+                # Determine if the prediction was correct (initial matches final)
+                is_correct = feedback_item.initialAnswerValue == feedback_item.finalAnswerValue
+                
+                # Fetch the Item to get the text field
+                item_text = None
+                try:
+                    item = Item.get_by_id(feedback_item.itemId, self.api_client)
+                    if item and item.text:
+                        item_text = item.text
+                except Exception as e:
+                    self.logger.warning(f"Could not fetch Item {feedback_item.itemId}: {e}")
+                
+                # Get the original production ScoreResult by querying for it
+                # The production ScoreResult is the one that was originally scored (without evaluationId)
+                # and matches this FeedbackItem's itemId and scoreId
+                explanation = None
+                trace = None
+                try:
+                    # Query for the production ScoreResult using itemId and scoreId
+                    query = """
+                    query ListScoreResults($filter: ModelScoreResultFilterInput, $limit: Int) {
+                        listScoreResults(filter: $filter, limit: $limit) {
+                            items {
+                                id
+                                evaluationId
+                                explanation
+                                trace
+                            }
+                        }
+                    }
+                    """
+                    variables = {
+                        "filter": {
+                            "itemId": {"eq": feedback_item.itemId},
+                            "scoreId": {"eq": feedback_item.scoreId}
+                        },
+                        "limit": 10
+                    }
+                    result = self.api_client.execute(query, variables)
+                    if result and 'listScoreResults' in result:
+                        items = result['listScoreResults'].get('items', [])
+                        # Filter for production results (those without evaluationId)
+                        production_results = [
+                            item for item in items 
+                            if not item.get('evaluationId')
+                        ]
+                        
+                        if production_results:
+                            production_result = production_results[0]
+                            explanation = production_result.get('explanation')
+                            trace_str = production_result.get('trace')
+                            self.logger.debug(f"Found production ScoreResult for FeedbackItem {feedback_item.id} with explanation: {explanation is not None}, trace: {trace_str is not None}")
+                            if trace_str:
+                                try:
+                                    trace = json.loads(trace_str) if isinstance(trace_str, str) else trace_str
+                                except:
+                                    trace = None
+                        else:
+                            self.logger.debug(f"No production ScoreResult found for FeedbackItem {feedback_item.id} (found {len(items)} total, {len(production_results)} without evaluationId)")
+                except Exception as e:
+                    self.logger.warning(f"Error fetching production ScoreResult for FeedbackItem {feedback_item.id}: {e}")
+                
+                # Create metadata with feedback details
+                # IMPORTANT: Use 'human_label' for the actual/ground-truth value (finalAnswerValue)
+                # This is what the frontend expects for displaying actual vs predicted
+                metadata = {
+                    'feedback_item_id': feedback_item.id,
+                    'initial_value': feedback_item.initialAnswerValue,
+                    'final_value': feedback_item.finalAnswerValue,
+                    'human_label': feedback_item.finalAnswerValue,  # Frontend expects this field
+                    'is_agreement': feedback_item.isAgreement,
+                    'correct': is_correct,
+                    'evaluation_type': 'feedback',
+                    'edited_at': feedback_item.editedAt.isoformat() if feedback_item.editedAt else None,
+                    'editor_name': feedback_item.editorName
+                }
+                
+                # Add text to metadata if available
+                if item_text:
+                    metadata['text'] = item_text
+                
+                # Add comments if available
+                if feedback_item.editCommentValue:
+                    metadata['edit_comment'] = feedback_item.editCommentValue
+                if feedback_item.initialCommentValue:
+                    metadata['initial_comment'] = feedback_item.initialCommentValue
+                if feedback_item.finalCommentValue:
+                    metadata['final_comment'] = feedback_item.finalCommentValue
+                
+                # Create the ScoreResult record
+                score_result = ScoreResult.create(
+                    client=self.api_client,
+                    evaluationId=evaluation_id,
+                    itemId=feedback_item.itemId,
+                    accountId=account_id,
+                    scorecardId=scorecard_id,
+                    scoreId=score_id,
+                    feedbackItemId=feedback_item.id,
+                    value=feedback_item.initialAnswerValue or 'N/A',  # Use initial (predicted) value
+                    explanation=explanation,  # From production ScoreResult
+                    trace=trace,  # From production ScoreResult
+                    confidence=None,  # No confidence for feedback evaluations
+                    correct=is_correct,
+                    metadata=metadata,
+                    code='200',
+                    status='COMPLETED',
+                    type='evaluation'  # Mark as evaluation type
+                )
+                
+                created_count += 1
+                
+            except Exception as e:
+                failed_count += 1
+                self.logger.error(f"Failed to create ScoreResult for FeedbackItem {feedback_item.id}: {e}")
+                # Continue processing other items even if one fails
+        
+        self.logger.info(f"Created {created_count} ScoreResult records, {failed_count} failed")
+        
+        if failed_count > 0:
+            self.logger.warning(f"{failed_count} ScoreResult records failed to create")
+
+
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):
+    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, **kwargs):
+        # Store evaluation_id BEFORE calling super().__init__ so parent can use it
+        self.evaluation_id = evaluation_id
         # Store scorecard_id before calling super().__init__
         self.scorecard_id = scorecard_id
+        # Store account_id before calling super().__init__ (if provided)
+        if account_id:
+            self.account_id = account_id
+        
+        # If account_key is provided, pass it to parent; otherwise parent will use default
+        if account_key:
+            kwargs['account_key'] = account_key
+        
         super().__init__(**kwargs)
+        
         self.override_folder = override_folder
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
@@ -2821,8 +3339,7 @@ class AccuracyEvaluation(Evaluation):
         self.score_version_id = score_version_id  # Store score version ID
         self.visualize = visualize
         self.task_id = task_id  # Store task ID
-        self.evaluation_id = evaluation_id  # Store evaluation ID
-        self.account_id = account_id  # Store account ID
+        # evaluation_id and account_id already set above
         # Don't overwrite scorecard_id here since it's already set
         self.results_queue = Queue()
         self.metrics_tasks = {}  # Dictionary to track metrics tasks per score
@@ -3144,13 +3661,17 @@ class AccuracyEvaluation(Evaluation):
                     except ValueError as e:
                         if "not found" in str(e):
                             # Use default report folder when scorecard not found in registry
-                            scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
+                            # Get scorecard name - it's a method for instances, class attribute for classes
+                            scorecard_name_raw = self.scorecard.name() if callable(self.scorecard.name) else self.scorecard.name
+                            scorecard_name = scorecard_name_raw.replace(' ', '_')
                             score_name = self.subset_of_score_names[0].replace(' ', '_')
                             report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
                         else:
                             raise
                 else:
-                    scorecard_name = self.scorecard.name.replace(' ', '_')
+                    # Get scorecard name - it's a method for instances, class attribute for classes
+                    scorecard_name_raw = self.scorecard.name() if callable(self.scorecard.name) else self.scorecard.name
+                    scorecard_name = scorecard_name_raw.replace(' ', '_')
                     report_folder_path = f"./score_results/{scorecard_name}/combined"
 
                 # Ensure the report folder exists

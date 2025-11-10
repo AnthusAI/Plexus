@@ -906,7 +906,8 @@ def generate_report_with_parameters(
         extract_parameters_from_config,
         validate_all_parameters,
         render_configuration_with_parameters,
-        normalize_parameter_value
+        normalize_parameter_value,
+        enrich_parameters_with_names
     )
 
     # Setup log prefix
@@ -956,11 +957,15 @@ def generate_report_with_parameters(
 
         logger.info(f"{log_prefix} Parameters validated: {normalized_params}")
 
-        # Render configuration with Jinja2
+        # Enrich parameters with resolved names for scorecard_select and score_select
+        enriched_params = enrich_parameters_with_names(param_defs, normalized_params, client)
+        logger.info(f"{log_prefix} Parameters enriched with names: {enriched_params}")
+
+        # Render configuration with Jinja2 using enriched parameters
         try:
             rendered_config = render_configuration_with_parameters(
                 report_config.configuration or '',
-                normalized_params
+                enriched_params
             )
             config_content_override = rendered_config
             logger.info(f"{log_prefix} Configuration rendered with parameters")
@@ -970,7 +975,7 @@ def generate_report_with_parameters(
             raise ValueError(error_msg) from e
 
         # Store parameters for metadata (with param_ prefix)
-        run_parameters.update({f"param_{k}": str(v) for k, v in normalized_params.items()})
+        run_parameters.update({f"param_{k}": str(v) for k, v in enriched_params.items()})
 
     # Step 3: Create or use Task record
     task_metadata = {
