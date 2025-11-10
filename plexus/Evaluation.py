@@ -2699,6 +2699,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'scorecard_id': evaluation.scorecardId,
                 'score_name': score_name,
                 'score_id': evaluation.scoreId,
+                'score_version_id': evaluation.scoreVersionId if hasattr(evaluation, 'scoreVersionId') else None,
                 'accuracy': evaluation.accuracy,
                 'metrics': metrics,
                 'parameters': parameters,
@@ -2784,6 +2785,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         errorDetails
                         scorecardId
                         scoreId
+                        scoreVersionId
                         confusionMatrix
                         scoreGoal
                         datasetClassDistribution
