@@ -52,6 +52,9 @@ interface TaskDisplayProps {
     predictedClassDistribution?: any
     isPredictedClassDistributionBalanced?: boolean | null
     scoreResults?: any // Accept any type for score results - we'll standardize it internally
+    scorecardId?: string | null | undefined
+    scoreId?: string | null | undefined
+    scoreVersionId?: string | null | undefined
   }
   reportData?: {
     id: string
@@ -289,6 +292,9 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         ...commonTaskProps,
         scorecard: evaluationData.scorecard?.name || '-',
         score: evaluationData.score?.name || '-',
+        scorecardId: evaluationData.scorecardId,
+        scoreId: evaluationData.scoreId,
+        scoreVersionId: evaluationData.scoreVersionId,
         data: {
           id: displayId,
           title: displayTitle,
