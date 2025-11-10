@@ -2952,6 +2952,13 @@ def last(account_key: str, type: Optional[str]):
         else:
             click.echo("Score: Not specified")
         
+        # Display score version if available
+        if latest_evaluation.get('score_version_id'):
+            version_id = latest_evaluation['score_version_id']
+            # Show short version (first 8 chars) with full ID
+            short_version = version_id[:8] if len(version_id) > 8 else version_id
+            click.echo(f"Score Version: {short_version}... (Full ID: {version_id})")
+        
         click.echo(f"\n=== Progress & Metrics ===")
         if latest_evaluation['total_items']:
             click.echo(f"Total Items: {latest_evaluation['total_items']}")

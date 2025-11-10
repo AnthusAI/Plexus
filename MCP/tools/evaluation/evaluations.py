@@ -104,6 +104,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     "status": evaluation_info['status'],
                     "scorecard": evaluation_info['scorecard_name'] or evaluation_info['scorecard_id'],
                     "score": evaluation_info['score_name'] or evaluation_info['score_id'],
+                    "score_version_id": evaluation_info.get('score_version_id'),
                     "total_items": evaluation_info['total_items'],
                     "processed_items": evaluation_info['processed_items'],
                     "metrics": evaluation_info['metrics'],
@@ -219,6 +220,13 @@ def register_evaluation_tools(mcp: FastMCP):
                         output_lines.append(f"Score ID: {evaluation_info['score_id']}")
                     else:
                         output_lines.append("Score: Not specified")
+                    
+                    # Display score version if available
+                    if evaluation_info.get('score_version_id'):
+                        version_id = evaluation_info['score_version_id']
+                        # Show short version (first 8 chars) with full ID
+                        short_version = version_id[:8] if len(version_id) > 8 else version_id
+                        output_lines.append(f"Score Version: {short_version}... (Full ID: {version_id})")
                     
                     output_lines.append("\n=== Progress & Metrics ===")
                     if evaluation_info.get('total_items'):
