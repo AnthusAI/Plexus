@@ -44,10 +44,20 @@ class TestPlexusFastmcpServer(unittest.TestCase):
     
     def test_get_plexus_url_default_base(self):
         """Test URL construction with default base URL when env var is missing"""
-        # Remove PLEXUS_APP_URL from environment to test default behavior
+        # Mock os.environ.get at the function level to return the default for PLEXUS_APP_URL
         # This ensures we test the default behavior regardless of CI environment config
-        env_without_plexus_url = {k: v for k, v in os.environ.items() if k != 'PLEXUS_APP_URL'}
-        with patch.dict(os.environ, env_without_plexus_url, clear=True):
+        
+        # Save the original os.environ.get before mocking
+        original_get = os.environ.get
+        
+        def mock_env_get(key, default=None):
+            if key == 'PLEXUS_APP_URL':
+                # Return the default value to simulate missing env var
+                return default
+            # For all other keys, use the original function
+            return original_get(key, default)
+        
+        with patch('plexus_fastmcp_server.os.environ.get', side_effect=mock_env_get):
             self.assertEqual(
                 get_plexus_url("lab/items"),
                 "https://plexus.anth.us/lab/items"
