@@ -207,10 +207,10 @@ class Item(BaseModel):
         return None
 
     @classmethod
-    def create(cls, client: '_BaseAPIClient', evaluationId: str, text: Optional[str] = None, 
-               metadata: Optional[Dict] = None, createdByType: Optional[str] = None, **kwargs) -> 'Item':
+    def create(cls, client: '_BaseAPIClient', evaluationId: str, text: Optional[str] = None,
+               metadata: Optional[Dict] = None, createdByType: Optional[str] = None, deterministic_id: Optional[str] = None, **kwargs) -> 'Item':
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        
+
         # Handle evaluationId requirement - DynamoDB GSI requires non-empty string
         if not evaluationId:
             # For prediction items, use a default evaluation ID
@@ -219,7 +219,7 @@ class Item(BaseModel):
             else:
                 # For evaluation items, evaluationId should be provided
                 raise ValueError("evaluationId is required for evaluation items")
-        
+
         # Determine createdByType if not provided
         if createdByType is None:
             # Default based on isEvaluation flag or evaluationId presence
@@ -227,7 +227,7 @@ class Item(BaseModel):
                 createdByType = "evaluation"
             else:
                 createdByType = "prediction"
-        
+
         input_data = {
             'evaluationId': evaluationId,
             'createdAt': now,
@@ -235,14 +235,18 @@ class Item(BaseModel):
             'createdByType': createdByType,
             **kwargs
         }
-        
+
+        # Add deterministic ID if provided (for deduplication via conditional write)
+        if deterministic_id:
+            input_data['id'] = deterministic_id
+
         if text is not None:
             input_data['text'] = text
         if metadata is not None:
             # Convert metadata to JSON string like other SDK models
             import json
             input_data['metadata'] = json.dumps(metadata)
-        
+
         mutation = """
         mutation CreateItem($input: CreateItemInput!) {
             createItem(input: $input) {
@@ -250,7 +254,7 @@ class Item(BaseModel):
             }
         }
         """ % cls.fields()
-        
+
         result = client.execute(mutation, {'input': input_data})
         return cls.from_dict(result['createItem'], client)
 
@@ -437,15 +441,24 @@ class Item(BaseModel):
                 else:
                     logger.info(f"IDENTIFIER_DEBUG: Creating new Item")
                 
+                # Generate deterministic ID using accountId + externalId
+                # This prevents duplicate Items from being created in race conditions
+                deterministic_id = None
+                if external_id and account_id:
+                    # Use a consistent format: {accountId}--{externalId}
+                    deterministic_id = f"{account_id}--{external_id}"
+                    if debug:
+                        logger.info(f"IDENTIFIER_DEBUG: Generated deterministic ID: {deterministic_id}")
+
                 # Set evaluation_id for non-evaluation items
                 if not evaluation_id:
                     evaluation_id = 'prediction-default' if not is_evaluation else None
-                
+
                 create_kwargs = {
                     'accountId': account_id,
                     'isEvaluation': is_evaluation
                 }
-                
+
                 if evaluation_id:
                     create_kwargs['evaluationId'] = evaluation_id
                 if external_id:
@@ -458,19 +471,68 @@ class Item(BaseModel):
                     create_kwargs['metadata'] = metadata
                 if score_id:
                     create_kwargs['scoreId'] = score_id
-                
+
                 # Create the Item - evaluationId, text, and metadata are positional/named parameters
                 # Remove these from kwargs since they're handled separately
-                create_kwargs_cleaned = {k: v for k, v in create_kwargs.items() 
+                create_kwargs_cleaned = {k: v for k, v in create_kwargs.items()
                                        if k not in ['evaluationId', 'text', 'metadata']}
-                
-                new_item = cls.create(
-                    client=client,
-                    evaluationId=evaluation_id or 'prediction-default',
-                    text=text,
-                    metadata=metadata,
-                    **create_kwargs_cleaned
-                )
+
+                # Try to create with deterministic ID (conditional write via unique ID)
+                try:
+                    new_item = cls.create(
+                        client=client,
+                        evaluationId=evaluation_id or 'prediction-default',
+                        text=text,
+                        metadata=metadata,
+                        deterministic_id=deterministic_id,
+                        **create_kwargs_cleaned
+                    )
+                except Exception as create_error:
+                    # Check if this is a duplicate key error (item with this ID already exists)
+                    error_str = str(create_error).lower()
+                    if deterministic_id and ("already exists" in error_str or "duplicate" in error_str or "conditional" in error_str):
+                        # Another thread/process created the Item first - fetch it
+                        if debug:
+                            logger.info(f"IDENTIFIER_DEBUG: Item with deterministic ID {deterministic_id} already exists, fetching it")
+
+                        # Fetch the existing Item by ID
+                        existing_item_obj = cls.get_by_id(deterministic_id, client)
+                        if existing_item_obj:
+                            if debug:
+                                logger.info(f"IDENTIFIER_DEBUG: Found existing Item {existing_item_obj.id}, will ensure identifiers exist")
+
+                            # Update the existing item with any new data
+                            update_kwargs = {}
+                            if description:
+                                update_kwargs['description'] = description
+                            if text:
+                                update_kwargs['text'] = text
+                            if metadata:
+                                update_kwargs['metadata'] = metadata
+
+                            if update_kwargs:
+                                existing_item_obj = existing_item_obj.update(**update_kwargs)
+
+                            # Check for missing identifiers and create them
+                            if identifiers:
+                                missing_identifiers = cls._find_missing_identifiers(client, account_id, existing_item_obj.id, identifiers, debug)
+                                if missing_identifiers:
+                                    if debug:
+                                        logger.info(f"IDENTIFIER_DEBUG: Found {len(missing_identifiers)} missing identifiers for Item {existing_item_obj.id}")
+                                    try:
+                                        identifier_ids = cls._create_identifier_records(client, existing_item_obj.id, account_id, missing_identifiers, debug)
+                                        if debug:
+                                            logger.info(f"IDENTIFIER_DEBUG: Created {len(identifier_ids)} missing identifier records")
+                                    except Exception as id_error:
+                                        logger.error(f"IDENTIFIER_DEBUG: Failed to create missing identifiers: {id_error}")
+
+                            return existing_item_obj.id, False, None
+                        else:
+                            # Weird state - couldn't fetch the item that supposedly exists
+                            return None, False, f"Item {deterministic_id} exists but could not be fetched"
+                    else:
+                        # Some other error - re-raise it
+                        raise
                 
                 # Create separate Identifier records for GSI-based lookups
                 if identifiers:
