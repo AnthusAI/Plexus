@@ -1129,6 +1129,9 @@ export type Evaluation = {
       }> | null;
     }>;
   } | null;
+  scorecardId?: string | null;
+  scoreId?: string | null;
+  scoreVersionId?: string | null;
 };
 
 // Add type definitions for subscription events
