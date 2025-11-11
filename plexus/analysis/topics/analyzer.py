@@ -994,6 +994,7 @@ def analyze_topics(
         # Continue with analysis even if n-gram export fails
 
     # --- Assess Topic Stability (Optional) ---
+    stability_results = None  # Initialize to None in case stability is disabled
     if compute_stability:
         logger.info("🔍 Computing topic stability metrics...")
         logger.info(f"   • Stability runs: {stability_n_runs}")
@@ -1034,6 +1035,7 @@ def analyze_topics(
             
         except Exception as e:
             logger.error(f"❌ Failed to compute topic stability: {e}", exc_info=True)
+            stability_results = None  # Ensure variable is None if computation fails
             # Continue with analysis even if stability assessment fails
 
     # --- Extract and Save Representative Documents ---
