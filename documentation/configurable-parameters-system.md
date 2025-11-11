@@ -133,6 +133,75 @@ parameters:
   description: Optionally select a specific version
 ```
 
+### Automatic Name Variable Injection
+
+**For Report Configurations Only**: When using `scorecard_select` or `score_select` parameter types in report configurations, the system automatically resolves the identifier to the actual object and injects a corresponding `{parameter_name}_name` variable into the template context.
+
+This allows templates to reference both the identifier (which could be an ID, key, external ID, or name) and the resolved human-readable name.
+
+#### How It Works
+
+1. **Parameter Definition**: Define a parameter with type `scorecard_select` or `score_select`
+2. **User Input**: User provides an identifier (ID, key, external ID, or name)
+3. **Automatic Resolution**: System looks up the object in the database
+4. **Name Injection**: Adds `{parameter_name}_name` variable with the resolved name
+5. **Template Rendering**: Both variables are available in Jinja2 templates
+
+#### Example
+
+```yaml
+parameters:
+  - name: scorecard
+    label: Scorecard
+    type: scorecard_select
+    required: true
+  - name: days
+    label: Days
+    type: number
+    default: 30
+
+---
+
+# Feedback Analysis Report
+
+## Scorecard: {{ scorecard_name }}
+## Last {{ days }} days
+
+This report analyzes scorecard {{ scorecard }} ({{ scorecard_name }}) 
+over the last {{ days }} days.
+```
+
+**User provides**: `scorecard=2bcaf6b9-c937-4ac5-9d89-8f3862518692`
+
+**System injects**: `scorecard_name="Call Criteria"`
+
+**Rendered output**:
+```markdown
+# Feedback Analysis Report
+
+## Scorecard: Call Criteria
+## Last 30 days
+
+This report analyzes scorecard 2bcaf6b9-c937-4ac5-9d89-8f3862518692 (Call Criteria)
+over the last 30 days.
+```
+
+#### Supported Parameter Types
+
+- **`scorecard_select`**: Automatically adds `{parameter_name}_name` with the scorecard's name
+- **`score_select`**: Automatically adds `{parameter_name}_name` with the score's name
+
+#### Fallback Behavior
+
+If the system cannot resolve the identifier (e.g., invalid ID, network error), it falls back to using the identifier itself as the name. This ensures reports always render successfully, even if resolution fails.
+
+#### Notes
+
+- This feature is **only available in report configurations** (not procedures or other parameter uses)
+- The original parameter value is preserved - only an additional `_name` variable is added
+- Name resolution happens after parameter validation and before Jinja2 template rendering
+- For `score_select` parameters, the system uses the `depends_on` field to find the scorecard context
+
 ## Usage Examples
 
 ### Procedure Template with Parameters

@@ -78,7 +78,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       setError(null)
       
       try {
-        // First get the account ID - using call-criteria as default
+        // First get the account ID
         const accountResponse = await getClient().graphql({
           query: `
             query ListAccounts($filter: ModelAccountFilterInput) {
@@ -91,7 +91,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
             }
           `,
           variables: {
-            filter: { key: { eq: 'call-criteria' } }
+            filter: { key: { eq: process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || '' } }
           }
         })
         

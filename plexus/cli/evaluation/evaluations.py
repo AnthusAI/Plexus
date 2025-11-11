@@ -1369,11 +1369,14 @@ def accuracy(
             client = PlexusDashboardClient()  # Create client at the top level
             account = None  # Initialize account at the top level
             
-            # Get the account ID for call-criteria regardless of path
-            logging.info("Looking up call-criteria account...")
-            account = Account.list_by_key(key="call-criteria", client=client)
+            # Get the account ID from PLEXUS_ACCOUNT_KEY environment variable
+            account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+            if not account_key:
+                raise Exception("PLEXUS_ACCOUNT_KEY environment variable must be set")
+            logging.info(f"Looking up account with key: {account_key}...")
+            account = Account.list_by_key(key=account_key, client=client)
             if not account:
-                raise Exception("Could not find account with key: call-criteria")
+                raise Exception(f"Could not find account with key: {account_key}")
             logging.info(f"Found account: {account.name} ({account.id})")
             
             if task_id:
@@ -2523,7 +2526,7 @@ def evaluations():
     pass
 
 @evaluations.command()
-@click.option('--account-key', default='call-criteria', help='Account key identifier')
+@click.option('--account-key', default=lambda: os.getenv('PLEXUS_ACCOUNT_KEY'), help='Account key identifier')
 @click.option('--type', required=True, help='Type of evaluation (e.g., accuracy, consistency)')
 @click.option('--task-id', required=True, help='Associated task ID')
 @click.option('--parameters', type=str, help='JSON string of evaluation parameters')
@@ -2909,7 +2912,7 @@ def info(evaluation_id: str, include_score_results: bool):
         click.echo(f"Error: {str(e)}", err=True)
 
 @evaluations.command()
-@click.option('--account-key', default='call-criteria', help='Account key to filter by')
+@click.option('--account-key', default=lambda: os.getenv('PLEXUS_ACCOUNT_KEY'), help='Account key to filter by')
 @click.option('--type', help='Filter by evaluation type (e.g., accuracy, consistency)')
 def last(account_key: str, type: Optional[str]):
     """Get information about the most recent evaluation"""
@@ -2948,6 +2951,13 @@ def last(account_key: str, type: Optional[str]):
             click.echo(f"Score ID: {latest_evaluation['score_id']}")
         else:
             click.echo("Score: Not specified")
+        
+        # Display score version if available
+        if latest_evaluation.get('score_version_id'):
+            version_id = latest_evaluation['score_version_id']
+            # Show short version (first 8 chars) with full ID
+            short_version = version_id[:8] if len(version_id) > 8 else version_id
+            click.echo(f"Score Version: {short_version}... (Full ID: {version_id})")
         
         click.echo(f"\n=== Progress & Metrics ===")
         if latest_evaluation['total_items']:
@@ -3030,10 +3040,10 @@ def feedback(
     
     Examples:
         # Analyze feedback edits (default mode)
-        plexus evaluate feedback --scorecard "Call Criteria" --score "Greeting" --days 14
+        plexus evaluate feedback --scorecard "SampleScorecard" --score "SampleScore" --days 14
         
         # Test a specific version against feedback
-        plexus evaluate feedback --scorecard "Call Criteria" --score "Greeting" --days 30 --version abc123
+        plexus evaluate feedback --scorecard "SampleScorecard" --score "SampleScore" --days 30 --version abc123
     """
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
