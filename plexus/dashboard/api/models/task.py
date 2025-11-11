@@ -6,6 +6,7 @@ from .account import Account
 import logging
 import uuid
 import json
+import os
 
 if TYPE_CHECKING:
     from .task_stage import TaskStage
@@ -141,10 +142,13 @@ class Task(BaseModel):
 
     @classmethod
     def _get_account_id(cls, client) -> str:
-        """Get the account ID for the call-criteria account."""
-        account = Account.list_by_key(client, "call-criteria")
+        """Get the account ID from PLEXUS_ACCOUNT_KEY environment variable."""
+        account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+        if not account_key:
+            raise ValueError("PLEXUS_ACCOUNT_KEY environment variable must be set")
+        account = Account.list_by_key(client, account_key)
         if not account:
-            raise ValueError("No account found with key: call-criteria")
+            raise ValueError(f"No account found with key: {account_key}")
         return account.id
 
     @classmethod

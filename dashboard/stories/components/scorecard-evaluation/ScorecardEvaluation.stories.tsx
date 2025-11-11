@@ -85,7 +85,7 @@ const mockAttachedFiles = JSON.stringify([
 
 // Example identifiers data
 const exampleIdentifiers = JSON.stringify([
-  { name: "form ID", id: "56288648", url: "https://app.callcriteria.com/r/56288648" },
+  { name: "form ID", id: "56288648", url: "https://example.com/forms/56288648" },
   { name: "XCC ID", id: "44548" },
   { name: "session ID", id: "C6CDE6E4908045B9BDC2C0D46ACDA8E9" }
 ]);

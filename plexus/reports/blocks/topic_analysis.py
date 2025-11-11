@@ -1176,7 +1176,6 @@ class TopicAnalysis(BaseReportBlock):
                                         self._log("⚠️  Final summary generation failed or returned empty result")
                                         
                                 except Exception as e:
-                                    import traceback
                                     error_msg = f"Error generating final summary: {str(e)}"
                                     traceback_str = traceback.format_exc()
                                     self._log(error_msg, level="ERROR")
@@ -1720,7 +1719,6 @@ You are writing copy for a Markdown document that already has an H1 at the top, 
                 
         except Exception as e:
             self._log(f"Error in final summary generation: {e}", level="ERROR")
-            import traceback
             self._log(f"Traceback: {traceback.format_exc()}", level="ERROR")
             return None
 

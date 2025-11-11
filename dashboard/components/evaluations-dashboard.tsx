@@ -119,7 +119,7 @@ interface RawTaskData {
   data?: RawTask;
 }
 
-const ACCOUNT_KEY = 'call-criteria'
+const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
 
 const LIST_ACCOUNTS = `
   query ListAccounts($filter: ModelAccountFilterInput) {
@@ -173,6 +173,7 @@ const LIST_EVALUATIONS = `
           id
           name
         }
+        scoreVersionId
         confusionMatrix
         scoreGoal
         datasetClassDistribution
@@ -851,7 +852,10 @@ export default function EvaluationsDashboard({
         evaluationData={{
           ...evaluation,
           // Pass lazily loaded score results when available
-          scoreResults: selectedEvaluationScoreResults ?? null
+          scoreResults: selectedEvaluationScoreResults ?? null,
+          scorecardId: evaluation.scorecardId ?? undefined,
+          scoreId: evaluation.scoreId ?? undefined,
+          scoreVersionId: evaluation.scoreVersionId ?? undefined
         }}
 
         isFullWidth={isFullWidth}
@@ -1072,7 +1076,10 @@ export default function EvaluationsDashboard({
                           evaluationData={{
                             ...evaluation,
                             // Pass the raw score results - they will be standardized in the components
-                            scoreResults: evaluation.scoreResults
+                            scoreResults: evaluation.scoreResults,
+                            scorecardId: evaluation.scorecardId ?? undefined,
+                            scoreId: evaluation.scoreId ?? undefined,
+                            scoreVersionId: evaluation.scoreVersionId ?? undefined
                           }}
                           isSelected={evaluation.id === selectedEvaluationId}
                           onClick={clickHandler}

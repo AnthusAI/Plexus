@@ -20,7 +20,7 @@ def register_evaluation_tools(mcp: FastMCP):
     async def plexus_evaluation_info(
         evaluation_id: Optional[str] = None,
         use_latest: bool = False,
-        account_key: str = 'call-criteria',
+        account_key: str = None,
         evaluation_type: str = "",
         include_score_results: bool = False,
         include_examples: bool = False,
@@ -43,7 +43,7 @@ def register_evaluation_tools(mcp: FastMCP):
         Parameters:
         - evaluation_id: The unique ID of the evaluation to look up (mutually exclusive with use_latest)
         - use_latest: If True, get info about the most recent evaluation (mutually exclusive with evaluation_id)
-        - account_key: Account key to filter by when using use_latest (default: 'call-criteria')
+        - account_key: Account key to filter by when using use_latest (uses PLEXUS_ACCOUNT_KEY env var if not provided)
         - evaluation_type: Optional filter by evaluation type when using use_latest (e.g., 'accuracy', 'consistency')
         - include_score_results: Whether to include score results information (default: False)
         - include_examples: Whether to include examples from confusion matrix (default: False)
@@ -55,6 +55,12 @@ def register_evaluation_tools(mcp: FastMCP):
         Returns:
         - Formatted string with comprehensive evaluation information
         """
+        # Use PLEXUS_ACCOUNT_KEY environment variable if no account_key provided
+        if account_key is None:
+            account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+            if account_key is None:
+                return "Error: account_key must be provided or PLEXUS_ACCOUNT_KEY environment variable must be set"
+        
         # Temporarily redirect stdout to capture any unexpected output
         old_stdout = sys.stdout
         temp_stdout = StringIO()
@@ -98,6 +104,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     "status": evaluation_info['status'],
                     "scorecard": evaluation_info['scorecard_name'] or evaluation_info['scorecard_id'],
                     "score": evaluation_info['score_name'] or evaluation_info['score_id'],
+                    "score_version_id": evaluation_info.get('score_version_id'),
                     "total_items": evaluation_info['total_items'],
                     "processed_items": evaluation_info['processed_items'],
                     "metrics": evaluation_info['metrics'],
@@ -213,6 +220,13 @@ def register_evaluation_tools(mcp: FastMCP):
                         output_lines.append(f"Score ID: {evaluation_info['score_id']}")
                     else:
                         output_lines.append("Score: Not specified")
+                    
+                    # Display score version if available
+                    if evaluation_info.get('score_version_id'):
+                        version_id = evaluation_info['score_version_id']
+                        # Show short version (first 8 chars) with full ID
+                        short_version = version_id[:8] if len(version_id) > 8 else version_id
+                        output_lines.append(f"Score Version: {short_version}... (Full ID: {version_id})")
                     
                     output_lines.append("\n=== Progress & Metrics ===")
                     if evaluation_info.get('total_items'):

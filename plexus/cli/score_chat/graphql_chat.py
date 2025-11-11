@@ -50,7 +50,9 @@ def message(scorecard: str, score: str, message: str, session_id: Optional[str] 
     async def process_message():
         # Get account ID from environment if not provided
         if not account_id:
-            account_id_env = os.environ.get('PLEXUS_ACCOUNT_ID', 'call-criteria')
+            account_id_env = os.environ.get('PLEXUS_ACCOUNT_ID')
+            if not account_id_env:
+                raise ValueError("PLEXUS_ACCOUNT_ID environment variable must be set")
         else:
             account_id_env = account_id
         
@@ -121,7 +123,9 @@ def list_sessions(account_id: Optional[str] = None, limit: int = 10):
     async def list_sessions_async():
         # Get account ID from environment if not provided
         if not account_id:
-            account_id_env = os.environ.get('PLEXUS_ACCOUNT_ID', 'call-criteria')
+            account_id_env = os.environ.get('PLEXUS_ACCOUNT_ID')
+            if not account_id_env:
+                raise ValueError("PLEXUS_ACCOUNT_ID environment variable must be set")
         else:
             account_id_env = account_id
         

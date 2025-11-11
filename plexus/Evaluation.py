@@ -137,7 +137,7 @@ class Evaluation:
         subset_of_score_names = None,
         experiment_label = None,
         max_mismatches_to_report=5,
-        account_key: str = 'call-criteria',
+        account_key: str = None,
         score_id: str = None,
         visualize: bool = False,
         task_id: str = None,
@@ -146,6 +146,12 @@ class Evaluation:
         # Immediately store task_id so that it is available for evaluation record creation
         self.allow_no_labels = allow_no_labels
         self.task_id = task_id
+        
+        # Use PLEXUS_ACCOUNT_KEY environment variable if no account_key provided
+        if account_key is None:
+            account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+            if account_key is None:
+                raise ValueError("account_key must be provided or PLEXUS_ACCOUNT_KEY environment variable must be set")
         
         # Set up logging for evaluations
         self.logging = logging.getLogger('plexus/evaluation')
@@ -2693,6 +2699,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'scorecard_id': evaluation.scorecardId,
                 'score_name': score_name,
                 'score_id': evaluation.scoreId,
+                'score_version_id': evaluation.scoreVersionId if hasattr(evaluation, 'scoreVersionId') else None,
                 'accuracy': evaluation.accuracy,
                 'metrics': metrics,
                 'parameters': parameters,
@@ -2742,7 +2749,9 @@ Total cost:       ${expenses['total_cost']:.6f}
         try:
             # Use PLEXUS_ACCOUNT_KEY environment variable if no account_key provided
             if account_key is None:
-                account_key = os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria')
+                account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+                if account_key is None:
+                    raise ValueError("account_key must be provided or PLEXUS_ACCOUNT_KEY environment variable must be set")
             
             client = PlexusDashboardClient()
             
@@ -2776,6 +2785,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         errorDetails
                         scorecardId
                         scoreId
+                        scoreVersionId
                         confusionMatrix
                         scoreGoal
                         datasetClassDistribution
