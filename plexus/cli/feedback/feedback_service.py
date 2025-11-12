@@ -363,7 +363,7 @@ class FeedbackService:
         scorecard_id: str,
         score_id: str,
         account_id: str,
-        days: int
+        days: Optional[int]
     ) -> FeedbackSummaryResult:
         """
         Generate a comprehensive feedback summary including confusion matrix, accuracy,
@@ -376,7 +376,7 @@ class FeedbackService:
             scorecard_id: The scorecard ID to filter by
             score_id: The score ID to filter by  
             account_id: The account ID to filter by
-            days: Number of days back to search
+            days: Number of days back to search (None = all time)
             
         Returns:
             FeedbackSummaryResult with context, analysis, and recommendations
@@ -501,7 +501,7 @@ class FeedbackService:
         scorecard_id: str,
         score_id: str,
         account_id: str,
-        days: int,
+        days: Optional[int],
         initial_value: Optional[str] = None,
         final_value: Optional[str] = None,
         limit: Optional[int] = None,
@@ -516,7 +516,7 @@ class FeedbackService:
             scorecard_id: The scorecard ID to filter by
             score_id: The score ID to filter by  
             account_id: The account ID to filter by
-            days: Number of days back to search
+            days: Number of days back to search (None = all time)
             initial_value: Optional filter for initial answer value
             final_value: Optional filter for final answer value
             limit: Optional limit on number of items to return
@@ -526,125 +526,18 @@ class FeedbackService:
         Returns:
             List of FeedbackItem objects matching the criteria
         """
-        logger.info(f"Finding feedback items for scorecard {scorecard_id}, score {score_id}, last {days} days")
+        days_str = f"last {days} days" if days is not None else "all time"
+        logger.info(f"Finding feedback items for scorecard {scorecard_id}, score {score_id}, {days_str}")
         
-        try:
-            # Calculate date range
-            start_date = datetime.now(timezone.utc) - timedelta(days=days)
-            # Add a small buffer to end_date to catch items created very recently
-            end_date = datetime.now(timezone.utc) + timedelta(minutes=5)
-            
-            # Use the GSI query for efficient retrieval (same as reporting system)
-            query = """
-            query ListFeedbackItemsByGSI(
-                $accountId: String!,
-                $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
-                $limit: Int,
-                $nextToken: String,
-                $sortDirection: ModelSortDirection
-            ) {
-                listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
-                    accountId: $accountId,
-                    scorecardIdScoreIdEditedAt: $composite_sk_condition,
-                    limit: $limit,
-                    nextToken: $nextToken,
-                    sortDirection: $sortDirection
-                ) {
-                    items {
-                        id
-                        accountId
-                        scorecardId
-                        scoreId
-                        itemId
-                        cacheKey
-                        initialAnswerValue
-                        finalAnswerValue
-                        initialCommentValue
-                        finalCommentValue
-                        editCommentValue
-                        editedAt
-                        editorName
-                        isAgreement
-                        createdAt
-                        updatedAt
-                        item {
-                            id
-                            identifiers
-                            externalId
-                            description
-                            text
-                            metadata
-                        }
-                    }
-                    nextToken
-                }
-            }
-            """
-            
-            variables = {
-                "accountId": account_id,
-                "composite_sk_condition": {
-                    "between": [
-                        {
-                            "scorecardId": scorecard_id,
-                            "scoreId": score_id,
-                            "editedAt": start_date.isoformat()
-                        },
-                        {
-                            "scorecardId": scorecard_id,
-                            "scoreId": score_id,
-                            "editedAt": end_date.isoformat()
-                        }
-                    ]
-                },
-                "limit": 100,
-                "nextToken": None,
-                "sortDirection": "DESC"
-            }
-            
-            # Handle pagination to get all items
-            all_feedback_items = []
-            next_token = None
-            
-            while True:
-                if next_token:
-                    variables["nextToken"] = next_token
-                
-                # Execute the query (async operation)
-                response = await asyncio.to_thread(client.execute, query, variables)
-                
-                if 'errors' in response:
-                    logger.error(f"GraphQL errors in GSI query: {response['errors']}")
-                    # Fall back to the standard method if GSI fails
-                    raise Exception(f"GSI query failed: {response['errors']}")
-                
-                result_data = response.get('listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt', {})
-                items_data = result_data.get('items', [])
-                
-                # Convert to FeedbackItem objects
-                batch_items = [FeedbackItem.from_dict(item_dict, client=client) for item_dict in items_data]
-                all_feedback_items.extend(batch_items)
-                
-                logger.debug(f"Fetched {len(batch_items)} items (total: {len(all_feedback_items)})")
-                
-                # Check for more pages
-                next_token = result_data.get('nextToken')
-                if not next_token:
-                    break
-            
-            logger.info(f"Retrieved {len(all_feedback_items)} feedback items from GSI")
-            
-        except Exception as e:
-            logger.warning(f"GSI query failed, falling back to standard query: {str(e)}")
-            
-            # Fallback to the original method
-            cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        # When days is None, we can't use the GSI query (which requires editedAt in composite key)
+        # so we go straight to the fallback query without date filtering
+        if days is None:
+            logger.info("No date filter specified, using standard query for all feedback items")
             filter_condition = {
                 "and": [
                     {"accountId": {"eq": account_id}},
                     {"scorecardId": {"eq": scorecard_id}},
-                    {"scoreId": {"eq": score_id}},
-                    {"editedAt": {"ge": cutoff_date}}
+                    {"scoreId": {"eq": score_id}}
                 ]
             }
             
@@ -655,7 +548,137 @@ class FeedbackService:
                 fields=FeedbackItem.GRAPHQL_BASE_FIELDS
             )
             
-            logger.info(f"Retrieved {len(all_feedback_items)} feedback items from fallback query")
+            logger.info(f"Retrieved {len(all_feedback_items)} feedback items from standard query (all time)")
+        else:
+            # Use the GSI query with date filtering for better performance
+            try:
+                # Calculate date range
+                start_date = datetime.now(timezone.utc) - timedelta(days=days)
+                # Add a small buffer to end_date to catch items created very recently
+                end_date = datetime.now(timezone.utc) + timedelta(minutes=5)
+                
+                # Use the GSI query for efficient retrieval (same as reporting system)
+                query = """
+                query ListFeedbackItemsByGSI(
+                    $accountId: String!,
+                    $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
+                    $limit: Int,
+                    $nextToken: String,
+                    $sortDirection: ModelSortDirection
+                ) {
+                    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+                        accountId: $accountId,
+                        scorecardIdScoreIdEditedAt: $composite_sk_condition,
+                        limit: $limit,
+                        nextToken: $nextToken,
+                        sortDirection: $sortDirection
+                    ) {
+                        items {
+                            id
+                            accountId
+                            scorecardId
+                            scoreId
+                            itemId
+                            cacheKey
+                            initialAnswerValue
+                            finalAnswerValue
+                            initialCommentValue
+                            finalCommentValue
+                            editCommentValue
+                            editedAt
+                            editorName
+                            isAgreement
+                            createdAt
+                            updatedAt
+                            item {
+                                id
+                                identifiers
+                                externalId
+                                description
+                                text
+                                metadata
+                            }
+                        }
+                        nextToken
+                    }
+                }
+                """
+                
+                variables = {
+                    "accountId": account_id,
+                    "composite_sk_condition": {
+                        "between": [
+                            {
+                                "scorecardId": scorecard_id,
+                                "scoreId": score_id,
+                                "editedAt": start_date.isoformat()
+                            },
+                            {
+                                "scorecardId": scorecard_id,
+                                "scoreId": score_id,
+                                "editedAt": end_date.isoformat()
+                            }
+                        ]
+                    },
+                    "limit": 100,
+                    "nextToken": None,
+                    "sortDirection": "DESC"
+                }
+                
+                # Handle pagination to get all items
+                all_feedback_items = []
+                next_token = None
+                
+                while True:
+                    if next_token:
+                        variables["nextToken"] = next_token
+                    
+                    # Execute the query (async operation)
+                    response = await asyncio.to_thread(client.execute, query, variables)
+                    
+                    if 'errors' in response:
+                        logger.error(f"GraphQL errors in GSI query: {response['errors']}")
+                        # Fall back to the standard method if GSI fails
+                        raise Exception(f"GSI query failed: {response['errors']}")
+                    
+                    result_data = response.get('listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt', {})
+                    items_data = result_data.get('items', [])
+                    
+                    # Convert to FeedbackItem objects
+                    batch_items = [FeedbackItem.from_dict(item_dict, client=client) for item_dict in items_data]
+                    all_feedback_items.extend(batch_items)
+                    
+                    logger.debug(f"Fetched {len(batch_items)} items (total: {len(all_feedback_items)})")
+                    
+                    # Check for more pages
+                    next_token = result_data.get('nextToken')
+                    if not next_token:
+                        break
+                
+                logger.info(f"Retrieved {len(all_feedback_items)} feedback items from GSI")
+                
+            except Exception as e:
+                logger.warning(f"GSI query failed, falling back to standard query: {str(e)}")
+                
+                # Fallback to the original method
+                cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+                filter_condition = {
+                    "and": [
+                        {"accountId": {"eq": account_id}},
+                        {"scorecardId": {"eq": scorecard_id}},
+                        {"scoreId": {"eq": score_id}},
+                        {"editedAt": {"ge": cutoff_date}}
+                    ]
+                }
+                
+                all_feedback_items, _ = FeedbackItem.list(
+                    client=client,
+                    limit=1000,  # Use a large limit to get all matching items
+                    filter=filter_condition,
+                    fields=FeedbackItem.GRAPHQL_BASE_FIELDS
+                )
+                
+                logger.info(f"Retrieved {len(all_feedback_items)} feedback items from fallback query")
         
         # Apply value filters if specified
         if initial_value or final_value:
@@ -700,7 +723,7 @@ class FeedbackService:
         scorecard_id: str,
         score_id: str,
         account_id: str,
-        days: int,
+        days: Optional[int],
         initial_value: Optional[str] = None,
         final_value: Optional[str] = None,
         limit: Optional[int] = None,
@@ -717,7 +740,7 @@ class FeedbackService:
             scorecard_id: The scorecard ID to filter by
             score_id: The score ID to filter by  
             account_id: The account ID to filter by
-            days: Number of days back to search
+            days: Number of days back to search (None = all time)
             initial_value: Optional filter for initial answer value
             final_value: Optional filter for final answer value
             limit: Optional limit on number of items to return
