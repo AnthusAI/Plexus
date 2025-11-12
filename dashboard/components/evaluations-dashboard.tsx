@@ -845,6 +845,12 @@ export default function EvaluationsDashboard({
                         (evaluation.scoreResults as any).items[0] : undefined)
     });
 
+        // Debug: Log the scoreVersionId
+        console.log('🔍 DEBUG evaluations-dashboard evaluation.scoreVersionId =', evaluation.scoreVersionId);
+        console.log('🔍 DEBUG evaluations-dashboard evaluation.scorecardId =', evaluation.scorecardId);
+        console.log('🔍 DEBUG evaluations-dashboard evaluation.scoreId =', evaluation.scoreId);
+        console.log('🔍 DEBUG evaluations-dashboard evaluation.id =', evaluation.id);
+
     return (
       <TaskDisplay
         variant="detail"
