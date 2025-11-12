@@ -214,8 +214,41 @@ class JobProcessor:
                     raise Exception(f"No transcript found for item {item_id}")
 
                 metadata = await get_metadata_from_item(item_id, self.client)
+                logging.info(f"📊 METADATA DEBUG: Raw metadata from DynamoDB:")
+                logging.info(f"  Type: {type(metadata)}")
+                logging.info(f"  Value: {metadata}")
+                
                 if not metadata:
                     metadata = {}
+                
+                # Desanitize metadata: parse any JSON string fields back to their original structure
+                # This reverses the sanitize_metadata_for_graphql transformation that stores
+                # dicts/lists as JSON strings for GraphQL compatibility
+                if isinstance(metadata, dict):
+                    logging.info(f"📊 METADATA DEBUG: Processing {len(metadata)} metadata keys")
+                    for key, value in list(metadata.items()):
+                        logging.info(f"  Key '{key}': type={type(value).__name__}, value_preview={str(value)[:100]}")
+                        if isinstance(value, str):
+                            # Try to parse JSON strings back to their original structure
+                            try:
+                                parsed = json.loads(value)
+                                metadata[key] = parsed
+                                logging.info(f"    ✅ Successfully parsed '{key}' from string to {type(parsed).__name__}")
+                            except (json.JSONDecodeError, ValueError) as e:
+                                # Not a JSON string, leave it as is
+                                logging.info(f"    ℹ️  '{key}' is not JSON (keeping as string): {e}")
+                                pass
+                else:
+                    logging.warning(f"📊 METADATA DEBUG: metadata is not a dict! Type: {type(metadata)}")
+                
+                logging.info(f"📊 METADATA DEBUG: Final metadata after deserialization:")
+                logging.info(f"  Type: {type(metadata)}")
+                if isinstance(metadata, dict):
+                    logging.info(f"  Keys: {list(metadata.keys())}")
+                    for key, value in metadata.items():
+                        logging.info(f"    '{key}': {type(value).__name__}")
+                else:
+                    logging.info(f"  Value: {metadata}")
 
                 external_id = await get_external_id_from_item(item_id, self.client)
                 if not external_id:

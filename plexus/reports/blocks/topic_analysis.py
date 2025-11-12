@@ -1327,7 +1327,12 @@ class TopicAnalysis(BaseReportBlock):
 
         except Exception as e:
             error_msg = f"An error occurred during TopicAnalysis block generation: {str(e)}"
-            tb_str = traceback.format_exc()
+            try:
+                tb_str = traceback.format_exc()
+            except Exception:
+                # Defensive handling in case traceback module has scoping issues
+                import traceback as tb_module
+                tb_str = tb_module.format_exc()
             self._log(error_msg, "ERROR")
             self._log("Traceback:", "ERROR")
             self._log(tb_str, "ERROR")
