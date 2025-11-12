@@ -286,6 +286,11 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
 
   // Conditionally render EvaluationTask or ReportTask
   if (evaluationData) {
+    // Debug: Log scoreVersionId in TaskDisplay
+    console.log('🔍 DEBUG TaskDisplay evaluationData.scoreVersionId =', evaluationData.scoreVersionId);
+    console.log('🔍 DEBUG TaskDisplay evaluationData.scorecardId =', evaluationData.scorecardId);
+    console.log('🔍 DEBUG TaskDisplay evaluationData.scoreId =', evaluationData.scoreId);
+    
     // Construct props specific to EvaluationTask
     const evaluationTaskProps = {
       task: {

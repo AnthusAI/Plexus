@@ -21,6 +21,7 @@ import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-res
 import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
 import Link from 'next/link'
+import { getClient } from '@/utils/amplify-client'
 
 export interface EvaluationMetric {
   name: string
@@ -985,6 +986,10 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   ...restProps
 }: EvaluationTaskProps) {
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
+  const [scoreVersionInfo, setScoreVersionInfo] = useState<{
+    createdAt: string;
+    isChampion: boolean;
+  } | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
   
@@ -992,6 +997,47 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   
 
   // Add more detailed logging for incoming data
+
+  // Fetch score version information when scoreVersionId is available
+  useEffect(() => {
+    if (!task.scoreVersionId || variant !== 'detail') {
+      setScoreVersionInfo(null);
+      return;
+    }
+
+    const fetchScoreVersion = async () => {
+      try {
+        const client = getClient();
+        const result = await client.graphql({
+          query: `
+            query GetScoreVersion($id: ID!) {
+              getScoreVersion(id: $id) {
+                id
+                createdAt
+                score {
+                  championVersionId
+                }
+              }
+            }
+          `,
+          variables: { id: task.scoreVersionId }
+        });
+
+        const scoreVersion = (result as any).data?.getScoreVersion;
+        if (scoreVersion) {
+          setScoreVersionInfo({
+            createdAt: scoreVersion.createdAt,
+            isChampion: scoreVersion.score?.championVersionId === task.scoreVersionId
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching score version:', error);
+        setScoreVersionInfo(null);
+      }
+    };
+
+    fetchScoreVersion();
+  }, [task.scoreVersionId, variant]);
 
   // Function to generate universal YAML code for evaluation
   const generateUniversalCode = useCallback((evaluationData: EvaluationTaskData) => {
@@ -1195,47 +1241,54 @@ evaluation:
 
   const taskData = task.data?.task as TaskData | undefined;
 
-  const taskWithDefaults = useMemo(() => ({
-    id: task.id,
-    type: task.type ? task.type.split(' ').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-    ).join(' ') : 'Unknown',
-    scorecard: task.scorecard,
-    score: task.score,
-    time: task.time,
-    description: variant === 'detail' ? undefined : task.summary,
-    data: task.data,
-    command: taskData?.command,
-    stages: taskData?.stages?.items?.map(stage => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.name === 'Processing' ? 'bg-secondary' : (
-        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
-        stage.status === 'FAILED' ? 'bg-false' :
-        'bg-neutral'
-      ),
-      name: stage.name,
-      order: stage.order,
-      status: mapTaskStatus(stage.status),
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      statusMessage: stage.statusMessage
-    })) || [],
-    currentStageName: taskData?.currentStageId || undefined,
-    processedItems: task.data?.processedItems,
-    totalItems: task.data?.totalItems,
-    startedAt: taskData?.startedAt || task.data?.startedAt || undefined,
-    estimatedCompletionAt: taskData?.estimatedCompletionAt || undefined,
-    status: mapTaskStatus(taskData?.status || task.data?.status),
-    dispatchStatus: taskData?.dispatchStatus,
-    celeryTaskId: taskData?.celeryTaskId,
-    workerNodeId: taskData?.workerNodeId,
-    completedAt: taskData?.completedAt || undefined,
-    errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined,
-    scorecardId: task.scorecardId,
-    scoreId: task.scoreId,
-    scoreVersionId: task.scoreVersionId
-  }), [task, taskData, variant]);
+  const taskWithDefaults = useMemo(() => {
+    // Debug: Log what we're receiving in EvaluationTask
+    console.log('🔍 DEBUG task.scoreVersionId =', task.scoreVersionId);
+    console.log('🔍 DEBUG task.scoreId =', task.scoreId);
+    console.log('🔍 DEBUG task.scorecardId =', task.scorecardId);
+    
+    return {
+      id: task.id,
+      type: task.type ? task.type.split(' ').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      ).join(' ') : 'Unknown',
+      scorecard: task.scorecard,
+      score: task.score,
+      time: task.time,
+      description: variant === 'detail' ? undefined : task.summary,
+      data: task.data,
+      command: taskData?.command,
+      stages: taskData?.stages?.items?.map(stage => ({
+        key: stage.name,
+        label: stage.name,
+        color: stage.name === 'Processing' ? 'bg-secondary' : (
+          stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+          stage.status === 'FAILED' ? 'bg-false' :
+          'bg-neutral'
+        ),
+        name: stage.name,
+        order: stage.order,
+        status: mapTaskStatus(stage.status),
+        processedItems: stage.processedItems,
+        totalItems: stage.totalItems,
+        statusMessage: stage.statusMessage
+      })) || [],
+      currentStageName: taskData?.currentStageId || undefined,
+      processedItems: task.data?.processedItems,
+      totalItems: task.data?.totalItems,
+      startedAt: taskData?.startedAt || task.data?.startedAt || undefined,
+      estimatedCompletionAt: taskData?.estimatedCompletionAt || undefined,
+      status: mapTaskStatus(taskData?.status || task.data?.status),
+      dispatchStatus: taskData?.dispatchStatus,
+      celeryTaskId: taskData?.celeryTaskId,
+      workerNodeId: taskData?.workerNodeId,
+      completedAt: taskData?.completedAt || undefined,
+      errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined,
+      scorecardId: task.scorecardId,
+      scoreId: task.scoreId,
+      scoreVersionId: task.scoreVersionId
+    };
+  }, [task, taskData, variant]);
 
   // Type assertion to ensure all properties match BaseTaskProps
   const typedTask = {
@@ -1331,9 +1384,9 @@ evaluation:
               {props.task.scorecard && props.task.scorecard.trim() !== '' && (
                 <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
                   <span className="truncate">{props.task.scorecard}</span>
-                  {variant === 'detail' && task.scorecardId && (
+                  {variant === 'detail' && taskWithDefaults.scorecardId && (
                     <Link 
-                      href={`/lab/scorecards/${task.scorecardId}`}
+                      href={`/lab/scorecards/${taskWithDefaults.scorecardId}`}
                       className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -1345,27 +1398,36 @@ evaluation:
               {props.task.score && props.task.score.trim() !== '' && (
                 <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
                   <span className="truncate">{props.task.score}</span>
-                  {variant === 'detail' && task.scorecardId && task.scoreId && (
-                    <Link 
-                      href={`/lab/scorecards/${task.scorecardId}/scores/${task.scoreId}`}
-                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Link>
-                  )}
+            {variant === 'detail' && taskWithDefaults.scorecardId && taskWithDefaults.scoreId && (() => {
+              console.log('🔍 DEBUG at link render - scoreVersionId =', taskWithDefaults.scoreVersionId);
+              
+              const scoreLink = taskWithDefaults.scoreVersionId 
+                ? `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`
+                : `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}`;
+              
+              console.log('🔍 DEBUG generated scoreLink =', scoreLink);
+                    
+                    return (
+                      <Link 
+                        href={scoreLink}
+                        className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    );
+                  })()}
                 </div>
               )}
-              {variant === 'detail' && task.scoreVersionId && task.scorecardId && task.scoreId && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-                  <span className="truncate">Version: {task.scoreVersionId.slice(0, 8)}</span>
-                  <Link 
-                    href={`/lab/scorecards/${task.scorecardId}/scores/${task.scoreId}/versions/${task.scoreVersionId}`}
-                    className="flex-shrink-0 hover:text-foreground transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
+              {variant === 'detail' && scoreVersionInfo && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Score Version:</span>
+                  <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
+                  {scoreVersionInfo.isChampion && (
+                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                      Champion
+                    </span>
+                  )}
                 </div>
               )}
               <Timestamp time={props.task.time} variant="relative" />
@@ -1535,3 +1597,4 @@ function getMetricInformation(metricName: string): string {
   }
   return descriptions[metricName] || ""
 }
+
