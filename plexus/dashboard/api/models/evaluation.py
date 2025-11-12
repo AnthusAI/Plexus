@@ -44,6 +44,7 @@ class Evaluation(BaseModel):
     errorDetails: Optional[Dict] = None
     scorecardId: Optional[str] = None
     scoreId: Optional[str] = None
+    scoreVersionId: Optional[str] = None
     confusionMatrix: Optional[Dict] = None
     scoreGoal: Optional[str] = None
     datasetClassDistribution: Optional[Dict] = None
@@ -75,6 +76,7 @@ class Evaluation(BaseModel):
         errorDetails: Optional[Dict] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
+        scoreVersionId: Optional[str] = None,
         confusionMatrix: Optional[Dict] = None,
         scoreGoal: Optional[str] = None,
         datasetClassDistribution: Optional[Dict] = None,
@@ -103,6 +105,7 @@ class Evaluation(BaseModel):
         self.errorDetails = errorDetails
         self.scorecardId = scorecardId
         self.scoreId = scoreId
+        self.scoreVersionId = scoreVersionId
         self.confusionMatrix = confusionMatrix
         self.scoreGoal = scoreGoal
         self.datasetClassDistribution = datasetClassDistribution
@@ -135,6 +138,7 @@ class Evaluation(BaseModel):
             errorDetails
             scorecardId
             scoreId
+            scoreVersionId
             confusionMatrix
             scoreGoal
             datasetClassDistribution
@@ -220,6 +224,7 @@ class Evaluation(BaseModel):
             errorDetails=data.get('errorDetails'),
             scorecardId=data.get('scorecardId'),
             scoreId=data.get('scoreId'),
+            scoreVersionId=data.get('scoreVersionId'),
             confusionMatrix=data.get('confusionMatrix'),
             scoreGoal=data.get('scoreGoal'),
             datasetClassDistribution=data.get('datasetClassDistribution'),
