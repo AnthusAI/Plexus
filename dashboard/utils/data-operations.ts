@@ -279,6 +279,7 @@ const EVALUATION_FIELDS = `
     id
     name
   }
+  scoreVersionId
   confusionMatrix
   scoreGoal
   datasetClassDistribution
@@ -905,6 +906,13 @@ type RawScoreResults = {
 export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvaluation | null {
 
   if (!evaluation) return null;
+
+  // Debug: Log scoreVersionId from raw evaluation
+  console.log('🔍 DEBUG transformEvaluation raw evaluation.scoreVersionId =', evaluation.scoreVersionId);
+  console.log('🔍 DEBUG transformEvaluation raw evaluation.scoreId =', evaluation.scoreId);
+  console.log('🔍 DEBUG transformEvaluation raw evaluation.scorecardId =', evaluation.scorecardId);
+  console.log('🔍 DEBUG transformEvaluation raw evaluation.id =', evaluation.id);
+  console.log('🔍 DEBUG transformEvaluation raw evaluation keys =', Object.keys(evaluation));
 
   // Handle task data - properly handle both function and object cases
   let taskData: AmplifyTask | null = null;
