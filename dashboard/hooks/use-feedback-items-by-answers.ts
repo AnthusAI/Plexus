@@ -10,6 +10,8 @@ export interface FeedbackItemFilter {
   scoreId: string;
   predicted: string;
   actual: string;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export interface FeedbackItemWithRelations {
@@ -45,8 +47,9 @@ export const useFeedbackItemsByAnswers = () => {
 
     try {
       // Use the same GSI method that works in main feedback analysis
-      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
-      const endDate = new Date();
+      // Use provided date range or fall back to 30 days
+      const startDate = filter.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const endDate = filter.endDate || new Date();
       
       const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt({
         accountId: filter.accountId,

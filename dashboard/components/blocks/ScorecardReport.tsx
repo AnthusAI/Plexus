@@ -135,6 +135,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                   scorecardId={scorecardId}
                   accountId={accountId}
                   isSingleScore={scoreData.scores.length === 1}
+                  dateRange={scoreData.date_range}
                 />
               ))}
           </div>
