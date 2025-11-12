@@ -66,6 +66,8 @@ interface ScorecardReportEvaluationProps {
   accountId?: string;
   // Prop to determine if this is the only score (for auto-expand behavior)
   isSingleScore?: boolean;
+  // Date range for filtering drill-down items
+  dateRange?: { start: string; end: string };
 }
 
 export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps> = ({ 
@@ -77,7 +79,8 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   onCellSelection,
   scorecardId,
   accountId,
-  isSingleScore = false
+  isSingleScore = false,
+  dateRange
 }) => {
   const [expanded, setExpanded] = useState(isSingleScore); // Auto-expand if single score
   
@@ -247,7 +250,10 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
           scorecardId: scorecardId,
           scoreId: score.id,
           predicted: selection.predicted,
-          actual: selection.actual
+          actual: selection.actual,
+          // Include date range if provided
+          startDate: dateRange?.start ? new Date(dateRange.start) : undefined,
+          endDate: dateRange?.end ? new Date(dateRange.end) : undefined
         };
         
         setActiveCellFilter({ predicted: selection.predicted, actual: selection.actual });
