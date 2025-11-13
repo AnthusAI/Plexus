@@ -265,6 +265,7 @@ class TopicAnalysis(BaseReportBlock):
             
             # BERTopic analysis configuration
             bertopic_analysis = self.config.get("bertopic_analysis", {})
+            self._log(f"🔍 CONFIG_DEBUG: bertopic_analysis keys = {list(bertopic_analysis.keys())}")
             skip_analysis = bertopic_analysis.get("skip_analysis", self.config.get("skip_analysis", False))
             num_topics = bertopic_analysis.get("num_topics", self.config.get("num_topics"))  # Default is None (auto)
             min_ngram = bertopic_analysis.get("min_ngram", self.config.get("min_ngram", 1))
@@ -274,6 +275,11 @@ class TopicAnalysis(BaseReportBlock):
             
             # Stop words filtering configuration
             remove_stop_words = bertopic_analysis.get("remove_stop_words", False)
+            # Support both old (singular) and new (plural) parameter names for backward compatibility
+            stop_words_languages = bertopic_analysis.get("stop_words_languages")
+            if stop_words_languages is None:
+                # Check for old singular parameter name
+                stop_words_languages = bertopic_analysis.get("stop_words_language")
             custom_stop_words = bertopic_analysis.get("custom_stop_words", [])
             min_df = bertopic_analysis.get("min_df", 1)
             
@@ -285,6 +291,18 @@ class TopicAnalysis(BaseReportBlock):
             compute_stability = stability_config.get("enabled", False)
             stability_n_runs = stability_config.get("n_runs", 10)
             stability_sample_fraction = stability_config.get("sample_fraction", 0.8)
+            
+            # Hierarchical topic modeling configuration (opt-in)
+            hierarchical_config = bertopic_analysis.get("hierarchical", {})
+            compute_hierarchical = hierarchical_config.get("enabled", False)
+            hierarchical_linkage = hierarchical_config.get("linkage", "average")
+            hierarchical_orientation = hierarchical_config.get("orientation", "left")
+            
+            # Debug logging for hierarchical configuration
+            self._log(f"🔍 HIERARCHICAL_DEBUG: hierarchical_config = {hierarchical_config}")
+            self._log(f"🔍 HIERARCHICAL_DEBUG: compute_hierarchical = {compute_hierarchical}")
+            self._log(f"🔍 HIERARCHICAL_DEBUG: hierarchical_linkage = {hierarchical_linkage}")
+            self._log(f"🔍 HIERARCHICAL_DEBUG: hierarchical_orientation = {hierarchical_orientation}")
 
             # Preprocessing configuration
             preprocessing = self.config.get("preprocessing", {})
@@ -612,6 +630,9 @@ class TopicAnalysis(BaseReportBlock):
                 # Lazy import to avoid loading PyTorch unless actually needed
                 from plexus.analysis.topics.analyzer import analyze_topics
                 
+                # Debug logging before calling analyze_topics
+                self._log(f"🔍 HIERARCHICAL_DEBUG: Calling analyze_topics with compute_hierarchical={compute_hierarchical}")
+                
                 analysis_results = await asyncio.to_thread(
                     analyze_topics,
                     text_file_path=text_file_path_str,
@@ -635,6 +656,7 @@ class TopicAnalysis(BaseReportBlock):
                     tokenizer=tokenizer,
                     # Stop words filtering parameters
                     remove_stop_words=remove_stop_words,
+                    stop_words_languages=stop_words_languages,
                     custom_stop_words=custom_stop_words,
                     min_df=min_df,
                     # N-gram export configuration
@@ -642,7 +664,11 @@ class TopicAnalysis(BaseReportBlock):
                     # Topic stability assessment configuration
                     compute_stability=compute_stability,
                     stability_n_runs=stability_n_runs,
-                    stability_sample_fraction=stability_sample_fraction
+                    stability_sample_fraction=stability_sample_fraction,
+                    # Hierarchical topic modeling configuration
+                    compute_hierarchical=compute_hierarchical,
+                    hierarchical_linkage=hierarchical_linkage,
+                    hierarchical_orientation=hierarchical_orientation
                 )
 
                 # Unpack results; handle None if analysis failed internally
@@ -651,9 +677,11 @@ class TopicAnalysis(BaseReportBlock):
                     topic_info = analysis_results.get('topic_info')
                     topic_similarity_metrics = analysis_results.get('topic_similarity_metrics')
                     topic_stability = analysis_results.get('topic_stability')
+                    hierarchical_topics = analysis_results.get('hierarchical_topics')
                 else:
                     topic_model, topic_info = None, None
                     topic_similarity_metrics, topic_stability = None, None
+                    hierarchical_topics = None
 
                 self._log("✅ BERTopic analysis completed successfully")
                 self._log("="*60)
@@ -1068,6 +1096,13 @@ class TopicAnalysis(BaseReportBlock):
                                 
                                 final_output_data['analysis_metrics'] = analysis_metrics
                                 self._log(f"✅ Added aggregate analysis metrics to output")
+                            
+                            # Add hierarchical topics structure if available
+                            if hierarchical_topics:
+                                final_output_data["hierarchical_topics"] = hierarchical_topics
+                                self._log(f"✅ Added hierarchical topics structure to output")
+                                self._log(f"   • Leaf topics: {hierarchical_topics['metadata']['total_leaf_topics']}")
+                                self._log(f"   • Parent nodes: {hierarchical_topics['metadata']['total_parent_nodes']}")
                             
                             # Save full topic data to attached file
                             if report_block_id:
