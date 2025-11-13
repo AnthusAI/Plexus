@@ -8,7 +8,7 @@ import logging
 import re
 import time
 import sys
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any, Optional, Union
 import pandas as pd
 import numpy as np
 # Lazy import: from bertopic import BERTopic
@@ -309,6 +309,81 @@ def create_topics_per_class_visualization(
         logger.error(f"Failed to generate Topics per Class visualization: {e}", exc_info=True)
         return None
 
+def _build_hierarchical_structure(
+    hierarchical_df: pd.DataFrame,
+    topic_model,
+    representation_model,
+    openai_api_key: Optional[str]
+) -> Dict[str, Any]:
+    """
+    Build a structured hierarchy from BERTopic's hierarchical_topics dataframe.
+    
+    The dataframe has columns: Parent_ID, Parent_Name, Topics, Child_Left, Child_Right, Distance
+    
+    Args:
+        hierarchical_df: DataFrame from topic_model.hierarchical_topics()
+        topic_model: Fitted BERTopic model
+        representation_model: Optional representation model for naming parent topics
+        openai_api_key: Optional OpenAI API key for LLM-based naming
+    
+    Returns:
+        A nested structure with parent-child relationships
+    """
+    logger.info("Building hierarchical topic structure...")
+    
+    # Get leaf topics (original topics before merging)
+    topic_info = topic_model.get_topic_info()
+    leaf_topics = {}
+    for _, row in topic_info.iterrows():
+        topic_id = row.get('Topic', -1)
+        if topic_id != -1:
+            leaf_topics[topic_id] = {
+                "id": int(topic_id),
+                "name": row.get('Name', f'Topic {topic_id}'),
+                "count": int(row.get('Count', 0)),
+                "is_leaf": True,
+                "children": []
+            }
+    
+    # Build parent nodes from hierarchical clustering
+    parent_nodes = {}
+    for _, row in hierarchical_df.iterrows():
+        parent_id = row.get('Parent_ID')
+        parent_name = row.get('Parent_Name', f'Merged Topic {parent_id}')
+        # BERTopic uses Child_Left_ID and Child_Right_ID column names
+        child_left = row.get('Child_Left_ID')
+        child_right = row.get('Child_Right_ID')
+        distance = row.get('Distance', 0.0)
+        
+        # Skip rows with invalid child IDs (NaN or None)
+        if pd.isna(child_left) or pd.isna(child_right):
+            logger.warning(f"Skipping parent node {parent_id} with invalid children: left={child_left}, right={child_right}")
+            continue
+        
+        # Create parent node
+        parent_nodes[parent_id] = {
+            "id": int(parent_id),
+            "name": parent_name,
+            "distance": float(distance),
+            "is_leaf": False,
+            "children": [int(child_left), int(child_right)]
+        }
+    
+    # Build tree structure (find root and organize)
+    hierarchy = {
+        "leaf_topics": leaf_topics,
+        "parent_nodes": parent_nodes,
+        "metadata": {
+            "total_leaf_topics": len(leaf_topics),
+            "total_parent_nodes": len(parent_nodes),
+            "max_distance": float(hierarchical_df['Distance'].max()) if not hierarchical_df.empty else 0.0
+        }
+    }
+    
+    logger.info(f"✅ Built hierarchy with {len(leaf_topics)} leaf topics and {len(parent_nodes)} parent nodes")
+    
+    return hierarchy
+
 def analyze_topics(
     text_file_path: str,
     output_dir: str,
@@ -331,6 +406,7 @@ def analyze_topics(
     tokenizer: str = "whitespace",
     # Stop words filtering parameters
     remove_stop_words: bool = False,
+    stop_words_languages: Optional[Union[str, List[str]]] = None,
     custom_stop_words: Optional[List[str]] = None,
     min_df: int = 1,
     # N-gram export configuration
@@ -338,7 +414,11 @@ def analyze_topics(
     # Topic stability assessment configuration
     compute_stability: bool = False,
     stability_n_runs: int = 10,
-    stability_sample_fraction: float = 0.8
+    stability_sample_fraction: float = 0.8,
+    # Hierarchical topic modeling configuration
+    compute_hierarchical: bool = False,
+    hierarchical_linkage: str = "average",
+    hierarchical_orientation: str = "left"
 ) -> Optional[Dict[str, Any]]:
     """
     Perform BERTopic analysis on transformed transcripts.
@@ -362,13 +442,20 @@ def analyze_topics(
         diversity: Diversity factor for document selection, 0-1 (default: 0.1)
         doc_length: Maximum characters per document (default: 500)
         tokenizer: Tokenization method for documents (default: "whitespace")
-        remove_stop_words: Whether to remove English stop words from topics (default: False)
+        remove_stop_words: Whether to remove stop words from topics (default: False)
+        stop_words_languages: Language(s) for stop words - supports any NLTK language(s)
+                             Can be a string ("english") or list (["english", "spanish"])
+                             Default: None (uses ["english", "spanish"] when remove_stop_words=True)
+                             Available: english, spanish, french, german, portuguese, italian, etc.
         custom_stop_words: Optional list of additional stop words to remove (default: None)
         min_df: Minimum document frequency for terms (default: 1)
         max_ngrams_per_topic: Maximum n-grams to export per topic (default: 100)
         compute_stability: Whether to assess topic stability (default: False)
         stability_n_runs: Number of bootstrap runs for stability (default: 10)
         stability_sample_fraction: Fraction of data to sample per run (default: 0.8)
+        compute_hierarchical: Whether to generate hierarchical topic structure (default: False)
+        hierarchical_linkage: Linkage method for hierarchical clustering (default: "average")
+        hierarchical_orientation: Orientation for hierarchy visualization (default: "left")
         
     Returns:
         Dict with keys: 'topic_model', 'topic_info', 'topics', 'docs', 
@@ -503,15 +590,57 @@ def analyze_topics(
     # Create custom CountVectorizer if stop words filtering is enabled
     vectorizer_model = None
     if remove_stop_words:
-        # Build stop words set
-        stop_words = set(ENGLISH_STOP_WORDS)
+        # Build stop words set using NLTK
+        import nltk
+        from nltk.corpus import stopwords
+        
+        # Download stopwords if not already available
+        try:
+            nltk.data.find('corpora/stopwords')
+        except LookupError:
+            logger.info("📥 Downloading NLTK stopwords corpus...")
+            nltk.download('stopwords', quiet=True)
+        
+        # Handle backward compatibility and default to both English and Spanish
+        if stop_words_languages is None:
+            # Default: remove both English and Spanish stop words
+            languages_to_use = ["english", "spanish"]
+            logger.info("ℹ️  No languages specified - defaulting to English + Spanish stop words")
+        elif isinstance(stop_words_languages, str):
+            # Single language specified (backward compatible)
+            languages_to_use = [stop_words_languages]
+        else:
+            # List of languages specified
+            languages_to_use = stop_words_languages
+        
+        # Collect stop words from all specified languages
+        stop_words = set()
+        loaded_languages = []
+        
+        for lang in languages_to_use:
+            try:
+                lang_stop_words = set(stopwords.words(lang))
+                stop_words.update(lang_stop_words)
+                loaded_languages.append(f"{lang} ({len(lang_stop_words)} words)")
+                logger.info(f"✅ Loaded {len(lang_stop_words)} {lang} stop words from NLTK")
+            except OSError as e:
+                logger.warning(f"⚠️  Language '{lang}' not found in NLTK. Skipping.")
+                logger.warning(f"   Available languages: {', '.join(sorted(stopwords.fileids()))}")
+        
+        if not stop_words:
+            logger.warning("⚠️  No stop words loaded! Falling back to English.")
+            stop_words = set(stopwords.words('english'))
+            loaded_languages = ["english (fallback)"]
+        
+        logger.info(f"📋 Total stop words loaded: {len(stop_words)} from {', '.join(loaded_languages)}")
+        
         if custom_stop_words:
             # Normalize custom stop words to lowercase
             custom_stop_words = [word.lower() for word in custom_stop_words]
             stop_words.update(custom_stop_words)
+            logger.info(f"   • Added {len(custom_stop_words)} custom stop words")
         
         # Create a custom analyzer that filters out n-grams containing stop words
-        from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS as sklearn_stop_words
         
         def custom_analyzer(text):
             """
@@ -553,11 +682,9 @@ def analyze_topics(
             min_df=min_df,
             lowercase=False  # Already handled in analyzer
         )
-        logger.info(f"✅ Created CountVectorizer with custom analyzer filtering {len(stop_words)} stop words (min_df={min_df})")
+        logger.info(f"✅ Created CountVectorizer with custom analyzer filtering {len(stop_words)} total stop words (min_df={min_df})")
         logger.info(f"   • N-grams containing any stop word will be completely excluded from analysis")
-        logger.info(f"   • Stop words include: {sorted(list(stop_words))[:20]}...")
-        if custom_stop_words:
-            logger.info(f"   • Custom stop words: {custom_stop_words}")
+        logger.info(f"   • Sample stop words: {sorted(list(stop_words))[:20]}...")
     else:
         logger.info("ℹ️  Stop words filtering disabled - using default CountVectorizer")
     
@@ -712,20 +839,9 @@ def analyze_topics(
     else:
         logger.warning(f"Skipping document visualization due to insufficient documents ({len(docs)} docs, need {umap_n_neighbors}) or topics ({num_topics} topics, need 1).")
 
-    # Visualize Topic Hierarchy (HTML only)
-    # macOS: Skip to avoid OpenMP segfault (hierarchical_topics re-encodes with sentence-transformers)
-    if sys.platform == 'darwin':
-        logger.warning("⚠️  macOS: Skipping hierarchy visualization (causes OpenMP segfault)")
-    else:
-        try:
-            hierarchical_topics_df = topic_model.hierarchical_topics(docs) # Rename for clarity
-            if hierarchical_topics_df is not None and not hierarchical_topics_df.empty:
-                fig_hierarchy = topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics_df, orientation='left') # Pass as keyword arg
-                save_visualization(fig_hierarchy, str(Path(output_dir) / "hierarchy.html"))
-            else:
-                logger.warning("No hierarchical topics found to visualize.")
-        except Exception as e:
-            logger.error(f"Failed to generate or save topic hierarchy visualization: {e}", exc_info=True)
+    # --- Hierarchical Topics: Moved to after fine-tuning ---
+    # This placeholder will be filled after LLM representation model is applied
+    hierarchical_topics_data = None
 
     # Visualize Topic Similarity (Heatmap) and extract metrics
     topic_similarity_metrics = None
@@ -825,8 +941,13 @@ def analyze_topics(
     except Exception as e:
         logger.error(f"Failed to save topic info: {e}", exc_info=True)
     
-    # Reduce topics if requested (safe since no representation model attached yet)
-    if nr_topics is not None and n_topics > 0 and nr_topics < n_topics:
+    # Reduce topics if requested (skip if hierarchical mode is enabled)
+    # Hierarchical mode needs many topics to build a meaningful hierarchy
+    if compute_hierarchical and nr_topics is not None:
+        logger.info(f"⚠️  Hierarchical mode enabled: Skipping topic reduction from {n_topics} to {nr_topics}")
+        logger.info(f"   • Keeping all {n_topics} discovered topics for richer hierarchical structure")
+        logger.info(f"   • To use topic reduction with hierarchical mode, disable hierarchical or remove num_topics")
+    elif nr_topics is not None and n_topics > 0 and nr_topics < n_topics:
         logger.info(f"Reducing topics from {n_topics} to {nr_topics}")
         
         # Check vectorizer BEFORE reduction
@@ -853,7 +974,7 @@ def analyze_topics(
         except Exception as e:
             logger.error("Failed to reduce topics", exc_info=True)
             # Do not re-raise here, allow to proceed with unreduced topics if reduction fails
-            logger.warning("Proceeding with unreduced topics after reduction failure.")
+            logger.warning("Proceeding with unreduced topics after reduction.")
 
     # Apply representation model to final topics (after reduction)
     if saved_representation_model is not None:
@@ -983,6 +1104,70 @@ def analyze_topics(
     # Final topic assignments are stable after optional reduction and representation model application
     logger.info("🔍 REPR_DEBUG: Topic modeling pipeline completed")
     logger.info(f"🔍 REPR_DEBUG: Final topic assignments - total: {len(topics)}, unique: {sorted(set(topics))}")
+
+    # --- Generate Hierarchical Topics (Optional) ---
+    # IMPORTANT: This must happen AFTER representation model is applied to get fine-tuned topic names
+    if compute_hierarchical:
+        logger.info("🔍 Computing hierarchical topic structure (after fine-tuning)...")
+        logger.info(f"   • Linkage method: {hierarchical_linkage}")
+        logger.info(f"   • Visualization orientation: {hierarchical_orientation}")
+        
+        # macOS: Skip to avoid OpenMP segfault (hierarchical_topics re-encodes with sentence-transformers)
+        if sys.platform == 'darwin':
+            logger.warning("⚠️  macOS: Skipping hierarchical topics (causes OpenMP segfault)")
+            logger.warning("⚠️  Hierarchical topic modeling is not supported on macOS due to OpenMP compatibility issues")
+        else:
+            try:
+                # Import linkage functions from scipy
+                from scipy.cluster.hierarchy import average, complete, single, ward
+                
+                # Map linkage method string to actual function
+                linkage_methods = {
+                    "average": average,
+                    "complete": complete,
+                    "single": single,
+                    "ward": ward
+                }
+                
+                linkage_func = linkage_methods.get(hierarchical_linkage, average)
+                logger.info(f"   • Using linkage function: {hierarchical_linkage} -> {linkage_func.__name__}")
+                
+                hierarchical_topics_df = topic_model.hierarchical_topics(docs, linkage_function=linkage_func)
+                
+                # Debug: Log the structure of the hierarchical topics dataframe
+                if hierarchical_topics_df is not None:
+                    logger.info(f"   • Hierarchical topics dataframe shape: {hierarchical_topics_df.shape}")
+                    logger.info(f"   • Columns: {list(hierarchical_topics_df.columns)}")
+                    logger.info(f"   • Sample row:\n{hierarchical_topics_df.head(1).to_dict('records')}")
+                
+                if hierarchical_topics_df is not None and not hierarchical_topics_df.empty:
+                    # Save visualization
+                    fig_hierarchy = topic_model.visualize_hierarchy(
+                        hierarchical_topics=hierarchical_topics_df,
+                        orientation=hierarchical_orientation
+                    )
+                    save_visualization(fig_hierarchy, str(Path(output_dir) / "hierarchy.html"))
+                    logger.info(f"✅ Saved hierarchy visualization to hierarchy.html")
+                    
+                    # Convert to structured JSON format for frontend
+                    hierarchical_topics_data = _build_hierarchical_structure(
+                        hierarchical_topics_df,
+                        topic_model,
+                        saved_representation_model,
+                        openai_api_key
+                    )
+                    
+                    # Save structured hierarchy data
+                    hierarchy_json_path = os.path.join(output_dir, "hierarchy_structure.json")
+                    with open(hierarchy_json_path, 'w', encoding='utf-8') as f:
+                        json.dump(hierarchical_topics_data, f, indent=2, ensure_ascii=False)
+                    os.chmod(hierarchy_json_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+                    
+                    logger.info(f"✅ Saved hierarchical structure to {hierarchy_json_path}")
+                else:
+                    logger.warning("No hierarchical topics found to visualize.")
+            except Exception as e:
+                logger.error(f"Failed to generate hierarchical topics: {e}", exc_info=True)
 
     # --- Save Complete N-grams with c-TF-IDF Scores ---
     # IMPORTANT: This must happen AFTER representation model is applied to get fine-tuned topic names
@@ -1205,5 +1390,9 @@ def analyze_topics(
     if stability_results is not None:
         analysis_results['topic_stability'] = stability_results
         logger.info("✅ Included topic stability metrics in results")
+    
+    if hierarchical_topics_data is not None:
+        analysis_results['hierarchical_topics'] = hierarchical_topics_data
+        logger.info("✅ Included hierarchical topics structure in results")
     
     return analysis_results
