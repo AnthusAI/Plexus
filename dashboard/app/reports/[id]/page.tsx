@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/button'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
 import { parseOutputString } from '@/lib/utils'
 import { GraphQLResult } from '@aws-amplify/api'
-import SquareLogo, { LogoVariant } from '@/components/logo-square';
+import BrandableLogo from '@/components/BrandableLogo';
+import { LogoVariant } from '@/components/logo-square';
 import { format, parseISO } from 'date-fns';
 import { Timestamp } from '@/components/ui/timestamp';
 import { Spinner } from '@/components/ui/spinner';
@@ -489,7 +490,7 @@ export function PublicReport({
                       rel="noopener noreferrer"
                       className="relative w-24 h-8"
                     >
-                      <SquareLogo variant={LogoVariant.Wide} />
+                      <BrandableLogo variant={LogoVariant.Wide} />
                     </a>
                   </div>
                 )}
