@@ -161,6 +161,10 @@ def load(source_identifier: str, fresh: bool, reload: bool):
 
         # Handle both scorecard format (with 'data' section) and dataset format (direct config)
         data_config = config.get('data')
+        
+        # Extract dataset-level parameters (like 'scores', 'scorecard', 'balance')
+        # These are not part of the data cache configuration
+        dataset_level_params = {}
         if not data_config:
             # Check if this is a direct dataset configuration (recommended format)
             if 'class' in config:
@@ -175,9 +179,16 @@ def load(source_identifier: str, fresh: bool, reload: bool):
                     # Client-specific extensions (existing behavior)
                     class_path = f"plexus_extensions.{class_name}.{class_name}"
                 
+                # Extract dataset-level parameters before creating data_config
+                dataset_level_param_keys = ['scores', 'scorecard', 'balance', 'generate_predictions']
+                for key in dataset_level_param_keys:
+                    if key in config:
+                        dataset_level_params[key] = config[key]
+                
                 data_config = {
                     'class': class_path,
-                    'parameters': {k: v for k, v in config.items() if k != 'class'}
+                    'parameters': {k: v for k, v in config.items() 
+                                 if k not in ['class'] + dataset_level_param_keys}
                 }
             else:
                 logging.error("No 'data' section in yamlConfiguration and no 'class' specified.")
@@ -191,6 +202,12 @@ def load(source_identifier: str, fresh: bool, reload: bool):
                 logging.error("  parameters:")
                 logging.error("    # ... data cache parameters")
                 return
+        else:
+            # For scorecard format, check for dataset-level params at top level
+            dataset_level_param_keys = ['scores', 'scorecard', 'balance', 'generate_predictions']
+            for key in dataset_level_param_keys:
+                if key in config:
+                    dataset_level_params[key] = config[key]
 
         # 3. Dynamically load DataCache class
         data_cache_class_path = data_config.get('class')
@@ -236,6 +253,78 @@ def load(source_identifier: str, fresh: bool, reload: bool):
         logging.info(f"Columns: {dataframe.columns.tolist()}")
         
         logging.info(f"Loaded dataframe with {len(dataframe)} rows and columns: {dataframe.columns.tolist()}")
+
+        # 4.5. Score Enrichment (if scores are specified at dataset level)
+        if dataset_level_params.get('scores'):
+            scores_to_enrich = dataset_level_params['scores']
+            scorecard_for_enrichment = dataset_level_params.get('scorecard')
+            
+            # If no top-level scorecard, try to extract from data config
+            if not scorecard_for_enrichment:
+                # Try to get from queries or searches
+                if 'queries' in data_cache_params and data_cache_params['queries']:
+                    # Get scorecard_id from first query
+                    first_query = data_cache_params['queries'][0]
+                    scorecard_for_enrichment = first_query.get('scorecard_id')
+                    if scorecard_for_enrichment:
+                        logging.info(f"Using scorecard_id from query: {scorecard_for_enrichment}")
+                elif 'searches' in data_cache_params and data_cache_params['searches']:
+                    # Get scorecard_id from first search
+                    first_search = data_cache_params['searches'][0]
+                    scorecard_for_enrichment = first_search.get('scorecard_id')
+                    if scorecard_for_enrichment:
+                        logging.info(f"Using scorecard_id from search: {scorecard_for_enrichment}")
+                
+                # Also try to get from dataframe if it has a scorecard_id column
+                if not scorecard_for_enrichment and 'scorecard_id' in dataframe.columns:
+                    unique_scorecards = dataframe['scorecard_id'].unique()
+                    if len(unique_scorecards) == 1:
+                        scorecard_for_enrichment = unique_scorecards[0]
+                        logging.info(f"Using scorecard_id from dataframe: {scorecard_for_enrichment}")
+                    elif len(unique_scorecards) > 1:
+                        logging.warning(f"Multiple scorecards found in dataframe: {unique_scorecards}. Using first one.")
+                        scorecard_for_enrichment = unique_scorecards[0]
+            
+            if not scorecard_for_enrichment:
+                logging.error("Score enrichment requested but no 'scorecard' could be determined.")
+                logging.error("Please add 'scorecard' parameter to your YAML configuration,")
+                logging.error("or ensure your queries/searches include 'scorecard_id'.")
+                return
+            
+            logging.info(f"============ ENRICHING DATASET WITH SCORES ============")
+            logging.info(f"Scores to enrich: {scores_to_enrich}")
+            logging.info(f"Scorecard: {scorecard_for_enrichment}")
+            
+            try:
+                from plexus.cli.dataset.score_enrichment import enrich_dataframe_with_scores
+                
+                # Get account ID
+                if not hasattr(data_source, 'accountId') or not data_source.accountId:
+                    logging.error("DataSource is missing accountId. Cannot enrich with scores.")
+                    return
+                
+                # Check if predictions should be generated
+                enable_predictions = dataset_level_params.get('generate_predictions', False)
+                if enable_predictions:
+                    logging.info("Prediction generation enabled for items with no existing score data")
+                
+                dataframe = enrich_dataframe_with_scores(
+                    df=dataframe,
+                    scorecard_identifier=scorecard_for_enrichment,
+                    score_identifiers=scores_to_enrich,
+                    account_id=data_source.accountId,
+                    client=client,
+                    enable_predictions=enable_predictions
+                )
+                
+                logging.info(f"Dataset enriched: {dataframe.shape[0]} rows x {dataframe.shape[1]} columns")
+                logging.info(f"New columns: {dataframe.columns.tolist()}")
+                
+            except Exception as e:
+                logging.error(f"Error during score enrichment: {e}")
+                import traceback
+                traceback.print_exc()
+                logging.error("Continuing with un-enriched dataset...")
 
         # 5. Generate Parquet file in memory
         if dataframe.empty:
