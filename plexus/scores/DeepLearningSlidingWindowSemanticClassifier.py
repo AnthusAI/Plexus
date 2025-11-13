@@ -1,8 +1,8 @@
 import os
 import json
 import numpy as np
-import mlflow
-import mlflow.keras
+# import mlflow
+# import mlflow.keras
 from pydantic import BaseModel, field_validator, ValidationError
 from transformers import TFAutoModel
 from tensorflow.keras.metrics import Precision, Recall, AUC
@@ -229,10 +229,10 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
         print("Logging metrics and artifacts...")
 
         # Log metrics to MLflow
-        mlflow.log_metric("training_loss", self.model.history.history['loss'][-1])
-        mlflow.log_metric("training_accuracy", self.model.history.history['accuracy'][-1])
-        mlflow.log_metric("validation_loss", self.model.history.history['val_loss'][-1])
-        mlflow.log_metric("validation_accuracy", self.model.history.history['val_accuracy'][-1])
+        # mlflow.log_metric("training_loss", self.model.history.history['loss'][-1])
+        # mlflow.log_metric("training_accuracy", self.model.history.history['accuracy'][-1])
+        # mlflow.log_metric("validation_loss", self.model.history.history['val_loss'][-1])
+        # mlflow.log_metric("validation_accuracy", self.model.history.history['val_accuracy'][-1])
 
         # After training is complete:
         inverse_label_map = {int(k): v for k, v in self.inverse_label_map.items()}
