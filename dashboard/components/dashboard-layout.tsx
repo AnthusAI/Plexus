@@ -27,7 +27,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Input } from "@/components/ui/input"
 import { ChatEvaluationCard } from "@/components/chat-evaluation-card"
 
-import SquareLogo, { LogoVariant } from './logo-square'
+import BrandableLogo from './BrandableLogo'
+import { LogoVariant } from './logo-square'
 import { useSidebar } from "@/app/contexts/SidebarContext"
 import { useAccount } from "@/app/contexts/AccountContext"
 import { DashboardDrawer } from "@/components/DashboardDrawer"
@@ -75,11 +76,7 @@ const MobileHeader = ({
       <Menu className="h-4 w-4" />
     </DashboardButton>
     
-    <Link href="/" className="flex items-center flex-1 justify-center">
-      <div className="scale-75">
-        <SquareLogo variant={LogoVariant.Narrow} />
-      </div>
-    </Link>
+    <div className="flex-1" /> {/* Spacer - logo removed per user request */}
 
     <DashboardButton
       variant="ghost"
@@ -230,20 +227,17 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     return (
       <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-2 mobile-compact' : ''}`}>
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
-          <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-4'}`}>
-            <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
-            <div className="relative">
-              {isLeftSidebarOpen ? (
-                <SquareLogo variant={LogoVariant.Wide} />
-              ) : (
-                <SquareLogo variant={LogoVariant.Narrow} />
-              )}
-            </div>
+          <Link href="/" className={`block ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-4'}`}>
+            {isLeftSidebarOpen ? (
+              <BrandableLogo variant={LogoVariant.Wide} />
+            ) : (
+              <BrandableLogo variant={LogoVariant.Narrow} />
+            )}
           </Link>
         </div>
 
         <div className="flex-grow">
-          <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
+          <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3 w-16'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {visibleMenuItems.map((item) => {
               const isCurrentPage = (pathname === item.path ||
                 (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||

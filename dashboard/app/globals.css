@@ -332,6 +332,8 @@ body {
 @import "hsl-radix-colors/indigo.css";
 @import "hsl-radix-colors/orange.css";
 @import "hsl-radix-colors/yellow.css";
+@import "hsl-radix-colors/amber.css";
+@import "hsl-radix-colors/cyan.css";
 
 /* Ultra-narrow mobile optimizations for iPhone support */
 @media (max-width: 375px) {
