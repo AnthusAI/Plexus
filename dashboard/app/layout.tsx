@@ -5,6 +5,8 @@ import ClientLayout from "./client-layout";
 import { HydrationOverlay } from "@builder.io/react-hydration-overlay";
 import "@aws-amplify/ui-react/styles.css";
 import { SidebarProvider } from "./contexts/SidebarContext"
+import { BrandProvider } from "./contexts/BrandContext"
+import { BrandedTitle } from "@/components/BrandedTitle"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -65,11 +67,14 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
-        <SidebarProvider>
-          <HydrationOverlay>
-            <ClientLayout>{children}</ClientLayout>
-          </HydrationOverlay>
-        </SidebarProvider>
+        <BrandProvider>
+          <BrandedTitle />
+          <SidebarProvider>
+            <HydrationOverlay>
+              <ClientLayout>{children}</ClientLayout>
+            </HydrationOverlay>
+          </SidebarProvider>
+        </BrandProvider>
       </body>
     </html>
   );
