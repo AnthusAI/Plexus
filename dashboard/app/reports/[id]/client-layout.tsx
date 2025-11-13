@@ -2,7 +2,8 @@
 
 import React from 'react'
 import { useParams } from 'next/navigation'
-import SquareLogo, { LogoVariant } from '@/components/logo-square'
+import BrandableLogo from '@/components/BrandableLogo'
+import { LogoVariant } from '@/components/logo-square'
 import { ReportService } from './page'
 import BlockRegistryInitializer from '@/components/blocks/BlockRegistryInitializer'
 
@@ -36,7 +37,7 @@ export default function ReportClientLayout({
             rel="noopener noreferrer"
             className="relative w-24 h-8"
           >
-            <SquareLogo variant={LogoVariant.Wide} />
+            <BrandableLogo variant={LogoVariant.Wide} />
           </a>
         </div>
       </footer>

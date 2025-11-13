@@ -2,7 +2,8 @@
 
 import React from 'react'
 import { useParams } from 'next/navigation'
-import SquareLogo, { LogoVariant } from '@/components/logo-square'
+import BrandableLogo from '@/components/BrandableLogo'
+import { LogoVariant } from '@/components/logo-square'
 import { EvaluationService } from './page'
 
 export default function EvaluationClientLayout({
@@ -33,7 +34,7 @@ export default function EvaluationClientLayout({
                 rel="noopener noreferrer"
                 className="relative w-24 h-8"
               >
-                <SquareLogo variant={LogoVariant.Wide} />
+                <BrandableLogo variant={LogoVariant.Wide} />
               </a>
             </div>
           )}
