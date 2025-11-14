@@ -125,7 +125,11 @@ export function BrandProvider({ children }: BrandProviderProps) {
 
     // Remove existing favicon links
     const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]');
-    existingFavicons.forEach(link => link.remove());
+    existingFavicons.forEach(link => {
+      if (link.parentNode) {
+        link.parentNode.removeChild(link);
+      }
+    });
 
     // Create new favicon link
     const faviconLink = document.createElement('link');
