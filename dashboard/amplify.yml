@@ -29,6 +29,14 @@ applications:
               echo "NEXT_PUBLIC_BRAND_CONFIG_URL: ${NEXT_PUBLIC_BRAND_CONFIG_URL:-not set}"
               echo ""
               
+              # Remove any existing brands directory or symlink
+              if [ -e "./public/brands" ] || [ -L "./public/brands" ]; then
+                echo "→ Removing existing public/brands (symlink or directory)"
+                rm -rf ./public/brands
+                echo "  ✓ Removed"
+              fi
+              echo ""
+              
               if [ ! -z "$BRAND_ASSETS_REPO" ]; then
                 echo "→ Cloning brand assets from $BRAND_ASSETS_REPO"
                 TEMP_DIR=$(mktemp -d)
