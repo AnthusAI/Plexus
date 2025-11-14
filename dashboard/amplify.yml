@@ -42,7 +42,16 @@ applications:
                 TEMP_DIR=$(mktemp -d)
                 echo "  Temp directory: $TEMP_DIR"
                 
-                git clone "$BRAND_ASSETS_REPO" "$TEMP_DIR" 2>&1 | head -10
+                # If GITHUB_TOKEN is set, use it for authentication
+                if [ ! -z "$GITHUB_TOKEN" ]; then
+                  echo "  Using GITHUB_TOKEN for authentication"
+                  # Convert https://github.com/org/repo.git to https://token@github.com/org/repo.git
+                  AUTH_REPO=$(echo "$BRAND_ASSETS_REPO" | sed "s|https://github.com|https://${GITHUB_TOKEN}@github.com|")
+                  git clone "$AUTH_REPO" "$TEMP_DIR" 2>&1 | head -10
+                else
+                  echo "  No GITHUB_TOKEN set, attempting public clone"
+                  git clone "$BRAND_ASSETS_REPO" "$TEMP_DIR" 2>&1 | head -10
+                fi
                 echo "  ✓ Clone complete"
                 
                 echo "  Contents of cloned repo:"
