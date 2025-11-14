@@ -54,11 +54,6 @@ interface TopicStabilityData {
   std_stability?: number;
   per_topic_stability: Record<number, number>;
   methodology: string;
-  interpretation: {
-    high: string;
-    medium: string;
-    low: string;
-  };
 }
 
 interface TopicAnalysisData {
@@ -1052,53 +1047,19 @@ const TopicStabilitySection: React.FC<{
   stabilityData: TopicStabilityData;
   topics: Array<{id: number; name: string}>;
 }> = ({ stabilityData, topics }) => {
-  // Determine stability level and color
-  const getStabilityLevel = (score: number): { level: string; color: string; description: string } => {
-    if (score > 0.7) {
-      return { 
-        level: 'High', 
-        color: 'text-green-600 dark:text-green-400',
-        description: stabilityData.interpretation.high
-      };
-    } else if (score >= 0.5) {
-      return { 
-        level: 'Medium', 
-        color: 'text-yellow-600 dark:text-yellow-400',
-        description: stabilityData.interpretation.medium
-      };
-    } else {
-      return { 
-        level: 'Low', 
-        color: 'text-red-600 dark:text-red-400',
-        description: stabilityData.interpretation.low
-      };
-    }
-  };
-  
-  const overallStability = getStabilityLevel(stabilityData.mean_stability);
   
   return (
     <div className="space-y-4 pt-2">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Overall Stability</CardTitle>
+          <CardTitle className="text-base">Topic Stability Metrics</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Overall Stability Score */}
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold">{(stabilityData.mean_stability * 100).toFixed(1)}%</span>
-                <Badge className={overallStability.color} variant="outline">
-                  {overallStability.level}
-                </Badge>
-              </div>
-              {/* Only show description for High and Medium stability */}
-              {stabilityData.mean_stability >= 0.5 && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  {overallStability.description}
-                </p>
-              )}
+              <div className="text-sm text-muted-foreground mb-1">Mean Stability Score</div>
+              <div className="text-2xl font-bold">{(stabilityData.mean_stability * 100).toFixed(1)}%</div>
             </div>
           </div>
           
@@ -1112,25 +1073,18 @@ const TopicStabilitySection: React.FC<{
           {/* Per-Topic Stability */}
           {Object.keys(stabilityData.per_topic_stability).length > 0 && (
             <div className="space-y-2 pt-2 border-t">
-              <h4 className="text-sm font-medium">Per-Topic Stability</h4>
+              <h4 className="text-sm font-medium">Per-Topic Stability Scores</h4>
               <div className="space-y-1">
                 {topics.map(topic => {
                   const topicStability = stabilityData.per_topic_stability[topic.id];
                   if (topicStability === undefined) return null;
                   
-                  const topicLevel = getStabilityLevel(topicStability);
-                  
                   return (
                     <div key={topic.id} className="flex items-center justify-between text-sm py-1 px-2 hover:bg-muted/50 rounded">
-                      <span className="font-medium">{topic.name}</span>
-                      <div className="flex items-center gap-2">
-                        <span className={topicLevel.color}>
-                          {(topicStability * 100).toFixed(1)}%
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          {topicLevel.level}
-                        </Badge>
-                      </div>
+                      <span className="font-medium">{cleanTopicName(topic.name)}</span>
+                      <span className="font-mono">
+                        {(topicStability * 100).toFixed(1)}%
+                      </span>
                     </div>
                   );
                 })}
