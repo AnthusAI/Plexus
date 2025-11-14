@@ -202,6 +202,28 @@ Plexus includes a modern web dashboard built with Next.js and Shadcn, providing 
 
 For detailed information about the dashboard, its API client, and usage instructions, see the [dashboard documentation](dashboard/README.md).
 
+### White-Label Branding
+
+The Plexus dashboard supports white-label branding, allowing you to customize the logo, colors, and fonts without modifying the core Plexus codebase. This enables multiple branded deployments from a single codebase.
+
+**Features:**
+- Custom logo components (React/ES modules)
+- Color palette overrides using Radix color system
+- Font customization
+- Separate branding repositories
+- Build-time asset bundling for production
+
+**Quick Start:**
+```bash
+# Set environment variable pointing to your brand configuration
+NEXT_PUBLIC_BRAND_CONFIG_URL=/brands/your-brand/brand.json
+```
+
+**Learn More:**
+- [White-Labeling Documentation](dashboard/BRANDING.md) - Complete guide to creating custom branding
+- [Example Brand Repository](https://github.com/AnthusAI/Plexus-branding) - Reference implementation with ACME AI Lab example
+- Create your own brand repository following the example structure
+
 ## Documentation 
 
 We build the Sphinx documentation at [https://anthusai.github.io/Plexus/](https://anthusai.github.io/Plexus/) with the files in the `documentation/` folder.

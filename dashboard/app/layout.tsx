@@ -69,11 +69,11 @@ export default function RootLayout({
       <body className={inter.className}>
         <BrandProvider>
           <BrandedTitle />
-          <SidebarProvider>
-            <HydrationOverlay>
-              <ClientLayout>{children}</ClientLayout>
-            </HydrationOverlay>
-          </SidebarProvider>
+        <SidebarProvider>
+          <HydrationOverlay>
+            <ClientLayout>{children}</ClientLayout>
+          </HydrationOverlay>
+        </SidebarProvider>
         </BrandProvider>
       </body>
     </html>

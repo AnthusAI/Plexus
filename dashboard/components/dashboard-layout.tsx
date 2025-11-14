@@ -228,11 +228,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-2 mobile-compact' : ''}`}>
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
           <Link href="/" className={`block ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-4'}`}>
-            {isLeftSidebarOpen ? (
+              {isLeftSidebarOpen ? (
               <BrandableLogo variant={LogoVariant.Wide} />
-            ) : (
+              ) : (
               <BrandableLogo variant={LogoVariant.Narrow} />
-            )}
+              )}
           </Link>
         </div>
 
