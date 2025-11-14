@@ -2,7 +2,8 @@
 
 import { ReactNode } from 'react'
 import { Authenticator } from '@aws-amplify/ui-react'
-import SquareLogo, { LogoVariant } from '@/components/logo-square'
+import BrandableLogo from '@/components/BrandableLogo'
+import { LogoVariant } from '@/components/logo-square'
 
 interface DashboardLayoutProps {
   children: ReactNode
@@ -15,7 +16,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="w-full max-w-[300px] relative">
           <div className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"></div>
           <div className="relative">
-            <SquareLogo variant={LogoVariant.Square} className="w-full" />
+            <BrandableLogo variant={LogoVariant.Square} className="w-full" />
           </div>
         </div>
         <div className="w-full max-w-md">
