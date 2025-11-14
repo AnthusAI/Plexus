@@ -1029,15 +1029,7 @@ class TopicAnalysis(BaseReportBlock):
                                             stability_score = per_topic_stability[topic_id]
                                             topic['stability_score'] = stability_score
                                             
-                                            # Add human-readable interpretation
-                                            if stability_score > 0.7:
-                                                topic['stability_interpretation'] = 'high (very reliable)'
-                                            elif stability_score >= 0.5:
-                                                topic['stability_interpretation'] = 'moderate (reasonably reliable)'
-                                            else:
-                                                topic['stability_interpretation'] = 'low (unstable, varies between runs)'
-                                            
-                                            self._log(f"   Topic {topic_id} stability: {stability_score:.3f} ({topic['stability_interpretation']})")
+                                            self._log(f"   Topic {topic_id} stability: {stability_score:.3f}")
                                 
                                 self._log("✅ Topic enrichment complete")
                             
@@ -1056,7 +1048,6 @@ class TopicAnalysis(BaseReportBlock):
                                 # Include metrics in summary if present
                                 if 'stability_score' in topic:
                                     summary_topic['stability_score'] = topic['stability_score']
-                                    summary_topic['stability_interpretation'] = topic.get('stability_interpretation', '')
                                 if 'similar_topics' in topic:
                                     summary_topic['similar_topics_count'] = len(topic['similar_topics'])
                                 
@@ -1084,15 +1075,6 @@ class TopicAnalysis(BaseReportBlock):
                                         'sample_fraction': topic_stability['sample_fraction'],
                                         'methodology': topic_stability['methodology']
                                     }
-                                    
-                                    # Add interpretation
-                                    mean_stability = topic_stability['mean_stability']
-                                    if mean_stability > 0.7:
-                                        analysis_metrics['topic_stability']['interpretation'] = 'Topics are highly stable and reliable'
-                                    elif mean_stability >= 0.5:
-                                        analysis_metrics['topic_stability']['interpretation'] = 'Topics show moderate stability'
-                                    else:
-                                        analysis_metrics['topic_stability']['interpretation'] = 'Topics are less stable - consider adjusting parameters'
                                 
                                 final_output_data['analysis_metrics'] = analysis_metrics
                                 self._log(f"✅ Added aggregate analysis metrics to output")
@@ -1554,10 +1536,7 @@ class TopicAnalysis(BaseReportBlock):
      * `mean_similarity` < 0.3 = highly distinct topics
      * `mean_similarity` > 0.6 = potential topic overlap
      * Check `high_similarity_pairs_count` for specific redundant topics
-   - If `analysis_metrics.topic_stability` exists, comment on reliability:
-     * `mean_stability` > 0.7 = highly reliable topics
-     * `mean_stability` < 0.5 = topics vary between runs
-   - If individual topics have `stability_score` and `stability_interpretation`, mention any low-stability topics
+   - If `analysis_metrics.topic_stability` exists, report the mean_stability score factually without interpretation
 
 4. **Key Insights**: 
    - Interpret patterns from the actual topic distribution
