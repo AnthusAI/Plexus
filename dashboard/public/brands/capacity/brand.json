@@ -1,0 +1,10 @@
+{
+  "name": "Capacity",
+  "logo": {
+    "componentPath": "/brands/capacity/logo.js"
+  },
+  "styles": {
+    "cssPath": "/brands/capacity/styles.css"
+  }
+}
+
