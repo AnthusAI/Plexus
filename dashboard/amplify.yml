@@ -58,27 +58,11 @@ applications:
                 ls -la "$TEMP_DIR" | head -20
                 echo ""
                 
-                if [ -f "$TEMP_DIR/capacity-branding.tar.gz" ]; then
-                  echo "  → Found capacity-branding.tar.gz in repo"
-                  mkdir -p ./public/brands
-                  cd ./public/brands
-                  tar -xzf "$TEMP_DIR/capacity-branding.tar.gz"
-                  echo "  ✓ Extracted capacity-branding.tar.gz"
-                  cd ../..
-                elif [ -f "$TEMP_DIR/brand-assets.tar.gz" ]; then
-                  echo "  → Found brand-assets.tar.gz in repo"
-                  mkdir -p ./public/brands
-                  cd ./public/brands
-                  tar -xzf "$TEMP_DIR/brand-assets.tar.gz"
-                  echo "  ✓ Extracted brand-assets.tar.gz"
-                  cd ../..
-                else
-                  echo "  ⚠ No tarball found, copying entire repo contents"
-                  mkdir -p ./public/brands
-                  cp -r "$TEMP_DIR"/* ./public/brands/
-                  rm -rf ./public/brands/.git
-                  echo "  ✓ Copied repo contents"
-                fi
+                echo "  → Copying brand assets to public/brands"
+                mkdir -p ./public/brands
+                cp -r "$TEMP_DIR"/* ./public/brands/
+                rm -rf ./public/brands/.git ./public/brands/.gitignore ./public/brands/README.md ./public/brands/Makefile
+                echo "  ✓ Copied brand assets"
                 
                 rm -rf "$TEMP_DIR"
                 echo "  ✓ Cleaned up temp directory"
