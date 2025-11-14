@@ -103,6 +103,15 @@ applications:
               echo ""
         build:
           commands:
+            - echo "=== Verifying brand assets before build ==="
+            - |
+              if [ -d "./public/brands" ]; then
+                echo "✓ public/brands exists"
+                ls -la ./public/brands
+              else
+                echo "✗ public/brands does NOT exist!"
+              fi
+            - echo "=== Starting Next.js build ==="
             - npm run build:fast
       artifacts:
         baseDirectory: .next
