@@ -25,6 +25,7 @@ import { IdentifierDisplay } from '../ui/identifier-display';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import { HierarchicalTopicView } from './HierarchicalTopicView';
 
 interface Identifier {
   id: string;
@@ -155,6 +156,15 @@ interface TopicAnalysisData {
   };
   block_title?: string;
   topic_stability?: TopicStabilityData;
+  hierarchical_topics?: {
+    leaf_topics: { [key: number]: any };
+    parent_nodes: { [key: number]: any };
+    metadata: {
+      total_leaf_topics: number;
+      total_parent_nodes: number;
+      max_distance: number;
+    };
+  };
   errors?: string[];
 }
 
@@ -342,6 +352,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const topics = data.topics || [];
   const errors = data.errors || [];
   const summary = data.summary;
+  const hierarchicalTopics = data.hierarchical_topics;
   
   // Debug logging for topics data
   console.log('🔍 TopicAnalysis: Topics data received:', {
@@ -406,15 +417,26 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
         )}
 
         {/* Main Topic Analysis Results */}
-        <TopicAnalysisResults 
-          topics={topics} 
-          summary={summary} 
-          bertopicAnalysis={bertopicAnalysis}
-          completeTopicsData={completeTopicsData}
-          loadingCompleteData={loadingCompleteData}
-          fetchCompleteTopicsData={fetchCompleteTopicsData}
-          attachedFiles={props.attachedFiles ?? undefined}
-        />
+        {hierarchicalTopics ? (
+          <HierarchicalTopicView
+            hierarchicalData={hierarchicalTopics}
+            topics={topics}
+            attachedFiles={props.attachedFiles ?? undefined}
+            completeTopicsData={completeTopicsData}
+            loadingCompleteData={loadingCompleteData}
+            fetchCompleteTopicsData={fetchCompleteTopicsData}
+          />
+        ) : (
+          <TopicAnalysisResults 
+            topics={topics} 
+            summary={summary} 
+            bertopicAnalysis={bertopicAnalysis}
+            completeTopicsData={completeTopicsData}
+            loadingCompleteData={loadingCompleteData}
+            fetchCompleteTopicsData={fetchCompleteTopicsData}
+            attachedFiles={props.attachedFiles ?? undefined}
+          />
+        )}
 
         {/* Analysis Details Section */}
         <div className="w-full">
@@ -540,7 +562,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
 /**
  * Helper function to clean topic names by removing prefixes like "0_"
  */
-const cleanTopicName = (name: string): string => {
+export const cleanTopicName = (name: string): string => {
   // Remove prefixes like "0_", "1_", etc., replace underscores, and capitalize
   const cleaned = name.replace(/^\d+_/, '');
   return cleaned
@@ -699,7 +721,7 @@ const TopicAnalysisResults: React.FC<{
  * Topic Examples Section Component
  * Shows representative example texts for a topic with collapsible display
  */
-const TopicExamplesSection: React.FC<{
+export const TopicExamplesSection: React.FC<{
   examples: TopicExample[];
 }> = ({ examples }) => {
   if (!examples || examples.length === 0) {
@@ -805,7 +827,7 @@ const TopicExamplesSection: React.FC<{
  * Topic N-grams Section Component
  * Shows complete n-gram list with c-TF-IDF scores for a topic
  */
-const TopicNgramsSection: React.FC<{
+export const TopicNgramsSection: React.FC<{
   topicId: number;
   topicName: string;
   attachedFiles?: string[];
