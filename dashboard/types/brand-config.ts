@@ -10,10 +10,15 @@ export interface BrandStylesConfig {
   cssPath: string;
 }
 
+export interface BrandFaviconConfig {
+  faviconPath: string;
+}
+
 export interface BrandConfig {
   name: string;
   logo?: BrandLogoConfig;
   styles?: BrandStylesConfig;
+  favicon?: BrandFaviconConfig;
 }
 
 /**
@@ -49,6 +54,17 @@ export function validateBrandConfig(config: unknown): config is BrandConfig {
     }
     const styles = cfg.styles as Record<string, unknown>;
     if (typeof styles.cssPath !== 'string' || styles.cssPath.trim() === '') {
+      return false;
+    }
+  }
+
+  // favicon is optional, but if present must have faviconPath
+  if (cfg.favicon !== undefined) {
+    if (typeof cfg.favicon !== 'object' || cfg.favicon === null) {
+      return false;
+    }
+    const favicon = cfg.favicon as Record<string, unknown>;
+    if (typeof favicon.faviconPath !== 'string' || favicon.faviconPath.trim() === '') {
       return false;
     }
   }

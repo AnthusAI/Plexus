@@ -114,6 +114,35 @@ export function BrandProvider({ children }: BrandProviderProps) {
     };
   }, [config]);
 
+  // Inject custom favicon when config is loaded
+  useEffect(() => {
+    if (!config?.favicon?.faviconPath) {
+      return;
+    }
+
+    const faviconPath = config.favicon.faviconPath;
+    console.log('[BrandProvider] Injecting custom favicon from:', faviconPath);
+
+    // Remove existing favicon links
+    const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]');
+    existingFavicons.forEach(link => link.remove());
+
+    // Create new favicon link
+    const faviconLink = document.createElement('link');
+    faviconLink.rel = 'icon';
+    faviconLink.href = faviconPath;
+    faviconLink.id = 'brand-custom-favicon';
+    document.head.appendChild(faviconLink);
+
+    // Cleanup function
+    return () => {
+      const existingFavicon = document.getElementById('brand-custom-favicon');
+      if (existingFavicon) {
+        existingFavicon.remove();
+      }
+    };
+  }, [config]);
+
   // Load custom logo component when config is loaded
   useEffect(() => {
     if (!config?.logo?.componentPath) {
