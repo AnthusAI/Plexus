@@ -18,6 +18,81 @@ applications:
             - npm --version
             - export PARCEL_WATCHER_BACKEND=inotify
             - npm ci --cache .npm --prefer-offline
+            # Fetch brand assets if BRAND_ASSETS_URL or BRAND_ASSETS_REPO is set
+            # Supports: 
+            #   - BRAND_ASSETS_URL: Public HTTPS URLs, S3 presigned URLs
+            #   - BRAND_ASSETS_REPO: GitHub repo URLs (public or private)
+            - |
+              echo "=== Brand Asset Fetching ==="
+              echo "BRAND_ASSETS_REPO: ${BRAND_ASSETS_REPO:-not set}"
+              echo "BRAND_ASSETS_URL: ${BRAND_ASSETS_URL:-not set}"
+              echo "NEXT_PUBLIC_BRAND_CONFIG_URL: ${NEXT_PUBLIC_BRAND_CONFIG_URL:-not set}"
+              echo ""
+              
+              if [ ! -z "$BRAND_ASSETS_REPO" ]; then
+                echo "→ Cloning brand assets from $BRAND_ASSETS_REPO"
+                TEMP_DIR=$(mktemp -d)
+                echo "  Temp directory: $TEMP_DIR"
+                
+                git clone "$BRAND_ASSETS_REPO" "$TEMP_DIR" 2>&1 | head -10
+                echo "  ✓ Clone complete"
+                
+                echo "  Contents of cloned repo:"
+                ls -la "$TEMP_DIR" | head -20
+                echo ""
+                
+                if [ -f "$TEMP_DIR/capacity-branding.tar.gz" ]; then
+                  echo "  → Found capacity-branding.tar.gz in repo"
+                  mkdir -p ./public/brands
+                  cd ./public/brands
+                  tar -xzf "$TEMP_DIR/capacity-branding.tar.gz"
+                  echo "  ✓ Extracted capacity-branding.tar.gz"
+                  cd ../..
+                elif [ -f "$TEMP_DIR/brand-assets.tar.gz" ]; then
+                  echo "  → Found brand-assets.tar.gz in repo"
+                  mkdir -p ./public/brands
+                  cd ./public/brands
+                  tar -xzf "$TEMP_DIR/brand-assets.tar.gz"
+                  echo "  ✓ Extracted brand-assets.tar.gz"
+                  cd ../..
+                else
+                  echo "  ⚠ No tarball found, copying entire repo contents"
+                  mkdir -p ./public/brands
+                  cp -r "$TEMP_DIR"/* ./public/brands/
+                  rm -rf ./public/brands/.git
+                  echo "  ✓ Copied repo contents"
+                fi
+                
+                rm -rf "$TEMP_DIR"
+                echo "  ✓ Cleaned up temp directory"
+                echo ""
+                echo "  Final contents of public/brands:"
+                ls -la ./public/brands
+                echo ""
+                echo "✓ Brand assets fetched and extracted successfully"
+                
+              elif [ ! -z "$BRAND_ASSETS_URL" ]; then
+                echo "→ Fetching brand assets from $BRAND_ASSETS_URL"
+                mkdir -p ./public/brands
+                cd ./public/brands
+                curl -L -o brands.tar.gz "$BRAND_ASSETS_URL"
+                echo "  ✓ Downloaded tarball"
+                tar -xzf brands.tar.gz
+                echo "  ✓ Extracted tarball"
+                rm brands.tar.gz
+                cd ../..
+                echo ""
+                echo "  Contents of public/brands:"
+                ls -la ./public/brands
+                echo ""
+                echo "✓ Brand assets fetched and extracted successfully"
+                
+              else
+                echo "ℹ No BRAND_ASSETS_URL or BRAND_ASSETS_REPO configured"
+                echo "  Using default Plexus branding"
+              fi
+              echo "=== End Brand Asset Fetching ==="
+              echo ""
         build:
           commands:
             - npm run build:fast
