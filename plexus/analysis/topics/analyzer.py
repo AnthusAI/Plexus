@@ -1189,15 +1189,23 @@ def analyze_topics(
             from plexus.analysis.topics.stability import assess_topic_stability
             
             # Prepare BERTopic parameters for stability assessment
+            # When hierarchical mode is enabled, we skip topic reduction, so stability should too
+            stability_nr_topics = None if compute_hierarchical else nr_topics
+            
             stability_bertopic_params = {
                 'n_gram_range': n_gram_range,
                 'min_topic_size': min_topic_size,
                 'top_n_words': top_n_words,
                 'umap_model': umap_model,
                 'vectorizer_model': vectorizer_model,
-                'nr_topics': nr_topics,  # Pass topic reduction parameter for consistent topic counts
+                'nr_topics': stability_nr_topics,  # None for hierarchical mode, nr_topics otherwise
                 'verbose': False  # Reduce logging during stability runs
             }
+            
+            if compute_hierarchical:
+                logger.info("   • Hierarchical mode: Assessing stability of unreduced topics (matching hierarchy)")
+            elif nr_topics:
+                logger.info(f"   • Assessing stability with topic reduction to {nr_topics} topics")
             
             stability_results = assess_topic_stability(
                 docs,
