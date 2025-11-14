@@ -251,9 +251,81 @@ Open the browser console and look for these messages:
 
 ## Production Deployment
 
-### 1. Deploy Branding Repository
+### AWS Amplify Deployment
 
-Deploy your branding repository contents to your web server at the `/brands/` path:
+For AWS Amplify deployments, brand assets are automatically fetched and bundled during the build process. This ensures assets are served from the same origin (required for security).
+
+#### Step 1: Package Your Brand Assets
+
+Create a tarball of your brand repository:
+
+```bash
+cd /path/to/your-branding-repo
+tar -czf brand-assets.tar.gz capacity/ images/
+```
+
+The tarball should contain your brand directories with their files:
+```
+capacity/
+  brand.json
+  logo.js
+  styles.css
+images/
+  capacity-logo.png
+```
+
+#### Step 2: Host the Tarball
+
+Upload the tarball to any accessible HTTPS endpoint:
+
+**Option A: GitHub Releases**
+1. Create a release in your branding repository
+2. Attach the tarball as a release asset
+3. Use the release asset URL
+
+**Option B: Existing S3 Bucket**
+```bash
+aws s3 cp brand-assets.tar.gz s3://your-bucket/brands/
+aws s3 presign s3://your-bucket/brands/brand-assets.tar.gz --expires-in 604800
+```
+
+**Option C: Any CDN or Web Server**
+- Upload to CloudFront, Cloudflare, or any HTTPS endpoint
+- Ensure the URL is accessible during build time
+
+#### Step 3: Configure Amplify Environment Variables
+
+In the AWS Amplify Console (App Settings → Environment Variables), set:
+
+```bash
+BRAND_ASSETS_URL=https://your-cdn.com/brand-assets.tar.gz
+NEXT_PUBLIC_BRAND_CONFIG_URL=/brands/capacity/brand.json
+```
+
+- `BRAND_ASSETS_URL`: URL to your tarball (fetched during build)
+- `NEXT_PUBLIC_BRAND_CONFIG_URL`: Path to brand.json (used by browser)
+
+#### Step 4: Deploy
+
+The next Amplify build will automatically:
+1. Download the tarball from `BRAND_ASSETS_URL`
+2. Extract it into `public/brands/`
+3. Build the Next.js app with the brand assets included
+4. Deploy the app with branding baked in
+
+#### Updating Branding
+
+To update branding without code changes:
+1. Create a new tarball with updated assets
+2. Upload to a new URL (or replace the existing one)
+3. Update `BRAND_ASSETS_URL` in Amplify Console
+4. Trigger a new build
+
+**Note:** Brand assets are baked into the build. Updates require a rebuild.
+
+### Manual/Self-Hosted Deployment
+
+If you're not using AWS Amplify, deploy your branding repository contents to your web server at the `/brands/` path:
 
 ```bash
 # Example: Copy to web server
@@ -262,25 +334,14 @@ scp -r ~/Projects/YourBrand-plexus-branding/* user@server:/var/www/plexus/brands
 # Or use your deployment pipeline
 ```
 
-### 2. Set Environment Variable
-
-Configure the environment variable in your production environment:
+Then set the environment variable before building:
 
 ```bash
 NEXT_PUBLIC_BRAND_CONFIG_URL=/brands/your-brand/brand.json
-```
-
-**Important:** Next.js environment variables are baked into the build at build time. You must:
-1. Set the environment variable before building
-2. Rebuild the application if you change the environment variable
-
-### 3. Build and Deploy Plexus
-
-```bash
-cd ~/Projects/Plexus/dashboard
 npm run build
-# Deploy the built application
 ```
+
+**Important:** Next.js environment variables are baked into the build at build time. You must rebuild if you change the environment variable.
 
 ## Error Handling
 
