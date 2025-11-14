@@ -1,0 +1,46 @@
+# Lambda Runtime
+awslambdaric
+
+# LangChain/LangGraph - pinned to production versions from pyproject.toml
+langchain>=0.3.25
+langgraph==0.6.7
+langchain-core>=0.3.70
+langchain-openai>=0.3.34
+langchain-anthropic>=0.3.10
+langchain-community>=0.3.24
+langchain-aws>=0.2.23
+langgraph-checkpoint-postgres==2.0.9
+
+# AWS & Azure
+boto3
+watchtower
+azure-identity
+
+# Core deps
+tiktoken
+pydantic
+openai
+requests
+python-dotenv
+psycopg[binary]
+sqlalchemy==1.4.15
+rich
+ruamel.yaml
+pyyaml
+tenacity
+graphviz
+gql[requests]
+rapidfuzz==3.9.4
+jinja2
+
+# Required by Score.py imports (even if not used by LangGraph scores)
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+xgboost
+nltk
+
+# Cost tracking
+git+https://github.com/AnthusAI/openai_cost_calculator.git@main
