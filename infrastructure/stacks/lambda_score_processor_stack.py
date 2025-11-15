@@ -57,7 +57,7 @@ class LambdaScoreProcessorStack(Stack):
         Tags.of(self).add("Service", "lambda-score-processor")
         Tags.of(self).add("ManagedBy", "CDK")
 
-        # Load environment-specific configuration from SSM Parameter Store
+        # Load environment-specific configuration from Secrets Manager
         config = EnvironmentConfig(self, environment)
 
         # Look up ECR repository by name (created by pipeline)
@@ -97,6 +97,9 @@ class LambdaScoreProcessorStack(Stack):
             ]
         )
 
+        # Grant read access to Secrets Manager
+        config.secret.grant_read(lambda_role)
+
         # Create Lambda function with container image
         # Note: The image must be built and pushed to ECR before deployment
         # This is handled by the pipeline's Docker build step
@@ -116,20 +119,20 @@ class LambdaScoreProcessorStack(Stack):
                 "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": standard_request_queue_url,
                 "PLEXUS_RESPONSE_WORKER_QUEUE_URL": response_queue_url,
 
-                # Plexus API Configuration (from SSM)
-                "PLEXUS_ACCOUNT_KEY": config.get_parameter("account-key"),
-                "PLEXUS_API_KEY": config.get_secret_parameter("api-key"),
-                "PLEXUS_API_URL": config.get_parameter("api-url"),
+                # Plexus API Configuration (from Secrets Manager)
+                "PLEXUS_ACCOUNT_KEY": config.get_value("account-key"),
+                "PLEXUS_API_KEY": config.get_value("api-key"),
+                "PLEXUS_API_URL": config.get_value("api-url"),
 
-                # Database Configuration (from SSM)
-                "PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI": config.get_secret_parameter("postgres-uri"),
+                # Database Configuration (from Secrets Manager)
+                "PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI": config.get_value("postgres-uri"),
 
-                # S3 Bucket Names (from SSM)
-                "AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME": config.get_parameter("score-result-attachments-bucket"),
-                "AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME": config.get_parameter("report-block-details-bucket"),
+                # S3 Bucket Names (from Secrets Manager)
+                "AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME": config.get_value("score-result-attachments-bucket"),
+                "AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME": config.get_value("report-block-details-bucket"),
 
-                # OpenAI Configuration (from SSM)
-                "OPENAI_API_KEY": config.get_secret_parameter("openai-api-key"),
+                # OpenAI Configuration (from Secrets Manager)
+                "OPENAI_API_KEY": config.get_value("openai-api-key"),
 
                 # GraphQL Schema Configuration (hardcoded - not environment-specific)
                 "FETCH_SCHEMA_FROM_TRANSPORT": "false",
