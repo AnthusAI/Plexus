@@ -57,29 +57,13 @@ class BasePipelineStack(Stack):
             authentication=SecretValue.secrets_manager("github-token")
         )
 
-        # Create ECR repository for this environment
-        # Each environment (staging/production) has its own repository
-        ecr_repository = ecr.Repository(
+        # Reference ECR repository (created in separate EcrRepositoriesStack)
+        # Must be deployed first: cdk deploy plexus-ecr-repositories
+        ecr_repository_name = f"{LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE}-{environment}"
+        ecr_repository = ecr.Repository.from_repository_name(
             self,
             "LambdaEcrRepository",
-            repository_name=f"{LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE}-{environment}",
-            image_scan_on_push=True,
-            lifecycle_rules=[
-                # Remove untagged images after 1 day (highest priority)
-                ecr.LifecycleRule(
-                    description="Remove untagged images after 1 day",
-                    max_image_age=cdk.Duration.days(1),
-                    rule_priority=1,
-                    tag_status=ecr.TagStatus.UNTAGGED
-                ),
-                # Keep last 10 images
-                ecr.LifecycleRule(
-                    description="Keep last 10 images",
-                    max_image_count=10,
-                    rule_priority=2
-                )
-            ],
-            removal_policy=cdk.RemovalPolicy.RETAIN,
+            repository_name=ecr_repository_name
         )
 
         # Create the pipeline
