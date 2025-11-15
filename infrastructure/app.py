@@ -8,7 +8,7 @@ app = cdk.App()
 
 # Get AWS account and region from environment or use defaults
 account = os.environ.get('CDK_DEFAULT_ACCOUNT')
-region = os.environ.get('CDK_DEFAULT_REGION', 'us-east-1')
+region = os.environ.get('CDK_DEFAULT_REGION', 'us-west-2')
 
 env = cdk.Environment(account=account, region=region)
 
