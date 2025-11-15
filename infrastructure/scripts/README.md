@@ -1,65 +1,74 @@
-# SSM Parameter Setup Scripts
+# Configuration Setup Scripts
 
-These scripts populate AWS Systems Manager Parameter Store with configuration values from your root `.env` file.
+These scripts populate AWS Secrets Manager with configuration values from your root `.env` file.
 
 ## Overview
 
-The scripts automatically read configuration from `Plexus/.env` and create SSM parameters for each environment.
+The scripts automatically read configuration from `Plexus/.env` and create a single JSON secret in Secrets Manager for each environment. This provides a unified, secure location for all configuration values (both sensitive and non-sensitive).
 
 ## Usage
 
 ### For Production Environment
 
-Run this to create production SSM parameters using current `.env` values:
+Run this to create/update the production secret using current `.env` values:
 
 ```bash
 cd infrastructure/scripts
-./create-ssm-parameters-production.sh
+./create-secrets-production.sh
 ```
 
-This will create:
-- `/plexus/production/config/account-key`
-- `/plexus/production/config/api-url`
-- `/plexus/production/config/api-key` (SecureString)
-- `/plexus/production/config/postgres-uri` (SecureString)
-- `/plexus/production/config/openai-api-key` (SecureString)
-- `/plexus/production/config/score-result-attachments-bucket`
-- `/plexus/production/config/report-block-details-bucket`
+This creates a secret named `plexus/production/config` with the following keys:
+- `account-key`
+- `api-key`
+- `api-url`
+- `postgres-uri`
+- `openai-api-key`
+- `score-result-attachments-bucket`
+- `report-block-details-bucket`
 
 ### For Staging Environment
 
-ToDo: Add staging config
+Run this to create/update the staging secret:
+
+```bash
+cd infrastructure/scripts
+./create-secrets-staging.sh
+```
+
+This creates a secret named `plexus/staging/config` with the same structure.
 
 ## What Gets Created
 
-### SSM Parameter Structure
+### Secrets Manager Structure
 
 ```
-/plexus/
-├── staging/
-│   └── config/
-│       ├── account-key (String)
-│       ├── api-url (String)
-│       ├── api-key (SecureString) 🔒
-│       ├── postgres-uri (SecureString) 🔒
-│       ├── openai-api-key (SecureString) 🔒
-│       ├── score-result-attachments-bucket (String)
-│       └── report-block-details-bucket (String)
-└── production/
-    └── config/
-        ├── account-key (String)
-        ├── api-url (String)
-        ├── api-key (SecureString) 🔒
-        ├── postgres-uri (SecureString) 🔒
-        ├── openai-api-key (SecureString) 🔒
-        ├── score-result-attachments-bucket (String)
-        └── report-block-details-bucket (String)
+AWS Secrets Manager
+├── plexus/staging/config (JSON secret)
+│   └── {
+│         "account-key": "...",
+│         "api-key": "...",
+│         "api-url": "...",
+│         "postgres-uri": "...",
+│         "openai-api-key": "...",
+│         "score-result-attachments-bucket": "...",
+│         "report-block-details-bucket": "..."
+│       }
+└── plexus/production/config (JSON secret)
+    └── {
+          "account-key": "...",
+          "api-key": "...",
+          "api-url": "...",
+          "postgres-uri": "...",
+          "openai-api-key": "...",
+          "score-result-attachments-bucket": "...",
+          "report-block-details-bucket": "..."
+        }
 ```
 
 ## Variable Mapping
 
-| SSM Parameter | .env Variable | Notes |
-|---------------|---------------|-------|
+| Secret Key | .env Variable | Notes |
+|-----------|---------------|-------|
 | `account-key` | `PLEXUS_ACCOUNT_KEY` | Account identifier |
 | `api-url` | `PLEXUS_API_URL` | GraphQL endpoint |
 | `api-key` | `PLEXUS_API_KEY` | API authentication key |
@@ -70,48 +79,59 @@ ToDo: Add staging config
 
 ## Verification
 
-After running the scripts, verify parameters were created:
+After running the scripts, verify secrets were created:
 
 ```bash
-# List all staging parameters
-aws ssm get-parameters-by-path \
-  --path "/plexus/staging/config" \
-  --with-decryption \
-  --output table
+# View staging secret metadata (no values)
+aws secretsmanager describe-secret --secret-id plexus/staging/config
 
-# List all production parameters
-aws ssm get-parameters-by-path \
-  --path "/plexus/production/config" \
-  --with-decryption \
-  --output table
+# View staging secret with values
+aws secretsmanager get-secret-value --secret-id plexus/staging/config \
+  --query SecretString --output text | jq
+
+# View production secret with values
+aws secretsmanager get-secret-value --secret-id plexus/production/config \
+  --query SecretString --output text | jq
 ```
 
-## Updating Parameters
+## Updating Configuration
 
-To update a single parameter:
+### Update All Values
+
+To update all configuration values from `.env`:
 
 ```bash
-# Update in .env file first
+# Update values in .env file first
 
-# Then re-run the script (uses --overwrite flag)
-./create-ssm-parameters-staging.sh
+# Then re-run the script (will update the secret)
+./create-secrets-production.sh
 ```
 
-Or update directly:
+### Update Single Value
+
+To update a single key in the secret:
 
 ```bash
-aws ssm put-parameter \
-  --name "/plexus/staging/config/api-key" \
-  --value "new-api-key-value" \
-  --type SecureString \
-  --overwrite
+# Get current secret value
+CURRENT=$(aws secretsmanager get-secret-value \
+  --secret-id plexus/production/config \
+  --query SecretString --output text)
+
+# Update the key using jq
+UPDATED=$(echo "$CURRENT" | jq '.["api-key"] = "new-value"')
+
+# Update the secret
+aws secretsmanager update-secret \
+  --secret-id plexus/production/config \
+  --secret-string "$UPDATED"
 ```
 
 ## Security Notes
 
-1. **SecureString Parameters**: API keys, database URIs, and OpenAI keys are stored as SecureString (encrypted with AWS KMS)
-2. **IAM Permissions**: You need `ssm:PutParameter` permission to run these scripts
-3. **Parameter History**: SSM keeps version history of all parameter changes
+1. **Encryption**: All values in Secrets Manager are encrypted at rest using AWS KMS
+2. **IAM Permissions**: Lambda functions are granted read-only access to the secret
+3. **Version History**: Secrets Manager keeps version history of all changes
+4. **Cost**: Secrets Manager charges per secret ($0.40/month per secret + $0.05 per 10,000 API calls)
 
 ## Troubleshooting
 
@@ -125,7 +145,7 @@ aws ssm put-parameter \
 
 ### Error: Variable is empty
 
-If a parameter gets an empty value, check that the variable is defined in `.env`:
+If a key gets an empty value in the secret, check that the variable is defined in `.env`:
 
 ```bash
 # Check what's loaded
@@ -136,14 +156,19 @@ echo $PLEXUS_API_KEY
 ### Error: Access Denied
 
 ```
-An error occurred (AccessDeniedException) when calling the PutParameter operation
+An error occurred (AccessDeniedException) when calling the CreateSecret operation
 ```
 
-**Solution**: Add SSM permissions to your IAM user:
+**Solution**: Add Secrets Manager permissions to your IAM user:
 ```json
 {
   "Effect": "Allow",
-  "Action": ["ssm:PutParameter"],
-  "Resource": "arn:aws:ssm:*:*:parameter/plexus/*"
+  "Action": [
+    "secretsmanager:CreateSecret",
+    "secretsmanager:UpdateSecret",
+    "secretsmanager:DescribeSecret",
+    "secretsmanager:GetSecretValue"
+  ],
+  "Resource": "arn:aws:secretsmanager:*:*:secret:plexus/*"
 }
 ```

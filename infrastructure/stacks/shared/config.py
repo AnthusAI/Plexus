@@ -2,29 +2,36 @@
 Shared configuration management for Plexus infrastructure.
 
 This module provides utilities for loading environment-specific configuration
-from AWS Systems Manager Parameter Store.
+from AWS Secrets Manager.
 """
 
 from aws_cdk import (
-    aws_ssm as ssm,
+    aws_secretsmanager as secretsmanager,
 )
 from constructs import Construct
 
 
 class EnvironmentConfig:
     """
-    Environment-specific configuration loaded from SSM Parameter Store.
+    Environment-specific configuration loaded from AWS Secrets Manager.
 
-    Configuration is stored in SSM with the following structure:
-    /plexus/{environment}/config/{key}
+    All configuration (both sensitive and non-sensitive) is stored in a single
+    JSON secret with the naming pattern: plexus/{environment}/config
 
-    Example:
-    /plexus/staging/config/account-key
-    /plexus/staging/config/api-key
-    /plexus/staging/config/api-url
-    /plexus/production/config/account-key
-    /plexus/production/config/api-key
-    /plexus/production/config/api-url
+    Example secret names:
+    - plexus/staging/config
+    - plexus/production/config
+
+    Example secret structure:
+    {
+        "account-key": "...",
+        "api-key": "...",
+        "api-url": "...",
+        "postgres-uri": "...",
+        "openai-api-key": "...",
+        "score-result-attachments-bucket": "...",
+        "report-block-details-bucket": "..."
+    }
     """
 
     def __init__(self, scope: Construct, environment: str):
@@ -37,39 +44,23 @@ class EnvironmentConfig:
         """
         self.scope = scope
         self.environment = environment
-        self.base_path = f"/plexus/{environment}/config"
+        self.secret_name = f"plexus/{environment}/config"
 
-    def get_parameter(self, key: str) -> str:
+        # Look up the secret (must exist before deployment)
+        self.secret = secretsmanager.Secret.from_secret_name_v2(
+            scope,
+            "PlexusConfig",
+            secret_name=self.secret_name
+        )
+
+    def get_value(self, key: str) -> str:
         """
-        Get a configuration parameter from SSM Parameter Store.
+        Get a configuration value from the secret.
 
         Args:
-            key: Parameter key (e.g., 'account-key', 'api-url')
+            key: Configuration key (e.g., 'account-key', 'api-url', 'openai-api-key')
 
         Returns:
-            Parameter value as a CDK token (resolved at deploy time)
+            Secret value as a CDK token (resolved at deploy time)
         """
-        parameter = ssm.StringParameter.from_string_parameter_name(
-            self.scope,
-            f"Param{key.replace('-', '').title()}",
-            string_parameter_name=f"{self.base_path}/{key}"
-        )
-        return parameter.string_value
-
-    def get_secret_parameter(self, key: str) -> str:
-        """
-        Get a secret configuration parameter from SSM Parameter Store (SecureString).
-
-        Args:
-            key: Parameter key (e.g., 'openai-api-key', 'postgres-uri')
-
-        Returns:
-            Parameter value as a CDK token (resolved at deploy time)
-        """
-        parameter = ssm.StringParameter.from_secure_string_parameter_attributes(
-            self.scope,
-            f"SecretParam{key.replace('-', '').title()}",
-            parameter_name=f"{self.base_path}/{key}",
-            version=1  # Use latest version
-        )
-        return parameter.string_value
+        return self.secret.secret_value_from_json(key).unsafe_unwrap()
