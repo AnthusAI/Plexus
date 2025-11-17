@@ -100,7 +100,7 @@ class LambdaFanoutStack(Stack):
             function_name=get_resource_name("lambda", environment, "fanout"),
             runtime=lambda_.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
-            code=lambda_.Code.from_asset("score-processor-fanout-lambda"),
+            code=lambda_.Code.from_asset("../score-processor-fanout-lambda"),
             role=lambda_role,
             timeout=Duration.seconds(60),
             memory_size=512,
