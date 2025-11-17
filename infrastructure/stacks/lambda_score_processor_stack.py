@@ -5,6 +5,8 @@ This stack manages the Lambda function that processes scoring jobs from SQS queu
 The function uses a container image built from the score-processor-lambda directory.
 """
 
+import os
+from datetime import datetime
 from aws_cdk import (
     Stack,
     Duration,
@@ -100,6 +102,10 @@ class LambdaScoreProcessorStack(Stack):
         # Grant read access to Secrets Manager
         config.secret.grant_read(lambda_role)
 
+        # Get deployment timestamp to force Lambda updates
+        # This ensures Lambda pulls the latest image even when using 'latest' tag
+        deployment_id = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+
         # Create Lambda function with container image
         # Note: The image must be built and pushed to ECR before deployment
         # This is handled by the pipeline's Docker build step
@@ -142,8 +148,11 @@ class LambdaScoreProcessorStack(Stack):
                 # Matplotlib Configuration (hardcoded - Lambda /tmp directory)
                 "MPLBACKEND": "Agg",
                 "MPLCONFIGDIR": "/tmp/mpl",
+
+                # Deployment ID - forces Lambda to update image on every deployment
+                "DEPLOYMENT_ID": deployment_id,
             },
-            description=f"Processes scoring jobs from SQS queue ({environment})"
+            description=f"Processes scoring jobs from SQS queue ({environment}) - Deployed: {deployment_id}"
         )
 
         # Note: We're intentionally NOT adding SQS as an event source yet
