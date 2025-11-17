@@ -103,9 +103,7 @@ class BasePipelineStack(Stack):
                 # Login to ECR
                 f"aws ecr get-login-password --region {kwargs.get('env').region if kwargs.get('env') else 'us-west-2'} | docker login --username AWS --password-stdin {ecr_repository.repository_uri.split('/')[0]}",
                 # Build and push Docker image with proper flags for Lambda
-                # Push to both latest tag and commit SHA tag
-                "export GIT_COMMIT_SHA=$(git rev-parse --short HEAD)",
-                f"docker buildx build --platform linux/amd64 --provenance=false --push -f score-processor-lambda/Dockerfile -t {ecr_repository.repository_uri}:$GIT_COMMIT_SHA -t {ecr_repository.repository_uri}:latest ."
+                f"docker buildx build --platform linux/amd64 --provenance=false --push -f score-processor-lambda/Dockerfile -t {ecr_repository.repository_uri}:latest ."
             ],
             build_environment=codebuild.BuildEnvironment(
                 build_image=codebuild.LinuxBuildImage.STANDARD_7_0,

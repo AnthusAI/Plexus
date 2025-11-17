@@ -6,7 +6,7 @@ The function uses a container image built from the score-processor-lambda direct
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from aws_cdk import (
     Stack,
     Duration,
@@ -104,7 +104,7 @@ class LambdaScoreProcessorStack(Stack):
 
         # Get deployment timestamp to force Lambda updates
         # This ensures Lambda pulls the latest image even when using 'latest' tag
-        deployment_id = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        deployment_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
         # Create Lambda function with container image
         # Note: The image must be built and pushed to ECR before deployment
