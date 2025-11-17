@@ -16,6 +16,7 @@ from aws_cdk import (
 from constructs import Construct
 from stacks.scoring_worker_stack import ScoringWorkerStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
+from stacks.lambda_fanout_stack import LambdaFanoutStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 
 
@@ -190,7 +191,7 @@ class DeploymentStage(cdk.Stage):
 
         # Deploy Lambda score processor stack (uses the same queues)
         # Configuration is loaded from SSM Parameter Store by the stack
-        LambdaScoreProcessorStack(
+        lambda_score_processor_stack = LambdaScoreProcessorStack(
             self,
             "LambdaScoreProcessor",
             environment=environment,
@@ -198,6 +199,17 @@ class DeploymentStage(cdk.Stage):
             standard_request_queue_url=scoring_worker_stack.standard_request_queue.queue_url,
             response_queue_url=scoring_worker_stack.response_queue.queue_url,
             stack_name=f"plexus-lambda-score-processor-{environment}",
+            env=kwargs.get("env")
+        )
+
+        # Deploy fan-out Lambda stack (for controlled rollout)
+        LambdaFanoutStack(
+            self,
+            "LambdaFanout",
+            environment=environment,
+            score_processor_lambda_arn=lambda_score_processor_stack.lambda_function.function_arn,
+            standard_request_queue_url=scoring_worker_stack.standard_request_queue.queue_url,
+            stack_name=f"plexus-lambda-fanout-{environment}",
             env=kwargs.get("env")
         )
 
