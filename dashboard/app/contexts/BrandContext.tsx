@@ -45,6 +45,10 @@ export function BrandProvider({ children }: BrandProviderProps) {
   const [customLogoComponent, setCustomLogoComponent] = useState<ComponentType<LogoComponentProps> | null>(null);
   const [logoLoading, setLogoLoading] = useState(false);
   const [logoError, setLogoError] = useState<Error | null>(null);
+  
+  // Refs to track dynamically created elements
+  const cssRef = React.useRef<HTMLLinkElement | null>(null);
+  const faviconRef = React.useRef<HTMLLinkElement | null>(null);
 
   // Load brand configuration
   useEffect(() => {
@@ -104,12 +108,13 @@ export function BrandProvider({ children }: BrandProviderProps) {
 
     // Add to document head
     document.head.appendChild(linkElement);
+    cssRef.current = linkElement;
 
     // Cleanup function to remove the link when component unmounts or config changes
     return () => {
-      const existingLink = document.getElementById('brand-custom-styles');
-      if (existingLink) {
-        existingLink.remove();
+      if (cssRef.current && cssRef.current.parentNode) {
+        cssRef.current.parentNode.removeChild(cssRef.current);
+        cssRef.current = null;
       }
     };
   }, [config]);
@@ -123,12 +128,10 @@ export function BrandProvider({ children }: BrandProviderProps) {
     const faviconPath = config.favicon.faviconPath;
     console.log('[BrandProvider] Injecting custom favicon from:', faviconPath);
 
-    // Remove existing favicon links
+    // Hide existing favicon links instead of removing them (to avoid React conflicts)
     const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]');
     existingFavicons.forEach(link => {
-      if (link.parentNode) {
-        link.parentNode.removeChild(link);
-      }
+      (link as HTMLLinkElement).media = 'not all'; // Disable without removing from DOM
     });
 
     // Create new favicon link
@@ -137,13 +140,18 @@ export function BrandProvider({ children }: BrandProviderProps) {
     faviconLink.href = faviconPath;
     faviconLink.id = 'brand-custom-favicon';
     document.head.appendChild(faviconLink);
+    faviconRef.current = faviconLink;
 
-    // Cleanup function
+    // Cleanup function - only remove our element and restore existing ones
     return () => {
-      const existingFavicon = document.getElementById('brand-custom-favicon');
-      if (existingFavicon) {
-        existingFavicon.remove();
+      if (faviconRef.current && faviconRef.current.parentNode) {
+        faviconRef.current.parentNode.removeChild(faviconRef.current);
+        faviconRef.current = null;
       }
+      // Restore existing favicons
+      existingFavicons.forEach(link => {
+        (link as HTMLLinkElement).media = '';
+      });
     };
   }, [config]);
 
