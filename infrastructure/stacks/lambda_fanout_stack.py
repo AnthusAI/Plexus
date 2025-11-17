@@ -11,6 +11,7 @@ from aws_cdk import (
     Tags,
     aws_lambda as lambda_,
     aws_iam as iam,
+    aws_sqs as sqs,
 )
 from constructs import Construct
 from .shared.naming import get_resource_name
@@ -30,7 +31,7 @@ class LambdaFanoutStack(Stack):
         construct_id: str,
         environment: str,
         score_processor_lambda_arn: str,
-        standard_request_queue_url: str,
+        request_queue: sqs.IQueue,
         **kwargs
     ) -> None:
         """
@@ -41,7 +42,7 @@ class LambdaFanoutStack(Stack):
             construct_id: Unique identifier for this stack
             environment: Environment name ('staging' or 'production')
             score_processor_lambda_arn: ARN of score processor Lambda to invoke
-            standard_request_queue_url: SQS queue URL for incoming requests
+            request_queue: SQS queue for incoming requests
             **kwargs: Additional stack properties
         """
         super().__init__(scope, construct_id, **kwargs)
@@ -71,7 +72,6 @@ class LambdaFanoutStack(Stack):
 
         # Add SQS permissions (ReceiveMessage, ChangeMessageVisibility, GetQueueAttributes)
         # Note: NOT DeleteMessage - score processor handles that
-        queue_arn = self._get_queue_arn_from_url(standard_request_queue_url)
         lambda_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -80,7 +80,7 @@ class LambdaFanoutStack(Stack):
                     "sqs:ChangeMessageVisibility",
                     "sqs:GetQueueAttributes",
                 ],
-                resources=[queue_arn],
+                resources=[request_queue.queue_arn],
             )
         )
 
@@ -107,28 +107,10 @@ class LambdaFanoutStack(Stack):
             environment={
                 "FANOUT_BATCH_SIZE": "10",  # Default batch size
                 "SCORE_PROCESSOR_LAMBDA_ARN": score_processor_lambda_arn,
-                "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": standard_request_queue_url,
+                "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": request_queue.queue_url,
             },
             description="Fan-out controller for score processor Lambda invocations",
         )
 
         # Store function for potential cross-stack references
         self.fanout_function = fanout_function
-
-    def _get_queue_arn_from_url(self, queue_url: str) -> str:
-        """
-        Convert SQS queue URL to ARN.
-
-        Args:
-            queue_url: SQS queue URL
-
-        Returns:
-            Queue ARN
-        """
-        # Queue URL format: https://sqs.{region}.amazonaws.com/{account_id}/{queue_name}
-        parts = queue_url.split("/")
-        queue_name = parts[-1]
-        account_id = parts[-2]
-        region = queue_url.split(".")[1]
-
-        return f"arn:aws:sqs:{region}:{account_id}:{queue_name}"

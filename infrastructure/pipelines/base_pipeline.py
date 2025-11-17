@@ -208,7 +208,7 @@ class DeploymentStage(cdk.Stage):
             "LambdaFanout",
             environment=environment,
             score_processor_lambda_arn=lambda_score_processor_stack.lambda_function.function_arn,
-            standard_request_queue_url=scoring_worker_stack.standard_request_queue.queue_url,
+            request_queue=scoring_worker_stack.standard_request_queue,
             stack_name=f"plexus-lambda-fanout-{environment}",
             env=kwargs.get("env")
         )
