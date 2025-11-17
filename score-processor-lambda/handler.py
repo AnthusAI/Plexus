@@ -4,10 +4,12 @@ Lambda Handler for Score Processing
 
 This handler processes scoring jobs from SQS. It can be invoked:
 1. Manually via AWS Console "Test" button - polls queue for 1 message
-2. Later: Directly triggered by SQS (future enhancement)
+2. Directly from fan-out Lambda - processes specific message passed in event
+3. Later: Directly triggered by SQS (future enhancement)
 
 The handler:
-- Polls SQS queue for ONE scoring job message
+- For manual invocation: Polls SQS queue for ONE scoring job message
+- For fan-out invocation: Processes message from event payload
 - Retrieves the ScoringJob from DynamoDB
 - Performs scoring using Plexus scorecard system
 - Creates ScoreResult in DynamoDB
@@ -342,19 +344,82 @@ async def async_handler(event, context):
         processor = LambdaJobProcessor()
         await processor.initialize()
 
-        # Poll for one message
-        job = await processor.poll_sqs_once()
+        # Check if this is a direct invocation from fan-out Lambda
+        if event.get('source') == 'fanout':
+            logging.info("📨 Processing direct invocation from fan-out Lambda")
 
-        if not job:
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'message': 'No messages in queue',
-                    'processed': False
-                })
+            # Extract message details from event
+            message_body = event.get('message_body', {})
+            receipt_handle = event.get('receipt_handle')
+            queue_url = event.get('queue_url')
+
+            scoring_job_id = message_body.get('scoring_job_id')
+
+            if not scoring_job_id or not receipt_handle or not queue_url:
+                logging.error(f"❌ Missing required fields in fan-out event")
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({
+                        'message': 'Invalid fan-out event format',
+                        'processed': False
+                    })
+                }
+
+            # Override the queue URL for this specific message
+            processor.request_queue_url = queue_url
+
+            # Get ScoringJob from DynamoDB
+            scoring_job = await asyncio.to_thread(ScoringJob.get_by_id, scoring_job_id, processor.client)
+
+            if not scoring_job:
+                logging.error(f"❌ ScoringJob not found: {scoring_job_id}")
+                return {
+                    'statusCode': 404,
+                    'body': json.dumps({
+                        'message': f'ScoringJob not found: {scoring_job_id}',
+                        'processed': False
+                    })
+                }
+
+            # Claim the job
+            await asyncio.to_thread(
+                scoring_job.update,
+                status='IN_PROGRESS',
+                startedAt=datetime.now(timezone.utc).isoformat()
+            )
+
+            logging.info(f"✅ Claimed ScoringJob {scoring_job_id}")
+
+            # Get external IDs
+            scorecard = await asyncio.to_thread(Scorecard.get_by_id, scoring_job.scorecardId, processor.client)
+            scorecard_external_id = scorecard.externalId if scorecard else None
+
+            score = await asyncio.to_thread(Score.get_by_id, scoring_job.scoreId, processor.client)
+            score_external_id = score.externalId if score else None
+
+            job = {
+                'scoring_job_id': scoring_job_id,
+                'item_id': scoring_job.itemId,
+                'scorecard_id': scorecard_external_id,
+                'score_id': score_external_id,
+                'receipt_handle': receipt_handle
             }
 
-        # Process the job
+        else:
+            # Manual invocation - poll for one message
+            logging.info("📬 Manual invocation - polling SQS queue")
+            job = await processor.poll_sqs_once()
+
+            if not job:
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps({
+                        'message': 'No messages in queue',
+                        'processed': False
+                    })
+                }
+
+        # Process the job (common path for both invocation types)
         await processor.process_job(
             job['scoring_job_id'],
             job['item_id'],
