@@ -95,6 +95,10 @@ class BasePipelineStack(Stack):
             "BuildLambdaImage",
             input=source,
             commands=[
+                # Login to Docker Hub to avoid rate limits on base image pulls
+                "export DOCKERHUB_USERNAME=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --query SecretString --output text | jq -r .username)",
+                "export DOCKERHUB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --query SecretString --output text | jq -r .password)",
+                "echo $DOCKERHUB_PASSWORD | docker login --username $DOCKERHUB_USERNAME --password-stdin",
                 # Login to ECR
                 f"aws ecr get-login-password --region {kwargs.get('env').region if kwargs.get('env') else 'us-west-2'} | docker login --username AWS --password-stdin {ecr_repository.repository_uri.split('/')[0]}",
                 # Build and push Docker image with proper flags for Lambda
@@ -123,6 +127,11 @@ class BasePipelineStack(Stack):
                 iam.PolicyStatement(
                     actions=["ecr:GetAuthorizationToken"],
                     resources=["*"]
+                ),
+                # Grant permission to read Docker Hub credentials from Secrets Manager
+                iam.PolicyStatement(
+                    actions=["secretsmanager:GetSecretValue"],
+                    resources=["arn:aws:secretsmanager:*:*:secret:dockerhub-credentials-*"]
                 )
             ]
         )
