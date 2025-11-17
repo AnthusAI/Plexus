@@ -11,9 +11,11 @@ from aws_cdk import (
     Stack,
     Duration,
     Tags,
+    CustomResource,
     aws_lambda as lambda_,
     aws_iam as iam,
     aws_ecr as ecr,
+    custom_resources as cr,
 )
 from constructs import Construct
 from .shared.naming import get_resource_name
@@ -102,10 +104,6 @@ class LambdaScoreProcessorStack(Stack):
         # Grant read access to Secrets Manager
         config.secret.grant_read(lambda_role)
 
-        # Get deployment timestamp to force Lambda updates
-        # This ensures Lambda pulls the latest image even when using 'latest' tag
-        deployment_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-
         # Create Lambda function with container image
         # Note: The image must be built and pushed to ECR before deployment
         # This is handled by the pipeline's Docker build step
@@ -114,7 +112,7 @@ class LambdaScoreProcessorStack(Stack):
             "ScoreProcessorFunction",
             function_name=get_resource_name("lambda", self.env_name, "score-processor"),
             code=lambda_.DockerImageCode.from_ecr(
-                repository=ecr_repository,  # Direct reference from pipeline
+                repository=ecr_repository,
                 tag_or_digest="latest"
             ),
             role=lambda_role,
@@ -148,12 +146,36 @@ class LambdaScoreProcessorStack(Stack):
                 # Matplotlib Configuration (hardcoded - Lambda /tmp directory)
                 "MPLBACKEND": "Agg",
                 "MPLCONFIGDIR": "/tmp/mpl",
-
-                # Deployment ID - forces Lambda to update image on every deployment
-                "DEPLOYMENT_ID": deployment_id,
             },
-            description=f"Processes scoring jobs from SQS queue ({environment}) - Deployed: {deployment_id}"
+            description=f"Processes scoring jobs from SQS queue ({environment})"
         )
+
+        # Custom resource to force Lambda image update on every deployment
+        # This calls UpdateFunctionCode API which forces Lambda to pull latest image
+        update_lambda_code = cr.AwsCustomResource(
+            self,
+            "UpdateLambdaCode",
+            on_update=cr.AwsSdkCall(
+                service="Lambda",
+                action="updateFunctionCode",
+                parameters={
+                    "FunctionName": self.lambda_function.function_name,
+                    "ImageUri": f"{ecr_repository.repository_uri}:latest",
+                },
+                physical_resource_id=cr.PhysicalResourceId.of(
+                    f"UpdateLambdaCode-{datetime.now(timezone.utc).timestamp()}"
+                ),
+            ),
+            policy=cr.AwsCustomResourcePolicy.from_statements([
+                iam.PolicyStatement(
+                    actions=["lambda:UpdateFunctionCode"],
+                    resources=[self.lambda_function.function_arn]
+                )
+            ])
+        )
+
+        # Ensure custom resource runs after Lambda is created
+        update_lambda_code.node.add_dependency(self.lambda_function)
 
         # Note: We're intentionally NOT adding SQS as an event source yet
         # The function will be invoked manually until we're ready for automatic triggering
