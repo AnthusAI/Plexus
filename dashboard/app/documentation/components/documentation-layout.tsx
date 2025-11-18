@@ -10,7 +10,8 @@ import { useTheme } from "next-themes"
 import { Button, type ButtonProps } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import SquareLogo, { LogoVariant } from '@/components/logo-square'
+import BrandableLogo from '@/components/BrandableLogo'
+import { LogoVariant } from '@/components/logo-square'
 
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
@@ -53,7 +54,7 @@ const MobileHeader = ({
     </DocButton>
     
     <Link href="/" className="flex items-center">
-      <SquareLogo variant={LogoVariant.Narrow} />
+      <BrandableLogo variant={LogoVariant.Narrow} />
     </Link>
 
     <DocButton
@@ -188,16 +189,16 @@ export default function DocumentationLayout({ children, tableOfContents }: Docum
             <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
             <div className="relative">
               {isLeftSidebarOpen ? (
-                <SquareLogo variant={LogoVariant.Wide} />
+                <BrandableLogo variant={LogoVariant.Wide} />
               ) : (
-                <SquareLogo variant={LogoVariant.Narrow} />
+                <BrandableLogo variant={LogoVariant.Narrow} />
               )}
             </div>
           </Link>
         </div>
 
         <ScrollArea className="flex-grow overflow-y-auto">
-          <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
+          <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3 w-16'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {docSections.map((section) => (
               <div key={section.name} className="mb-4">
                 <TooltipProvider>

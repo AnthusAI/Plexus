@@ -227,14 +227,18 @@ class ScoringWorkerStack(Stack):
         )
 
         # Create the SSM Association to apply the document to tagged instances
+        # Uses a composite tag "WorkerRole" that combines environment and worker type
+        # Example values: "production-scoring", "staging-scoring"
         ssm_association = ssm.CfnAssociation(
             self,
             f"ScoringWorkerAssociation-{self.env_name}",
             name=ssm_doc.ref,
-            targets=[ssm.CfnAssociation.TargetProperty(
-                key="tag:Environment",
-                values=[self.env_name]
-            )],
+            targets=[
+                ssm.CfnAssociation.TargetProperty(
+                    key="tag:WorkerRole",
+                    values=[f"{self.env_name}-scoring"]
+                )
+            ],
         )
 
         # Add dependency to ensure Document exists before Association

@@ -64,9 +64,8 @@ export function SegmentedProgressBar({
               )}
             >
               <span className={cn(
-                "text-sm font-medium truncate px-1 min-w-0 max-w-full",
-                !isCurrent && "text-muted-foreground",
-                isCurrent && isSelected ? "text-primary-selected-foreground" : "text-primary-foreground"
+                "text-sm truncate px-1 min-w-0 max-w-full",
+                isCurrent ? "font-bold text-foreground" : "font-medium text-muted-foreground"
               )}>
                 {isCurrent && error ? errorLabel : segment.label}
               </span>

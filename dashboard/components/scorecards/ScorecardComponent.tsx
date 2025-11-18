@@ -928,6 +928,11 @@ export const DetailContent = React.memo(function DetailContent({
               icon: <ListCheck className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
             })) || [];
             
+            // Sort scores alphabetically by name (case-insensitive)
+            const sortedScores = [...processedScores].sort((a, b) => 
+              a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+            );
+            
             return (
               <div key={section.id} className="space-y-2 w-full">
                 <div className="flex justify-between items-center w-full">
@@ -962,7 +967,7 @@ export const DetailContent = React.memo(function DetailContent({
                 <div className="bg-background rounded-lg w-full">
                   <div className="@container w-full p-4">
                     <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4 w-full">
-                      {processedScores.map((scoreData) => (
+                      {sortedScores.map((scoreData) => (
                         <ScoreComponent
                           key={scoreData.id}
                           variant="grid"
