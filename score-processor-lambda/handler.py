@@ -533,11 +533,17 @@ async def async_handler(event, context):
         logging.error(f"❌ Lambda execution failed: {e}")
         logging.error(traceback.format_exc())
 
-        # For SQS event source, raising an exception returns message to queue
-        # For other invocations, return error response
-        if 'Records' in event:
-            raise  # Re-raise to trigger SQS retry
+        # For SQS event source with ReportBatchItemFailures, return failed message IDs
+        # This tells SQS to return only the failed messages to the queue for retry
+        if 'Records' in event and len(event['Records']) > 0:
+            record = event['Records'][0]
+            return {
+                'batchItemFailures': [
+                    {'itemIdentifier': record['messageId']}
+                ]
+            }
         else:
+            # For other invocations, return error response
             return {
                 'statusCode': 500,
                 'body': json.dumps({
