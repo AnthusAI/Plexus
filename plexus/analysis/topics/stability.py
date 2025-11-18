@@ -209,11 +209,6 @@ def assess_topic_stability(
         "std_stability": std_stability,
         "per_topic_stability": per_topic_stability,
         "consistency_scores": consistency_scores,
-        "methodology": f"Bootstrap sampling with Jaccard similarity of top-{top_n_words_for_display} keywords",
-        "interpretation": {
-            "high": "> 0.7 (topics are very stable and consistent)",
-            "medium": "0.5 - 0.7 (topics are moderately stable)",
-            "low": "< 0.5 (topics are unstable, consider adjusting parameters)"
-        }
+        "methodology": f"Bootstrap sampling with Jaccard similarity of top-{top_n_words_for_display} keywords"
     }
 

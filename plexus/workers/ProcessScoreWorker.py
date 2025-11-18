@@ -57,14 +57,17 @@ from plexus.utils.scoring import get_text_from_item, get_metadata_from_item, get
 class JobProcessor:
     """Handles polling and processing of scoring jobs"""
 
-    def __init__(self, error_retry_delay=5):
+    def __init__(self, error_retry_delay=5, max_jobs_per_worker=None):
         """
         Initialize the job processor
 
         Args:
             error_retry_delay: Number of seconds to wait before retrying after errors
+            max_jobs_per_worker: Maximum number of jobs to process before exiting (None = unlimited)
         """
         self.error_retry_delay = error_retry_delay
+        self.max_jobs_per_worker = max_jobs_per_worker
+        self.jobs_processed = 0
         self.client = PlexusDashboardClient()
         self.sqs_client = boto3.client('sqs')
         self.request_queue_url = os.environ.get('PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL')
@@ -214,8 +217,41 @@ class JobProcessor:
                     raise Exception(f"No transcript found for item {item_id}")
 
                 metadata = await get_metadata_from_item(item_id, self.client)
+                logging.info(f"📊 METADATA DEBUG: Raw metadata from DynamoDB:")
+                logging.info(f"  Type: {type(metadata)}")
+                logging.info(f"  Value: {metadata}")
+                
                 if not metadata:
                     metadata = {}
+                
+                # Desanitize metadata: parse any JSON string fields back to their original structure
+                # This reverses the sanitize_metadata_for_graphql transformation that stores
+                # dicts/lists as JSON strings for GraphQL compatibility
+                if isinstance(metadata, dict):
+                    logging.info(f"📊 METADATA DEBUG: Processing {len(metadata)} metadata keys")
+                    for key, value in list(metadata.items()):
+                        logging.info(f"  Key '{key}': type={type(value).__name__}, value_preview={str(value)[:100]}")
+                        if isinstance(value, str):
+                            # Try to parse JSON strings back to their original structure
+                            try:
+                                parsed = json.loads(value)
+                                metadata[key] = parsed
+                                logging.info(f"    ✅ Successfully parsed '{key}' from string to {type(parsed).__name__}")
+                            except (json.JSONDecodeError, ValueError) as e:
+                                # Not a JSON string, leave it as is
+                                logging.info(f"    ℹ️  '{key}' is not JSON (keeping as string): {e}")
+                                pass
+                else:
+                    logging.warning(f"📊 METADATA DEBUG: metadata is not a dict! Type: {type(metadata)}")
+                
+                logging.info(f"📊 METADATA DEBUG: Final metadata after deserialization:")
+                logging.info(f"  Type: {type(metadata)}")
+                if isinstance(metadata, dict):
+                    logging.info(f"  Keys: {list(metadata.keys())}")
+                    for key, value in metadata.items():
+                        logging.info(f"    '{key}': {type(value).__name__}")
+                else:
+                    logging.info(f"  Value: {metadata}")
 
                 external_id = await get_external_id_from_item(item_id, self.client)
                 if not external_id:
@@ -392,6 +428,11 @@ class JobProcessor:
                 logging.info(f"✅ Job completed successfully: value={value}")
                 logging.info(f"📌 ScoreResult created in DynamoDB")
 
+                # Increment job counter
+                self.jobs_processed += 1
+                if self.max_jobs_per_worker and self.jobs_processed >= self.max_jobs_per_worker:
+                    logging.info(f"🔄 Reached max jobs limit ({self.max_jobs_per_worker}), will exit after this job")
+
         except Exception as e:
             logging.error(f"❌ Job processing failed: {e}")
             logging.error(traceback.format_exc())
@@ -440,6 +481,11 @@ class JobProcessor:
                         job['receipt_handle']
                     )
 
+                    # Check if we've hit the max jobs limit
+                    if self.max_jobs_per_worker and self.jobs_processed >= self.max_jobs_per_worker:
+                        logging.info(f"✅ Reached max jobs limit ({self.max_jobs_per_worker}), exiting gracefully")
+                        break
+
                     if once:
                         logging.info("✅ Processed one job, exiting (--once mode)")
                         break
@@ -469,9 +515,10 @@ class JobProcessor:
 class WorkerManager:
     """Manages multiple worker processes"""
 
-    def __init__(self, num_workers=4, error_retry_delay=5):
+    def __init__(self, num_workers=4, error_retry_delay=5, max_jobs_per_worker=None):
         self.num_workers = num_workers
         self.error_retry_delay = error_retry_delay
+        self.max_jobs_per_worker = max_jobs_per_worker
         self.workers = []
         self.shutdown_event = multiprocessing.Event()
         
@@ -503,7 +550,7 @@ class WorkerManager:
         logging.info(f"🚀 Starting worker process {worker_id}")
         
         async def run_worker():
-            processor = JobProcessor(error_retry_delay=self.error_retry_delay)
+            processor = JobProcessor(error_retry_delay=self.error_retry_delay, max_jobs_per_worker=self.max_jobs_per_worker)
             await processor.run(once=once)
             
         try:
@@ -604,6 +651,7 @@ def main():
     parser.add_argument('--once', action='store_true', help='Process one job per worker and exit')
     parser.add_argument('--error-retry-delay', type=int, default=None, help='Seconds to wait before retrying after errors (default: from env or 5)')
     parser.add_argument('--workers', type=int, default=None, help='Number of worker processes (default: from env or 4)')
+    parser.add_argument('--max-jobs-per-worker', type=int, default=None, help='Maximum jobs per worker before restart (default: from env or unlimited)')
     parser.add_argument('--single', action='store_true', help='Run single worker (no multiprocessing)')
     args = parser.parse_args()
 
@@ -619,18 +667,24 @@ def main():
     if error_retry_delay is None:
         error_retry_delay = int(os.environ.get('PLEXUS_SCORING_WORKER_ERROR_RETRY_DELAY', 5))
 
+    max_jobs_per_worker = args.max_jobs_per_worker
+    if max_jobs_per_worker is None:
+        max_jobs_env = os.environ.get('PLEXUS_SCORING_WORKER_MAX_JOBS_PER_WORKER')
+        max_jobs_per_worker = int(max_jobs_env) if max_jobs_env else 100
+
     if args.single:
         # Run single worker for testing/debugging
         logging.info("🔧 Running in single worker mode")
         asyncio.run(run_single_worker())
     else:
         # Run multiple workers
-        logging.info(f"🚀 Starting scoring worker manager with {num_workers} workers and error retry delay of {error_retry_delay} seconds")
+        max_jobs_msg = f", max {max_jobs_per_worker} jobs per worker" if max_jobs_per_worker else ""
+        logging.info(f"🚀 Starting scoring worker manager with {num_workers} workers, error retry delay of {error_retry_delay} seconds{max_jobs_msg}")
 
-        manager = WorkerManager(num_workers=num_workers, error_retry_delay=error_retry_delay)
+        manager = WorkerManager(num_workers=num_workers, error_retry_delay=error_retry_delay, max_jobs_per_worker=max_jobs_per_worker)
         
         # Set up signal handlers for graceful shutdown
-        def signal_handler(signum, frame):
+        def signal_handler(signum, _frame):
             logging.info(f"📡 Received signal {signum}, shutting down...")
             manager.shutdown()
             

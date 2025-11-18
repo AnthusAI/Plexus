@@ -40,9 +40,10 @@ const config: TestRunnerConfig = {
     // Ensure the page is ready before running tests
     await page.waitForLoadState('networkidle');
     
-    // Inject StorybookTestRunnerError into the page context if needed
+    // Inject StorybookTestRunnerError into the page context
+    // Define it directly without checking to avoid temporal dead zone errors
     await page.addInitScript(() => {
-      if (typeof window !== 'undefined' && !(window as any).StorybookTestRunnerError) {
+      if (typeof window !== 'undefined') {
         (window as any).StorybookTestRunnerError = class StorybookTestRunnerError extends Error {
           constructor(message: string) {
             super(message);

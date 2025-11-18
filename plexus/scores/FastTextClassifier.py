@@ -7,8 +7,8 @@ from plexus.CustomLogging import logging
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
-import mlflow
-import mlflow.pyfunc
+# import mlflow
+# import mlflow.pyfunc
 
 from plexus.scores.Score import Score
 
@@ -137,7 +137,7 @@ class FastTextClassifier(Score):
             'vocabulary_size_in_word_count': len(self.model.words),
             'number_of_labels': len(self.model.labels)
         }
-        mlflow.log_metrics(model_details)
+        # mlflow.log_metrics(model_details)
         # Report model's hyperparameters, if accessible
         if hasattr(self.model, 'f'):  # Check if the 'f' function (which gives access to model parameters) exists
             params = self.model.f.getArgs()
@@ -160,8 +160,8 @@ class FastTextClassifier(Score):
             }
             model_details['hyperparameters'] = hyperparameters
             logging.info(f"Model hyperparameters: {hyperparameters}")
-            mlflow.log_params(hyperparameters)
-            mlflow.log_metrics(hyperparameters)
+            # mlflow.log_params(hyperparameters)
+            # mlflow.log_metrics(hyperparameters)
         else:
             logging.info("Model hyperparameters are not accessible.")
 
@@ -221,7 +221,8 @@ class FastTextClassifier(Score):
             if isinstance(value, dict):
                 self._log_parameters_recursively(value, parent_key=f'{parent_key}{key}.')
             else:
-                mlflow.log_param(f'{parent_key}{key}', value)
+                # mlflow.log_param(f'{parent_key}{key}', value)
+                logging.info(f"Logging parameter: {parent_key}{key} = {value}")
 
     def _model_name(self):
         """
@@ -276,8 +277,10 @@ class FastTextClassifier(Score):
     def get_model_artifact_path(self):
         # Retrieve the model path from MLflow
         # This is just a placeholder, you'll need to implement the logic to retrieve the actual path
-        model_uri = f"models:/{self._model_name()}/Production"
-        local_model_path = mlflow.pyfunc.get_model_uri(model_uri)
+        # model_uri = f"models:/{self._model_name()}/Production"
+        # local_model_path = mlflow.pyfunc.get_model_uri(model_uri)
+        local_model_path = f"models:/{self._model_name()}/Production"
+
         return local_model_path
 
     def predict(self, model_input, text_column='text'):
