@@ -399,16 +399,17 @@ async def async_handler(event, context):
                 }
 
                 # Process the job
-                # Note: We pass None for receipt_handle since SQS event source handles deletion
+                # Note: We pass receipt_handle so Lambda can manually delete on success
+                # SQS event source provides the receipt handle in the record
                 await processor.process_job(
                     job['scoring_job_id'],
                     job['item_id'],
                     job['scorecard_id'],
                     job['score_id'],
-                    job['receipt_handle']
+                    record['receiptHandle']  # Use receipt handle from SQS record
                 )
 
-                # Return success - SQS will delete the message
+                # Return success
                 return {
                     'statusCode': 200,
                     'body': json.dumps({
@@ -533,15 +534,10 @@ async def async_handler(event, context):
         logging.error(f"❌ Lambda execution failed: {e}")
         logging.error(traceback.format_exc())
 
-        # For SQS event source with ReportBatchItemFailures, return failed message IDs
-        # This tells SQS to return only the failed messages to the queue for retry
-        if 'Records' in event and len(event['Records']) > 0:
-            record = event['Records'][0]
-            return {
-                'batchItemFailures': [
-                    {'itemIdentifier': record['messageId']}
-                ]
-            }
+        # For SQS event source, raise exception to return message to queue
+        # SQS will retry up to maxReceiveCount (3) times, then move to DLQ
+        if 'Records' in event:
+            raise  # Re-raise to trigger SQS retry mechanism
         else:
             # For other invocations, return error response
             return {

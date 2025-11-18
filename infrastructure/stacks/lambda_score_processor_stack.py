@@ -202,6 +202,7 @@ class LambdaScoreProcessorStack(Stack):
                 queue=standard_request_queue,
                 batch_size=1,  # Process one message per Lambda invocation
                 max_concurrency=50,  # Max 50 concurrent pollers
-                report_batch_item_failures=True,  # Only retry failed messages
+                # report_batch_item_failures=False (default) - Lambda handles deletion manually
+                # On exception, SQS returns message to queue for retry
             )
         )
