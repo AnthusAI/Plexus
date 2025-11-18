@@ -101,6 +101,21 @@ class LambdaScoreProcessorStack(Stack):
             ]
         )
 
+        # Add Bedrock permissions for LLM invocations
+        lambda_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream",
+                ],
+                resources=[
+                    # Allow access to all Bedrock foundation models
+                    f"arn:aws:bedrock:*::foundation-model/*"
+                ]
+            )
+        )
+
         # Grant read access to Secrets Manager
         config.secret.grant_read(lambda_role)
 
