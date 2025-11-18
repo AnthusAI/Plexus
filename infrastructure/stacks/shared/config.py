@@ -47,12 +47,10 @@ class EnvironmentConfig:
         self.secret_name = f"plexus/{environment}/config"
 
         # Look up the secret (must exist before deployment)
-        # Use from_secret_partial_arn to avoid validation at synth time
-        # Format: arn:aws:secretsmanager:region:account:secret:name
-        self.secret = secretsmanager.Secret.from_secret_partial_arn(
+        self.secret = secretsmanager.Secret.from_secret_name_v2(
             scope,
             "PlexusConfig",
-            secret_partial_arn=f"arn:aws:secretsmanager:*:*:secret:{self.secret_name}-*"
+            secret_name=self.secret_name
         )
 
     def get_value(self, key: str) -> str:
