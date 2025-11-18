@@ -81,6 +81,10 @@ def main():
     failure_count = 0
     total_messages_processed = 0
 
+    # Track stats for last 10 invocations
+    last_summary_invocation = 0
+    last_summary_messages = 0
+
     try:
         while True:
             invocation_count += 1
@@ -154,7 +158,15 @@ def main():
 
             # Print summary every 10 invocations
             if invocation_count % 10 == 0:
-                print(f"\n--- Summary: {success_count} successful, {failure_count} failed, {total_messages_processed} messages processed ---\n")
+                # Calculate stats for last 10 invocations
+                invocations_since_summary = invocation_count - last_summary_invocation
+                messages_since_summary = total_messages_processed - last_summary_messages
+
+                print(f"\n--- Last {invocations_since_summary} invocations: {messages_since_summary} messages processed | Total: {total_messages_processed} messages ({success_count} successful, {failure_count} failed) ---\n")
+
+                # Update tracking for next summary
+                last_summary_invocation = invocation_count
+                last_summary_messages = total_messages_processed
 
             # Calculate remaining sleep time to maintain consistent interval
             remaining_sleep = max(0, args.interval - execution_time)
