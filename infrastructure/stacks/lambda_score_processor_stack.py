@@ -13,8 +13,10 @@ from aws_cdk import (
     Tags,
     CustomResource,
     aws_lambda as lambda_,
+    aws_lambda_event_sources as lambda_events,
     aws_iam as iam,
     aws_ecr as ecr,
+    aws_sqs as sqs,
     custom_resources as cr,
 )
 from constructs import Construct
@@ -36,7 +38,7 @@ class LambdaScoreProcessorStack(Stack):
         construct_id: str,
         environment: str,
         ecr_repository_name: str,
-        standard_request_queue_url: str,
+        standard_request_queue: sqs.IQueue,
         response_queue_url: str,
         **kwargs
     ) -> None:
@@ -48,7 +50,7 @@ class LambdaScoreProcessorStack(Stack):
             construct_id: Unique identifier for this stack
             environment: Environment name ('staging' or 'production')
             ecr_repository_name: Name of ECR repository containing Lambda container image
-            standard_request_queue_url: SQS queue URL for incoming requests
+            standard_request_queue: SQS queue for incoming requests
             response_queue_url: SQS queue URL for responses
             **kwargs: Additional stack properties
         """
@@ -133,9 +135,10 @@ class LambdaScoreProcessorStack(Stack):
             role=lambda_role,
             timeout=Duration.seconds(300),  # 5 minutes
             memory_size=2048,
+            reserved_concurrent_executions=50,  # Max 50 concurrent Lambda executions
             environment={
                 # SQS Queue URLs (from ScoringWorkerStack)
-                "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": standard_request_queue_url,
+                "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": standard_request_queue.queue_url,
                 "PLEXUS_RESPONSE_WORKER_QUEUE_URL": response_queue_url,
 
                 # Plexus API Configuration (from Secrets Manager)
@@ -192,14 +195,13 @@ class LambdaScoreProcessorStack(Stack):
         # Ensure custom resource runs after Lambda is created
         update_lambda_code.node.add_dependency(self.lambda_function)
 
-        # Note: We're intentionally NOT adding SQS as an event source yet
-        # The function will be invoked manually until we're ready for automatic triggering
-        #
-        # Future: Add SQS trigger when ready
-        # from aws_cdk import aws_lambda_event_sources as lambda_events
-        # self.lambda_function.add_event_source(
-        #     lambda_events.SqsEventSource(
-        #         queue=standard_request_queue,
-        #         batch_size=1
-        #     )
-        # )
+        # Add SQS event source trigger
+        # This enables automatic Lambda invocation for each message in the queue
+        self.lambda_function.add_event_source(
+            lambda_events.SqsEventSource(
+                queue=standard_request_queue,
+                batch_size=1,  # Process one message per Lambda invocation
+                max_concurrency=50,  # Max 50 concurrent pollers
+                report_batch_item_failures=True,  # Only retry failed messages
+            )
+        )
