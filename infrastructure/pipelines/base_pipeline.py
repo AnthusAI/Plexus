@@ -190,19 +190,19 @@ class DeploymentStage(cdk.Stage):
         )
 
         # Deploy Lambda score processor stack (uses the same queues)
-        # Configuration is loaded from SSM Parameter Store by the stack
+        # Configuration is loaded from Secrets Manager by the stack
         lambda_score_processor_stack = LambdaScoreProcessorStack(
             self,
             "LambdaScoreProcessor",
             environment=environment,
             ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
-            standard_request_queue_url=scoring_worker_stack.standard_request_queue.queue_url,
+            standard_request_queue=scoring_worker_stack.standard_request_queue,
             response_queue_url=scoring_worker_stack.response_queue.queue_url,
             stack_name=f"plexus-lambda-score-processor-{environment}",
             env=kwargs.get("env")
         )
 
-        # Deploy fan-out Lambda stack (for controlled rollout)
+        # Fan-out Lambda stack
         LambdaFanoutStack(
             self,
             "LambdaFanout",

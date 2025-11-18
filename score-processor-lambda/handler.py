@@ -3,18 +3,20 @@
 Lambda Handler for Score Processing
 
 This handler processes scoring jobs from SQS. It can be invoked:
-1. Manually via AWS Console "Test" button - polls queue for 1 message
-2. Directly from fan-out Lambda - processes specific message passed in event
-3. Later: Directly triggered by SQS (future enhancement)
+1. SQS event source trigger - automatic trigger from SQS queue (batch_size=1)
+2. Fan-out Lambda - processes specific message passed in event
+3. Manual invocation - polls queue for 1 message
 
 The handler:
-- For manual invocation: Polls SQS queue for ONE scoring job message
-- For fan-out invocation: Processes message from event payload
+- For SQS event source: Extracts message from event.Records[0], SQS handles deletion
+- For fan-out invocation: Processes message from event payload, manually deletes
+- For manual invocation: Polls SQS queue for ONE scoring job message, manually deletes
 - Retrieves the ScoringJob from DynamoDB
 - Performs scoring using Plexus scorecard system
 - Creates ScoreResult in DynamoDB
 - Sends response to PLEXUS_RESPONSE_WORKER_QUEUE_URL
-- Deletes SQS message after success
+- On success: Message deleted (automatically for SQS trigger, manually for others)
+- On failure: Exception raised to return message to queue (SQS will retry → DLQ)
 
 Environment Variables:
     PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL: SQS queue URL
@@ -302,14 +304,17 @@ class LambdaJobProcessor:
                     completedAt=datetime.now(timezone.utc).isoformat()
                 )
 
-                # Delete SQS message
-                await asyncio.to_thread(
-                    self.sqs_client.delete_message,
-                    QueueUrl=self.request_queue_url,
-                    ReceiptHandle=receipt_handle
-                )
-
-                logging.info(f"✅ Job completed successfully: value={value}")
+                # Delete SQS message (only if receipt_handle provided)
+                # SQS event source handles deletion automatically, so receipt_handle will be None
+                if receipt_handle:
+                    await asyncio.to_thread(
+                        self.sqs_client.delete_message,
+                        QueueUrl=self.request_queue_url,
+                        ReceiptHandle=receipt_handle
+                    )
+                    logging.info(f"✅ Job completed successfully: value={value}")
+                else:
+                    logging.info(f"✅ Job completed successfully: value={value} (SQS event source - message deletion handled automatically)")
 
         except Exception as e:
             logging.error(f"❌ Job processing failed: {e}")
@@ -344,8 +349,77 @@ async def async_handler(event, context):
         processor = LambdaJobProcessor()
         await processor.initialize()
 
+        # Check if this is an SQS event source trigger
+        if 'Records' in event and len(event['Records']) > 0:
+            record = event['Records'][0]
+
+            # Verify it's from SQS
+            if record.get('eventSource') == 'aws:sqs':
+                logging.info("📫 Processing SQS event source trigger")
+
+                # Extract message from SQS record
+                message_body = json.loads(record['body'])
+                scoring_job_id = message_body.get('scoring_job_id')
+
+                if not scoring_job_id:
+                    logging.error(f"❌ Message missing scoring_job_id: {message_body}")
+                    # Raise exception to return message to queue
+                    raise ValueError(f"Invalid message format: missing scoring_job_id")
+
+                # Get ScoringJob from DynamoDB
+                scoring_job = await asyncio.to_thread(ScoringJob.get_by_id, scoring_job_id, processor.client)
+
+                if not scoring_job:
+                    logging.error(f"❌ ScoringJob not found: {scoring_job_id}")
+                    # Raise exception to return message to queue (will go to DLQ after retries)
+                    raise ValueError(f"ScoringJob not found: {scoring_job_id}")
+
+                # Claim the job
+                await asyncio.to_thread(
+                    scoring_job.update,
+                    status='IN_PROGRESS',
+                    startedAt=datetime.now(timezone.utc).isoformat()
+                )
+
+                logging.info(f"✅ Claimed ScoringJob {scoring_job_id}")
+
+                # Get external IDs
+                scorecard = await asyncio.to_thread(Scorecard.get_by_id, scoring_job.scorecardId, processor.client)
+                scorecard_external_id = scorecard.externalId if scorecard else None
+
+                score = await asyncio.to_thread(Score.get_by_id, scoring_job.scoreId, processor.client)
+                score_external_id = score.externalId if score else None
+
+                job = {
+                    'scoring_job_id': scoring_job_id,
+                    'item_id': scoring_job.itemId,
+                    'scorecard_id': scorecard_external_id,
+                    'score_id': score_external_id,
+                    'receipt_handle': None  # SQS handles deletion automatically
+                }
+
+                # Process the job
+                # Note: We pass None for receipt_handle since SQS event source handles deletion
+                await processor.process_job(
+                    job['scoring_job_id'],
+                    job['item_id'],
+                    job['scorecard_id'],
+                    job['score_id'],
+                    job['receipt_handle']
+                )
+
+                # Return success - SQS will delete the message
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps({
+                        'message': 'Job processed successfully',
+                        'scoring_job_id': job['scoring_job_id'],
+                        'processed': True
+                    })
+                }
+
         # Check if this is a direct invocation from fan-out Lambda
-        if event.get('source') == 'fanout':
+        elif event.get('source') == 'fanout':
             logging.info("📨 Processing direct invocation from fan-out Lambda")
 
             # Extract message details from event
@@ -405,6 +479,24 @@ async def async_handler(event, context):
                 'receipt_handle': receipt_handle
             }
 
+            # Process the job (common path for both invocation types)
+            await processor.process_job(
+                job['scoring_job_id'],
+                job['item_id'],
+                job['scorecard_id'],
+                job['score_id'],
+                job['receipt_handle']
+            )
+
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'message': 'Job processed successfully',
+                    'scoring_job_id': job['scoring_job_id'],
+                    'processed': True
+                })
+            }
+
         else:
             # Manual invocation - poll for one message
             logging.info("📬 Manual invocation - polling SQS queue")
@@ -419,36 +511,41 @@ async def async_handler(event, context):
                     })
                 }
 
-        # Process the job (common path for both invocation types)
-        await processor.process_job(
-            job['scoring_job_id'],
-            job['item_id'],
-            job['scorecard_id'],
-            job['score_id'],
-            job['receipt_handle']
-        )
+            # Process the job (common path for both invocation types)
+            await processor.process_job(
+                job['scoring_job_id'],
+                job['item_id'],
+                job['scorecard_id'],
+                job['score_id'],
+                job['receipt_handle']
+            )
 
-        return {
-            'statusCode': 200,
-            'body': json.dumps({
-                'message': 'Job processed successfully',
-                'scoring_job_id': job['scoring_job_id'],
-                'processed': True
-            })
-        }
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'message': 'Job processed successfully',
+                    'scoring_job_id': job['scoring_job_id'],
+                    'processed': True
+                })
+            }
 
     except Exception as e:
         logging.error(f"❌ Lambda execution failed: {e}")
         logging.error(traceback.format_exc())
 
-        return {
-            'statusCode': 500,
-            'body': json.dumps({
-                'message': 'Job processing failed',
-                'error': str(e),
-                'processed': False
-            })
-        }
+        # For SQS event source, raising an exception returns message to queue
+        # For other invocations, return error response
+        if 'Records' in event:
+            raise  # Re-raise to trigger SQS retry
+        else:
+            return {
+                'statusCode': 500,
+                'body': json.dumps({
+                    'message': 'Job processing failed',
+                    'error': str(e),
+                    'processed': False
+                })
+            }
 
 
 def lambda_handler(event, context):
