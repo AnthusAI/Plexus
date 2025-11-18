@@ -248,7 +248,8 @@ class LambdaJobProcessor:
                         errorMessage=explanation[:255] if explanation else "Scoring returned ERROR",
                         completedAt=datetime.now(timezone.utc).isoformat()
                     )
-                    return
+                    # Raise exception to trigger SQS retry mechanism
+                    raise ValueError(f"Scoring returned ERROR: {explanation[:255] if explanation else 'No explanation'}")
 
                 # Extract trace data
                 trace_data = None
