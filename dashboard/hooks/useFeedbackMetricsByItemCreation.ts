@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
-import { useUnifiedMetrics } from './useUnifiedMetrics'
-import type { MetricsDataSource } from '../utils/generalizedMetricsAggregator'
+import { useUnifiedMetrics, type MetricsConfig } from './useUnifiedMetrics'
 
 interface FeedbackMetricsByItemCreationConfig {
   accountId: string
@@ -17,20 +16,20 @@ interface FeedbackMetricsByItemCreationConfig {
  * - "How much feedback did we get on items created from evaluations vs predictions?"
  * - "What's the feedback rate on items created in the last hour?"
  * - "Show feedback trends based on when the underlying items were created"
+ * 
+ * Note: This now uses the standard feedback metrics from AggregatedMetrics table.
+ * The Lambda aggregation service handles the filtering by item creation type.
  */
 export function useFeedbackMetricsByItemCreation(config: FeedbackMetricsByItemCreationConfig) {
-  // Memoize the data source configuration to prevent infinite re-renders
-  const dataSource: MetricsDataSource = useMemo(() => ({
-    type: 'feedbackItemsByItemCreation',
-    accountId: config.accountId,
-    createdByType: config.createdByType,
-    scorecardId: config.scorecardId,
-    scoreId: config.scoreId,
-    cacheKey: `feedback-by-item-creation-${config.accountId}-${config.createdByType || 'all'}-${config.scorecardId || 'all'}-${config.scoreId || 'all'}`,
-    cacheTTL: 5 * 60 * 1000 // 5 minutes
-  }), [config.accountId, config.createdByType, config.scorecardId, config.scoreId])
+  // Memoize the metrics configuration
+  const metricsConfig: MetricsConfig = useMemo(() => ({
+    filters: {
+      createdByType: config.createdByType,
+      scoreResultType: 'feedback'
+    }
+  }), [config.createdByType])
 
-  return useUnifiedMetrics(dataSource)
+  return useUnifiedMetrics(metricsConfig)
 }
 
 // Convenience hooks for specific use cases

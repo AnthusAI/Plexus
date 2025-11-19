@@ -1,40 +1,7 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAccount } from '@/app/contexts/AccountContext'
-import { 
-  generalizedMetricsAggregator, 
-  MetricsDataSource, 
-  MetricsResult 
-} from '@/utils/generalizedMetricsAggregator'
-
-// Global state to persist metrics across component mount/unmount cycles
-const globalMetricsState = new Map<string, {
-  metrics: UnifiedMetricsData | null
-  isLoading: boolean
-  error: string | null
-  lastFetch: number
-}>()
-
-// Global refresh timers to prevent multiple timers for the same config
-const globalRefreshTimers = new Map<string, NodeJS.Timeout>()
-
-// Helper to generate a unique key for the metrics config
-function getConfigKey(accountId: string, config: MetricsConfig): string {
-  // Include filtering parameters in the key to ensure different filters get different cache entries
-  const sourceDescriptors = Object.entries(config.sources)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, source]) => {
-      if (!source) return key
-      
-      const filters = []
-      if (source.createdByType) filters.push(`createdByType:${source.createdByType}`)
-      if (source.scoreResultType) filters.push(`scoreResultType:${source.scoreResultType}`)
-      
-      return filters.length > 0 ? `${key}(${filters.join(',')})` : key
-    })
-    .join(',')
-  
-  return `${accountId}:${sourceDescriptors}`
-}
+import { graphqlRequest } from '@/utils/amplify-client'
+import type { Schema } from '../amplify/data/resource'
 
 // Unified metrics data structure
 export interface UnifiedMetricsData {
@@ -66,11 +33,11 @@ export interface UnifiedMetricsData {
 
 // Configuration for different metric types
 export interface MetricsConfig {
-  // Data sources to fetch
-  sources: {
-    items?: MetricsDataSource
-    scoreResults?: MetricsDataSource
-    feedback?: MetricsDataSource
+  // Filtering options
+  filters?: {
+    createdByType?: string // For items: "evaluation", "prediction", etc.
+    scoreResultType?: string // For scoreResults: "prediction", "evaluation", etc.
+    taskType?: string // For tasks: filter by task type
   }
   
   // Optional transformations
@@ -89,417 +56,162 @@ export interface UseUnifiedMetricsResult {
   refetch: () => void
 }
 
+type AggregatedMetricsRecord = Schema['AggregatedMetrics']['type']
+
 /**
- * Unified metrics hook that can handle different data sources and filtering
- * 
- * Examples:
- * - All items/scoreResults: useUnifiedMetrics({ sources: { items: {...}, scoreResults: {...} } })
- * - Prediction scoreResults only: useUnifiedMetrics({ sources: { scoreResults: { type: 'scoreResults', scoreResultType: 'prediction', ... } } })
- * - Feedback items: useUnifiedMetrics({ sources: { feedback: { type: 'feedbackItems', ... } } })
+ * Query AggregatedMetrics table for a specific time range and record type
+ * Uses the byAccountRecordType GSI for efficient querying
  */
-// Synchronous cache check function (defined outside the hook to avoid initialization issues)
-const checkCachedDataSync = (accountId: string, config: MetricsConfig): UnifiedMetricsData | null => {
-  try {    
-    // Prepare data sources with account ID
-    const preparedSources: { [key: string]: MetricsDataSource } = {}
-    
-    Object.entries(config.sources).forEach(([key, source]) => {
-      if (source) {
-        preparedSources[key] = {
-          ...source,
+async function queryAggregatedMetrics(
+  accountId: string,
+  recordType: 'items' | 'scoreResults' | 'tasks',
+  startTime: Date,
+  endTime: Date
+): Promise<AggregatedMetricsRecord[]> {
+  // Use the byAccountRecordType GSI for efficient querying
+  // GSI: idx("accountId").sortKeys(["recordType", "timeRangeStart"])
+  const query = `
+    query ListAggregatedMetricsByAccountRecordType(
+      $accountId: String!
+      $recordType: String!
+      $startTime: String!
+      $endTime: String!
+    ) {
+      listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart(
+        accountId: $accountId
+        recordTypeTimeRangeStart: {
+          between: [
+            { recordType: $recordType, timeRangeStart: $startTime }
+            { recordType: $recordType, timeRangeStart: $endTime }
+          ]
+        }
+        limit: 10000
+      ) {
+        items {
+          id
           accountId
+          recordType
+          timeRangeStart
+          timeRangeEnd
+          numberOfMinutes
+          count
+          cost
+          errorCount
+          complete
+          createdAt
+          updatedAt
         }
-      }
-    })
-
-    // Check if we have cached data for all required sources
-    const cachedResults: { [key: string]: any } = {}
-    let hasAllCachedData = true
-
-    for (const [key, source] of Object.entries(preparedSources)) {
-      // Create sources for different time ranges (same logic as calculateUnifiedMetrics)
-      const now = new Date()
-      const nowAligned = new Date(now)
-      nowAligned.setSeconds(0, 0)
-      const currentHourMinutes = nowAligned.getMinutes()
-      const windowMinutes = 60 + currentHourMinutes
-      const lastHour = new Date(nowAligned.getTime() - windowMinutes * 60 * 1000)
-
-      const hourlySource: MetricsDataSource = {
-        ...source,
-        startTime: lastHour,
-        endTime: now
-      }
-
-      const total24hSource: MetricsDataSource = {
-        ...source,
-        startTime: new Date(now.getTime() - 24 * 60 * 60 * 1000),
-        endTime: now
-      }
-
-      // Check cache for both time ranges
-      const hourlyCacheKey = generalizedMetricsAggregator.cache.generateKey(hourlySource)
-      const total24hCacheKey = generalizedMetricsAggregator.cache.generateKey(total24hSource)
-      
-      const hourlyCached = generalizedMetricsAggregator.cache.get(hourlyCacheKey)
-      const total24hCached = generalizedMetricsAggregator.cache.get(total24hCacheKey)
-
-      if (hourlyCached && total24hCached) {
-        // Normalize hourly metrics (same logic as getComprehensiveMetrics)
-        const actualWindowMinutes = (now.getTime() - lastHour.getTime()) / (60 * 1000)
-        const normalizationFactor = actualWindowMinutes > 0 ? 60 / actualWindowMinutes : 1
-
-        const normalizedHourlyData = {
-          ...hourlyCached,
-          count: Math.round(hourlyCached.count * normalizationFactor),
-          sum: hourlyCached.sum * normalizationFactor,
-          avg: hourlyCached.avg
-        }
-
-        // Generate chart data from cached 24h data
-        const chartData = generalizedMetricsAggregator.generateChartDataFromRecords(total24hCached.items, source)
-
-        cachedResults[key] = {
-          hourly: normalizedHourlyData,
-          total24h: total24hCached,
-          chartData,
-          lastUpdated: now
-        }
-      } else {
-        hasAllCachedData = false
-        break
+        nextToken
       }
     }
+  `
 
-    if (!hasAllCachedData) {
-      return null
-    }
+  const variables = {
+    accountId,
+    recordType,
+    startTime: startTime.toISOString(),
+    endTime: endTime.toISOString()
+  }
 
-    // Transform cached results into unified format (same logic as calculateUnifiedMetrics)
-    const itemsResult = cachedResults.items
-    const scoreResultsResult = cachedResults.scoreResults
-    const feedbackResult = cachedResults.feedback
-
-    const itemsMetrics = itemsResult || scoreResultsResult || feedbackResult
-    const itemsPerHour = itemsMetrics?.hourly.count || 0
-    const itemsTotal24h = itemsMetrics?.total24h.count || 0
-    const itemsAveragePerHour = itemsTotal24h > 0 ? Math.round(itemsTotal24h / 24) : 0
-
-    const scoreResultsMetrics = scoreResultsResult || feedbackResult
-    const scoreResultsPerHour = scoreResultsMetrics?.hourly.count || 0
-    const scoreResultsTotal24h = scoreResultsMetrics?.total24h.count || 0
-    const scoreResultsAveragePerHour = scoreResultsTotal24h > 0 ? Math.round(scoreResultsTotal24h / 24) : 0
-
-    const chartData = generateCombinedChartData(cachedResults)
-    const { itemsPeak, scoreResultsPeak } = config.transformations?.customPeakCalculation?.(chartData) || 
-      calculatePeakValues(chartData)
-    const { hasErrors, errorCount } = config.transformations?.customErrorDetection?.(cachedResults) || 
-      { hasErrors: false, errorCount: 0 }
-
-    return {
-      itemsPerHour,
-      itemsAveragePerHour,
-      itemsPeakHourly: itemsPeak,
-      itemsTotal24h,
-      
-      scoreResultsPerHour,
-      scoreResultsAveragePerHour,
-      scoreResultsPeakHourly: scoreResultsPeak,
-      scoreResultsTotal24h,
-      
-      chartData,
-      lastUpdated: new Date(),
-      hasErrorsLast24h: hasErrors,
-      totalErrors24h: errorCount
-    }
+  try {
+    const response = await graphqlRequest<any>(query, variables)
+    const items = response.data?.listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart?.items || []
+    
+    // Filter to only complete records
+    return items.filter((item: AggregatedMetricsRecord) => item.complete)
   } catch (error) {
-    console.warn('Error checking cached data synchronously:', error)
-    return null
-  }
-}
-
-export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResult {
-  const { selectedAccount } = useAccount()
-  
-  // Generate unique key for this config
-  const configKey = useMemo(() => {
-    if (!selectedAccount) return null
-    const key = getConfigKey(selectedAccount.id, config)
-    return key
-  }, [selectedAccount?.id, config])
-  
-  // Get or initialize global state for this config
-  const getGlobalState = useCallback(() => {
-    if (!configKey) return { metrics: null, isLoading: false, error: null, lastFetch: 0 }
-    
-    if (!globalMetricsState.has(configKey)) {
-      // Try to get cached data first
-      const cachedData = selectedAccount ? checkCachedDataSync(selectedAccount.id, config) : null
-      globalMetricsState.set(configKey, {
-        metrics: cachedData,
-        isLoading: !cachedData,
-        error: null,
-        lastFetch: cachedData ? Date.now() : 0
-      })
-      
-    }
-    
-    return globalMetricsState.get(configKey)!
-  }, [configKey, selectedAccount, config])
-  
-  // Initialize local state from global state
-  const globalState = getGlobalState()
-  const [metrics, setMetrics] = useState<UnifiedMetricsData | null>(globalState.metrics)
-  const [isLoading, setIsLoading] = useState(globalState.isLoading)
-  const [error, setError] = useState<string | null>(globalState.error)
-  
-  // Update global state when local state changes
-  const updateGlobalState = useCallback((updates: Partial<typeof globalState>) => {
-    if (!configKey) return
-    
-    const current = globalMetricsState.get(configKey)!
-    const newState = { ...current, ...updates }
-    globalMetricsState.set(configKey, newState)
-    
-    // Update local state
-    if (updates.metrics !== undefined) setMetrics(updates.metrics)
-    if (updates.isLoading !== undefined) setIsLoading(updates.isLoading)
-    if (updates.error !== undefined) setError(updates.error)
-  }, [configKey])
-
-  const calculateUnifiedMetrics = useCallback(async (accountId: string): Promise<UnifiedMetricsData> => {
-    const results: { [key: string]: MetricsResult } = {}
-    
-    // Prepare data sources with account ID
-    const preparedSources: { [key: string]: MetricsDataSource } = {}
-    
-    Object.entries(config.sources).forEach(([key, source]) => {
-      if (source) {
-        preparedSources[key] = {
-          ...source,
-          accountId
-        }
-      }
-    })
-
-    // Fetch all metrics in parallel
-    const fetchPromises = Object.entries(preparedSources).map(async ([key, source]) => {
-      try {
-        const result = await generalizedMetricsAggregator.getComprehensiveMetrics(source)
-        return [key, result] as [string, MetricsResult]
-      } catch (err) {
-        console.error(`Error fetching ${key} metrics:`, err)
-        throw err
-      }
-    })
-
-    const fetchedResults = await Promise.all(fetchPromises)
-    fetchedResults.forEach(([key, result]) => {
-      results[key] = result
-    })
-
-    // Transform results into unified format
-    const itemsResult = results.items
-    const scoreResultsResult = results.scoreResults
-    const feedbackResult = results.feedback
-
-    // Calculate items metrics (from items source or fallback to scoreResults or feedback)
-    const itemsMetrics = itemsResult || scoreResultsResult || feedbackResult
-    const itemsPerHour = itemsMetrics?.hourly.count || 0
-    const itemsTotal24h = itemsMetrics?.total24h.count || 0
-    const itemsAveragePerHour = itemsTotal24h > 0 ? Math.round(itemsTotal24h / 24) : 0
-
-    // Calculate score results metrics (from scoreResults or fallback to feedback for feedback-only hooks)
-    const scoreResultsMetrics = scoreResultsResult || feedbackResult
-    const scoreResultsPerHour = scoreResultsMetrics?.hourly.count || 0
-    const scoreResultsTotal24h = scoreResultsMetrics?.total24h.count || 0
-    const scoreResultsAveragePerHour = scoreResultsTotal24h > 0 ? Math.round(scoreResultsTotal24h / 24) : 0
-
-    // Generate combined chart data
-    const chartData = generateCombinedChartData(results)
-
-    // Calculate peak values from chart data
-    const { itemsPeak, scoreResultsPeak } = config.transformations?.customPeakCalculation?.(chartData) || 
-      calculatePeakValues(chartData)
-
-    // Detect errors
-    const { hasErrors, errorCount } = config.transformations?.customErrorDetection?.(results) || 
-      { hasErrors: false, errorCount: 0 }
-
-    return {
-      itemsPerHour,
-      itemsAveragePerHour,
-      itemsPeakHourly: itemsPeak,
-      itemsTotal24h,
-      
-      scoreResultsPerHour,
-      scoreResultsAveragePerHour,
-      scoreResultsPeakHourly: scoreResultsPeak,
-      scoreResultsTotal24h,
-      
-      chartData,
-      lastUpdated: new Date(),
-      hasErrorsLast24h: hasErrors,
-      totalErrors24h: errorCount
-    }
-  }, [config])
-
-  const fetchMetrics = useCallback(async () => {
-    if (!selectedAccount || !configKey) {
-      updateGlobalState({ metrics: null, isLoading: false, error: null })
-      return
-    }
-
-    // Check for cached data first and show it immediately
-    const cachedData = checkCachedDataSync(selectedAccount.id, config)
-    if (cachedData) {
-      updateGlobalState({ metrics: cachedData, isLoading: false, error: null, lastFetch: Date.now() })
-      return
-    }
-
-    updateGlobalState({ isLoading: true, error: null })
-
-    try {
-      const result = await calculateUnifiedMetrics(selectedAccount.id)
-      updateGlobalState({ metrics: result, isLoading: false, error: null, lastFetch: Date.now() })
-    } catch (err) {
-      updateGlobalState({ 
-        error: err instanceof Error ? err.message : 'Failed to calculate unified metrics',
-        isLoading: false 
-      })
-    }
-  }, [selectedAccount, calculateUnifiedMetrics, config, configKey, updateGlobalState])
-
-  // Background fetch that never shows loading states - just smoothly updates data
-  const fetchMetricsInBackground = useCallback(async () => {
-    if (!selectedAccount || !configKey) {
-      return
-    }
-
-    try {
-      const result = await calculateUnifiedMetrics(selectedAccount.id)
-      // Update metrics without changing loading state - smooth update
-      updateGlobalState({ metrics: result, error: null, lastFetch: Date.now() })
-    } catch (err) {
-      console.error('❌ useUnifiedMetrics: Error in background fetch:', err)
-      // Don't update error state for background fetches - keep showing last known data
-      console.log('🔄 useUnifiedMetrics: Background fetch failed, keeping last known data')
-    }
-  }, [selectedAccount, calculateUnifiedMetrics, configKey, updateGlobalState])
-
-  const refetch = useCallback(() => {
-    if (!selectedAccount || !configKey) {
-      updateGlobalState({ metrics: null, isLoading: false, error: null })
-      return
-    }
-
-    // Check if we have existing data (global state or cache)
-    const currentGlobalState = globalMetricsState.get(configKey)
-    const cachedData = checkCachedDataSync(selectedAccount.id, config)
-    
-    if (currentGlobalState?.metrics || cachedData) {
-      // We have existing data - show it immediately and fetch in background
-      const existingData = currentGlobalState?.metrics || cachedData
-      if (existingData) {
-        updateGlobalState({ metrics: existingData, isLoading: false, error: null })
-        // Fetch fresh data in background without showing loading
-        fetchMetricsInBackground()
-      }
-    } else {
-      // No existing data - show loading state for first fetch
-      updateGlobalState({ metrics: null, isLoading: true, error: null })
-      fetchMetrics()
-    }
-  }, [selectedAccount, config, configKey, updateGlobalState, fetchMetrics, fetchMetricsInBackground])
-
-  // Setup automatic refresh mechanism
-  const setupAutoRefresh = useCallback(() => {
-    if (!selectedAccount || !configKey) return
-
-    // Clear any existing timer for this config
-    const existingTimer = globalRefreshTimers.get(configKey)
-    if (existingTimer) {
-      clearInterval(existingTimer)
-    }
-
-    // Set up new 30-second refresh timer
-    const refreshTimer = setInterval(() => {
-      fetchMetricsInBackground()
-    }, 30000) // 30 seconds
-
-    globalRefreshTimers.set(configKey, refreshTimer)
-
-    // Cleanup function
-    return () => {
-      clearInterval(refreshTimer)
-      globalRefreshTimers.delete(configKey)
-    }
-  }, [selectedAccount, configKey, fetchMetricsInBackground])
-
-  // Handle account changes and trigger background refresh
-  useEffect(() => {
-    if (!selectedAccount || !configKey) {
-      updateGlobalState({ metrics: null, isLoading: false, error: null })
-      return
-    }
-
-    // Check if we already have data in global state
-    const currentGlobalState = globalMetricsState.get(configKey)
-    if (currentGlobalState?.metrics) {
-      // Always trigger a background refresh to get fresh data, but don't show loading
-      fetchMetricsInBackground()
-    } else {
-      // No data available, fetch fresh data (this will show loading only for first time)
-      fetchMetrics()
-    }
-
-    // Setup automatic refresh
-    const cleanup = setupAutoRefresh()
-    return cleanup
-  }, [selectedAccount, config, configKey, updateGlobalState, fetchMetrics, fetchMetricsInBackground, setupAutoRefresh])
-
-  return {
-    metrics,
-    isLoading,
-    error,
-    refetch
+    console.error(`Error querying AggregatedMetrics for ${recordType}:`, error)
+    // Return empty array on error instead of throwing - allows graceful degradation
+    return []
   }
 }
 
 /**
- * Generate combined chart data from multiple metric results
+ * Calculate metrics from AggregatedMetrics records
  */
-function generateCombinedChartData(results: { [key: string]: MetricsResult }): Array<{
+function calculateMetricsFromRecords(
+  records: AggregatedMetricsRecord[],
+  startTime: Date,
+  endTime: Date
+): { count: number; errorCount: number } {
+  // Filter records that fall within our time range and are complete
+  const relevantRecords = records.filter(record => {
+    if (!record.complete) return false
+    
+    const recordStart = new Date(record.timeRangeStart)
+    const recordEnd = new Date(record.timeRangeEnd)
+    
+    // Check if record overlaps with our time range
+    return recordStart < endTime && recordEnd > startTime
+  })
+
+  // Sum up the counts
+  const count = relevantRecords.reduce((sum, record) => sum + (record.count || 0), 0)
+  const errorCount = relevantRecords.reduce((sum, record) => sum + (record.errorCount || 0), 0)
+
+  return { count, errorCount }
+}
+
+/**
+ * Generate chart data from AggregatedMetrics records
+ * Groups records into hourly buckets
+ */
+function generateChartData(
+  itemsRecords: AggregatedMetricsRecord[],
+  scoreResultsRecords: AggregatedMetricsRecord[]
+): Array<{
   time: string
   items: number
   scoreResults: number
-  bucketStart?: string
-  bucketEnd?: string
+  bucketStart: string
+  bucketEnd: string
 }> {
-  const itemsResult = results.items
-  const scoreResultsResult = results.scoreResults
-  const feedbackResult = results.feedback
+  const now = new Date()
+  const chartData: Array<{
+    time: string
+    items: number
+    scoreResults: number
+    bucketStart: string
+    bucketEnd: string
+  }> = []
 
-  // Use the longest chart data as the base, including feedback data
-  const baseChartData = itemsResult?.chartData || scoreResultsResult?.chartData || feedbackResult?.chartData || []
-  
-  return baseChartData.map((point: any, index: number) => {
-    // Get corresponding data points from other sources
-    const scoreResultsPoint = scoreResultsResult?.chartData[index]
-    const feedbackPoint = feedbackResult?.chartData[index]
+  // Generate 24 hourly buckets
+  for (let i = 23; i >= 0; i--) {
+    const bucketEnd = new Date(now)
+    bucketEnd.setHours(bucketEnd.getHours() - i, 0, 0, 0)
+    
+    const bucketStart = new Date(bucketEnd)
+    bucketStart.setHours(bucketStart.getHours() - 1)
 
-    // If we don't have items data, use scoreResults data for items line too
-    const itemsValue = itemsResult ? point.value : (scoreResultsPoint?.value || 0)
+    // Sum counts from all records that overlap with this hour bucket
+    const itemsCount = itemsRecords
+      .filter(record => {
+        if (!record.complete) return false
+        const recordStart = new Date(record.timeRangeStart)
+        const recordEnd = new Date(record.timeRangeEnd)
+        return recordStart < bucketEnd && recordEnd > bucketStart
+      })
+      .reduce((sum, record) => sum + (record.count || 0), 0)
 
-    return {
-      time: point.time,
-      items: itemsValue,
-      scoreResults: scoreResultsPoint?.value || 0,
-      feedback: feedbackPoint?.value || 0,
-      bucketStart: point.bucketStart,
-      bucketEnd: point.bucketEnd
-    }
-  })
+    const scoreResultsCount = scoreResultsRecords
+      .filter(record => {
+        if (!record.complete) return false
+        const recordStart = new Date(record.timeRangeStart)
+        const recordEnd = new Date(record.timeRangeEnd)
+        return recordStart < bucketEnd && recordEnd > bucketStart
+      })
+      .reduce((sum, record) => sum + (record.count || 0), 0)
+
+    chartData.push({
+      time: bucketStart.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      items: itemsCount,
+      scoreResults: scoreResultsCount,
+      bucketStart: bucketStart.toISOString(),
+      bucketEnd: bucketEnd.toISOString()
+    })
+  }
+
+  return chartData
 }
 
 /**
@@ -519,102 +231,196 @@ function calculatePeakValues(chartData: Array<{ items: number; scoreResults: num
   return { itemsPeak, scoreResultsPeak }
 }
 
+/**
+ * Unified metrics hook that queries AggregatedMetrics table
+ */
+export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetricsResult {
+  const { selectedAccount } = useAccount()
+  const [metrics, setMetrics] = useState<UnifiedMetricsData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Memoize config to prevent unnecessary re-renders
+  const memoizedConfig = useMemo(() => config, [JSON.stringify(config)])
+
+  const fetchMetrics = useCallback(async () => {
+    if (!selectedAccount) {
+      setMetrics(null)
+      setIsLoading(false)
+      setError(null)
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const now = new Date()
+      const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      const last60min = new Date(now.getTime() - 60 * 60 * 1000)
+
+      // Query AggregatedMetrics for items and scoreResults
+      const [itemsRecords, scoreResultsRecords] = await Promise.all([
+        queryAggregatedMetrics(selectedAccount.id, 'items', last24h, now),
+        queryAggregatedMetrics(selectedAccount.id, 'scoreResults', last24h, now)
+      ])
+
+      // Calculate hourly metrics (last 60 minutes)
+      const itemsHourly = calculateMetricsFromRecords(itemsRecords, last60min, now)
+      const scoreResultsHourly = calculateMetricsFromRecords(scoreResultsRecords, last60min, now)
+
+      // Calculate 24h totals
+      const items24h = calculateMetricsFromRecords(itemsRecords, last24h, now)
+      const scoreResults24h = calculateMetricsFromRecords(scoreResultsRecords, last24h, now)
+
+      // Generate chart data
+      const chartData = generateChartData(itemsRecords, scoreResultsRecords)
+
+      // Calculate peaks
+      const { itemsPeak, scoreResultsPeak } = memoizedConfig.transformations?.customPeakCalculation?.(chartData) || 
+        calculatePeakValues(chartData)
+
+      // Calculate averages
+      const itemsAveragePerHour = Math.round(items24h.count / 24)
+      const scoreResultsAveragePerHour = Math.round(scoreResults24h.count / 24)
+
+      // Detect errors
+      const hasErrorsLast24h = (items24h.errorCount + scoreResults24h.errorCount) > 0
+      const totalErrors24h = items24h.errorCount + scoreResults24h.errorCount
+
+      const metricsData: UnifiedMetricsData = {
+        itemsPerHour: itemsHourly.count,
+        itemsAveragePerHour,
+        itemsPeakHourly: itemsPeak,
+        itemsTotal24h: items24h.count,
+        
+        scoreResultsPerHour: scoreResultsHourly.count,
+        scoreResultsAveragePerHour,
+        scoreResultsPeakHourly: scoreResultsPeak,
+        scoreResultsTotal24h: scoreResults24h.count,
+        
+        chartData,
+        lastUpdated: now,
+        hasErrorsLast24h,
+        totalErrors24h
+      }
+
+      setMetrics(metricsData)
+      setIsLoading(false)
+    } catch (err) {
+      console.error('Error fetching unified metrics:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch metrics')
+      setIsLoading(false)
+    }
+  }, [selectedAccount, memoizedConfig])
+
+  // Setup subscriptions for real-time updates
+  useEffect(() => {
+    if (!selectedAccount) return
+
+    let handles: Array<{ unsubscribe: () => void }> = []
+
+    // Import subscription functions dynamically to avoid circular dependencies
+    import('@/utils/subscriptions').then(({ observeAggregatedMetricsCreation, observeAggregatedMetricsUpdates }) => {
+      // Subscribe to AggregatedMetrics creation
+      if (observeAggregatedMetricsCreation) {
+        const createSub = observeAggregatedMetricsCreation(selectedAccount.id, () => {
+          console.log('AggregatedMetrics created, refetching...')
+          fetchMetrics()
+        })
+        handles.push(createSub)
+      }
+
+      // Subscribe to AggregatedMetrics updates
+      if (observeAggregatedMetricsUpdates) {
+        const updateSub = observeAggregatedMetricsUpdates(selectedAccount.id, () => {
+          console.log('AggregatedMetrics updated, refetching...')
+          fetchMetrics()
+        })
+        handles.push(updateSub)
+      }
+    }).catch(err => {
+      console.warn('Could not setup AggregatedMetrics subscriptions:', err)
+    })
+
+    return () => {
+      handles.forEach(handle => handle.unsubscribe())
+    }
+  }, [selectedAccount?.id, fetchMetrics])
+
+  // Initial fetch and periodic refresh
+  useEffect(() => {
+    fetchMetrics()
+
+    // Refresh every 30 seconds
+    const refreshInterval = setInterval(() => {
+      fetchMetrics()
+    }, 30000)
+
+    return () => clearInterval(refreshInterval)
+  }, [fetchMetrics])
+
+  const refetch = useCallback(() => {
+    fetchMetrics()
+  }, [fetchMetrics])
+
+  return {
+    metrics,
+    isLoading,
+    error,
+    refetch
+  }
+}
+
 // Convenience hooks for common use cases
 
 /**
  * Hook for all items and score results (no filtering) - backward compatible
  */
 export function useAllItemsMetrics(): UseUnifiedMetricsResult {
-  const config = useMemo(() => ({
-    sources: {
-      items: {
-        type: 'items' as const,
-        accountId: '', // Will be filled by the hook
-      },
-      scoreResults: {
-        type: 'scoreResults' as const,
-        accountId: '', // Will be filled by the hook
-      }
-    }
-  }), [])
-
-  return useUnifiedMetrics(config)
+  return useUnifiedMetrics({})
 }
 
 /**
  * Hook for prediction items and score results
  */
 export function usePredictionMetrics(): UseUnifiedMetricsResult {
-  const config = useMemo(() => ({
-    sources: {
-      items: {
-        type: 'items' as const,
-        createdByType: 'prediction',
-        accountId: '', // Will be filled by the hook
-      },
-      scoreResults: {
-        type: 'scoreResults' as const,
-        scoreResultType: 'prediction',
-        accountId: '', // Will be filled by the hook
-      }
+  return useUnifiedMetrics({
+    filters: {
+      createdByType: 'prediction',
+      scoreResultType: 'prediction'
     }
-  }), [])
-
-  return useUnifiedMetrics(config)
+  })
 }
 
 /**
  * Hook for evaluation items and score results
  */
 export function useEvaluationMetrics(): UseUnifiedMetricsResult {
-  const config = useMemo(() => ({
-    sources: {
-      items: {
-        type: 'items' as const,
-        createdByType: 'evaluation',
-        accountId: '', // Will be filled by the hook
-      },
-      scoreResults: {
-        type: 'scoreResults' as const,
-        scoreResultType: 'evaluation',
-        accountId: '', // Will be filled by the hook
-      }
+  return useUnifiedMetrics({
+    filters: {
+      createdByType: 'evaluation',
+      scoreResultType: 'evaluation'
     }
-  }), [])
-
-  return useUnifiedMetrics(config)
+  })
 }
 
 /**
  * Hook for feedback items
  */
 export function useFeedbackMetrics(): UseUnifiedMetricsResult {
-  const config = useMemo(() => ({
-    sources: {
-      // For feedback, we track score results with feedback type
-      scoreResults: {
-        type: 'scoreResults' as const,
-        scoreResultType: 'feedback',
-        accountId: '', // Will be filled by the hook
-      }
+  return useUnifiedMetrics({
+    filters: {
+      scoreResultType: 'feedback'
     }
-  }), [])
-
-  return useUnifiedMetrics(config)
+  })
 }
 
 /**
  * Hook for task metrics
  */
 export function useTaskMetrics(): UseUnifiedMetricsResult {
-  const config = useMemo(() => ({
-    sources: {
-      // For tasks, we track task records
-      items: {
-        type: 'tasks' as const,
-        accountId: '', // Will be filled by the hook
-      }
-    },
+  return useUnifiedMetrics({
     transformations: {
       // Custom peak calculation for tasks (use higher baseline since tasks are less frequent)
       customPeakCalculation: (chartData: Array<{ items: number; scoreResults: number }>) => {
@@ -623,23 +429,16 @@ export function useTaskMetrics(): UseUnifiedMetricsResult {
         return { itemsPeak, scoreResultsPeak }
       }
     }
-  }), [])
-
-  return useUnifiedMetrics(config)
+  })
 }
 
 /**
  * Hook for evaluation task metrics (actual task records + score results)
  */
 export function useEvaluationTaskMetrics(): UseUnifiedMetricsResult {
-  const config = useMemo(() => ({
-    sources: {
-      // For evaluation tasks, we track actual task records (not items)
-      items: {
-        type: 'tasks' as const,
-        taskType: 'evaluation', // Filter for evaluation-related tasks
-        accountId: '', // Will be filled by the hook
-      }
+  return useUnifiedMetrics({
+    filters: {
+      taskType: 'evaluation'
     },
     transformations: {
       // Custom peak calculation for evaluation tasks
@@ -649,7 +448,5 @@ export function useEvaluationTaskMetrics(): UseUnifiedMetricsResult {
         return { itemsPeak, scoreResultsPeak }
       }
     }
-  }), [])
-
-  return useUnifiedMetrics(config)
-} 
+  })
+}
