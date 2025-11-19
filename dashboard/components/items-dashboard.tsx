@@ -1128,6 +1128,8 @@ function ItemsDashboardInner() {
               ...(freshItem.text !== undefined && { text: freshItem.text }),
               // Preserve isNew status
               isNew: prevItem.isNew,
+              // PRESERVE scorecards to prevent flicker - score count manager updates this separately
+              scorecards: prevItem.scorecards || [],
             };
           }
           return prevItem;
@@ -1354,6 +1356,8 @@ function ItemsDashboardInner() {
                       ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
                       // Only update text if it's actually present in the update
                       ...(updatedItem.text !== undefined && { text: updatedItem.text }),
+                      // PRESERVE scorecards to prevent flicker - score count manager updates this separately
+                      scorecards: prevItems[existingItemIndex].scorecards || [],
                     };
                     return updatedItems;
                   } else {
@@ -2657,6 +2661,8 @@ function ItemsDashboardInner() {
                     ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
                     // Only update text if it's actually present in the update
                     ...(updatedItem.text !== undefined && { text: updatedItem.text }),
+                    // PRESERVE scorecards to prevent flicker - score count manager updates this separately
+                    scorecards: prevItems[existingItemIndex].scorecards || [],
                   };
                   return updatedItems;
                 } else {
