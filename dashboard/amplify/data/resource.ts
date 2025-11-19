@@ -82,6 +82,7 @@ const schema = a.schema({
             dataSets: a.hasMany('DataSet', 'accountId'),
             procedures: a.hasMany('Procedure', 'accountId'),
             procedureTemplates: a.hasMany('ProcedureTemplate', 'accountId'),
+            graphNodes: a.hasMany('GraphNode', 'accountId'),
             chatSessions: a.hasMany('ChatSession', 'accountId'),
         })
         .authorization((allow) => [
