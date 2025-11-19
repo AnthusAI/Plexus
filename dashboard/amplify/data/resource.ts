@@ -43,7 +43,7 @@ type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "editedAt";
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
 type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
-type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "recordType" | "timeRangeStart" | "timeRangeEnd" | "numberOfMinutes" | "count" | "cost" | "decisionCount" | "externalAiApiCount" | "cachedAiApiCount" | "errorCount" | "createdAt" | "updatedAt";
+type AggregatedMetricsIndexFields = "accountId" | "compositeKey" | "scorecardId" | "scoreId" | "recordType" | "timeRangeStart" | "timeRangeEnd" | "numberOfMinutes" | "count" | "cost" | "decisionCount" | "externalAiApiCount" | "cachedAiApiCount" | "errorCount" | "createdAt" | "updatedAt";
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
@@ -728,6 +728,7 @@ const schema = a.schema({
         .model({
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
+            compositeKey: a.string().required(), // "recordType#timeRangeStart#numberOfMinutes"
             scorecardId: a.string(),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
@@ -747,6 +748,7 @@ const schema = a.schema({
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
+        .identifier(['accountId', 'compositeKey'])
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
