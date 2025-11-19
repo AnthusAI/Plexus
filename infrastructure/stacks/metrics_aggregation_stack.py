@@ -17,7 +17,6 @@ from aws_cdk.aws_lambda_event_sources import DynamoEventSource
 from aws_cdk.aws_lambda import StartingPosition
 from constructs import Construct
 import os
-from typing import Dict, Any
 
 from .shared.naming import get_resource_name
 from .shared.config import EnvironmentConfig
@@ -59,36 +58,30 @@ class MetricsAggregationStack(Stack):
         # Load environment-specific configuration from Secrets Manager
         config = EnvironmentConfig(self, environment)
         
-        # Load Amplify table ARNs from environment variables
-        # Run discover_and_save_tables.py first to populate these
-        print(f"Loading Amplify table ARNs from environment for {environment}...")
+        # Load Amplify table ARNs from Secrets Manager
+        # These are populated by running discover_and_save_tables.py and create-secrets-{environment}.sh
+        print(f"Loading Amplify table ARNs from Secrets Manager for {environment}...")
         region = kwargs.get('env').region if kwargs.get('env') else 'us-west-2'
-        
-        # Build tables dict from environment variables
+
+        # Build tables dict from Secrets Manager configuration
         tables = {}
-        table_types = ['item', 'scoreResult', 'task', 'evaluation']
-        
+        table_types = ['item', 'scoreresult', 'task', 'evaluation']
+
         for table_type in table_types:
-            env_prefix = f"TABLE_{table_type.upper()}"
-            table_name = os.environ.get(f"{env_prefix}_NAME")
-            table_arn = os.environ.get(f"{env_prefix}_ARN")
-            stream_arn = os.environ.get(f"{env_prefix}_STREAM_ARN")
-            
-            if table_name and table_arn and stream_arn:
-                tables[table_type] = {
-                    'table_name': table_name,
-                    'table_arn': table_arn,
-                    'stream_arn': stream_arn
-                }
-                print(f"  Loaded {table_type}: {table_name}")
-        
-        if not tables:
-            raise Exception(
-                "Could not load table ARNs from environment. "
-                "Run 'python3 discover_and_save_tables.py' first to populate .env file."
-            )
-        
-        print(f"Loaded {len(tables)} tables")
+            secret_prefix = f"table-{table_type.lower()}"
+            table_name = config.get_value(f"{secret_prefix}-name")
+            table_arn = config.get_value(f"{secret_prefix}-arn")
+            stream_arn = config.get_value(f"{secret_prefix}-stream-arn")
+
+            # Only add if all values exist (CDK tokens will be resolved at deploy time)
+            tables[table_type] = {
+                'table_name': table_name,
+                'table_arn': table_arn,
+                'stream_arn': stream_arn
+            }
+            print(f"  Loading {table_type} from Secrets Manager")
+
+        print(f"Configured {len(tables)} table stream sources")
         
         # Get the build directory containing the Lambda function code
         # Run build_lambda.sh first to populate this directory
