@@ -48,7 +48,7 @@ type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | 
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
 type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
-type GraphNodeIndexFields = "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
+type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
 type ProcedureTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
@@ -891,6 +891,8 @@ const schema = a.schema({
 
     GraphNode: a
         .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
             procedureId: a.id().required(),
             procedure: a.belongsTo('Procedure', 'procedureId'),
             parentNodeId: a.id(),
@@ -908,6 +910,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: GraphNodeIndexFields) => any) => [
+            idx("accountId").sortKeys(["createdAt"]).name("byAccountAndCreatedAt"),
             idx("procedureId").sortKeys(["createdAt"]).name("nodesByProcedureCreatedAt"),
             idx("parentNodeId").name("nodesByParent")
         ]),
