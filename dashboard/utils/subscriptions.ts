@@ -1204,3 +1204,51 @@ export function observeGraphNodeUpdates() {
     };
   });
 }
+
+/**
+ * Subscribe to AggregatedMetrics creation events for an account
+ */
+export function observeAggregatedMetricsCreation(
+  accountId: string,
+  callback: () => void
+): { unsubscribe: () => void } {
+  const client = getClient();
+  
+  const subscription = ((client.models.AggregatedMetrics as any).onCreate({
+    filter: { accountId: { eq: accountId } }
+  }) as AmplifySubscription).subscribe({
+    next: () => {
+      console.log('AggregatedMetrics created for account:', accountId);
+      callback();
+    },
+    error: (error: Error) => {
+      console.error('AggregatedMetrics onCreate subscription error:', error);
+    }
+  });
+
+  return subscription;
+}
+
+/**
+ * Subscribe to AggregatedMetrics update events for an account
+ */
+export function observeAggregatedMetricsUpdates(
+  accountId: string,
+  callback: () => void
+): { unsubscribe: () => void } {
+  const client = getClient();
+  
+  const subscription = ((client.models.AggregatedMetrics as any).onUpdate({
+    filter: { accountId: { eq: accountId } }
+  }) as AmplifySubscription).subscribe({
+    next: () => {
+      console.log('AggregatedMetrics updated for account:', accountId);
+      callback();
+    },
+    error: (error: Error) => {
+      console.error('AggregatedMetrics onUpdate subscription error:', error);
+    }
+  });
+
+  return subscription;
+}
