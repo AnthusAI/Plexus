@@ -84,18 +84,22 @@ class MetricsAggregationStack(Stack):
         print(f"Configured {len(tables)} table stream sources")
         
         # Get the build directory containing the Lambda function code
-        # Run build_lambda.sh first to populate this directory
+        # If it doesn't exist, run the build script to create it
         function_dir = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             'build',
             'metrics_aggregator'
         )
-        
+
         if not os.path.exists(function_dir):
-            raise Exception(
-                f"Lambda build directory not found: {function_dir}\n"
-                "Run './build_lambda.sh' from the infrastructure directory first."
+            print(f"⚠️  Lambda build directory not found, running build_lambda.sh...")
+            import subprocess
+            build_script = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                'build_lambda.sh'
             )
+            subprocess.run(['bash', build_script], check=True, cwd=os.path.dirname(build_script))
+            print(f"✅ Lambda build completed")
         
         # Create IAM role for Lambda
         lambda_role = iam.Role(
