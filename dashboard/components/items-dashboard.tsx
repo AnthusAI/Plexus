@@ -40,6 +40,7 @@ import { ItemsDashboardSkeleton, ItemCardSkeleton } from './loading-skeleton'
 import { ScoreResultCountManager, type ScoreResultCount } from '@/utils/score-result-counter'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ItemsGauges } from './ItemsGauges'
+import { useVirtualItems } from '@/hooks/useVirtualItems'
 
 // Get the current date and time
 const now = new Date();
@@ -168,6 +169,19 @@ const GridContent = ({
   hasInitiallyLoaded: boolean;
   itemsWithErrors: Set<string>;
 }) => {
+  // Use virtual scrolling to only render visible items
+  const { shouldRenderItem } = useVirtualItems({
+    items: filteredItems,
+    itemRefsMap,
+    selectedItemId: selectedItem,
+    bufferRows: 2, // Keep 2 rows above/below viewport
+  });
+
+  // Filter items to only those that should be rendered
+  const visibleItems = useMemo(() => {
+    return filteredItems.filter(item => shouldRenderItem(item.id));
+  }, [filteredItems, shouldRenderItem]);
+
   // Only show "No items found" if we're not loading and have actually finished the initial load
   if (filteredItems.length === 0 && !isLoading && hasInitiallyLoaded) {
     return (
@@ -192,7 +206,7 @@ const GridContent = ({
         }}
       >
         <AnimatePresence mode="popLayout">
-          {filteredItems.map((item) => {
+          {visibleItems.map((item) => {
             const scoreCount = scoreResultCounts.get(item.id);
             return (
               <GridItemCard
@@ -2681,8 +2695,8 @@ function ItemsDashboardInner() {
           }
           
           // Trigger a re-count of score results for this item
+          // Don't clear first - just reload to avoid flickering
           if (scoreCountManagerRef.current) {
-            scoreCountManagerRef.current.clearCount(updatedItem.id);
             scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
           }
         }

@@ -1221,6 +1221,7 @@ class ProcedureService:
             # Create the root node with champion configuration stored in metadata
             root_node = GraphNode.create(
                 client=self.client,
+                accountId=experiment.accountId,
                 procedureId=experiment.id,
                 parentNodeId=None,  # Root node has no parent
                 name="Root",

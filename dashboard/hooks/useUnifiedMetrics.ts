@@ -259,10 +259,28 @@ export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetrics
       const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
       const last60min = new Date(now.getTime() - 60 * 60 * 1000)
 
-      // Query AggregatedMetrics for items and scoreResults
+      // Determine which items recordType to query based on filters
+      let itemsRecordType: 'items' | 'predictionItems' | 'evaluationItems' | 'feedbackItems' = 'items'
+      if (memoizedConfig.filters?.useFeedbackItems) {
+        itemsRecordType = 'feedbackItems'
+      } else if (memoizedConfig.filters?.createdByType === 'prediction') {
+        itemsRecordType = 'predictionItems'
+      } else if (memoizedConfig.filters?.createdByType === 'evaluation') {
+        itemsRecordType = 'evaluationItems'
+      }
+
+      // Determine which scoreResults recordType to query based on filters
+      let scoreResultsRecordType: 'scoreResults' | 'predictionScoreResults' | 'evaluationScoreResults' = 'scoreResults'
+      if (memoizedConfig.filters?.scoreResultType === 'prediction') {
+        scoreResultsRecordType = 'predictionScoreResults'
+      } else if (memoizedConfig.filters?.scoreResultType === 'evaluation') {
+        scoreResultsRecordType = 'evaluationScoreResults'
+      }
+
+      // Query AggregatedMetrics for items and scoreResults (or filtered variants)
       const [itemsRecords, scoreResultsRecords] = await Promise.all([
-        queryAggregatedMetrics(selectedAccount.id, 'items', last24h, now),
-        queryAggregatedMetrics(selectedAccount.id, 'scoreResults', last24h, now)
+        queryAggregatedMetrics(selectedAccount.id, itemsRecordType, last24h, now),
+        queryAggregatedMetrics(selectedAccount.id, scoreResultsRecordType, last24h, now)
       ])
 
       // Calculate hourly metrics (last 60 minutes)
@@ -407,11 +425,12 @@ export function useEvaluationMetrics(): UseUnifiedMetricsResult {
 
 /**
  * Hook for feedback items
+ * Note: Feedback items are tracked in the FeedbackItem table, not as a filter on Items
  */
 export function useFeedbackMetrics(): UseUnifiedMetricsResult {
   return useUnifiedMetrics({
     filters: {
-      scoreResultType: 'feedback'
+      useFeedbackItems: true  // Special flag to query feedbackItems instead of items
     }
   })
 }

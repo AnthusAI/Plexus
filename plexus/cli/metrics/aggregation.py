@@ -139,7 +139,9 @@ def count_records_efficiently(
     records: List[Dict[str, Any]], 
     account_id: str, 
     record_type: str,
-    verbose: bool = False
+    verbose: bool = False,
+    filter_field: Optional[str] = None,
+    filter_value: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Efficiently count records into all relevant buckets.
@@ -152,6 +154,8 @@ def count_records_efficiently(
         account_id: Account ID
         record_type: Type of records
         verbose: If True, print detailed counting statistics
+        filter_field: Optional field name to filter by (e.g., 'type')
+        filter_value: Optional value to filter for (e.g., 'prediction')
         
     Returns:
         List of bucket counts ready for ORM updates
@@ -160,8 +164,15 @@ def count_records_efficiently(
     
     processed = 0
     skipped = 0
+    filtered_out = 0
     
     for record in records:
+        # Apply filter if specified
+        if filter_field and filter_value:
+            if record.get(filter_field) != filter_value:
+                filtered_out += 1
+                continue
+        
         # Extract timestamp (try createdAt first, then updatedAt)
         timestamp_str = record.get('createdAt') or record.get('updatedAt')
         if not timestamp_str:
@@ -180,7 +191,8 @@ def count_records_efficiently(
     
     if verbose:
         # Log counting summary with cross-checks
-        print(f"  Processed: {processed} records ({skipped} skipped - no timestamp)")
+        filter_msg = f", {filtered_out} filtered out" if filter_field else ""
+        print(f"  Processed: {processed} records ({skipped} skipped - no timestamp{filter_msg})")
         
         # Cross-check: sum of 1-min buckets should equal processed records
         one_min_total = sum(b['count'] for b in bucket_counts if b['number_of_minutes'] == 1)
@@ -208,11 +220,14 @@ def query_records_for_counting(
     Query records from the API for counting.
     
     Uses the appropriate GraphQL query based on record type and handles pagination.
+    For filtered types (predictionScoreResults, evaluationScoreResults), queries
+    the base scoreResults and returns all records (filtering happens in counting).
     
     Args:
         client: The API client
         account_id: Account ID to filter by
-        record_type: Type of records ('items', 'scoreResults', 'tasks', 'evaluations')
+        record_type: Type of records ('items', 'scoreResults', 'predictionScoreResults', 
+                     'evaluationScoreResults', 'tasks', 'evaluations')
         start_time: Start of time range
         end_time: End of time range
         verbose: If True, print query progress
@@ -220,14 +235,24 @@ def query_records_for_counting(
     Returns:
         List of record dictionaries with timestamps
     """
-    if record_type == 'items':
+    if record_type in ('items', 'predictionItems', 'evaluationItems'):
+        # All item types use the same query (filtering happens in counting)
         return _query_items(client, account_id, start_time, end_time, verbose)
-    elif record_type == 'scoreResults':
+    elif record_type in ('scoreResults', 'predictionScoreResults', 'evaluationScoreResults'):
+        # All score result types use the same query (filtering happens in counting)
         return _query_score_results(client, account_id, start_time, end_time, verbose)
     elif record_type == 'tasks':
         return _query_tasks(client, account_id, start_time, end_time, verbose)
     elif record_type == 'evaluations':
         return _query_evaluations(client, account_id, start_time, end_time, verbose)
+    elif record_type == 'feedbackItems':
+        return _query_feedback_items(client, account_id, start_time, end_time, verbose)
+    elif record_type == 'procedures':
+        return _query_procedures(client, account_id, start_time, end_time, verbose)
+    elif record_type == 'graphNodes':
+        return _query_graph_nodes(client, account_id, start_time, end_time, verbose)
+    elif record_type == 'chatSessions':
+        return _query_chat_sessions(client, account_id, start_time, end_time, verbose)
     else:
         raise ValueError(f"Unknown record type: {record_type}")
 
@@ -287,7 +312,7 @@ def _query_items(
     end_time: datetime,
     verbose: bool = False
 ) -> List[Dict[str, Any]]:
-    """Query Items in time window."""
+    """Query Items in time window (includes createdByType for filtering)."""
     query = """
     query ListItemsByTime(
         $accountId: String!,
@@ -304,6 +329,7 @@ def _query_items(
             items {
                 id
                 createdAt
+                createdByType
             }
             nextToken
         }
@@ -330,7 +356,7 @@ def _query_score_results(
     end_time: datetime,
     verbose: bool = False
 ) -> List[Dict[str, Any]]:
-    """Query ScoreResults in time window."""
+    """Query ScoreResults in time window (includes type field for filtering)."""
     query = """
     query ListScoreResultsByTime(
         $accountId: String!,
@@ -347,6 +373,7 @@ def _query_score_results(
             items {
                 id
                 updatedAt
+                type
             }
             nextToken
         }
@@ -448,5 +475,220 @@ def _query_evaluations(
             'endTime': end_time.isoformat().replace('+00:00', 'Z')
         },
         'listEvaluationByAccountIdAndUpdatedAt',
+        verbose
+    )
+
+
+def _query_feedback_items(
+    client: 'PlexusDashboardClient',
+    account_id: str,
+    start_time: datetime,
+    end_time: datetime,
+    verbose: bool = False
+) -> List[Dict[str, Any]]:
+    """Query FeedbackItems in time window."""
+    query = """
+    query ListFeedbackItemsByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listFeedbackItemByAccountIdAndUpdatedAt(
+            accountId: $accountId,
+            updatedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                updatedAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listFeedbackItemByAccountIdAndCreatedAt',
+        verbose
+    )
+
+
+def _query_procedures(
+    client: 'PlexusDashboardClient',
+    account_id: str,
+    start_time: datetime,
+    end_time: datetime,
+    verbose: bool = False
+) -> List[Dict[str, Any]]:
+    """Query Procedures in time window."""
+    query = """
+    query ListProceduresByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listProcedureByAccountIdAndUpdatedAt(
+            accountId: $accountId,
+            updatedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                updatedAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listProcedureByAccountIdAndUpdatedAt',
+        verbose
+    )
+
+
+def _query_graph_nodes(
+    client: 'PlexusDashboardClient',
+    account_id: str,
+    start_time: datetime,
+    end_time: datetime,
+    verbose: bool = False
+) -> List[Dict[str, Any]]:
+    """Query GraphNodes in time window."""
+    query = """
+    query ListGraphNodesByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listGraphNodeByAccountIdAndCreatedAt(
+            accountId: $accountId,
+            createdAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                createdAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listGraphNodeByAccountIdAndCreatedAt',
+        verbose
+    )
+
+
+def _query_chat_sessions(
+    client: 'PlexusDashboardClient',
+    account_id: str,
+    start_time: datetime,
+    end_time: datetime,
+    verbose: bool = False
+) -> List[Dict[str, Any]]:
+    """Query ChatSessions in time window."""
+    query = """
+    query ListChatSessionsByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listChatSessionByAccountIdAndUpdatedAt(
+            accountId: $accountId,
+            updatedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                updatedAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listChatSessionByAccountIdAndUpdatedAt',
+        verbose
+    )
+
+
+def _query_chat_messages(
+    client: 'PlexusDashboardClient',
+    account_id: str,
+    start_time: datetime,
+    end_time: datetime,
+    verbose: bool = False
+) -> List[Dict[str, Any]]:
+    """Query ChatMessages in time window."""
+    query = """
+    query ListChatMessagesByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listChatMessageByAccountIdAndCreatedAt(
+            accountId: $accountId,
+            createdAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                createdAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listChatMessageByAccountIdAndCreatedAt',
         verbose
     )
