@@ -201,7 +201,7 @@ class LambdaScoreProcessorStack(Stack):
             lambda_events.SqsEventSource(
                 queue=standard_request_queue,
                 batch_size=1,  # Process one message per Lambda invocation
-                max_concurrency=50,  # Max 50 concurrent pollers
+                max_concurrency=500,  # Max 500 concurrent pollers (leaves 500 for other Lambdas)
                 # report_batch_item_failures=False (default) - Lambda handles deletion manually
                 # On exception, SQS returns message to queue for retry
             )
