@@ -20,6 +20,7 @@ import os
 from typing import Dict, Any
 
 from .shared.naming import get_resource_name
+from .shared.config import EnvironmentConfig
 
 
 class MetricsAggregationStack(Stack):
@@ -54,15 +55,9 @@ class MetricsAggregationStack(Stack):
         Tags.of(self).add("Environment", environment)
         Tags.of(self).add("Service", "metrics-aggregation")
         Tags.of(self).add("ManagedBy", "CDK")
-        
-        # Get GraphQL credentials from environment variables
-        graphql_endpoint = os.environ.get('PLEXUS_API_URL')
-        graphql_api_key = os.environ.get('PLEXUS_API_KEY')
-        
-        if not graphql_endpoint or not graphql_api_key:
-            raise ValueError(
-                "PLEXUS_API_URL and PLEXUS_API_KEY must be set in .env file"
-            )
+
+        # Load environment-specific configuration from Secrets Manager
+        config = EnvironmentConfig(self, environment)
         
         # Load Amplify table ARNs from environment variables
         # Run discover_and_save_tables.py first to populate these
@@ -168,7 +163,10 @@ class MetricsAggregationStack(Stack):
                 resources=['*']  # AppSync doesn't support resource-level permissions for GraphQL
             )
         )
-        
+
+        # Grant read access to Secrets Manager
+        config.secret.grant_read(lambda_role)
+
         # Create Lambda function
         self.lambda_function = lambda_.Function(
             self,
@@ -181,8 +179,8 @@ class MetricsAggregationStack(Stack):
             timeout=Duration.seconds(60),
             memory_size=512,
             environment={
-                'GRAPHQL_ENDPOINT': graphql_endpoint,
-                'GRAPHQL_API_KEY': graphql_api_key,
+                'GRAPHQL_ENDPOINT': config.get_value("api-url"),
+                'GRAPHQL_API_KEY': config.get_value("api-key"),
                 'ENVIRONMENT': environment
             },
             description=f"Processes DynamoDB streams to update AggregatedMetrics ({environment})"
