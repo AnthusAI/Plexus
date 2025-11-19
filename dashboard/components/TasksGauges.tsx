@@ -77,7 +77,7 @@ export function TasksGauges({
   } = useTaskMetrics()
 
   // Transform metrics data to BaseGaugesData format
-  // For task metrics, we use the items data since tasks are tracked as items
+  // For task metrics, we query the tasks recordType from AggregatedMetrics
   const data: BaseGaugesData | null = metricsData ? {
     tasksPerHour: metricsData.itemsPerHour || 0,
     tasksAveragePerHour: metricsData.itemsAveragePerHour || 0,

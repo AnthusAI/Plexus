@@ -2,10 +2,10 @@
 
 import React from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
-import { useEvaluationMetrics } from '../hooks/useUnifiedMetrics'
+import { useProceduresMetrics } from '../hooks/useUnifiedMetrics'
 
-// Configuration for evaluation-specific gauges (two gauges: evaluations + score results)  
-const evaluationTasksGaugesConfig: BaseGaugesConfig = {
+// Configuration for procedures-specific gauges (two gauges: procedures + graph nodes)  
+const proceduresGaugesConfig: BaseGaugesConfig = {
   // Use grid layout to match ItemsGauges pattern
   layout: 'grid',
   gridCols: {
@@ -25,12 +25,12 @@ const evaluationTasksGaugesConfig: BaseGaugesConfig = {
   
   gauges: [
     {
-      key: 'evaluations',
-      title: 'Evaluations / hour',
-      valueKey: 'evaluationsPerHour',
-      averageKey: 'evaluationsAveragePerHour',
-      peakKey: 'evaluationsPeakHourly',
-      totalKey: 'evaluationsTotal24h',
+      key: 'procedures',
+      title: 'Procedures / hour',
+      valueKey: 'proceduresPerHour',
+      averageKey: 'proceduresAveragePerHour',
+      peakKey: 'proceduresPeakHourly',
+      totalKey: 'proceduresTotal24h',
       color: 'hsl(var(--chart-1))',
       unit: '',
       decimalPlaces: 0,
@@ -41,12 +41,12 @@ const evaluationTasksGaugesConfig: BaseGaugesConfig = {
       ]
     },
     {
-      key: 'scoreResults',
-      title: 'Score Results / hour',
-      valueKey: 'scoreResultsPerHour',
-      averageKey: 'scoreResultsAveragePerHour',
-      peakKey: 'scoreResultsPeakHourly',
-      totalKey: 'scoreResultsTotal24h',
+      key: 'graphNodes',
+      title: 'Graph Nodes / hour',
+      valueKey: 'graphNodesPerHour',
+      averageKey: 'graphNodesAveragePerHour',
+      peakKey: 'graphNodesPeakHourly',
+      totalKey: 'graphNodesTotal24h',
       color: 'hsl(var(--chart-2))',
       unit: '',
       decimalPlaces: 0,
@@ -59,31 +59,31 @@ const evaluationTasksGaugesConfig: BaseGaugesConfig = {
   ],
   chartAreas: [
     {
-      dataKey: 'evaluations',
-      label: 'Evaluations',
+      dataKey: 'procedures',
+      label: 'Procedures',
       color: 'var(--primary)',
       fillOpacity: 0.8
     },
     {
-      dataKey: 'scoreResults',
-      label: 'Score Results',
+      dataKey: 'graphNodes',
+      label: 'Graph Nodes',
       color: 'var(--secondary)',
       fillOpacity: 0.8
     }
   ],
   chartConfig: {
-    evaluations: {
-      label: 'Evaluations',
+    procedures: {
+      label: 'Procedures',
       color: 'hsl(var(--chart-1))',
     },
-    scoreResults: {
-      label: 'Score Results',
+    graphNodes: {
+      label: 'Graph Nodes',
       color: 'hsl(var(--chart-2))',
     },
   }
 }
 
-interface EvaluationTasksGaugesProps {
+interface ProceduresGaugesProps {
   className?: string
   // Override props for Storybook/testing
   overrideData?: Partial<BaseGaugesData>
@@ -95,39 +95,39 @@ interface EvaluationTasksGaugesProps {
   onErrorClick?: () => void
 }
 
-export function EvaluationTasksGauges({ 
+export function ProceduresGauges({ 
   className,
   overrideData,
   useRealData = true,
   disableEmergenceAnimation = false,
   onErrorClick
-}: EvaluationTasksGaugesProps) {
-  // Use evaluation metrics (items and score results filtered for evaluations)
+}: ProceduresGaugesProps) {
+  // Use procedures metrics (procedures and graph nodes)
   const { 
     metrics: metricsData, 
     isLoading, 
     error 
-  } = useEvaluationMetrics()
+  } = useProceduresMetrics()
 
   // Transform metrics data to BaseGaugesData format
-  // For evaluations, we use both task data (evaluation tasks) and scoreResults data (score results from evaluations)
+  // For procedures, we use both procedures data and graphNodes data
   const data: BaseGaugesData | null = metricsData ? {
-    // Evaluations data (from tasks with taskType: 'evaluation')
-    evaluationsPerHour: metricsData.itemsPerHour || 0,
-    evaluationsAveragePerHour: metricsData.itemsAveragePerHour || 0,
-    evaluationsPeakHourly: metricsData.itemsPeakHourly || 10, // Use higher baseline for evaluations
-    evaluationsTotal24h: metricsData.itemsTotal24h || 0,
+    // Procedures data
+    proceduresPerHour: metricsData.itemsPerHour || 0,
+    proceduresAveragePerHour: metricsData.itemsAveragePerHour || 0,
+    proceduresPeakHourly: metricsData.itemsPeakHourly || 10, // Use higher baseline for procedures
+    proceduresTotal24h: metricsData.itemsTotal24h || 0,
     
-    // Score Results data (from scoreResults with scoreResultType: 'evaluation')
-    scoreResultsPerHour: metricsData.scoreResultsPerHour || 0,
-    scoreResultsAveragePerHour: metricsData.scoreResultsAveragePerHour || 0,
-    scoreResultsPeakHourly: metricsData.scoreResultsPeakHourly || 300, // Use higher baseline for score results
-    scoreResultsTotal24h: metricsData.scoreResultsTotal24h || 0,
+    // Graph Nodes data
+    graphNodesPerHour: metricsData.scoreResultsPerHour || 0,
+    graphNodesAveragePerHour: metricsData.scoreResultsAveragePerHour || 0,
+    graphNodesPeakHourly: metricsData.scoreResultsPeakHourly || 50, // Use higher baseline for graph nodes
+    graphNodesTotal24h: metricsData.scoreResultsTotal24h || 0,
     
     chartData: metricsData.chartData?.map((point: any) => ({
       time: point.time,
-      evaluations: point.items || 0, // Map items to evaluations for chart display
-      scoreResults: point.scoreResults || 0, // Map scoreResults for chart display
+      procedures: point.items || 0, // Map items to procedures for chart display
+      graphNodes: point.scoreResults || 0, // Map scoreResults to graphNodes for chart display
       bucketStart: point.bucketStart,
       bucketEnd: point.bucketEnd
     })) || [],
@@ -139,15 +139,16 @@ export function EvaluationTasksGauges({
   return (
     <BaseGauges
       className={className}
-      config={evaluationTasksGaugesConfig}
+      config={proceduresGaugesConfig}
       data={useRealData ? data : null}
       isLoading={isLoading}
       error={error}
-title="Evaluations & Score Results, Last 24 Hours"
+      title="Procedures & Graph Nodes, Last 24 Hours"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}
       onErrorClick={onErrorClick}
     />
   )
-} 
+}
+
