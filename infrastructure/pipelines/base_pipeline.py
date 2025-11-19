@@ -78,6 +78,8 @@ class BasePipelineStack(Stack):
                 commands=[
                     "cd infrastructure",
                     "pip install -r requirements.txt",
+                    # Build Lambda functions (metrics aggregator, etc.) before CDK synth
+                    "./build_lambda.sh",
                     "npx cdk synth"
                 ],
                 primary_output_directory="infrastructure/cdk.out"
