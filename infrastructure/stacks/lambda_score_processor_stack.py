@@ -135,7 +135,7 @@ class LambdaScoreProcessorStack(Stack):
             role=lambda_role,
             timeout=Duration.seconds(300),  # 5 minutes
             memory_size=2048,
-            reserved_concurrent_executions=50,  # Max 50 concurrent Lambda executions
+            reserved_concurrent_executions=500,  # Reserve 500 slots (leaves 500 for other Lambdas)
             environment={
                 # SQS Queue URLs (from ScoringWorkerStack)
                 "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": standard_request_queue.queue_url,
