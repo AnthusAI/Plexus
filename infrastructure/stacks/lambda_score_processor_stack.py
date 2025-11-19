@@ -5,13 +5,19 @@ This stack manages the Lambda function that processes scoring jobs from SQS queu
 The function uses a container image built from the score-processor-lambda directory.
 """
 
+import os
+from datetime import datetime, timezone
 from aws_cdk import (
     Stack,
     Duration,
     Tags,
+    CustomResource,
     aws_lambda as lambda_,
+    aws_lambda_event_sources as lambda_events,
     aws_iam as iam,
     aws_ecr as ecr,
+    aws_sqs as sqs,
+    custom_resources as cr,
 )
 from constructs import Construct
 from .shared.naming import get_resource_name
@@ -32,7 +38,7 @@ class LambdaScoreProcessorStack(Stack):
         construct_id: str,
         environment: str,
         ecr_repository_name: str,
-        standard_request_queue_url: str,
+        standard_request_queue: sqs.IQueue,
         response_queue_url: str,
         **kwargs
     ) -> None:
@@ -44,7 +50,7 @@ class LambdaScoreProcessorStack(Stack):
             construct_id: Unique identifier for this stack
             environment: Environment name ('staging' or 'production')
             ecr_repository_name: Name of ECR repository containing Lambda container image
-            standard_request_queue_url: SQS queue URL for incoming requests
+            standard_request_queue: SQS queue for incoming requests
             response_queue_url: SQS queue URL for responses
             **kwargs: Additional stack properties
         """
@@ -97,6 +103,21 @@ class LambdaScoreProcessorStack(Stack):
             ]
         )
 
+        # Add Bedrock permissions for LLM invocations
+        lambda_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream",
+                ],
+                resources=[
+                    # Allow access to all Bedrock foundation models
+                    f"arn:aws:bedrock:*::foundation-model/*"
+                ]
+            )
+        )
+
         # Grant read access to Secrets Manager
         config.secret.grant_read(lambda_role)
 
@@ -108,15 +129,16 @@ class LambdaScoreProcessorStack(Stack):
             "ScoreProcessorFunction",
             function_name=get_resource_name("lambda", self.env_name, "score-processor"),
             code=lambda_.DockerImageCode.from_ecr(
-                repository=ecr_repository,  # Direct reference from pipeline
+                repository=ecr_repository,
                 tag_or_digest="latest"
             ),
             role=lambda_role,
             timeout=Duration.seconds(300),  # 5 minutes
             memory_size=2048,
+            reserved_concurrent_executions=500,  # Reserve 500 slots (leaves 500 for other Lambdas)
             environment={
                 # SQS Queue URLs (from ScoringWorkerStack)
-                "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": standard_request_queue_url,
+                "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": standard_request_queue.queue_url,
                 "PLEXUS_RESPONSE_WORKER_QUEUE_URL": response_queue_url,
 
                 # Plexus API Configuration (from Secrets Manager)
@@ -146,14 +168,41 @@ class LambdaScoreProcessorStack(Stack):
             description=f"Processes scoring jobs from SQS queue ({environment})"
         )
 
-        # Note: We're intentionally NOT adding SQS as an event source yet
-        # The function will be invoked manually until we're ready for automatic triggering
-        #
-        # Future: Add SQS trigger when ready
-        # from aws_cdk import aws_lambda_event_sources as lambda_events
-        # self.lambda_function.add_event_source(
-        #     lambda_events.SqsEventSource(
-        #         queue=standard_request_queue,
-        #         batch_size=1
-        #     )
-        # )
+        # Custom resource to force Lambda image update on every deployment
+        # This calls UpdateFunctionCode API which forces Lambda to pull latest image
+        update_lambda_code = cr.AwsCustomResource(
+            self,
+            "UpdateLambdaCode",
+            on_update=cr.AwsSdkCall(
+                service="Lambda",
+                action="updateFunctionCode",
+                parameters={
+                    "FunctionName": self.lambda_function.function_name,
+                    "ImageUri": f"{ecr_repository.repository_uri}:latest",
+                },
+                physical_resource_id=cr.PhysicalResourceId.of(
+                    f"UpdateLambdaCode-{datetime.now(timezone.utc).timestamp()}"
+                ),
+            ),
+            policy=cr.AwsCustomResourcePolicy.from_statements([
+                iam.PolicyStatement(
+                    actions=["lambda:UpdateFunctionCode"],
+                    resources=[self.lambda_function.function_arn]
+                )
+            ])
+        )
+
+        # Ensure custom resource runs after Lambda is created
+        update_lambda_code.node.add_dependency(self.lambda_function)
+
+        # Add SQS event source trigger
+        # This enables automatic Lambda invocation for each message in the queue
+        self.lambda_function.add_event_source(
+            lambda_events.SqsEventSource(
+                queue=standard_request_queue,
+                batch_size=1,  # Process one message per Lambda invocation
+                max_concurrency=500,  # Max 500 concurrent pollers (leaves 500 for other Lambdas)
+                # report_batch_item_failures=False (default) - Lambda handles deletion manually
+                # On exception, SQS returns message to queue for retry
+            )
+        )

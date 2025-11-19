@@ -16,6 +16,7 @@ from aws_cdk import (
 from constructs import Construct
 from stacks.scoring_worker_stack import ScoringWorkerStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
+from stacks.lambda_fanout_stack import LambdaFanoutStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 
 
@@ -95,6 +96,10 @@ class BasePipelineStack(Stack):
             "BuildLambdaImage",
             input=source,
             commands=[
+                # Login to Docker Hub to avoid rate limits on base image pulls
+                "export DOCKERHUB_USERNAME=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --query SecretString --output text | jq -r .username)",
+                "export DOCKERHUB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --query SecretString --output text | jq -r .password)",
+                "echo $DOCKERHUB_PASSWORD | docker login --username $DOCKERHUB_USERNAME --password-stdin",
                 # Login to ECR
                 f"aws ecr get-login-password --region {kwargs.get('env').region if kwargs.get('env') else 'us-west-2'} | docker login --username AWS --password-stdin {ecr_repository.repository_uri.split('/')[0]}",
                 # Build and push Docker image with proper flags for Lambda
@@ -123,6 +128,11 @@ class BasePipelineStack(Stack):
                 iam.PolicyStatement(
                     actions=["ecr:GetAuthorizationToken"],
                     resources=["*"]
+                ),
+                # Grant permission to read Docker Hub credentials from Secrets Manager
+                iam.PolicyStatement(
+                    actions=["secretsmanager:GetSecretValue"],
+                    resources=["arn:aws:secretsmanager:*:*:secret:dockerhub-credentials-*"]
                 )
             ]
         )
@@ -180,15 +190,26 @@ class DeploymentStage(cdk.Stage):
         )
 
         # Deploy Lambda score processor stack (uses the same queues)
-        # Configuration is loaded from SSM Parameter Store by the stack
-        LambdaScoreProcessorStack(
+        # Configuration is loaded from Secrets Manager by the stack
+        lambda_score_processor_stack = LambdaScoreProcessorStack(
             self,
             "LambdaScoreProcessor",
             environment=environment,
             ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
-            standard_request_queue_url=scoring_worker_stack.standard_request_queue.queue_url,
+            standard_request_queue=scoring_worker_stack.standard_request_queue,
             response_queue_url=scoring_worker_stack.response_queue.queue_url,
             stack_name=f"plexus-lambda-score-processor-{environment}",
+            env=kwargs.get("env")
+        )
+
+        # Fan-out Lambda stack
+        LambdaFanoutStack(
+            self,
+            "LambdaFanout",
+            environment=environment,
+            score_processor_lambda_arn=lambda_score_processor_stack.lambda_function.function_arn,
+            request_queue=scoring_worker_stack.standard_request_queue,
+            stack_name=f"plexus-lambda-fanout-{environment}",
             env=kwargs.get("env")
         )
 
