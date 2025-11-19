@@ -84,15 +84,65 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 print(f"[1/3] Retrieved {len(records)} {record_type} records")
                 
-                # Count records into all buckets efficiently (O(n))
-                print(f"[2/3] Counting into buckets...")
-                bucket_counts = count_records_efficiently(records, account_id, record_type)
-                
-                print(f"[2/3] Generated {len(bucket_counts)} bucket updates")
+                # For items, count three times: all, prediction, evaluation
+                if record_type == 'items':
+                    # Count all items
+                    print(f"[2/3] Counting all items into buckets...")
+                    bucket_counts = count_records_efficiently(records, account_id, 'items')
+                    print(f"[2/3] Generated {len(bucket_counts)} bucket updates for items")
+                    
+                    # Count prediction items
+                    print(f"[2/3] Counting predictionItems into buckets...")
+                    prediction_bucket_counts = count_records_efficiently(
+                        records, account_id, 'predictionItems',
+                        filter_field='createdByType', filter_value='prediction'
+                    )
+                    print(f"[2/3] Generated {len(prediction_bucket_counts)} bucket updates for predictionItems")
+                    
+                    # Count evaluation items
+                    print(f"[2/3] Counting evaluationItems into buckets...")
+                    evaluation_bucket_counts = count_records_efficiently(
+                        records, account_id, 'evaluationItems',
+                        filter_field='createdByType', filter_value='evaluation'
+                    )
+                    print(f"[2/3] Generated {len(evaluation_bucket_counts)} bucket updates for evaluationItems")
+                    
+                    # Combine all bucket counts
+                    all_bucket_counts = bucket_counts + prediction_bucket_counts + evaluation_bucket_counts
+                # For scoreResults, count three times: all, prediction, evaluation
+                elif record_type == 'scoreResults':
+                    # Count all score results
+                    print(f"[2/3] Counting all scoreResults into buckets...")
+                    bucket_counts = count_records_efficiently(records, account_id, 'scoreResults')
+                    print(f"[2/3] Generated {len(bucket_counts)} bucket updates for scoreResults")
+                    
+                    # Count prediction score results
+                    print(f"[2/3] Counting predictionScoreResults into buckets...")
+                    prediction_bucket_counts = count_records_efficiently(
+                        records, account_id, 'predictionScoreResults',
+                        filter_field='type', filter_value='prediction'
+                    )
+                    print(f"[2/3] Generated {len(prediction_bucket_counts)} bucket updates for predictionScoreResults")
+                    
+                    # Count evaluation score results
+                    print(f"[2/3] Counting evaluationScoreResults into buckets...")
+                    evaluation_bucket_counts = count_records_efficiently(
+                        records, account_id, 'evaluationScoreResults',
+                        filter_field='type', filter_value='evaluation'
+                    )
+                    print(f"[2/3] Generated {len(evaluation_bucket_counts)} bucket updates for evaluationScoreResults")
+                    
+                    # Combine all bucket counts
+                    all_bucket_counts = bucket_counts + prediction_bucket_counts + evaluation_bucket_counts
+                else:
+                    # Count records into all buckets efficiently (O(n))
+                    print(f"[2/3] Counting into buckets...")
+                    all_bucket_counts = count_records_efficiently(records, account_id, record_type)
+                    print(f"[2/3] Generated {len(all_bucket_counts)} bucket updates")
                 
                 # Update all buckets in AggregatedMetrics
                 print(f"[3/3] Updating AggregatedMetrics...")
-                updates, errors = update_buckets(graphql_client, bucket_counts)
+                updates, errors = update_buckets(graphql_client, all_bucket_counts)
                 
                 total_updates += updates
                 total_errors += errors
@@ -177,11 +227,14 @@ def determine_record_type(event_source_arn: str) -> str:
         event_source_arn: Stream ARN like 'arn:aws:dynamodb:...:table/Item-xxx/stream/...'
         
     Returns:
-        Record type ('items', 'scoreResults', 'tasks', 'evaluations') or empty string
+        Record type or empty string if not recognized
     """
     arn_lower = event_source_arn.lower()
     
-    if 'item' in arn_lower and 'feedback' not in arn_lower:
+    # Check for specific types first (order matters - check feedbackitem before item)
+    if 'feedbackitem' in arn_lower:
+        return 'feedbackItems'
+    elif 'item' in arn_lower:
         return 'items'
     elif 'scoreresult' in arn_lower:
         return 'scoreResults'
@@ -189,6 +242,13 @@ def determine_record_type(event_source_arn: str) -> str:
         return 'tasks'
     elif 'evaluation' in arn_lower:
         return 'evaluations'
+    elif 'procedure' in arn_lower:
+        return 'procedures'
+    elif 'graphnode' in arn_lower:
+        return 'graphNodes'
+    elif 'chatsession' in arn_lower:
+        return 'chatSessions'
+    # chatMessages excluded - no accountId field, belongs to sessions
     
     return ''
 

@@ -59,6 +59,7 @@ class TestProcedureServiceRootNodeLogic:
             # Verify root node creation was called with correct parameters (including code)
             mock_create_node.assert_called_once_with(
                 client=self.mock_client,
+                accountId="test-account-id",
                 procedureId="test-procedure-id",
                 parentNodeId=None,  # Root node has no parent
                 name="Root",

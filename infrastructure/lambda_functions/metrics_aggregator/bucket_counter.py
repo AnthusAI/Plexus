@@ -121,7 +121,9 @@ def get_time_window() -> Tuple[datetime, datetime]:
 
 def count_records_efficiently(records: List[Dict[str, any]], 
                               account_id: str, 
-                              record_type: str) -> List[Dict[str, any]]:
+                              record_type: str,
+                              filter_field: str = None,
+                              filter_value: str = None) -> List[Dict[str, any]]:
     """
     Efficiently count records into all relevant buckets.
     
@@ -132,6 +134,8 @@ def count_records_efficiently(records: List[Dict[str, any]],
         records: List of records with 'createdAt' or 'updatedAt' timestamps
         account_id: Account ID
         record_type: Type of records
+        filter_field: Optional field name to filter by (e.g., 'type')
+        filter_value: Optional value to filter for (e.g., 'prediction')
         
     Returns:
         List of bucket counts ready for GraphQL updates
@@ -140,8 +144,15 @@ def count_records_efficiently(records: List[Dict[str, any]],
     
     processed = 0
     skipped = 0
+    filtered_out = 0
     
     for record in records:
+        # Apply filter if specified
+        if filter_field and filter_value:
+            if record.get(filter_field) != filter_value:
+                filtered_out += 1
+                continue
+        
         # Extract timestamp (try createdAt first, then updatedAt)
         timestamp_str = record.get('createdAt') or record.get('updatedAt')
         if not timestamp_str:
@@ -159,7 +170,8 @@ def count_records_efficiently(records: List[Dict[str, any]],
     bucket_counts = counter.get_bucket_counts()
     
     # Log counting summary with cross-checks
-    print(f"  Processed: {processed} records ({skipped} skipped - no timestamp)")
+    filter_msg = f", {filtered_out} filtered out" if filter_field else ""
+    print(f"  Processed: {processed} records ({skipped} skipped - no timestamp{filter_msg})")
     
     # Cross-check: sum of 1-min buckets should equal processed records
     one_min_total = sum(b['count'] for b in bucket_counts if b['number_of_minutes'] == 1)

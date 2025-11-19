@@ -23,7 +23,7 @@ def query_items_in_window(graphql_client,
         end_time: End of time window
         
     Returns:
-        List of all items (id and createdAt only for efficiency)
+        List of all items (id, createdAt, and createdByType for filtering)
     """
     query = """
     query ListItemsByTime(
@@ -41,6 +41,7 @@ def query_items_in_window(graphql_client,
             items {
                 id
                 createdAt
+                createdByType
             }
             nextToken
         }
@@ -73,7 +74,7 @@ def query_score_results_in_window(graphql_client,
         end_time: End of time window
         
     Returns:
-        List of all score results (id and updatedAt only for efficiency)
+        List of all score results (id, updatedAt, and type for filtering)
     """
     query = """
     query ListScoreResultsByTime(
@@ -91,6 +92,7 @@ def query_score_results_in_window(graphql_client,
             items {
                 id
                 updatedAt
+                type
             }
             nextToken
         }
@@ -209,6 +211,201 @@ def query_evaluations_in_window(graphql_client,
     )
 
 
+def query_feedback_items_in_window(graphql_client,
+                                   account_id: str,
+                                   start_time: datetime,
+                                   end_time: datetime) -> List[Dict[str, Any]]:
+    """Query all FeedbackItems in a time window with pagination."""
+    query = """
+    query ListFeedbackItemsByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listFeedbackItemByAccountIdAndUpdatedAt(
+            accountId: $accountId,
+            updatedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                updatedAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        graphql_client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listFeedbackItemByAccountIdAndCreatedAt'
+    )
+
+
+def query_procedures_in_window(graphql_client,
+                               account_id: str,
+                               start_time: datetime,
+                               end_time: datetime) -> List[Dict[str, Any]]:
+    """Query all Procedures in a time window with pagination."""
+    query = """
+    query ListProceduresByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listProcedureByAccountIdAndUpdatedAt(
+            accountId: $accountId,
+            updatedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                updatedAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        graphql_client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listProcedureByAccountIdAndUpdatedAt'
+    )
+
+
+def query_graph_nodes_in_window(graphql_client,
+                                account_id: str,
+                                start_time: datetime,
+                                end_time: datetime) -> List[Dict[str, Any]]:
+    """Query all GraphNodes in a time window with pagination."""
+    query = """
+    query ListGraphNodesByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listGraphNodeByAccountIdAndCreatedAt(
+            accountId: $accountId,
+            createdAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                createdAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        graphql_client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listGraphNodeByAccountIdAndCreatedAt'
+    )
+
+
+def query_chat_sessions_in_window(graphql_client,
+                                  account_id: str,
+                                  start_time: datetime,
+                                  end_time: datetime) -> List[Dict[str, Any]]:
+    """Query all ChatSessions in a time window with pagination."""
+    query = """
+    query ListChatSessionsByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listChatSessionByAccountIdAndUpdatedAt(
+            accountId: $accountId,
+            updatedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                updatedAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        graphql_client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listChatSessionByAccountIdAndUpdatedAt'
+    )
+
+
+def query_chat_messages_in_window(graphql_client,
+                                  account_id: str,
+                                  start_time: datetime,
+                                  end_time: datetime) -> List[Dict[str, Any]]:
+    """Query all ChatMessages in a time window with pagination."""
+    query = """
+    query ListChatMessagesByTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listChatMessageByAccountIdAndCreatedAt(
+            accountId: $accountId,
+            createdAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                createdAt
+            }
+            nextToken
+        }
+    }
+    """
+    
+    return _paginated_query(
+        graphql_client,
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
+        'listChatMessageByAccountIdAndCreatedAt'
+    )
+
+
 def _paginated_query(graphql_client,
                     query: str,
                     variables: Dict[str, Any],
@@ -267,11 +464,16 @@ def _paginated_query(graphql_client,
 
 
 # Map record types to query functions
+# Note: chatMessages excluded - no accountId field, belongs to sessions
 QUERY_FUNCTIONS = {
     'items': query_items_in_window,
     'scoreResults': query_score_results_in_window,
     'tasks': query_tasks_in_window,
-    'evaluations': query_evaluations_in_window
+    'evaluations': query_evaluations_in_window,
+    'feedbackItems': query_feedback_items_in_window,
+    'procedures': query_procedures_in_window,
+    'graphNodes': query_graph_nodes_in_window,
+    'chatSessions': query_chat_sessions_in_window
 }
 
 

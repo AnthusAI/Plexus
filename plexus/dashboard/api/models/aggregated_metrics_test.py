@@ -101,7 +101,7 @@ def test_list_by_time_range(mock_client, sample_metrics_data):
     """Test querying metrics by time range"""
     # Setup mock response
     mock_client.execute.return_value = {
-        'listAggregatedMetricsByAccountIdAndTimeRangeStart': {
+        'listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType': {
             'items': [sample_metrics_data],
             'nextToken': None
         }
@@ -137,7 +137,7 @@ def test_list_by_time_range_with_record_type_filter(mock_client, sample_metrics_
     data_scores['recordType'] = 'scoreResults'
     
     mock_client.execute.return_value = {
-        'listAggregatedMetricsByAccountIdAndTimeRangeStart': {
+        'listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType': {
             'items': [data_items, data_scores],
             'nextToken': None
         }
@@ -173,13 +173,13 @@ def test_list_by_time_range_pagination(mock_client, sample_metrics_data):
     # Setup mock to return two pages
     mock_client.execute.side_effect = [
         {
-            'listAggregatedMetricsByAccountIdAndTimeRangeStart': {
+            'listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType': {
                 'items': [data1],
                 'nextToken': 'token-123'
             }
         },
         {
-            'listAggregatedMetricsByAccountIdAndTimeRangeStart': {
+            'listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType': {
                 'items': [data2],
                 'nextToken': None
             }
@@ -211,7 +211,7 @@ def test_create_or_update_creates_new(mock_client, sample_metrics_data):
     mock_client.execute.side_effect = [
         # First call: list_by_time_range query
         {
-            'listAggregatedMetricsByAccountIdAndTimeRangeStart': {
+            'listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType': {
                 'items': [],
                 'nextToken': None
             }
@@ -253,7 +253,7 @@ def test_create_or_update_updates_existing(mock_client, sample_metrics_data):
     mock_client.execute.side_effect = [
         # First call: list_by_time_range query
         {
-            'listAggregatedMetricsByAccountIdAndTimeRangeStart': {
+            'listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType': {
                 'items': [sample_metrics_data],
                 'nextToken': None
             }

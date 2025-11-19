@@ -35,7 +35,30 @@ load_dotenv()
 console = Console()
 
 # Record types to process
-RECORD_TYPES = ['items', 'scoreResults', 'tasks', 'evaluations']
+# Ordered from lowest to highest volume - high-volume types processed last
+# Note: chatMessages excluded - no accountId field, belongs to sessions
+RECORD_TYPES = [
+    'tasks',           # Low volume
+    'evaluations',     # Low volume
+    'procedures',      # Low volume
+    'chatSessions',    # Low volume
+    'graphNodes',      # Low volume
+    'feedbackItems',   # Medium volume
+    'items',           # HIGH volume - 3 metrics computed
+    'predictionItems',        # Filtered items
+    'evaluationItems',        # Filtered items
+    'scoreResults',    # HIGH volume - 3 metrics computed
+    'predictionScoreResults',  # Filtered scoreResults
+    'evaluationScoreResults',  # Filtered scoreResults
+]
+
+# Mapping of record types to their filter settings
+RECORD_TYPE_FILTERS = {
+    'predictionItems': {'filter_field': 'createdByType', 'filter_value': 'prediction'},
+    'evaluationItems': {'filter_field': 'createdByType', 'filter_value': 'evaluation'},
+    'predictionScoreResults': {'filter_field': 'type', 'filter_value': 'prediction'},
+    'evaluationScoreResults': {'filter_field': 'type', 'filter_value': 'evaluation'},
+}
 
 
 def get_account_id_from_env(client: PlexusDashboardClient) -> str:
@@ -189,11 +212,14 @@ def verify_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                 
                 # Count into buckets
                 task = progress.add_task("Counting into buckets...", total=None)
+                # Get filter settings if this is a filtered record type
+                filter_settings = RECORD_TYPE_FILTERS.get(rec_type, {})
                 computed_counts = count_records_efficiently(
                     records,
                     account_id,
                     rec_type,
-                    verbose=False
+                    verbose=False,
+                    **filter_settings
                 )
                 progress.update(task, completed=True)
                 
@@ -327,11 +353,14 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                 
                 # Count into buckets
                 task = progress.add_task("Counting into buckets...", total=None)
+                # Get filter settings if this is a filtered record type
+                filter_settings = RECORD_TYPE_FILTERS.get(rec_type, {})
                 computed_counts = count_records_efficiently(
                     records,
                     account_id,
                     rec_type,
-                    verbose=True  # Show counting details
+                    verbose=True,  # Show counting details
+                    **filter_settings
                 )
                 progress.update(task, completed=True)
                 
