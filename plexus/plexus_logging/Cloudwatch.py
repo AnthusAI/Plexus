@@ -7,27 +7,34 @@ class CloudWatchLogger:
     def __init__(self, namespace="Plexus"):
         self.namespace = namespace
         self.cloudwatch_client = None
-        
-        # Debug logging for AWS credentials
+
+        # Get AWS region
+        aws_region = os.getenv('AWS_REGION') or os.getenv('AWS_REGION_NAME') or os.getenv('AWS_DEFAULT_REGION')
+
+        if not aws_region:
+            logging.warning("AWS region not set, CloudWatch metrics disabled")
+            return
+
+        # Check if explicit credentials are provided (EC2 workers)
         aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
         aws_secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-        aws_region = os.getenv('AWS_REGION') or os.getenv('AWS_REGION_NAME') or os.getenv('AWS_DEFAULT_REGION')
-        
-        logging.debug(f"AWS Credentials Check - Access Key: {'Present' if aws_access_key else 'Missing'}, "
-                     f"Secret Key: {'Present' if aws_secret_key else 'Missing'}, "
-                     f"Region: {'Present' if aws_region else 'Missing'}")
-        
-        if aws_access_key and aws_secret_key and aws_region:
-            try:
-                self.cloudwatch_client = boto3.client('cloudwatch', 
+
+        try:
+            # If explicit credentials provided, use them (EC2 workers)
+            # Otherwise, use default credentials (Lambda IAM role, EC2 instance profile, etc.)
+            if aws_access_key and aws_secret_key:
+                logging.debug("Using explicit AWS credentials from environment")
+                self.cloudwatch_client = boto3.client('cloudwatch',
                                                     region_name=aws_region,
                                                     aws_access_key_id=aws_access_key,
                                                     aws_secret_access_key=aws_secret_key)
-                logging.info("Successfully initialized CloudWatch client")
-            except Exception as e:
-                logging.error(f"Failed to initialize CloudWatch client: {str(e)}")
-        else:
-            logging.warning("CloudWatch client not initialized due to missing credentials")
+            else:
+                logging.debug("Using default AWS credentials (IAM role/instance profile)")
+                self.cloudwatch_client = boto3.client('cloudwatch', region_name=aws_region)
+
+            logging.info(f"Successfully initialized CloudWatch client in region {aws_region}")
+        except Exception as e:
+            logging.error(f"Failed to initialize CloudWatch client: {str(e)}")
 
     def log_metric(self, metric_name, metric_value, dimensions):
         """
