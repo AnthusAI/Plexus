@@ -31,11 +31,35 @@ if (getResourceByShareTokenFunction) {
     );
 }
 
-// Get reference to the Task table and enable streams
+// Enable streams on tables for metrics aggregation
 const taskTable = backend.data.resources.tables.Task;
-const cfnTable = taskTable.node.defaultChild as dynamodb.CfnTable;
-if (cfnTable) {
-    cfnTable.streamSpecification = {
+const taskCfnTable = taskTable.node.defaultChild as dynamodb.CfnTable;
+if (taskCfnTable) {
+    taskCfnTable.streamSpecification = {
+        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    };
+}
+
+const itemTable = backend.data.resources.tables.Item;
+const itemCfnTable = itemTable.node.defaultChild as dynamodb.CfnTable;
+if (itemCfnTable) {
+    itemCfnTable.streamSpecification = {
+        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    };
+}
+
+const scoreResultTable = backend.data.resources.tables.ScoreResult;
+const scoreResultCfnTable = scoreResultTable.node.defaultChild as dynamodb.CfnTable;
+if (scoreResultCfnTable) {
+    scoreResultCfnTable.streamSpecification = {
+        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    };
+}
+
+const evaluationTable = backend.data.resources.tables.Evaluation;
+const evaluationCfnTable = evaluationTable.node.defaultChild as dynamodb.CfnTable;
+if (evaluationCfnTable) {
+    evaluationCfnTable.streamSpecification = {
         streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
     };
 }
