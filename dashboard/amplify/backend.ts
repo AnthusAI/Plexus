@@ -64,6 +64,46 @@ if (evaluationCfnTable) {
     };
 }
 
+const feedbackItemTable = backend.data.resources.tables.FeedbackItem;
+const feedbackItemCfnTable = feedbackItemTable.node.defaultChild as dynamodb.CfnTable;
+if (feedbackItemCfnTable) {
+    feedbackItemCfnTable.streamSpecification = {
+        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    };
+}
+
+const procedureTable = backend.data.resources.tables.Procedure;
+const procedureCfnTable = procedureTable.node.defaultChild as dynamodb.CfnTable;
+if (procedureCfnTable) {
+    procedureCfnTable.streamSpecification = {
+        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    };
+}
+
+const graphNodeTable = backend.data.resources.tables.GraphNode;
+const graphNodeCfnTable = graphNodeTable.node.defaultChild as dynamodb.CfnTable;
+if (graphNodeCfnTable) {
+    graphNodeCfnTable.streamSpecification = {
+        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    };
+}
+
+const chatSessionTable = backend.data.resources.tables.ChatSession;
+const chatSessionCfnTable = chatSessionTable.node.defaultChild as dynamodb.CfnTable;
+if (chatSessionCfnTable) {
+    chatSessionCfnTable.streamSpecification = {
+        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    };
+}
+
+const chatMessageTable = backend.data.resources.tables.ChatMessage;
+const chatMessageCfnTable = chatMessageTable.node.defaultChild as dynamodb.CfnTable;
+if (chatMessageCfnTable) {
+    chatMessageCfnTable.streamSpecification = {
+        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    };
+}
+
 // Create the TaskDispatcher stack with the table reference
 const taskDispatcherStack = new TaskDispatcherStack(
     backend.createStack('TaskDispatcherStack'),
