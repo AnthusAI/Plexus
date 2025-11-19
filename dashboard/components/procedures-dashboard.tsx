@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
 import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
+import { ProceduresGauges } from "@/components/ProceduresGauges"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
@@ -836,6 +837,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
       {/* Procedures Content */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* ProceduresGauges at the top - only show when not in mobile selected procedure view */}
+        {!(selectedProcedureId && isNarrowViewport) && (
+          <div className="pb-3">
+            <ProceduresGauges />
+          </div>
+        )}
+        
         <AnimatePresence mode="popLayout">
           <motion.div 
             key="procedures-layout"
