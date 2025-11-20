@@ -180,25 +180,56 @@ class AggregatedMetrics(BaseModel):
         Returns:
             List of AggregatedMetrics instances
         """
-        query = """
-        query ListAggregatedMetricsByTimeRange(
-            $accountId: String!,
-            $startTime: AWSDateTime!,
-            $nextToken: String
-        ) {
-            listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType(
-                accountId: $accountId,
-                timeRangeStartRecordType: { beginsWith: { timeRangeStart: $startTime } },
-                limit: 1000,
-                nextToken: $nextToken
+        # Use the byAccountRecordType GSI when record_type is provided
+        # GSI: idx("accountId").sortKeys(["recordType", "timeRangeStart"])
+        if record_type:
+            query = """
+            query ListAggregatedMetricsByAccountRecordType(
+                $accountId: String!,
+                $recordType: String!,
+                $startTime: String!,
+                $endTime: String!,
+                $nextToken: String
             ) {
-                items {
-                    %s
+                listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart(
+                    accountId: $accountId,
+                    recordTypeTimeRangeStart: {
+                        between: [
+                            { recordType: $recordType, timeRangeStart: $startTime }
+                            { recordType: $recordType, timeRangeStart: $endTime }
+                        ]
+                    },
+                    limit: 1000,
+                    nextToken: $nextToken
+                ) {
+                    items {
+                        %s
+                    }
+                    nextToken
                 }
-                nextToken
             }
-        }
-        """ % cls.fields()
+            """ % cls.fields()
+        else:
+            # Without record_type, use the byAccountTimeRangeRecord GSI
+            query = """
+            query ListAggregatedMetricsByTimeRange(
+                $accountId: String!,
+                $startTime: AWSDateTime!,
+                $nextToken: String
+            ) {
+                listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType(
+                    accountId: $accountId,
+                    timeRangeStartRecordType: { ge: { timeRangeStart: $startTime } },
+                    limit: 1000,
+                    nextToken: $nextToken
+                ) {
+                    items {
+                        %s
+                    }
+                    nextToken
+                }
+            }
+            """ % cls.fields()
 
         # Paginate through all results
         all_items = []
@@ -209,26 +240,36 @@ class AggregatedMetrics(BaseModel):
                 'accountId': account_id,
                 'startTime': start_time.isoformat().replace('+00:00', 'Z')
             }
+            if record_type:
+                variables['recordType'] = record_type
+                variables['endTime'] = end_time.isoformat().replace('+00:00', 'Z')
             if next_token:
                 variables['nextToken'] = next_token
                 
             result = client.execute(query, variables)
-            items = result.get('listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType', {}).get('items', [])
+            if record_type:
+                items = result.get('listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart', {}).get('items', [])
+            else:
+                items = result.get('listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType', {}).get('items', [])
             
-            # Filter by time range and record type in memory
-            filtered_items = []
-            for item in items:
-                item_time_str = item.get('timeRangeStart')
-                if item_time_str:
-                    item_time = datetime.fromisoformat(item_time_str.replace('Z', '+00:00'))
-                    if start_time <= item_time <= end_time:
-                        if record_type is None or item.get('recordType') == record_type:
+            # When using byAccountRecordType GSI with between, no need to filter
+            # When using byAccountTimeRangeRecord GSI, filter by time range and record type in memory
+            if not record_type:
+                filtered_items = []
+                for item in items:
+                    item_time_str = item.get('timeRangeStart')
+                    if item_time_str:
+                        item_time = datetime.fromisoformat(item_time_str.replace('Z', '+00:00'))
+                        if start_time <= item_time <= end_time:
                             filtered_items.append(item)
-            items = filtered_items
+                items = filtered_items
             
             all_items.extend([cls.from_dict(item, client) for item in items])
             
-            next_token = result.get('listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType', {}).get('nextToken')
+            if record_type:
+                next_token = result.get('listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart', {}).get('nextToken')
+            else:
+                next_token = result.get('listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType', {}).get('nextToken')
             if not next_token:
                 break
         

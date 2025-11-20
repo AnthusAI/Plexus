@@ -9,12 +9,15 @@ Commands:
 
 import click
 import os
+import asyncio
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskID
 from dotenv import load_dotenv
 
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -306,8 +309,14 @@ def verify_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
 @click.option('--end', help='End time (flexible format)')
 @click.option('--record-type', default='all', help='Specific record type or "all"')
 @click.option('--force', is_flag=True, help='Update even if counts match')
-def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str], record_type: str, force: bool):
-    """Recompute and update aggregated metrics."""
+@click.option('--concurrency', type=int, default=10, help='Number of parallel workers (default: 10, max recommended: 50)')
+def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str], record_type: str, force: bool, concurrency: int):
+    """
+    Recompute and update aggregated metrics with parallel processing.
+    
+    Buckets are written immediately as they're computed, using multiple parallel workers
+    for maximum throughput. Increase --concurrency for faster updates of large time ranges.
+    """
     try:
         # Create client and get account
         client = create_client()
@@ -318,9 +327,10 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
         
         # Display header
         console.print(Panel(
-            f"[bold cyan]Update Metrics[/bold cyan]\n"
+            f"[bold cyan]Update Metrics (Parallel)[/bold cyan]\n"
             f"Time Range: {format_time_range(start_time, end_time)}\n"
             f"Account: {os.environ.get('PLEXUS_ACCOUNT_KEY')}\n"
+            f"Concurrency: {concurrency} workers\n"
             f"[red]{'Force update mode' if force else 'Will update only changed counts'}[/red]",
             expand=False
         ))
@@ -331,28 +341,34 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
         total_updates = 0
         total_skipped = 0
         
+        # Process each record type
         for rec_type in types_to_update:
             console.print(f"\n[bold]Updating {rec_type}...[/bold]")
             
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 console=console
             ) as progress:
                 # Query raw records
-                task = progress.add_task(f"Querying {rec_type}...", total=None)
+                query_task = progress.add_task(f"Querying {rec_type}...", total=None)
+                console.print(f"[dim]Querying {rec_type} records from {format_time_range(start_time, end_time)}...[/dim]")
                 records = query_records_for_counting(
                     client,
                     account_id,
                     rec_type,
                     start_time,
                     end_time,
-                    verbose=False
+                    verbose=True  # Show pagination progress
                 )
-                progress.update(task, completed=True)
+                console.print(f"[dim]Retrieved {len(records)} {rec_type} records[/dim]")
+                progress.update(query_task, completed=True)
                 
                 # Count into buckets
-                task = progress.add_task("Counting into buckets...", total=None)
+                count_task = progress.add_task("Counting into buckets...", total=None)
+                console.print(f"[dim]Counting {len(records)} records into time buckets...[/dim]")
                 # Get filter settings if this is a filtered record type
                 filter_settings = RECORD_TYPE_FILTERS.get(rec_type, {})
                 computed_counts = count_records_efficiently(
@@ -362,7 +378,8 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                     verbose=True,  # Show counting details
                     **filter_settings
                 )
-                progress.update(task, completed=True)
+                console.print(f"[dim]Generated {len(computed_counts)} bucket counts[/dim]")
+                progress.update(count_task, completed=True)
                 
                 # Query existing metrics if not forcing
                 stored_lookup = {}
@@ -384,11 +401,8 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                         )
                         stored_lookup[key] = metric.count
                 
-                # Update metrics
-                task = progress.add_task("Updating metrics...", total=len(computed_counts))
-                updates = 0
-                skipped = 0
-                
+                # Filter buckets that need updating
+                buckets_to_update = []
                 for computed in computed_counts:
                     key = (
                         computed['time_range_start'].isoformat(),
@@ -399,29 +413,92 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                     
                     # Skip if counts match and not forcing
                     if not force and stored_count == computed_count:
-                        skipped += 1
-                        progress.update(task, advance=1)
+                        total_skipped += 1
                         continue
                     
-                    # Update via ORM
-                    AggregatedMetrics.create_or_update(
-                        client,
-                        account_id=account_id,
-                        record_type=rec_type,
-                        time_range_start=computed['time_range_start'],
-                        time_range_end=computed['time_range_end'],
-                        number_of_minutes=computed['number_of_minutes'],
-                        count=computed_count,
-                        complete=computed['complete']
-                    )
-                    updates += 1
-                    progress.update(task, advance=1)
+                    buckets_to_update.append(computed)
+                
+                # Sort buckets by time (most recent first) so dashboard shows recent data immediately
+                buckets_to_update.sort(
+                    key=lambda b: (b['time_range_start'], b['number_of_minutes']),
+                    reverse=True
+                )
+                
+                if not buckets_to_update:
+                    console.print(f"[yellow]No updates needed for {rec_type}[/yellow]")
+                    continue
+                
+                # Show time range being updated
+                oldest_bucket = min(buckets_to_update, key=lambda b: b['time_range_start'])
+                newest_bucket = max(buckets_to_update, key=lambda b: b['time_range_start'])
+                console.print(f"[dim]Updating {len(buckets_to_update)} buckets from {newest_bucket['time_range_start'].strftime('%Y-%m-%d %H:%M')} back to {oldest_bucket['time_range_start'].strftime('%Y-%m-%d %H:%M')} (most recent first)[/dim]")
+                
+                # Update metrics in parallel
+                task = progress.add_task(
+                    f"Updating {len(buckets_to_update)} buckets...", 
+                    total=len(buckets_to_update)
+                )
+                
+                # Thread-local storage for clients (one per thread)
+                thread_local = threading.local()
+                
+                def get_thread_client():
+                    """Get or create a client for the current thread."""
+                    if not hasattr(thread_local, 'client'):
+                        thread_local.client = create_client()
+                    return thread_local.client
+                
+                def update_bucket(bucket_data: Dict[str, Any]) -> bool:
+                    """Update a single bucket. Returns True on success."""
+                    try:
+                        # Use thread-local client to avoid creating new clients constantly
+                        thread_client = get_thread_client()
+                        AggregatedMetrics.create_or_update(
+                            thread_client,
+                            account_id=account_id,
+                            record_type=rec_type,
+                            time_range_start=bucket_data['time_range_start'],
+                            time_range_end=bucket_data['time_range_end'],
+                            number_of_minutes=bucket_data['number_of_minutes'],
+                            count=bucket_data['count'],
+                            complete=bucket_data['complete']
+                        )
+                        return True
+                    except Exception as e:
+                        console.print(f"[red]Error updating bucket: {e}[/red]")
+                        return False
+                
+                # Process buckets in parallel
+                updates = 0
+                errors = 0
+                last_report = 0
+                report_interval = max(10, len(buckets_to_update) // 20)  # Report every 5% or 10 buckets
+                
+                with ThreadPoolExecutor(max_workers=concurrency) as executor:
+                    # Submit all tasks
+                    future_to_bucket = {
+                        executor.submit(update_bucket, bucket): bucket 
+                        for bucket in buckets_to_update
+                    }
+                    
+                    # Process as they complete
+                    for completed_count, future in enumerate(as_completed(future_to_bucket), 1):
+                        if future.result():
+                            updates += 1
+                        else:
+                            errors += 1
+                        progress.update(task, advance=1)
+                        
+                        # Periodic progress report
+                        if completed_count - last_report >= report_interval:
+                            pct = (completed_count / len(buckets_to_update)) * 100
+                            console.print(f"[dim]  Progress: {completed_count}/{len(buckets_to_update)} ({pct:.0f}%) - {updates} updated, {errors} errors[/dim]")
+                            last_report = completed_count
                 
                 progress.update(task, completed=True)
             
-            console.print(f"[green]✓ Updated {updates} buckets, skipped {skipped} (unchanged)[/green]")
+            console.print(f"[green]✓ Updated {updates} buckets for {rec_type}[/green]")
             total_updates += updates
-            total_skipped += skipped
         
         # Final summary
         console.print(f"\n[bold green]✓ Complete: {total_updates} buckets updated, {total_skipped} skipped[/bold green]")
