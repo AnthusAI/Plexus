@@ -132,17 +132,14 @@ def test_list_by_time_range(mock_client, sample_metrics_data):
 
 def test_list_by_time_range_with_record_type_filter(mock_client, sample_metrics_data):
     """Test querying metrics with record type filter"""
-    # Setup mock response with multiple record types
+    # Setup mock response with only the requested record type
+    # When record_type='items' is specified, the GSI query only returns items
     data_items = dict(sample_metrics_data)
     data_items['recordType'] = 'items'
     
-    data_scores = dict(sample_metrics_data)
-    data_scores['compositeKey'] = f"scoreResults#{sample_metrics_data['timeRangeStart']}#60"
-    data_scores['recordType'] = 'scoreResults'
-    
     mock_client.execute.return_value = {
-        'listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType': {
-            'items': [data_items, data_scores],
+        'listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart': {
+            'items': [data_items],  # Only return items matching the filter
             'nextToken': None
         }
     }
