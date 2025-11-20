@@ -151,16 +151,28 @@ class GraphQLClient:
     def update_aggregated_metrics(self,
                                   account_id: str,
                                   composite_key: str,
+                                  record_type: str,
+                                  time_range_start: str,
+                                  time_range_end: str,
+                                  number_of_minutes: int,
                                   count: int,
-                                  complete: bool = False) -> Dict[str, Any]:
+                                  complete: bool = False,
+                                  scorecard_id: Optional[str] = None,
+                                  score_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Update an existing AggregatedMetrics record using composite key.
         
         Args:
             account_id: Account ID (partition key)
             composite_key: Composite key (sort key)
+            record_type: Type of record (required for GSI)
+            time_range_start: ISO datetime string (required for GSI)
+            time_range_end: ISO datetime string (required for GSI)
+            number_of_minutes: Bucket duration (required for GSI)
             count: New count value
             complete: Whether the bucket is complete
+            scorecard_id: Optional scorecard filter (GSI field)
+            score_id: Optional score filter (GSI field)
             
         Returns:
             Updated record
@@ -183,11 +195,21 @@ class GraphQLClient:
             'input': {
                 'accountId': account_id,
                 'compositeKey': composite_key,
+                'recordType': record_type,
+                'timeRangeStart': time_range_start,
+                'timeRangeEnd': time_range_end,
+                'numberOfMinutes': number_of_minutes,
                 'count': count,
                 'complete': complete,
                 'updatedAt': now
             }
         }
+        
+        # Add optional GSI fields
+        if scorecard_id:
+            variables['input']['scorecardId'] = scorecard_id
+        if score_id:
+            variables['input']['scoreId'] = score_id
         
         data = self.execute_query(mutation, variables)
         return data.get('updateAggregatedMetrics', {})
@@ -229,8 +251,14 @@ class GraphQLClient:
             return self.update_aggregated_metrics(
                 account_id=account_id,
                 composite_key=composite_key,
+                record_type=record_type,
+                time_range_start=time_range_start,
+                time_range_end=time_range_end,
+                number_of_minutes=number_of_minutes,
                 count=count,
-                complete=complete
+                complete=complete,
+                scorecard_id=scorecard_id,
+                score_id=score_id
             )
         except Exception as e:
             # If update fails (record doesn't exist), create it
