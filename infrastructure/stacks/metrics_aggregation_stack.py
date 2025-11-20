@@ -186,7 +186,7 @@ class MetricsAggregationStack(Stack):
         # Configure stream event sources with table-specific batch settings
         stream_configs = {
             'item': {'batch_size': 10, 'batch_window': 15},
-            'scoreResult': {'batch_size': 100, 'batch_window': 15},
+            'scoreresult': {'batch_size': 100, 'batch_window': 15},  # Fixed: lowercase to match table_types
             'task': {'batch_size': 1, 'batch_window': 15},
             'evaluation': {'batch_size': 1, 'batch_window': 15}
         }
