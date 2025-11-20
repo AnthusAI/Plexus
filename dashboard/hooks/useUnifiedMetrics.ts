@@ -58,6 +58,46 @@ export interface UseUnifiedMetricsResult {
 
 type AggregatedMetricsRecord = Schema['AggregatedMetrics']['type']
 
+// Bucket sizes in descending order for hierarchical selection
+const BUCKET_SIZES = [60, 15, 5, 1] as const
+
+/**
+ * Check if a time is aligned to a specific bucket size
+ */
+function isAlignedToBucket(time: Date, bucketMinutes: number): boolean {
+  const minutes = time.getMinutes()
+  const hours = time.getHours()
+  
+  switch (bucketMinutes) {
+    case 60:
+      return minutes === 0
+    case 15:
+      return minutes % 15 === 0
+    case 5:
+      return minutes % 5 === 0
+    case 1:
+      return true // Always aligned to 1-minute buckets
+    default:
+      return false
+  }
+}
+
+/**
+ * Align a time down to the nearest bucket boundary
+ */
+function alignTimeToBucket(time: Date, bucketMinutes: number): Date {
+  const aligned = new Date(time)
+  const totalMinutes = aligned.getHours() * 60 + aligned.getMinutes()
+  const alignedMinutes = Math.floor(totalMinutes / bucketMinutes) * bucketMinutes
+  
+  aligned.setHours(Math.floor(alignedMinutes / 60))
+  aligned.setMinutes(alignedMinutes % 60)
+  aligned.setSeconds(0)
+  aligned.setMilliseconds(0)
+  
+  return aligned
+}
+
 /**
  * Query AggregatedMetrics table for a specific time range and record type
  * Uses the byAccountRecordType GSI for efficient querying
@@ -88,8 +128,8 @@ async function queryAggregatedMetrics(
         limit: 10000
       ) {
         items {
-          id
           accountId
+          compositeKey
           recordType
           timeRangeStart
           timeRangeEnd
@@ -117,8 +157,8 @@ async function queryAggregatedMetrics(
     const response = await graphqlRequest<any>(query, variables)
     const items = response.data?.listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart?.items || []
     
-    // Filter to only complete records
-    return items.filter((item: AggregatedMetricsRecord) => item.complete)
+    // Return all records (including incomplete ones for rolling window calculations)
+    return items
   } catch (error) {
     console.error(`Error querying AggregatedMetrics for ${recordType}:`, error)
     // Return empty array on error instead of throwing - allows graceful degradation
@@ -127,34 +167,101 @@ async function queryAggregatedMetrics(
 }
 
 /**
- * Calculate metrics from AggregatedMetrics records
+ * Calculate metrics from AggregatedMetrics records using hierarchical bucket selection
+ * 
+ * This algorithm avoids double-counting by preferring larger buckets and only using
+ * smaller buckets to fill gaps. For example, if we have a 60-minute bucket covering
+ * 8:00-9:00, we won't also count the twelve 5-minute buckets within that same period.
+ * 
+ * Algorithm:
+ * 1. Sort records by bucket size (largest first: 60, 15, 5, 1)
+ * 2. Track which time ranges have been "covered" by selected buckets
+ * 3. For each record (largest first), select it only if it doesn't overlap with already-covered time
+ * 4. Sum the counts from selected records
  */
 function calculateMetricsFromRecords(
   records: AggregatedMetricsRecord[],
   startTime: Date,
   endTime: Date
 ): { count: number; errorCount: number } {
-  // Filter records that fall within our time range and are complete
-  const relevantRecords = records.filter(record => {
-    if (!record.complete) return false
-    
+  console.log(`[calculateMetricsFromRecords] Processing ${records.length} records for time range ${startTime.toISOString()} to ${endTime.toISOString()}`)
+  
+  // Filter records that overlap with our time range
+  const overlappingRecords = records.filter(record => {
     const recordStart = new Date(record.timeRangeStart)
     const recordEnd = new Date(record.timeRangeEnd)
-    
-    // Check if record overlaps with our time range
     return recordStart < endTime && recordEnd > startTime
   })
 
-  // Sum up the counts
-  const count = relevantRecords.reduce((sum, record) => sum + (record.count || 0), 0)
-  const errorCount = relevantRecords.reduce((sum, record) => sum + (record.errorCount || 0), 0)
+  console.log(`[calculateMetricsFromRecords] Found ${overlappingRecords.length} overlapping records`)
+  
+  if (overlappingRecords.length === 0) {
+    return { count: 0, errorCount: 0 }
+  }
+
+  // Sort by bucket size (largest first), then by start time
+  const sortedRecords = [...overlappingRecords].sort((a, b) => {
+    // First by bucket size (descending)
+    if (b.numberOfMinutes !== a.numberOfMinutes) {
+      return b.numberOfMinutes - a.numberOfMinutes
+    }
+    // Then by start time (ascending)
+    return new Date(a.timeRangeStart).getTime() - new Date(b.timeRangeStart).getTime()
+  })
+
+  // Track covered time ranges as [start, end] pairs in milliseconds
+  const coveredRanges: Array<[number, number]> = []
+  
+  // Helper: Check if a time range overlaps with any covered range
+  const isOverlapping = (start: number, end: number): boolean => {
+    return coveredRanges.some(([coveredStart, coveredEnd]) => {
+      return start < coveredEnd && end > coveredStart
+    })
+  }
+  
+  // Helper: Add a time range to covered ranges
+  const addCoveredRange = (start: number, end: number) => {
+    coveredRanges.push([start, end])
+  }
+
+  // Select non-overlapping records (hierarchically)
+  const selectedRecords: AggregatedMetricsRecord[] = []
+  
+  for (const record of sortedRecords) {
+    const recordStart = new Date(record.timeRangeStart).getTime()
+    const recordEnd = new Date(record.timeRangeEnd).getTime()
+    
+    // Clamp to our query range
+    const clampedStart = Math.max(recordStart, startTime.getTime())
+    const clampedEnd = Math.min(recordEnd, endTime.getTime())
+    
+    // Only select if this time range isn't already covered
+    if (!isOverlapping(clampedStart, clampedEnd)) {
+      selectedRecords.push(record)
+      addCoveredRange(clampedStart, clampedEnd)
+    }
+  }
+
+  console.log(`[calculateMetricsFromRecords] Selected ${selectedRecords.length} non-overlapping records (from ${overlappingRecords.length} overlapping)`)
+  
+  if (selectedRecords.length > 0 && selectedRecords.length <= 10) {
+    selectedRecords.forEach(r => {
+      console.log(`[calculateMetricsFromRecords]   Selected: ${r.timeRangeStart} to ${r.timeRangeEnd}, ${r.numberOfMinutes}min, count=${r.count}`)
+    })
+  }
+
+  // Sum up the counts from selected records
+  const count = selectedRecords.reduce((sum, record) => sum + (record.count || 0), 0)
+  const errorCount = selectedRecords.reduce((sum, record) => sum + (record.errorCount || 0), 0)
+
+  console.log(`[calculateMetricsFromRecords] Result: count=${count}, errorCount=${errorCount}`)
 
   return { count, errorCount }
 }
 
 /**
  * Generate chart data from AggregatedMetrics records
- * Groups records into hourly buckets
+ * Groups records into hourly buckets using hierarchical selection to avoid double-counting
  */
 function generateChartData(
   itemsRecords: AggregatedMetricsRecord[],
@@ -183,29 +290,14 @@ function generateChartData(
     const bucketStart = new Date(bucketEnd)
     bucketStart.setHours(bucketStart.getHours() - 1)
 
-    // Sum counts from all records that overlap with this hour bucket
-    const itemsCount = itemsRecords
-      .filter(record => {
-        if (!record.complete) return false
-        const recordStart = new Date(record.timeRangeStart)
-        const recordEnd = new Date(record.timeRangeEnd)
-        return recordStart < bucketEnd && recordEnd > bucketStart
-      })
-      .reduce((sum, record) => sum + (record.count || 0), 0)
-
-    const scoreResultsCount = scoreResultsRecords
-      .filter(record => {
-        if (!record.complete) return false
-        const recordStart = new Date(record.timeRangeStart)
-        const recordEnd = new Date(record.timeRangeEnd)
-        return recordStart < bucketEnd && recordEnd > bucketStart
-      })
-      .reduce((sum, record) => sum + (record.count || 0), 0)
+    // Use hierarchical selection to avoid double-counting
+    const itemsMetrics = calculateMetricsFromRecords(itemsRecords, bucketStart, bucketEnd)
+    const scoreResultsMetrics = calculateMetricsFromRecords(scoreResultsRecords, bucketStart, bucketEnd)
 
     chartData.push({
       time: bucketStart.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-      items: itemsCount,
-      scoreResults: scoreResultsCount,
+      items: itemsMetrics.count,
+      scoreResults: scoreResultsMetrics.count,
       bucketStart: bucketStart.toISOString(),
       bucketEnd: bucketEnd.toISOString()
     })
@@ -283,9 +375,18 @@ export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetrics
         queryAggregatedMetrics(selectedAccount.id, scoreResultsRecordType, last24h, now)
       ])
 
+      // Debug logging
+      console.log(`[useUnifiedMetrics] Fetched ${itemsRecords.length} items records, ${scoreResultsRecords.length} scoreResults records`)
+      if (itemsRecords.length > 0) {
+        console.log(`[useUnifiedMetrics] Sample items record:`, itemsRecords[0])
+        console.log(`[useUnifiedMetrics] Available bucket sizes:`, [...new Set(itemsRecords.map(r => r.numberOfMinutes))].sort((a, b) => a - b))
+      }
+
       // Calculate hourly metrics (last 60 minutes)
       const itemsHourly = calculateMetricsFromRecords(itemsRecords, last60min, now)
       const scoreResultsHourly = calculateMetricsFromRecords(scoreResultsRecords, last60min, now)
+      
+      console.log(`[useUnifiedMetrics] Hourly: ${itemsHourly.count} items, ${scoreResultsHourly.count} scoreResults`)
 
       // Calculate 24h totals
       const items24h = calculateMetricsFromRecords(itemsRecords, last24h, now)

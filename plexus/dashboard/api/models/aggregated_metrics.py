@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 class AggregatedMetrics(BaseModel):
     """AggregatedMetrics model for interacting with the API."""
     accountId: str
+    compositeKey: str
     recordType: str
     timeRangeStart: datetime
     timeRangeEnd: datetime
@@ -44,6 +45,7 @@ class AggregatedMetrics(BaseModel):
         self,
         id: str,
         accountId: str,
+        compositeKey: str,
         recordType: str,
         timeRangeStart: datetime,
         timeRangeEnd: datetime,
@@ -64,6 +66,7 @@ class AggregatedMetrics(BaseModel):
     ):
         super().__init__(id, client)
         self.accountId = accountId
+        self.compositeKey = compositeKey
         self.recordType = recordType
         self.timeRangeStart = timeRangeStart
         self.timeRangeEnd = timeRangeEnd
@@ -80,6 +83,12 @@ class AggregatedMetrics(BaseModel):
         self.cachedAiApiCount = cachedAiApiCount
         self.errorCount = errorCount
         self.metadata = metadata
+    
+    @staticmethod
+    def generate_composite_key(record_type: str, time_range_start: datetime, number_of_minutes: int) -> str:
+        """Generate composite key for AggregatedMetrics."""
+        time_str = time_range_start.isoformat().replace('+00:00', 'Z')
+        return f"{record_type}#{time_str}#{number_of_minutes}"
 
     def __repr__(self) -> str:
         return (
@@ -92,8 +101,8 @@ class AggregatedMetrics(BaseModel):
     def fields(cls) -> str:
         """Fields to request in queries and mutations"""
         return """
-            id
             accountId
+            compositeKey
             scorecardId
             scoreId
             recordType
@@ -123,9 +132,13 @@ class AggregatedMetrics(BaseModel):
                         data[date_field].replace('Z', '+00:00')
                     )
         
+        # For composite key, id is derived from accountId#compositeKey
+        record_id = f"{data['accountId']}#{data['compositeKey']}"
+        
         return cls(
-            id=data['id'],
+            id=record_id,
             accountId=data['accountId'],
+            compositeKey=data['compositeKey'],
             recordType=data['recordType'],
             timeRangeStart=data['timeRangeStart'],
             timeRangeEnd=data['timeRangeEnd'],
@@ -269,93 +282,90 @@ class AggregatedMetrics(BaseModel):
         Returns:
             The created or updated AggregatedMetrics instance
         """
-        # Query for existing record
-        existing = cls.list_by_time_range(
-            client,
-            account_id,
-            time_range_start,
-            time_range_start,  # Same start/end to get exact match
-            record_type
-        )
-        
-        # Filter to exact match on numberOfMinutes
-        existing = [m for m in existing if m.numberOfMinutes == number_of_minutes]
+        # Generate composite key
+        composite_key = cls.generate_composite_key(record_type, time_range_start, number_of_minutes)
         
         now = datetime.now(timezone.utc)
         
-        if existing:
-            # Update existing record
-            metric = existing[0]
-            update_mutation = """
-            mutation UpdateAggregatedMetrics($input: UpdateAggregatedMetricsInput!) {
-                updateAggregatedMetrics(input: $input) {
-                    %s
-                }
+        # Try update first (more common case)
+        update_mutation = """
+        mutation UpdateAggregatedMetrics($input: UpdateAggregatedMetricsInput!) {
+            updateAggregatedMetrics(input: $input) {
+                %s
             }
-            """ % cls.fields()
+        }
+        """ % cls.fields()
+        
+        update_input = {
+            'accountId': account_id,
+            'compositeKey': composite_key,
+            'count': count,
+            'complete': complete,
+            'updatedAt': now.isoformat().replace('+00:00', 'Z')
+        }
             
-            update_input = {
-                'id': metric.id,
-                'count': count,
-                'complete': complete,
-                'updatedAt': now.isoformat().replace('+00:00', 'Z')
-            }
-            
-            # Add optional fields if provided
-            if cost is not None:
-                update_input['cost'] = cost
-            if decision_count is not None:
-                update_input['decisionCount'] = decision_count
-            if external_ai_api_count is not None:
-                update_input['externalAiApiCount'] = external_ai_api_count
-            if cached_ai_api_count is not None:
-                update_input['cachedAiApiCount'] = cached_ai_api_count
-            if error_count is not None:
-                update_input['errorCount'] = error_count
-            if metadata is not None:
-                update_input['metadata'] = metadata
-            
+        # Add optional fields if provided
+        if cost is not None:
+            update_input['cost'] = cost
+        if decision_count is not None:
+            update_input['decisionCount'] = decision_count
+        if external_ai_api_count is not None:
+            update_input['externalAiApiCount'] = external_ai_api_count
+        if cached_ai_api_count is not None:
+            update_input['cachedAiApiCount'] = cached_ai_api_count
+        if error_count is not None:
+            update_input['errorCount'] = error_count
+        if metadata is not None:
+            update_input['metadata'] = metadata
+        
+        try:
+            # Try update first
             result = client.execute(update_mutation, {'input': update_input})
             return cls.from_dict(result['updateAggregatedMetrics'], client)
-        else:
-            # Create new record
-            create_mutation = """
-            mutation CreateAggregatedMetrics($input: CreateAggregatedMetricsInput!) {
-                createAggregatedMetrics(input: $input) {
-                    %s
+        except Exception as e:
+            # If update fails (record doesn't exist), create it
+            error_msg = str(e).lower()
+            if 'not found' in error_msg or 'does not exist' in error_msg or 'conditional request failed' in error_msg:
+                create_mutation = """
+                mutation CreateAggregatedMetrics($input: CreateAggregatedMetricsInput!) {
+                    createAggregatedMetrics(input: $input) {
+                        %s
+                    }
                 }
-            }
-            """ % cls.fields()
-            
-            create_input = {
-                'accountId': account_id,
-                'recordType': record_type,
-                'timeRangeStart': time_range_start.isoformat().replace('+00:00', 'Z'),
-                'timeRangeEnd': time_range_end.isoformat().replace('+00:00', 'Z'),
-                'numberOfMinutes': number_of_minutes,
-                'count': count,
-                'complete': complete,
-                'createdAt': now.isoformat().replace('+00:00', 'Z'),
-                'updatedAt': now.isoformat().replace('+00:00', 'Z')
-            }
-            
-            # Add optional fields if provided
-            if scorecard_id:
-                create_input['scorecardId'] = scorecard_id
-            if score_id:
-                create_input['scoreId'] = score_id
-            if cost is not None:
-                create_input['cost'] = cost
-            if decision_count is not None:
-                create_input['decisionCount'] = decision_count
-            if external_ai_api_count is not None:
-                create_input['externalAiApiCount'] = external_ai_api_count
-            if cached_ai_api_count is not None:
-                create_input['cachedAiApiCount'] = cached_ai_api_count
-            if error_count is not None:
-                create_input['errorCount'] = error_count
-            if metadata is not None:
-                create_input['metadata'] = metadata
-            
-            result = client.execute(create_mutation, {'input': create_input})
-            return cls.from_dict(result['createAggregatedMetrics'], client)
+                """ % cls.fields()
+                
+                create_input = {
+                    'accountId': account_id,
+                    'compositeKey': composite_key,
+                    'recordType': record_type,
+                    'timeRangeStart': time_range_start.isoformat().replace('+00:00', 'Z'),
+                    'timeRangeEnd': time_range_end.isoformat().replace('+00:00', 'Z'),
+                    'numberOfMinutes': number_of_minutes,
+                    'count': count,
+                    'complete': complete,
+                    'createdAt': now.isoformat().replace('+00:00', 'Z'),
+                    'updatedAt': now.isoformat().replace('+00:00', 'Z')
+                }
+                
+                # Add optional fields if provided
+                if scorecard_id:
+                    create_input['scorecardId'] = scorecard_id
+                if score_id:
+                    create_input['scoreId'] = score_id
+                if cost is not None:
+                    create_input['cost'] = cost
+                if decision_count is not None:
+                    create_input['decisionCount'] = decision_count
+                if external_ai_api_count is not None:
+                    create_input['externalAiApiCount'] = external_ai_api_count
+                if cached_ai_api_count is not None:
+                    create_input['cachedAiApiCount'] = cached_ai_api_count
+                if error_count is not None:
+                    create_input['errorCount'] = error_count
+                if metadata is not None:
+                    create_input['metadata'] = metadata
+                
+                result = client.execute(create_mutation, {'input': create_input})
+                return cls.from_dict(result['createAggregatedMetrics'], client)
+            else:
+                raise
