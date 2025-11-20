@@ -589,11 +589,18 @@ export default function EvaluationsDashboard({
   }, [])
 
   // Use the new hook for evaluation data
-  const { evaluations, isLoading, error, refetch } = useEvaluationData({ 
+  const { evaluations, isLoading, isLoadingMore, hasMore, error, refetch, loadMore } = useEvaluationData({ 
     accountId,
     selectedScorecard,
     selectedScore
   });
+
+  // Infinite scrolling - load more when the sentinel div is in view
+  useEffect(() => {
+    if (inView && hasMore && !isLoadingMore) {
+      loadMore();
+    }
+  }, [inView, hasMore, isLoadingMore, loadMore]);
 
   // Debug logging for scorecard and score selection
   useEffect(() => {

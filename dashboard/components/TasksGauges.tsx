@@ -1,8 +1,31 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useMemo } from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
 import { useTaskMetrics } from '../hooks/useUnifiedMetrics'
+
+// Helper function to calculate time range based on period and offset
+function calculateTimeRange(period: 'hour' | 'day' | 'week', offset: number): { start: Date; end: Date } {
+  const now = new Date()
+  
+  let periodMs: number
+  switch (period) {
+    case 'hour':
+      periodMs = 60 * 60 * 1000
+      break
+    case 'day':
+      periodMs = 24 * 60 * 60 * 1000
+      break
+    case 'week':
+      periodMs = 7 * 24 * 60 * 60 * 1000
+      break
+  }
+  
+  const end = new Date(now.getTime() - (offset * periodMs))
+  const start = new Date(end.getTime() - periodMs)
+  
+  return { start, end }
+}
 
 // Configuration for task-specific gauges (single gauge example)  
 const tasksGaugesConfig: BaseGaugesConfig = {
@@ -28,9 +51,8 @@ const tasksGaugesConfig: BaseGaugesConfig = {
       unit: '',
       decimalPlaces: 0,
       segments: [
-        { start: 0, end: 10, color: 'var(--false)' },
-        { start: 10, end: 90, color: 'var(--neutral)' },
-        { start: 90, end: 100, color: 'var(--true)' }
+        { start: 0, end: 90, color: 'var(--neutral)' },
+        { start: 90, end: 100, color: 'var(--false)' }
       ]
     }
   ],
@@ -69,12 +91,25 @@ export function TasksGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: TasksGaugesProps) {
-  // Use real task metrics
+  // Time navigation state
+  const [timePeriod, setTimePeriod] = useState<'hour' | 'day' | 'week'>('day')
+  const [timeOffset, setTimeOffset] = useState(0)
+
+  // Calculate time range based on period and offset
+  const timeRange = useMemo(() => calculateTimeRange(timePeriod, timeOffset), [timePeriod, timeOffset])
+
+  // Use real task metrics with time range
   const { 
     metrics: metricsData, 
     isLoading, 
     error 
-  } = useTaskMetrics()
+  } = useTaskMetrics({
+    timeRange: {
+      start: timeRange.start,
+      end: timeRange.end,
+      period: timePeriod
+    }
+  })
 
   // Transform metrics data to BaseGaugesData format
   // For task metrics, we query the tasks recordType from AggregatedMetrics
@@ -104,6 +139,11 @@ export function TasksGauges({
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}
       onErrorClick={onErrorClick}
+      enableTimeNavigation={true}
+      timePeriod={timePeriod}
+      timeOffset={timeOffset}
+      onTimePeriodChange={setTimePeriod}
+      onTimeOffsetChange={setTimeOffset}
     />
   )
 } 

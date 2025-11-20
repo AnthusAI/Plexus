@@ -35,9 +35,8 @@ const proceduresGaugesConfig: BaseGaugesConfig = {
       unit: '',
       decimalPlaces: 0,
       segments: [
-        { start: 0, end: 10, color: 'var(--false)' },
-        { start: 10, end: 90, color: 'var(--neutral)' },
-        { start: 90, end: 100, color: 'var(--true)' }
+        { start: 0, end: 90, color: 'var(--neutral)' },
+        { start: 90, end: 100, color: 'var(--false)' }
       ]
     },
     {
@@ -51,9 +50,8 @@ const proceduresGaugesConfig: BaseGaugesConfig = {
       unit: '',
       decimalPlaces: 0,
       segments: [
-        { start: 0, end: 50, color: 'var(--false)' },
-        { start: 50, end: 450, color: 'var(--neutral)' },
-        { start: 450, end: 500, color: 'var(--true)' }
+        { start: 0, end: 90, color: 'var(--neutral)' },
+        { start: 90, end: 100, color: 'var(--false)' }
       ]
     }
   ],
