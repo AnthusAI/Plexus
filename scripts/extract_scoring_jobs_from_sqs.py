@@ -5,8 +5,8 @@ Script to read SQS messages containing scoring job IDs and generate a CSV report
 This script:
 1. Reads all messages from an SQS queue (without deleting them)
 2. Extracts the scoring_job_id from each message
-3. Queries the database to get the report_id and scorecard_id for each scoring job (in parallel)
-4. Generates a CSV with deduplicated results based on report_id
+3. Queries the database to get the external_id, scorecard_id, and score_id for each scoring job (in parallel)
+4. Generates a CSV with results (optionally deduplicated by any column)
 
 Performance:
 - Uses parallel processing (default: 20 workers) for database lookups
@@ -14,10 +14,10 @@ Performance:
 - Adjust max_workers parameter based on your system capabilities
 
 Usage:
-    python scripts/extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers]
+    python scripts/extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers] [--dedupe COLUMN]
 
 Examples:
-    # Basic usage with defaults
+    # Basic usage - all scoring jobs without deduplication (default)
     python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue
     
     # Specify output file
@@ -25,6 +25,9 @@ Examples:
     
     # Use 50 parallel workers for maximum speed on a powerful machine
     python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue output.csv 50
+    
+    # Deduplicate by external_id (one result per external_id)
+    python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue output.csv 20 --dedupe external_id
 """
 
 import os
@@ -58,35 +61,37 @@ except ImportError as e:
 class ScoringJobExtractor:
     """Extracts scoring job information from SQS queue and generates CSV report."""
 
-    def __init__(self, queue_url: str, max_workers: int = 20):
+    def __init__(self, queue_url: str, max_workers: int = 20, dedupe_column: str = None):
         """
         Initialize the extractor.
 
         Args:
             queue_url: The SQS queue URL to read messages from
             max_workers: Maximum number of parallel workers for database lookups
+            dedupe_column: Column name to deduplicate on (None = no deduplication)
         """
         self.queue_url = queue_url
         self.max_workers = max_workers
+        self.dedupe_column = dedupe_column
         self.sqs_client = boto3.client('sqs')
         self.dashboard_client = PlexusDashboardClient()
 
         # Storage for results
         self.results: List[Dict[str, str]] = []
-        self.seen_report_ids: Set[str] = set()
+        self.seen_values: Set[str] = set()  # Track seen values for deduplication
         self.results_lock = Lock()  # Thread-safe access to results
 
-    def extract_report_id_from_item_id(self, item_id: str) -> str:
+    def extract_external_id_from_item_id(self, item_id: str) -> str:
         """
-        Extract report ID from the item ID.
+        Extract external ID from the item ID.
 
-        The report ID is everything after the last '-' in the item ID.
+        The external ID is everything after the last '-' in the item ID.
 
         Args:
             item_id: The full item ID (e.g., "account-scorecard-123456")
 
         Returns:
-            The report ID (e.g., "123456")
+            The external ID (e.g., "123456")
         """
         if not item_id:
             return ""
@@ -162,7 +167,7 @@ class ScoringJobExtractor:
             scoring_job_id: The scoring job ID to look up
 
         Returns:
-            Dictionary with scoring_job_id, report_id, and scorecard_id
+            Dictionary with scoring_job_id, external_id, scorecard_id, and score_id
         """
         try:
             logger.debug(f"Looking up scoring job: {scoring_job_id}")
@@ -170,13 +175,14 @@ class ScoringJobExtractor:
             # Get the scoring job
             scoring_job = ScoringJob.get_by_id(scoring_job_id, self.dashboard_client)
 
-            # Extract report ID from itemId
-            report_id = self.extract_report_id_from_item_id(scoring_job.itemId)
+            # Extract external ID from itemId
+            external_id = self.extract_external_id_from_item_id(scoring_job.itemId)
 
             result = {
                 'scoring_job_id': scoring_job_id,
-                'report_id': report_id,
-                'scorecard_id': scoring_job.scorecardId
+                'external_id': external_id,
+                'scorecard_id': scoring_job.scorecardId,
+                'score_id': scoring_job.scoreId or ''
             }
 
             logger.debug(f"Found: {result}")
@@ -186,8 +192,9 @@ class ScoringJobExtractor:
             logger.error(f"Error looking up scoring job {scoring_job_id}: {e}")
             return {
                 'scoring_job_id': scoring_job_id,
-                'report_id': 'ERROR',
-                'scorecard_id': 'ERROR'
+                'external_id': 'ERROR',
+                'scorecard_id': 'ERROR',
+                'score_id': 'ERROR'
             }
 
     def process_single_message(self, message: Dict, message_num: int) -> Dict[str, str]:
@@ -223,7 +230,11 @@ class ScoringJobExtractor:
         Args:
             messages: List of message bodies from SQS
         """
-        logger.info(f"Processing {len(messages)} messages with {self.max_workers} parallel workers...")
+        if self.dedupe_column:
+            dedup_status = f"with deduplication on '{self.dedupe_column}'"
+        else:
+            dedup_status = "without deduplication"
+        logger.info(f"Processing {len(messages)} messages with {self.max_workers} parallel workers ({dedup_status})...")
 
         completed = 0
         
@@ -246,24 +257,30 @@ class ScoringJobExtractor:
                         continue
 
                     # Thread-safe check and add
-                    report_id = result['report_id']
-                    
                     with self.results_lock:
-                        if report_id not in self.seen_report_ids:
-                            self.results.append(result)
-                            self.seen_report_ids.add(report_id)
+                        if self.dedupe_column:
+                            # Only add if we haven't seen this value in the dedupe column
+                            dedupe_value = result.get(self.dedupe_column, '')
+                            if dedupe_value not in self.seen_values:
+                                self.results.append(result)
+                                self.seen_values.add(dedupe_value)
+                            else:
+                                logger.debug(f"Skipping duplicate {self.dedupe_column}: {dedupe_value}")
                         else:
-                            logger.debug(f"Skipping duplicate report_id: {report_id}")
+                            # Add all results without deduplication
+                            self.results.append(result)
 
                     # Progress logging
                     if completed % 50 == 0:
                         with self.results_lock:
-                            logger.info(f"Processed {completed}/{len(messages)} messages, {len(self.results)} unique reports")
+                            result_label = f"unique by {self.dedupe_column}" if self.dedupe_column else "results"
+                            logger.info(f"Processed {completed}/{len(messages)} messages, {len(self.results)} {result_label}")
 
                 except Exception as e:
                     logger.error(f"Error getting result from future: {e}")
 
-        logger.info(f"Completed processing. Found {len(self.results)} unique reports")
+        result_label = f"unique by {self.dedupe_column}" if self.dedupe_column else "results"
+        logger.info(f"Completed processing. Found {len(self.results)} {result_label}")
 
     def write_csv(self, output_file: str) -> None:
         """
@@ -276,7 +293,7 @@ class ScoringJobExtractor:
 
         try:
             with open(output_file, 'w', newline='') as csvfile:
-                fieldnames = ['scoring_job_id', 'report_id', 'scorecard_id']
+                fieldnames = ['scoring_job_id', 'external_id', 'scorecard_id', 'score_id']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
                 writer.writeheader()
@@ -306,6 +323,10 @@ class ScoringJobExtractor:
         logger.info(f"Queue URL: {self.queue_url}")
         logger.info(f"Output file: {output_file}")
         logger.info(f"Parallel workers: {self.max_workers}")
+        if self.dedupe_column:
+            logger.info(f"Deduplication: enabled (column: {self.dedupe_column})")
+        else:
+            logger.info(f"Deduplication: disabled")
         logger.info("")
 
         # Step 1: Read messages from SQS
@@ -329,7 +350,11 @@ class ScoringJobExtractor:
         logger.info("=" * 80)
         logger.info("Summary:")
         logger.info(f"  Messages read: {len(messages)}")
-        logger.info(f"  Unique reports: {len(self.results)}")
+        if self.dedupe_column:
+            result_label = f"Unique results (by {self.dedupe_column})"
+        else:
+            result_label = "Total results"
+        logger.info(f"  {result_label}: {len(self.results)}")
         logger.info(f"  Output file: {output_file}")
         logger.info("=" * 80)
 
@@ -338,30 +363,75 @@ def main():
     """Main entry point for the script."""
     # Check command line arguments
     if len(sys.argv) < 2:
-        print("Usage: python extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers]")
+        print("Usage: python extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers] [--dedupe COLUMN]")
         print("")
         print("Arguments:")
-        print("  SQS_QUEUE_URL  - The SQS queue URL to read from")
+        print("  SQS_QUEUE_URL   - The SQS queue URL to read from")
         print("  output_file.csv - (Optional) Output CSV filename")
-        print("  max_workers    - (Optional) Number of parallel workers (default: 20)")
+        print("  max_workers     - (Optional) Number of parallel workers (default: 20)")
+        print("  --dedupe COLUMN - (Optional) Deduplicate results by specified column")
+        print("")
+        print("Available columns for deduplication:")
+        print("  - scoring_job_id")
+        print("  - external_id")
+        print("  - scorecard_id")
+        print("  - score_id")
         print("")
         print("Examples:")
+        print("  # Basic usage without deduplication (all scoring jobs)")
         print("  python extract_scoring_jobs_from_sqs.py \\")
         print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue")
         print("")
+        print("  # With custom output file")
         print("  python extract_scoring_jobs_from_sqs.py \\")
         print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue \\")
         print("    my_output.csv")
         print("")
+        print("  # With 50 workers for maximum speed")
         print("  python extract_scoring_jobs_from_sqs.py \\")
         print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue \\")
         print("    my_output.csv \\")
         print("    50")
+        print("")
+        print("  # Deduplicate by external_id (one result per external_id)")
+        print("  python extract_scoring_jobs_from_sqs.py \\")
+        print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue \\")
+        print("    my_output.csv \\")
+        print("    20 \\")
+        print("    --dedupe external_id")
+        print("")
+        print("  # Deduplicate by score_id")
+        print("  python extract_scoring_jobs_from_sqs.py \\")
+        print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue \\")
+        print("    my_output.csv \\")
+        print("    20 \\")
+        print("    --dedupe score_id")
         sys.exit(1)
 
+    # Parse arguments
     queue_url = sys.argv[1]
-    output_file = sys.argv[2] if len(sys.argv) > 2 else None
-    max_workers = int(sys.argv[3]) if len(sys.argv) > 3 else 20
+    
+    # Check for --dedupe flag and its argument
+    dedupe_column = None
+    filtered_argv = []
+    i = 0
+    while i < len(sys.argv):
+        if sys.argv[i] == '--dedupe' and i + 1 < len(sys.argv):
+            dedupe_column = sys.argv[i + 1]
+            i += 2  # Skip both --dedupe and the column name
+        else:
+            filtered_argv.append(sys.argv[i])
+            i += 1
+    
+    output_file = filtered_argv[2] if len(filtered_argv) > 2 else None
+    max_workers = int(filtered_argv[3]) if len(filtered_argv) > 3 else 20
+
+    # Validate dedupe_column if provided
+    valid_columns = ['scoring_job_id', 'external_id', 'scorecard_id', 'score_id']
+    if dedupe_column and dedupe_column not in valid_columns:
+        logger.error(f"Invalid dedupe column: {dedupe_column}")
+        logger.error(f"Valid columns are: {', '.join(valid_columns)}")
+        sys.exit(1)
 
     # Validate environment variables
     required_env_vars = ['PLEXUS_API_URL', 'PLEXUS_API_KEY']
@@ -374,7 +444,7 @@ def main():
 
     # Run the extractor
     try:
-        extractor = ScoringJobExtractor(queue_url, max_workers=max_workers)
+        extractor = ScoringJobExtractor(queue_url, max_workers=max_workers, dedupe_column=dedupe_column)
         extractor.run(output_file)
     except Exception as e:
         logger.error(f"Fatal error: {e}")
