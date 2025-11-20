@@ -133,7 +133,8 @@ async function queryAggregatedMetrics(
             { recordType: $recordType, timeRangeStart: $endTime }
           ]
         }
-        limit: 10000
+        sortDirection: DESC
+        limit: 50000
       ) {
         items {
           accountId
@@ -164,6 +165,12 @@ async function queryAggregatedMetrics(
   try {
     const response = await graphqlRequest<any>(query, variables)
     const items = response.data?.listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart?.items || []
+    const nextToken = response.data?.listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart?.nextToken
+    
+    // Warn if there are more records (we hit the limit)
+    if (nextToken) {
+      console.warn(`[queryAggregatedMetrics] Hit 10k limit for ${recordType}, some records not fetched. Consider pagination.`)
+    }
     
     // Return all records (including incomplete ones for rolling window calculations)
     return items
@@ -192,16 +199,12 @@ function calculateMetricsFromRecords(
   startTime: Date,
   endTime: Date
 ): { count: number; errorCount: number } {
-  console.log(`[calculateMetricsFromRecords] Processing ${records.length} records for time range ${startTime.toISOString()} to ${endTime.toISOString()}`)
-  
   // Filter records that overlap with our time range
   const overlappingRecords = records.filter(record => {
     const recordStart = new Date(record.timeRangeStart)
     const recordEnd = new Date(record.timeRangeEnd)
     return recordStart < endTime && recordEnd > startTime
   })
-
-  console.log(`[calculateMetricsFromRecords] Found ${overlappingRecords.length} overlapping records`)
   
   if (overlappingRecords.length === 0) {
     return { count: 0, errorCount: 0 }
@@ -250,19 +253,9 @@ function calculateMetricsFromRecords(
     }
   }
 
-  console.log(`[calculateMetricsFromRecords] Selected ${selectedRecords.length} non-overlapping records (from ${overlappingRecords.length} overlapping)`)
-  
-  if (selectedRecords.length > 0 && selectedRecords.length <= 10) {
-    selectedRecords.forEach(r => {
-      console.log(`[calculateMetricsFromRecords]   Selected: ${r.timeRangeStart} to ${r.timeRangeEnd}, ${r.numberOfMinutes}min, count=${r.count}`)
-    })
-  }
-
   // Sum up the counts from selected records
   const count = selectedRecords.reduce((sum, record) => sum + (record.count || 0), 0)
   const errorCount = selectedRecords.reduce((sum, record) => sum + (record.errorCount || 0), 0)
-
-  console.log(`[calculateMetricsFromRecords] Result: count=${count}, errorCount=${errorCount}`)
 
   return { count, errorCount }
 }
@@ -368,7 +361,17 @@ export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetrics
   const [error, setError] = useState<string | null>(null)
   
   // Memoize config to prevent unnecessary re-renders
-  const memoizedConfig = useMemo(() => config, [JSON.stringify(config)])
+  // Convert Date objects to timestamps for proper comparison
+  const memoizedConfig = useMemo(() => config, [
+    JSON.stringify({
+      ...config,
+      timeRange: config.timeRange ? {
+        start: config.timeRange.start.getTime(),
+        end: config.timeRange.end.getTime(),
+        period: config.timeRange.period
+      } : undefined
+    })
+  ])
 
   const fetchMetrics = useCallback(async () => {
     if (!selectedAccount) {
@@ -386,17 +389,37 @@ export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetrics
       
       // Use custom time range if provided, otherwise default to last 24h
       const timeRange = memoizedConfig.timeRange
-      const rangeEnd = timeRange?.end || now
-      const rangeStart = timeRange?.start || new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      const chartEnd = timeRange?.end || now
+      const chartStart = timeRange?.start || new Date(now.getTime() - 24 * 60 * 60 * 1000)
       const period = timeRange?.period || 'day'
       
-      // Calculate the time window for per-hour gauge (last 60 minutes within the range)
-      // For historical periods, use the last hour of that period
-      const gaugeEnd = rangeEnd
-      const gaugeStart = new Date(Math.max(
-        gaugeEnd.getTime() - 60 * 60 * 1000,
-        rangeStart.getTime()
+      // Gauges and daily counts are ALWAYS calculated from the end time, regardless of chart period
+      // Gauge time window: last 60 minutes before chartEnd (always per-hour)
+      const gaugeEnd = chartEnd
+      const gaugeStart = new Date(gaugeEnd.getTime() - 60 * 60 * 1000)
+      
+      // Daily count time window: last 24 hours before chartEnd (always per-day)
+      const dailyEnd = chartEnd
+      const dailyStart = new Date(dailyEnd.getTime() - 24 * 60 * 60 * 1000)
+      
+      // Query range: We need data for:
+      // 1. The chart period (chartStart to chartEnd) 
+      // 2. The 24-hour window for gauges/daily counts (dailyStart to dailyEnd)
+      // 
+      // IMPORTANT: For large time ranges (like "Last Week"), we must ensure we get
+      // the MOST RECENT data for gauges. Since GraphQL queries return oldest-first
+      // and have a 50k limit, we limit our query to a reasonable range.
+      // For a week view with 1-min buckets: 7 days × 24 hrs × 60 min = 10,080 records per type
+      // So we're safe querying up to 2 weeks of data.
+      const maxQueryDays = 14 // Maximum 2 weeks to stay well under 50k limit
+      const maxQueryRange = maxQueryDays * 24 * 60 * 60 * 1000
+      const earliestStart = new Date(chartEnd.getTime() - maxQueryRange)
+      
+      const queryStart = new Date(Math.max(
+        Math.min(chartStart.getTime(), dailyStart.getTime()),
+        earliestStart.getTime()
       ))
+      const queryEnd = chartEnd
 
       // Determine which items recordType to query based on filters
       let itemsRecordType: 'items' | 'predictionItems' | 'evaluationItems' | 'feedbackItems' = 'items'
@@ -417,56 +440,54 @@ export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetrics
       }
 
       // Query AggregatedMetrics for items and scoreResults (or filtered variants)
+      // Use the expanded query range to ensure we have data for both chart and daily counts
       const [itemsRecords, scoreResultsRecords] = await Promise.all([
-        queryAggregatedMetrics(selectedAccount.id, itemsRecordType, rangeStart, rangeEnd),
-        queryAggregatedMetrics(selectedAccount.id, scoreResultsRecordType, rangeStart, rangeEnd)
+        queryAggregatedMetrics(selectedAccount.id, itemsRecordType, queryStart, queryEnd),
+        queryAggregatedMetrics(selectedAccount.id, scoreResultsRecordType, queryStart, queryEnd)
       ])
 
       // Debug logging
-      console.log(`[useUnifiedMetrics] Fetched ${itemsRecords.length} items records, ${scoreResultsRecords.length} scoreResults records`)
-      if (itemsRecords.length > 0) {
-        console.log(`[useUnifiedMetrics] Sample items record:`, itemsRecords[0])
-        console.log(`[useUnifiedMetrics] Available bucket sizes:`, [...new Set(itemsRecords.map(r => r.numberOfMinutes))].sort((a, b) => a - b))
-      }
-
-      // Calculate hourly metrics (last 60 minutes within the range)
+      // Calculate hourly metrics (ALWAYS last 60 minutes before chartEnd)
       const itemsHourly = calculateMetricsFromRecords(itemsRecords, gaugeStart, gaugeEnd)
       const scoreResultsHourly = calculateMetricsFromRecords(scoreResultsRecords, gaugeStart, gaugeEnd)
+
+      // Calculate daily totals (ALWAYS last 24 hours before chartEnd)
+      const itemsDaily = calculateMetricsFromRecords(itemsRecords, dailyStart, dailyEnd)
+      const scoreResultsDaily = calculateMetricsFromRecords(scoreResultsRecords, dailyStart, dailyEnd)
+
+      // Generate chart data with the actual chart time range
+      const chartData = generateChartData(itemsRecords, scoreResultsRecords, chartStart, chartEnd, period)
+
+      // Generate 24-hour data for peak calculation (ALWAYS last 24 hours, regardless of chart period)
+      // This ensures gauge scales remain consistent
+      const dailyChartData = generateChartData(itemsRecords, scoreResultsRecords, dailyStart, dailyEnd, 'day')
       
-      console.log(`[useUnifiedMetrics] Hourly: ${itemsHourly.count} items, ${scoreResultsHourly.count} scoreResults`)
+      // Calculate peaks from the 24-hour daily data (not from the chart data)
+      // This keeps gauge maximums consistent regardless of chart period
+      const { itemsPeak, scoreResultsPeak } = memoizedConfig.transformations?.customPeakCalculation?.(dailyChartData) || 
+        calculatePeakValues(dailyChartData)
 
-      // Calculate totals for the entire range
-      const itemsTotal = calculateMetricsFromRecords(itemsRecords, rangeStart, rangeEnd)
-      const scoreResultsTotal = calculateMetricsFromRecords(scoreResultsRecords, rangeStart, rangeEnd)
+      // Calculate averages based on the 24-hour daily window (always 24 hours)
+      const itemsAveragePerHour = Math.round(itemsDaily.count / 24)
+      const scoreResultsAveragePerHour = Math.round(scoreResultsDaily.count / 24)
 
-      // Generate chart data with custom time range
-      const chartData = generateChartData(itemsRecords, scoreResultsRecords, rangeStart, rangeEnd, period)
-
-      // Calculate peaks
-      const { itemsPeak, scoreResultsPeak } = memoizedConfig.transformations?.customPeakCalculation?.(chartData) || 
-        calculatePeakValues(chartData)
-
-      // Calculate averages based on the time period
-      const rangeHours = (rangeEnd.getTime() - rangeStart.getTime()) / (60 * 60 * 1000)
-      const itemsAveragePerHour = Math.round(itemsTotal.count / rangeHours)
-      const scoreResultsAveragePerHour = Math.round(scoreResultsTotal.count / rangeHours)
-
-      // Detect errors
-      const hasErrorsInRange = (itemsTotal.errorCount + scoreResultsTotal.errorCount) > 0
-      const totalErrorsInRange = itemsTotal.errorCount + scoreResultsTotal.errorCount
+      // Detect errors in the daily window
+      const hasErrorsInRange = (itemsDaily.errorCount + scoreResultsDaily.errorCount) > 0
+      const totalErrorsInRange = itemsDaily.errorCount + scoreResultsDaily.errorCount
 
       const metricsData: UnifiedMetricsData = {
+        // Gauges: ALWAYS per-hour (last 60 minutes before chartEnd)
         itemsPerHour: itemsHourly.count,
         itemsAveragePerHour,
         itemsPeakHourly: itemsPeak,
-        itemsTotal24h: itemsTotal.count,
+        itemsTotal24h: itemsDaily.count,  // Daily count: ALWAYS last 24 hours before chartEnd
         
         scoreResultsPerHour: scoreResultsHourly.count,
         scoreResultsAveragePerHour,
         scoreResultsPeakHourly: scoreResultsPeak,
-        scoreResultsTotal24h: scoreResultsTotal.count,
+        scoreResultsTotal24h: scoreResultsDaily.count,  // Daily count: ALWAYS last 24 hours before chartEnd
         
-        chartData,
+        chartData,  // Chart: uses the actual selected time period
         lastUpdated: now,
         hasErrorsLast24h: hasErrorsInRange,
         totalErrors24h: totalErrorsInRange
