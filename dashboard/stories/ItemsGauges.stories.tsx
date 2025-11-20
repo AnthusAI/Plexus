@@ -510,6 +510,352 @@ export const WithRealData: Story = {
   },
 }
 
+// Time navigation stories with fake data generator
+function generateHistoricalData(
+  period: 'hour' | 'day' | 'week',
+  offset: number,
+  activityLevel: 'low' | 'medium' | 'high' = 'medium'
+): {
+  chartData: typeof highActivityData
+  itemsPerHour: number
+  scoreResultsPerHour: number
+  itemsAveragePerHour: number
+  scoreResultsAveragePerHour: number
+  itemsPeakHourly: number
+  scoreResultsPeakHourly: number
+  itemsTotal: number
+  scoreResultsTotal: number
+} {
+  const now = new Date()
+  let endTime: Date
+  let startTime: Date
+  let bucketCount: number
+  let bucketSizeMs: number
+  
+  // Calculate time range
+  if (offset === 0) {
+    endTime = now
+  } else {
+    switch (period) {
+      case 'hour':
+        endTime = new Date(now.getTime() + offset * 60 * 60 * 1000)
+        break
+      case 'day':
+        endTime = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000)
+        break
+      case 'week':
+        endTime = new Date(now.getTime() + offset * 7 * 24 * 60 * 60 * 1000)
+        break
+    }
+  }
+  
+  switch (period) {
+    case 'hour':
+      startTime = new Date(endTime.getTime() - 60 * 60 * 1000)
+      bucketCount = 12
+      bucketSizeMs = 5 * 60 * 1000
+      break
+    case 'day':
+      startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000)
+      bucketCount = 24
+      bucketSizeMs = 60 * 60 * 1000
+      break
+    case 'week':
+      startTime = new Date(endTime.getTime() - 7 * 24 * 60 * 60 * 1000)
+      bucketCount = 28
+      bucketSizeMs = 6 * 60 * 60 * 1000
+      break
+  }
+  
+  // Activity level multipliers
+  const multipliers = {
+    low: { items: 0.3, scoreResults: 0.5 },
+    medium: { items: 1, scoreResults: 1.5 },
+    high: { items: 2, scoreResults: 3 }
+  }
+  const mult = multipliers[activityLevel]
+  
+  // Generate chart data with realistic patterns
+  const chartData = []
+  let totalItems = 0
+  let totalScoreResults = 0
+  let peakItems = 0
+  let peakScoreResults = 0
+  
+  for (let i = bucketCount - 1; i >= 0; i--) {
+    const bucketEnd = new Date(endTime.getTime() - i * bucketSizeMs)
+    const bucketStart = new Date(bucketEnd.getTime() - bucketSizeMs)
+    
+    // Create realistic patterns with some randomness
+    const hourOfDay = bucketStart.getHours()
+    const dayOfWeek = bucketStart.getDay()
+    
+    // Business hours multiplier (9am-5pm weekdays)
+    let businessHoursMult = 1
+    if (dayOfWeek >= 1 && dayOfWeek <= 5 && hourOfDay >= 9 && hourOfDay <= 17) {
+      businessHoursMult = 1.5
+    } else if (hourOfDay >= 0 && hourOfDay <= 6) {
+      businessHoursMult = 0.3
+    }
+    
+    // Add some randomness
+    const randomFactor = 0.7 + Math.random() * 0.6
+    
+    const items = Math.round(20 * mult.items * businessHoursMult * randomFactor)
+    const scoreResults = Math.round(30 * mult.scoreResults * businessHoursMult * randomFactor)
+    
+    totalItems += items
+    totalScoreResults += scoreResults
+    peakItems = Math.max(peakItems, items)
+    peakScoreResults = Math.max(peakScoreResults, scoreResults)
+    
+    chartData.push({
+      time: bucketStart.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      items,
+      scoreResults,
+      bucketStart: bucketStart.toISOString(),
+      bucketEnd: bucketEnd.toISOString()
+    })
+  }
+  
+  // Calculate per-hour metrics (last hour of the period)
+  const lastHourData = chartData.slice(-Math.min(period === 'hour' ? 12 : 1, chartData.length))
+  const itemsPerHour = lastHourData.reduce((sum, d) => sum + d.items, 0)
+  const scoreResultsPerHour = lastHourData.reduce((sum, d) => sum + d.scoreResults, 0)
+  
+  // Calculate averages
+  const rangeHours = (endTime.getTime() - startTime.getTime()) / (60 * 60 * 1000)
+  const itemsAveragePerHour = Math.round(totalItems / rangeHours)
+  const scoreResultsAveragePerHour = Math.round(totalScoreResults / rangeHours)
+  
+  return {
+    chartData,
+    itemsPerHour,
+    scoreResultsPerHour,
+    itemsAveragePerHour,
+    scoreResultsAveragePerHour,
+    itemsPeakHourly: Math.max(peakItems, 50),
+    scoreResultsPeakHourly: Math.max(peakScoreResults, 100),
+    itemsTotal: totalItems,
+    scoreResultsTotal: totalScoreResults
+  }
+}
+
+export const TimeNavigationHour: Story = {
+  render: (args) => {
+    const [timePeriod, setTimePeriod] = React.useState<'hour' | 'day' | 'week'>('hour')
+    const [timeOffset, setTimeOffset] = React.useState(0)
+    
+    const data = React.useMemo(() => 
+      generateHistoricalData(timePeriod, timeOffset, 'medium'),
+      [timePeriod, timeOffset]
+    )
+    
+    return (
+      <MockAccountProvider>
+        <div className="@container">
+          <ItemsGauges
+            {...args}
+            timePeriod={timePeriod}
+            timeOffset={timeOffset}
+            onTimePeriodChange={setTimePeriod}
+            onTimeOffsetChange={setTimeOffset}
+            scoreResultsPerHour={data.scoreResultsPerHour}
+            itemsPerHour={data.itemsPerHour}
+            scoreResultsAveragePerHour={data.scoreResultsAveragePerHour}
+            itemsAveragePerHour={data.itemsAveragePerHour}
+            scoreResultsPeakHourly={data.scoreResultsPeakHourly}
+            itemsPeakHourly={data.itemsPeakHourly}
+            scoreResultsTotal24h={data.scoreResultsTotal}
+            itemsTotal24h={data.itemsTotal}
+            chartData={data.chartData}
+            useRealData={false}
+          />
+        </div>
+      </MockAccountProvider>
+    )
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Interactive time navigation - Hour view. Use the left/right carets to navigate through hours. Chart shows 5-minute buckets.',
+      },
+    },
+  },
+}
+
+export const TimeNavigationDay: Story = {
+  render: (args) => {
+    const [timePeriod, setTimePeriod] = React.useState<'hour' | 'day' | 'week'>('day')
+    const [timeOffset, setTimeOffset] = React.useState(0)
+    
+    const data = React.useMemo(() => 
+      generateHistoricalData(timePeriod, timeOffset, 'medium'),
+      [timePeriod, timeOffset]
+    )
+    
+    return (
+      <MockAccountProvider>
+        <div className="@container">
+          <ItemsGauges
+            {...args}
+            timePeriod={timePeriod}
+            timeOffset={timeOffset}
+            onTimePeriodChange={setTimePeriod}
+            onTimeOffsetChange={setTimeOffset}
+            scoreResultsPerHour={data.scoreResultsPerHour}
+            itemsPerHour={data.itemsPerHour}
+            scoreResultsAveragePerHour={data.scoreResultsAveragePerHour}
+            itemsAveragePerHour={data.itemsAveragePerHour}
+            scoreResultsPeakHourly={data.scoreResultsPeakHourly}
+            itemsPeakHourly={data.itemsPeakHourly}
+            scoreResultsTotal24h={data.scoreResultsTotal}
+            itemsTotal24h={data.itemsTotal}
+            chartData={data.chartData}
+            useRealData={false}
+          />
+        </div>
+      </MockAccountProvider>
+    )
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Interactive time navigation - Day view. Use the left/right carets to navigate through days. Chart shows hourly buckets.',
+      },
+    },
+  },
+}
+
+export const TimeNavigationWeek: Story = {
+  render: (args) => {
+    const [timePeriod, setTimePeriod] = React.useState<'hour' | 'day' | 'week'>('week')
+    const [timeOffset, setTimeOffset] = React.useState(0)
+    
+    const data = React.useMemo(() => 
+      generateHistoricalData(timePeriod, timeOffset, 'medium'),
+      [timePeriod, timeOffset]
+    )
+    
+    return (
+      <MockAccountProvider>
+        <div className="@container">
+          <ItemsGauges
+            {...args}
+            timePeriod={timePeriod}
+            timeOffset={timeOffset}
+            onTimePeriodChange={setTimePeriod}
+            onTimeOffsetChange={setTimeOffset}
+            scoreResultsPerHour={data.scoreResultsPerHour}
+            itemsPerHour={data.itemsPerHour}
+            scoreResultsAveragePerHour={data.scoreResultsAveragePerHour}
+            itemsAveragePerHour={data.itemsAveragePerHour}
+            scoreResultsPeakHourly={data.scoreResultsPeakHourly}
+            itemsPeakHourly={data.itemsPeakHourly}
+            scoreResultsTotal24h={data.scoreResultsTotal}
+            itemsTotal24h={data.itemsTotal}
+            chartData={data.chartData}
+            useRealData={false}
+          />
+        </div>
+      </MockAccountProvider>
+    )
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Interactive time navigation - Week view. Use the left/right carets to navigate through weeks. Chart shows 6-hour buckets.',
+      },
+    },
+  },
+}
+
+export const TimeNavigationLowActivity: Story = {
+  render: (args) => {
+    const [timePeriod, setTimePeriod] = React.useState<'hour' | 'day' | 'week'>('day')
+    const [timeOffset, setTimeOffset] = React.useState(0)
+    
+    const data = React.useMemo(() => 
+      generateHistoricalData(timePeriod, timeOffset, 'low'),
+      [timePeriod, timeOffset]
+    )
+    
+    return (
+      <MockAccountProvider>
+        <div className="@container">
+          <ItemsGauges
+            {...args}
+            timePeriod={timePeriod}
+            timeOffset={timeOffset}
+            onTimePeriodChange={setTimePeriod}
+            onTimeOffsetChange={setTimeOffset}
+            scoreResultsPerHour={data.scoreResultsPerHour}
+            itemsPerHour={data.itemsPerHour}
+            scoreResultsAveragePerHour={data.scoreResultsAveragePerHour}
+            itemsAveragePerHour={data.itemsAveragePerHour}
+            scoreResultsPeakHourly={data.scoreResultsPeakHourly}
+            itemsPeakHourly={data.itemsPeakHourly}
+            scoreResultsTotal24h={data.scoreResultsTotal}
+            itemsTotal24h={data.itemsTotal}
+            chartData={data.chartData}
+            useRealData={false}
+          />
+        </div>
+      </MockAccountProvider>
+    )
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Time navigation with low activity levels. Test the navigation with minimal data.',
+      },
+    },
+  },
+}
+
+export const TimeNavigationHighActivity: Story = {
+  render: (args) => {
+    const [timePeriod, setTimePeriod] = React.useState<'hour' | 'day' | 'week'>('day')
+    const [timeOffset, setTimeOffset] = React.useState(0)
+    
+    const data = React.useMemo(() => 
+      generateHistoricalData(timePeriod, timeOffset, 'high'),
+      [timePeriod, timeOffset]
+    )
+    
+    return (
+      <MockAccountProvider>
+        <div className="@container">
+          <ItemsGauges
+            {...args}
+            timePeriod={timePeriod}
+            timeOffset={timeOffset}
+            onTimePeriodChange={setTimePeriod}
+            onTimeOffsetChange={setTimeOffset}
+            scoreResultsPerHour={data.scoreResultsPerHour}
+            itemsPerHour={data.itemsPerHour}
+            scoreResultsAveragePerHour={data.scoreResultsAveragePerHour}
+            itemsAveragePerHour={data.itemsAveragePerHour}
+            scoreResultsPeakHourly={data.scoreResultsPeakHourly}
+            itemsPeakHourly={data.itemsPeakHourly}
+            scoreResultsTotal24h={data.scoreResultsTotal}
+            itemsTotal24h={data.itemsTotal}
+            chartData={data.chartData}
+            useRealData={false}
+          />
+        </div>
+      </MockAccountProvider>
+    )
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Time navigation with high activity levels. Test the navigation with lots of data.',
+      },
+    },
+  },
+}
+
 // No data story - demonstrates undefined values showing no needles/values
 export const NoData: Story = {
   args: {
