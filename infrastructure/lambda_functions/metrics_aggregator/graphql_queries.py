@@ -67,6 +67,9 @@ def query_score_results_in_window(graphql_client,
     """
     Query all ScoreResults in a time window with pagination.
     
+    Note: Uses updatedAt due to GSI limit (20 max per table).
+    This may cause some double-counting if records are updated frequently.
+    
     Args:
         graphql_client: GraphQL client instance
         account_id: Account ID to filter by
@@ -246,7 +249,7 @@ def query_feedback_items_in_window(graphql_client,
             'startTime': start_time.isoformat().replace('+00:00', 'Z'),
             'endTime': end_time.isoformat().replace('+00:00', 'Z')
         },
-        'listFeedbackItemByAccountIdAndCreatedAt'
+        'listFeedbackItemByAccountIdAndUpdatedAt'
     )
 
 
