@@ -28,9 +28,12 @@ def sample_metrics_data():
     start = now.replace(minute=0, second=0, microsecond=0)
     end = start + timedelta(minutes=60)
     
+    # Generate composite key: recordType#timeRangeStart#numberOfMinutes
+    composite_key = f"items#{start.isoformat().replace('+00:00', 'Z')}#60"
+    
     return {
-        'id': 'test-id-123',
         'accountId': 'acc-123',
+        'compositeKey': composite_key,
         'recordType': 'items',
         'timeRangeStart': start.isoformat().replace('+00:00', 'Z'),
         'timeRangeEnd': end.isoformat().replace('+00:00', 'Z'),
@@ -54,8 +57,9 @@ def test_from_dict_basic(mock_client, sample_metrics_data):
     """Test creating AggregatedMetrics from dictionary"""
     metric = AggregatedMetrics.from_dict(sample_metrics_data, mock_client)
     
-    assert metric.id == 'test-id-123'
+    assert metric.id.startswith('acc-123#items#')
     assert metric.accountId == 'acc-123'
+    assert metric.compositeKey == sample_metrics_data['compositeKey']
     assert metric.recordType == 'items'
     assert metric.numberOfMinutes == 60
     assert metric.count == 100
@@ -91,7 +95,7 @@ def test_repr(mock_client, sample_metrics_data):
     repr_str = repr(metric)
     
     assert 'AggregatedMetrics' in repr_str
-    assert 'test-id-123' in repr_str
+    assert 'acc-123#items#' in repr_str
     assert 'items' in repr_str
     assert '60min' in repr_str
     assert 'count=100' in repr_str
@@ -122,7 +126,7 @@ def test_list_by_time_range(mock_client, sample_metrics_data):
     
     # Should return one metric
     assert len(metrics) == 1
-    assert metrics[0].id == 'test-id-123'
+    assert metrics[0].id.startswith('acc-123#items#')
     assert metrics[0].count == 100
 
 
@@ -133,7 +137,7 @@ def test_list_by_time_range_with_record_type_filter(mock_client, sample_metrics_
     data_items['recordType'] = 'items'
     
     data_scores = dict(sample_metrics_data)
-    data_scores['id'] = 'test-id-456'
+    data_scores['compositeKey'] = f"scoreResults#{sample_metrics_data['timeRangeStart']}#60"
     data_scores['recordType'] = 'scoreResults'
     
     mock_client.execute.return_value = {
@@ -164,11 +168,11 @@ def test_list_by_time_range_pagination(mock_client, sample_metrics_data):
     """Test that pagination is handled correctly"""
     # First page
     data1 = dict(sample_metrics_data)
-    data1['id'] = 'test-id-1'
+    # compositeKey is already set from fixture
     
-    # Second page
+    # Second page  
     data2 = dict(sample_metrics_data)
-    data2['id'] = 'test-id-2'
+    # Use same compositeKey for second page (same time bucket)
     
     # Setup mock to return two pages
     mock_client.execute.side_effect = [
@@ -201,26 +205,24 @@ def test_list_by_time_range_pagination(mock_client, sample_metrics_data):
     
     # Should return both metrics
     assert len(metrics) == 2
-    assert metrics[0].id == 'test-id-1'
-    assert metrics[1].id == 'test-id-2'
+    # Both should have same composite key (same time bucket)
+    assert metrics[0].id.startswith('acc-123#items#')
+    assert metrics[1].id.startswith('acc-123#items#')
 
 
 def test_create_or_update_creates_new(mock_client, sample_metrics_data):
     """Test create_or_update creates new record when none exists"""
-    # Mock list_by_time_range to return empty (no existing record)
-    mock_client.execute.side_effect = [
-        # First call: list_by_time_range query
-        {
-            'listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType': {
-                'items': [],
-                'nextToken': None
-            }
-        },
-        # Second call: create mutation
-        {
-            'createAggregatedMetrics': sample_metrics_data
-        }
-    ]
+    # Mock to simulate update failing (no record exists), then create succeeding
+    def mock_execute(query, variables):
+        if 'updateAggregatedMetrics' in query:
+            # Simulate update failure (record doesn't exist)
+            raise Exception("conditional request failed")
+        elif 'createAggregatedMetrics' in query:
+            # Return created record
+            return {'createAggregatedMetrics': sample_metrics_data}
+        return {}
+    
+    mock_client.execute.side_effect = mock_execute
     
     start_time = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     end_time = start_time + timedelta(minutes=60)
@@ -236,36 +238,27 @@ def test_create_or_update_creates_new(mock_client, sample_metrics_data):
         complete=True
     )
     
-    # Should have called execute twice (query + create)
+    # Should have called execute twice (update attempt + create)
     assert mock_client.execute.call_count == 2
     
     # Second call should be create mutation
     second_call_args = mock_client.execute.call_args_list[1]
     assert 'createAggregatedMetrics' in second_call_args[0][0]
     
-    assert metric.id == 'test-id-123'
+    assert metric.id.startswith('acc-123#items#')
     assert metric.count == 100
 
 
 def test_create_or_update_updates_existing(mock_client, sample_metrics_data):
     """Test create_or_update updates existing record"""
-    # Mock list_by_time_range to return existing record
-    mock_client.execute.side_effect = [
-        # First call: list_by_time_range query
-        {
-            'listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType': {
-                'items': [sample_metrics_data],
-                'nextToken': None
-            }
-        },
-        # Second call: update mutation
-        {
-            'updateAggregatedMetrics': {
-                **sample_metrics_data,
-                'count': 150  # Updated count
-            }
-        }
-    ]
+    # Mock update to succeed (record exists)
+    updated_data = {
+        **sample_metrics_data,
+        'count': 150  # Updated count
+    }
+    mock_client.execute.return_value = {
+        'updateAggregatedMetrics': updated_data
+    }
     
     start_time = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     end_time = start_time + timedelta(minutes=60)
@@ -281,12 +274,12 @@ def test_create_or_update_updates_existing(mock_client, sample_metrics_data):
         complete=True
     )
     
-    # Should have called execute twice (query + update)
-    assert mock_client.execute.call_count == 2
+    # Should have called execute once (update succeeds)
+    assert mock_client.execute.call_count == 1
     
-    # Second call should be update mutation
-    second_call_args = mock_client.execute.call_args_list[1]
-    assert 'updateAggregatedMetrics' in second_call_args[0][0]
+    # Call should be update mutation
+    call_args = mock_client.execute.call_args_list[0]
+    assert 'updateAggregatedMetrics' in call_args[0][0]
     
     assert metric.count == 150
 
@@ -296,7 +289,7 @@ def test_fields_method():
     fields = AggregatedMetrics.fields()
     
     required_fields = [
-        'id', 'accountId', 'recordType', 'timeRangeStart', 'timeRangeEnd',
+        'accountId', 'compositeKey', 'recordType', 'timeRangeStart', 'timeRangeEnd',
         'numberOfMinutes', 'count', 'complete', 'createdAt', 'updatedAt'
     ]
     

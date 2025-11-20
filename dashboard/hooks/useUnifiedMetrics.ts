@@ -38,6 +38,7 @@ export interface MetricsConfig {
     createdByType?: string // For items: "evaluation", "prediction", etc.
     scoreResultType?: string // For scoreResults: "prediction", "evaluation", etc.
     taskType?: string // For tasks: filter by task type
+    useFeedbackItems?: boolean // Special flag to query feedbackItems instead of items
   }
   
   // Optional transformations
