@@ -178,7 +178,7 @@ def query_evaluations_in_window(graphql_client,
         end_time: End of time window
         
     Returns:
-        List of all evaluations (id and createdAt only for efficiency)
+        List of all evaluations (id and updatedAt only for efficiency)
     """
     query = """
     query ListEvaluationsByTime(
@@ -187,15 +187,15 @@ def query_evaluations_in_window(graphql_client,
         $endTime: String!,
         $nextToken: String
     ) {
-        listEvaluationByAccountIdAndCreatedAt(
+        listEvaluationByAccountIdAndUpdatedAt(
             accountId: $accountId,
-            createdAt: { between: [$startTime, $endTime] },
+            updatedAt: { between: [$startTime, $endTime] },
             limit: 1000,
             nextToken: $nextToken
         ) {
             items {
                 id
-                createdAt
+                updatedAt
             }
             nextToken
         }
@@ -210,7 +210,7 @@ def query_evaluations_in_window(graphql_client,
             'startTime': start_time.isoformat().replace('+00:00', 'Z'),
             'endTime': end_time.isoformat().replace('+00:00', 'Z')
         },
-        'listEvaluationByAccountIdAndCreatedAt'
+        'listEvaluationByAccountIdAndUpdatedAt'
     )
 
 
