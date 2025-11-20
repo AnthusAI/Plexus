@@ -1,9 +1,9 @@
 # Lambda Runtime
 awslambdaric
 
-# LangChain/LangGraph - pinned to production versions from pyproject.toml
-langchain>=0.3.25
-langgraph==0.6.7
+# LangChain/LangGraph - pinned to working versions (matches local dev environment)
+langchain==0.3.27
+langgraph==0.2.60
 langchain-core==0.3.74
 langchain-openai>=0.3.34
 langchain-anthropic>=0.3.10
