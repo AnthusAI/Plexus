@@ -261,8 +261,12 @@ class GraphQLClient:
                 score_id=score_id
             )
         except Exception as e:
-            # If update fails (record doesn't exist), create it
-            if 'not found' in str(e).lower() or 'does not exist' in str(e).lower():
+            # If update fails, fall back to create
+            # Note: Even with all GSI fields included, Amplify Gen2 sometimes returns
+            # ConditionalCheckFailedException for updates. The safest approach is to
+            # catch these and fall back to create, which will upsert the record.
+            error_msg = str(e).lower()
+            if 'not found' in error_msg or 'does not exist' in error_msg or 'conditional' in error_msg:
                 return self.create_aggregated_metrics(
                     account_id=account_id,
                     record_type=record_type,
