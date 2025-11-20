@@ -1,10 +1,10 @@
 # Lambda Runtime
 awslambdaric
 
-# LangChain/LangGraph - pinned to production versions from pyproject.toml
+# LangChain/LangGraph - pin langchain-core to avoid _RestrictedSandboxedEnvironment issue
 langchain>=0.3.25
 langgraph==0.6.7
-langchain-core>=0.3.70
+langchain-core<0.3.79
 langchain-openai>=0.3.34
 langchain-anthropic>=0.3.10
 langchain-community>=0.3.24
