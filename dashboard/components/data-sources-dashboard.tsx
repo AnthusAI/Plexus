@@ -96,18 +96,10 @@ export default function DataSourcesDashboard({
         return
       }
 
-      console.log('=== FETCHING DATA SOURCES ===')
       // Fetch real data sources for the selected account
       const result = await amplifyClient.DataSource.list({
         filter: { accountId: { eq: selectedAccount.id } }
       })
-
-      console.log('Raw data sources from database:', result.data.map(ds => ({
-        id: ds.id,
-        name: ds.name,
-        attachedFiles: ds.attachedFiles,
-        attachedFilesLength: ds.attachedFiles?.length || 0
-      })))
 
       // Sort by updatedAt descending manually
       const sortedData = [...result.data].sort((a, b) => 

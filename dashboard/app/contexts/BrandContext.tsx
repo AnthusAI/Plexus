@@ -56,11 +56,9 @@ export function BrandProvider({ children }: BrandProviderProps) {
     
     if (!configUrl) {
       // No brand config URL specified, use default Plexus branding
-      console.log('[BrandProvider] No NEXT_PUBLIC_BRAND_CONFIG_URL specified, using default branding');
       return;
     }
 
-    console.log('[BrandProvider] Loading brand config from:', configUrl);
     setLoading(true);
 
     fetch(configUrl)
@@ -71,13 +69,10 @@ export function BrandProvider({ children }: BrandProviderProps) {
         return response.json();
       })
       .then(data => {
-        console.log('[BrandProvider] Fetched brand config:', data);
-        
         if (!validateBrandConfig(data)) {
           throw new Error('Invalid brand configuration format');
         }
         
-        console.log('[BrandProvider] Brand config validated successfully');
         setConfig(data);
         setError(null);
       })
@@ -98,7 +93,6 @@ export function BrandProvider({ children }: BrandProviderProps) {
     }
 
     const cssPath = config.styles.cssPath;
-    console.log('[BrandProvider] Injecting custom CSS from:', cssPath);
 
     // Create link element for custom styles
     const linkElement = document.createElement('link');
@@ -126,7 +120,6 @@ export function BrandProvider({ children }: BrandProviderProps) {
     }
 
     const faviconPath = config.favicon.faviconPath;
-    console.log('[BrandProvider] Injecting custom favicon from:', faviconPath);
 
     // Hide existing favicon links instead of removing them (to avoid React conflicts)
     const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]');
@@ -162,7 +155,6 @@ export function BrandProvider({ children }: BrandProviderProps) {
     }
 
     const componentPath = config.logo.componentPath;
-    console.log('[BrandProvider] Loading custom logo component from:', componentPath);
     setLogoLoading(true);
 
     // Load the ES module by creating a script tag with type="module"
@@ -184,7 +176,6 @@ export function BrandProvider({ children }: BrandProviderProps) {
     const handleLogoLoaded = () => {
       const CustomLogo = (window as any).__BRAND_CUSTOM_LOGO__;
       if (CustomLogo) {
-        console.log('[BrandProvider] Custom logo component loaded successfully');
         setCustomLogoComponent(() => CustomLogo);
         setLogoError(null);
       } else {

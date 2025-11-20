@@ -273,7 +273,6 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   isSelected?: boolean;
 }) => {
 
-  console.log(`🔍 TRACE_STAGES: GridContent render - ${data.id} - stages: ${data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
 
   const progress = useMemo(() => 
     data.processedItems && data.totalItems ? 
@@ -328,7 +327,6 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   const stages = useMemo(() => {
     const stageItems = data.task?.stages?.items || [];
     
-    console.log(`🔍 TRACE_STAGES: GridContent useMemo stages - ${data.id} - creating TaskStatus configs for: ${stageItems.map(s => `${s.name}:${s.status}`).join(',')}`);
     
     return stageItems.map(stage => ({
       key: stage.name,
@@ -385,7 +383,6 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
       estimatedRemainingSeconds: data.estimatedRemainingSeconds
     };
     
-    console.log(`🔍 TRACE_STAGES: GridContent useMemo taskStatus - ${data.id} - final TaskStatus props stages: ${statusObj.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
     
     return statusObj;
   }, [
@@ -452,10 +449,8 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
 
   const allow = stagesChanged || progressChanged || otherChanged;
   if (allow) {
-    console.log(`🔍 TRACE_STAGES: GridContent memo ALLOWING re-render - ${nextProps.data.id} - stagesChanged=${stagesChanged} progressChanged=${progressChanged} otherChanged=${otherChanged}`);
     return false;
   }
-  console.log(`🔍 TRACE_STAGES: GridContent memo BLOCKING re-render - ${nextProps.data.id} - no changes`);
   return true;
 });
 
@@ -659,29 +654,13 @@ const DetailContent = React.memo(({
   // Only show main panel if we're not in narrow view with a selected result
   const showMainPanel = isWideEnoughForThree || 
                         (isWideEnoughForTwo && (!showResultDetail || !showResultsList)) || 
-                        (!isWideEnoughForTwo && !showResultDetail) // Only show main panel in narrow view if no result selected
-
-  console.log('DetailContent render conditions:', {
-    containerWidth,
-    isWideEnoughForTwo,
-    isWideEnoughForThree,
-    hasScoreResults: !!data.scoreResults?.length,
-    parsedResultCount: parsedScoreResults.length,
-    showMainPanel,
-    showResultsList,
-    showResultDetail,
-    showScoreResultInNarrowView,
-    showAsColumns,
-    selectedScoreResult: selectedScoreResult?.id
-  });
+                        (!isWideEnoughForTwo && !showResultDetail); // Only show main panel in narrow view if no result selected
 
   const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
-    console.log('Score result selected:', result.id);
     onSelectScoreResult?.(result.id)
   }
 
   const handleScoreResultClose = () => {
-    console.log('Score result detail closed');
     onSelectScoreResult?.(null)
   }
 
@@ -993,7 +972,6 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
 
   const data = task.data ?? {} as EvaluationTaskData
   
-  console.log(`🔍 TRACE_STAGES: EvaluationTask render - ${data.id} - stages: ${data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
   
 
   // Add more detailed logging for incoming data
@@ -1194,7 +1172,6 @@ evaluation:
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => {
-              console.log('Get Code menu item selected');
               handleGetCode();
             }}>
               <MessageSquareCode className="mr-2 h-4 w-4" />
@@ -1202,7 +1179,6 @@ evaluation:
             </DropdownMenuItem>
             {onShare && (
               <DropdownMenuItem onSelect={() => {
-                console.log('Share menu item selected');
                 onShare();
               }}>
                 <Share className="mr-2 h-4 w-4" />
@@ -1211,7 +1187,6 @@ evaluation:
             )}
             {onDelete && (
               <DropdownMenuItem onSelect={() => {
-                console.log('Delete menu item selected');
                 onDelete(data.id);
               }}>
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -1230,7 +1205,6 @@ evaluation:
           <CardButton
             icon={X}
             onClick={() => {
-              console.log('EvaluationTask: X button clicked, calling onClose function');
               onClose();
             }}
           />
@@ -1243,9 +1217,6 @@ evaluation:
 
   const taskWithDefaults = useMemo(() => {
     // Debug: Log what we're receiving in EvaluationTask
-    console.log('🔍 DEBUG task.scoreVersionId =', task.scoreVersionId);
-    console.log('🔍 DEBUG task.scoreId =', task.scoreId);
-    console.log('🔍 DEBUG task.scorecardId =', task.scorecardId);
     
     return {
       id: task.id,
@@ -1399,13 +1370,11 @@ evaluation:
                 <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
                   <span className="truncate">{props.task.score}</span>
             {variant === 'detail' && taskWithDefaults.scorecardId && taskWithDefaults.scoreId && (() => {
-              console.log('🔍 DEBUG at link render - scoreVersionId =', taskWithDefaults.scoreVersionId);
               
               const scoreLink = taskWithDefaults.scoreVersionId 
                 ? `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`
                 : `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}`;
               
-              console.log('🔍 DEBUG generated scoreLink =', scoreLink);
                     
                     return (
                       <Link 
@@ -1449,7 +1418,6 @@ evaluation:
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onSelect={() => {
-                            console.log('Get Code menu item selected');
                             handleGetCode();
                           }}>
                             <MessageSquareCode className="mr-2 h-4 w-4" />
@@ -1457,7 +1425,6 @@ evaluation:
                           </DropdownMenuItem>
                           {onShare && (
                             <DropdownMenuItem onSelect={() => {
-                              console.log('Share menu item selected');
                               onShare();
                             }}>
                               <Share className="mr-2 h-4 w-4" />
@@ -1466,7 +1433,6 @@ evaluation:
                           )}
                           {onDelete && (
                             <DropdownMenuItem onSelect={() => {
-                              console.log('Delete menu item selected');
                               onDelete(data.id);
                             }}>
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -1555,9 +1521,7 @@ evaluation:
   const nextStages = nextProps.task.data?.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
   
   if (shouldNotRerender) {
-    console.log(`🔍 TRACE_STAGES: EvaluationTask memo BLOCKING re-render - ${nextProps.task.id} - stages: [${nextStages}]`);
   } else {
-    console.log(`🔍 TRACE_STAGES: EvaluationTask memo ALLOWING re-render - ${nextProps.task.id} - stage change: [${prevStages}] → [${nextStages}]`);
   }
   
   return shouldNotRerender;

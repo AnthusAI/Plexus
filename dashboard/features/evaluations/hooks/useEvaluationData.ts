@@ -343,11 +343,6 @@ export function useEvaluationData({
         // Set nextToken and hasMore for pagination
         setNextToken(response.nextToken);
         setHasMore(!!response.nextToken);
-        
-        console.log('Initial load captured nextToken:', {
-          hasNextToken: !!response.nextToken,
-          itemCount: response.items.length
-        });
       } catch (err) {
         console.error('Error loading initial nextToken:', err);
       }

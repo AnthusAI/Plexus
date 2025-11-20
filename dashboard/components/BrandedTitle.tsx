@@ -21,45 +21,35 @@ export function BrandedTitle({ pageTitle }: BrandedTitleProps) {
     // If no custom brand is configured, don't do anything
     // Let Next.js handle the title normally
     if (!config?.name) {
-      console.log('[BrandedTitle] No custom brand configured, using default title handling');
       return;
     }
 
     const replacePlexusInTitle = () => {
       const currentTitle = document.title;
-      console.log('[BrandedTitle] Current title:', currentTitle);
       
       if (pageTitle) {
         // If a specific page title is provided, use it
         const newTitle = `${pageTitle} - ${brandName}`;
         if (currentTitle === newTitle) {
-          console.log('[BrandedTitle] Title already correct, skipping update');
           return;
         }
-        console.log('[BrandedTitle] Setting title from pageTitle prop:', newTitle);
         document.title = newTitle;
       } else if (currentTitle && currentTitle.includes('Plexus')) {
         // Replace "Plexus" with the brand name in the existing title
         // This handles cases like "Tasks - Plexus" or "Evaluations -- Plexus"
         const brandedTitle = currentTitle.replace(/Plexus/g, brandName);
         if (currentTitle === brandedTitle) {
-          console.log('[BrandedTitle] Title already correct, skipping update');
           return;
         }
-        console.log('[BrandedTitle] Replacing Plexus with', brandName, ':', brandedTitle);
         document.title = brandedTitle;
       } else if (currentTitle && !currentTitle.includes(brandName)) {
         // If the title doesn't contain the brand name, append it
         // This handles cases like "Agent Operating System" -> "Agent Operating System - Acme"
         const brandedTitle = `${currentTitle} - ${brandName}`;
         if (currentTitle === brandedTitle) {
-          console.log('[BrandedTitle] Title already correct, skipping update');
           return;
         }
-        console.log('[BrandedTitle] Appending brand name to title:', brandedTitle);
         document.title = brandedTitle;
-      } else {
-        console.log('[BrandedTitle] Title already contains brand name, leaving as is');
       }
     };
 
@@ -84,11 +74,9 @@ export function BrandedTitle({ pageTitle }: BrandedTitleProps) {
           );
           
           if (titleChanged || mutation.target.nodeName === 'TITLE') {
-            console.log('[BrandedTitle] Title element changed, re-checking');
             replacePlexusInTitle();
           }
         } else if (mutation.type === 'characterData' && mutation.target.parentNode?.nodeName === 'TITLE') {
-          console.log('[BrandedTitle] Title text changed, re-checking');
           replacePlexusInTitle();
         }
       });
