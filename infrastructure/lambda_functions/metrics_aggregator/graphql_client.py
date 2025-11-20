@@ -63,80 +63,22 @@ class GraphQLClient:
         
         return result.get('data', {})
     
-    def get_aggregated_metrics(self, 
-                               account_id: str,
+    def generate_composite_key(self,
                                record_type: str,
                                time_range_start: str,
-                               number_of_minutes: int,
-                               scorecard_id: Optional[str] = None,
-                               score_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+                               number_of_minutes: int) -> str:
         """
-        Query for existing AggregatedMetrics record.
+        Generate composite key for AggregatedMetrics.
         
         Args:
-            account_id: Account ID
-            record_type: Type of record ('items', 'scoreResults', 'tasks', 'evaluations')
-            time_range_start: ISO datetime string for bucket start
-            number_of_minutes: Bucket duration in minutes
-            scorecard_id: Optional scorecard filter
-            score_id: Optional score filter
+            record_type: Type of record
+            time_range_start: ISO datetime string
+            number_of_minutes: Bucket duration
             
         Returns:
-            Existing record if found, None otherwise
+            Composite key string
         """
-        query = """
-        query ListAggregatedMetrics(
-            $accountId: String!,
-            $recordType: String!,
-            $timeRangeStart: String!
-        ) {
-            listAggregatedMetricsByRecordTypeAndTimeRangeStart(
-                recordType: $recordType,
-                timeRangeStart: { eq: $timeRangeStart },
-                filter: {
-                    accountId: { eq: $accountId }
-                }
-            ) {
-                items {
-                    id
-                    accountId
-                    scorecardId
-                    scoreId
-                    recordType
-                    timeRangeStart
-                    timeRangeEnd
-                    numberOfMinutes
-                    count
-                    complete
-                }
-            }
-        }
-        """
-        
-        variables = {
-            'accountId': account_id,
-            'recordType': record_type,
-            'timeRangeStart': time_range_start
-        }
-        
-        try:
-            data = self.execute_query(query, variables)
-            items = data.get('listAggregatedMetricsByRecordTypeAndTimeRangeStart', {}).get('items', [])
-            
-            # Filter by numberOfMinutes, scorecardId, scoreId
-            for item in items:
-                if item['numberOfMinutes'] != number_of_minutes:
-                    continue
-                if scorecard_id and item.get('scorecardId') != scorecard_id:
-                    continue
-                if score_id and item.get('scoreId') != score_id:
-                    continue
-                return item
-            
-            return None
-        except Exception as e:
-            print(f"Error querying AggregatedMetrics: {e}")
-            return None
+        return f"{record_type}#{time_range_start}#{number_of_minutes}"
     
     def create_aggregated_metrics(self,
                                   account_id: str,
@@ -149,7 +91,7 @@ class GraphQLClient:
                                   scorecard_id: Optional[str] = None,
                                   score_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Create a new AggregatedMetrics record.
+        Create a new AggregatedMetrics record with composite key.
         
         Args:
             account_id: Account ID
@@ -168,8 +110,8 @@ class GraphQLClient:
         mutation = """
         mutation CreateAggregatedMetrics($input: CreateAggregatedMetricsInput!) {
             createAggregatedMetrics(input: $input) {
-                id
                 accountId
+                compositeKey
                 recordType
                 timeRangeStart
                 timeRangeEnd
@@ -181,9 +123,11 @@ class GraphQLClient:
         """
         
         now = datetime.utcnow().isoformat() + 'Z'
+        composite_key = self.generate_composite_key(record_type, time_range_start, number_of_minutes)
         
         input_data = {
             'accountId': account_id,
+            'compositeKey': composite_key,
             'recordType': record_type,
             'timeRangeStart': time_range_start,
             'timeRangeEnd': time_range_end,
@@ -205,14 +149,16 @@ class GraphQLClient:
         return data.get('createAggregatedMetrics', {})
     
     def update_aggregated_metrics(self,
-                                  record_id: str,
+                                  account_id: str,
+                                  composite_key: str,
                                   count: int,
                                   complete: bool = False) -> Dict[str, Any]:
         """
-        Update an existing AggregatedMetrics record.
+        Update an existing AggregatedMetrics record using composite key.
         
         Args:
-            record_id: Record ID to update
+            account_id: Account ID (partition key)
+            composite_key: Composite key (sort key)
             count: New count value
             complete: Whether the bucket is complete
             
@@ -222,7 +168,8 @@ class GraphQLClient:
         mutation = """
         mutation UpdateAggregatedMetrics($input: UpdateAggregatedMetricsInput!) {
             updateAggregatedMetrics(input: $input) {
-                id
+                accountId
+                compositeKey
                 count
                 complete
                 updatedAt
@@ -234,7 +181,8 @@ class GraphQLClient:
         
         variables = {
             'input': {
-                'id': record_id,
+                'accountId': account_id,
+                'compositeKey': composite_key,
                 'count': count,
                 'complete': complete,
                 'updatedAt': now
@@ -255,7 +203,8 @@ class GraphQLClient:
                                   scorecard_id: Optional[str] = None,
                                   score_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Create or update an AggregatedMetrics record.
+        Create or update an AggregatedMetrics record using composite key.
+        With composite keys, we can directly create - DynamoDB will handle upsert.
         
         Args:
             account_id: Account ID
@@ -271,36 +220,34 @@ class GraphQLClient:
         Returns:
             Created or updated record
         """
-        # Try to find existing record
-        existing = self.get_aggregated_metrics(
-            account_id=account_id,
-            record_type=record_type,
-            time_range_start=time_range_start,
-            number_of_minutes=number_of_minutes,
-            scorecard_id=scorecard_id,
-            score_id=score_id
-        )
+        # With composite primary key, we can just create/update directly
+        # Try update first (more common case), fall back to create
+        composite_key = self.generate_composite_key(record_type, time_range_start, number_of_minutes)
         
-        if existing:
-            # Update existing record
+        try:
+            # Try update first
             return self.update_aggregated_metrics(
-                record_id=existing['id'],
+                account_id=account_id,
+                composite_key=composite_key,
                 count=count,
                 complete=complete
             )
-        else:
-            # Create new record
-            return self.create_aggregated_metrics(
-                account_id=account_id,
-                record_type=record_type,
-                time_range_start=time_range_start,
-                time_range_end=time_range_end,
-                number_of_minutes=number_of_minutes,
-                count=count,
-                complete=complete,
-                scorecard_id=scorecard_id,
-                score_id=score_id
-            )
+        except Exception as e:
+            # If update fails (record doesn't exist), create it
+            if 'not found' in str(e).lower() or 'does not exist' in str(e).lower():
+                return self.create_aggregated_metrics(
+                    account_id=account_id,
+                    record_type=record_type,
+                    time_range_start=time_range_start,
+                    time_range_end=time_range_end,
+                    number_of_minutes=number_of_minutes,
+                    count=count,
+                    complete=complete,
+                    scorecard_id=scorecard_id,
+                    score_id=score_id
+                )
+            else:
+                raise
 
 
 def get_client_from_env() -> GraphQLClient:

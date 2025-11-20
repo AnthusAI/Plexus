@@ -356,7 +356,12 @@ def _query_score_results(
     end_time: datetime,
     verbose: bool = False
 ) -> List[Dict[str, Any]]:
-    """Query ScoreResults in time window (includes type field for filtering)."""
+    """
+    Query ScoreResults in time window (includes type field for filtering).
+    
+    Note: Uses updatedAt due to GSI limit (20 max per table).
+    This may cause some double-counting if records are updated frequently.
+    """
     query = """
     query ListScoreResultsByTime(
         $accountId: String!,
@@ -517,7 +522,7 @@ def _query_feedback_items(
             'startTime': start_time.isoformat().replace('+00:00', 'Z'),
             'endTime': end_time.isoformat().replace('+00:00', 'Z')
         },
-        'listFeedbackItemByAccountIdAndCreatedAt',
+        'listFeedbackItemByAccountIdAndUpdatedAt',
         verbose
     )
 

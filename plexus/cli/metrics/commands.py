@@ -14,7 +14,7 @@ from typing import Optional, List, Dict, Any
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from dotenv import load_dotenv
 
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -425,6 +425,133 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
         
         # Final summary
         console.print(f"\n[bold green]✓ Complete: {total_updates} buckets updated, {total_skipped} skipped[/bold green]")
+    
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise click.Abort()
+
+
+@metrics_group.command('delete-all')
+@click.option('--dry-run', is_flag=True, help='Show what would be deleted without actually deleting')
+@click.confirmation_option(prompt='Are you sure you want to delete ALL aggregated metrics? This cannot be undone!')
+def delete_all_metrics(dry_run: bool):
+    """
+    Delete all AggregatedMetrics records for the account.
+    
+    Use this before schema migration to clean up old records.
+    After deletion, run 'plexus metrics update' to repopulate.
+    """
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        raise click.Abort()
+    
+    try:
+        # Get account ID
+        account_id = get_account_id_from_env(client)
+        
+        console.print(f"\n[yellow]{'DRY RUN: ' if dry_run else ''}Deleting all AggregatedMetrics for account {account_id}...[/yellow]\n")
+        
+        deleted = 0
+        errors = 0
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console
+        ) as progress:
+            task = progress.add_task("Querying records...", total=None)
+            
+            # Query all records using the GSI
+            query = """
+            query ListAllMetrics($accountId: String!, $nextToken: String) {
+                listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType(
+                    accountId: $accountId,
+                    limit: 1000,
+                    nextToken: $nextToken
+                ) {
+                    items {
+                        accountId
+                        compositeKey
+                        recordType
+                        timeRangeStart
+                        numberOfMinutes
+                    }
+                    nextToken
+                }
+            }
+            """
+            
+            next_token = None
+            batch_count = 0
+            
+            while True:
+                # Query batch
+                variables = {'accountId': account_id}
+                if next_token:
+                    variables['nextToken'] = next_token
+                
+                result = client.execute(query, variables)
+                items = result.get('listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType', {}).get('items', [])
+                
+                if not items:
+                    break
+                
+                batch_count += 1
+                
+                # Update progress with total for this batch
+                progress.update(task, description=f"Deleting batch {batch_count}", total=len(items), completed=0)
+                
+                # Delete each record
+                for idx, item in enumerate(items):
+                    if not dry_run:
+                        try:
+                            delete_mutation = """
+                            mutation DeleteAggregatedMetrics($input: DeleteAggregatedMetricsInput!) {
+                                deleteAggregatedMetrics(input: $input) {
+                                    accountId
+                                    compositeKey
+                                }
+                            }
+                            """
+                            
+                            delete_input = {
+                                'accountId': item['accountId'],
+                                'compositeKey': item['compositeKey']
+                            }
+                            
+                            client.execute(delete_mutation, {'input': delete_input})
+                            deleted += 1
+                        except Exception as e:
+                            errors += 1
+                            console.print(f"[red]Error deleting {item['recordType']} {item['timeRangeStart']}: {e}[/red]")
+                    else:
+                        deleted += 1
+                    
+                    # Update progress
+                    progress.update(task, completed=idx + 1)
+                
+                # Check for more pages
+                next_token = result.get('listAggregatedMetricsByAccountIdAndTimeRangeStartAndRecordType', {}).get('nextToken')
+                if not next_token:
+                    break
+            
+            progress.update(task, description="Complete", completed=True)
+        
+        # Summary
+        if dry_run:
+            console.print(f"\n[yellow]DRY RUN: Would delete {deleted} records[/yellow]")
+        else:
+            if errors > 0:
+                console.print(f"\n[yellow]⚠ Deleted {deleted} records with {errors} errors[/yellow]")
+            else:
+                console.print(f"\n[green]✓ Successfully deleted {deleted} records[/green]")
+        
+        if not dry_run and deleted > 0:
+            console.print(f"\n[dim]To repopulate metrics, run:[/dim]")
+            console.print(f"[dim]  plexus metrics update --hours 168[/dim]")
     
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
