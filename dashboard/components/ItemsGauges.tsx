@@ -419,7 +419,7 @@ export function ItemsGauges({
                   <span className="text-muted-foreground text-xs leading-tight @[500px]:hidden @[700px]:block">Items / day</span>
                 </div>
               </div>
-              {/* Center: Error indicator or Last updated timestamp - absolutely centered in the chart card */}
+              {/* Center: Error indicator - absolutely centered in the chart card */}
               <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 mb-1 flex flex-col items-center z-10">
                 {useRealData && hasErrorsLast24h && onErrorClick && (
                   <div className="relative">
@@ -439,17 +439,6 @@ export function ItemsGauges({
                       </div>
                     </Button>
                   </div>
-                )}
-                {useRealData && !hasErrorsLast24h && metrics?.lastUpdated && (
-                  <>
-                    <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
-                    <Timestamp 
-                      time={metrics.lastUpdated} 
-                      variant="relative" 
-                      showIcon={false}
-                      className="text-[10px] text-muted-foreground"
-                    />
-                  </>
                 )}
               </div>
               {/* Score Results metric - right-justified with color on the right */}

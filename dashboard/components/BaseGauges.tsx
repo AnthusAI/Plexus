@@ -591,20 +591,6 @@ export function BaseGauges({
                         </div>
                       )}
                       
-                      {/* Center: Last updated timestamp - absolutely centered in the chart card */}
-                      <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 mb-1 flex flex-col items-center z-10">
-                        {useRealData && effectiveData?.lastUpdated && (
-                          <>
-                            <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
-                            <Timestamp 
-                              time={effectiveData.lastUpdated as Date} 
-                              variant="relative" 
-                              showIcon={false}
-                              className="text-[10px] text-muted-foreground"
-                            />
-                          </>
-                        )}
-                      </div>
                       
                       {/* Second metric - right-justified with color on the right */}
                       {config.gauges.length > 1 && (
