@@ -89,15 +89,6 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
   const [scores, setScores] = useState<Array<{ value: string; label: string }>>([])
   const [isLoading, setIsLoading] = useState(!useMockData)
 
-  // Debug logging
-  useEffect(() => {
-    console.debug('ScorecardContext state:', { 
-      selectedScorecard, 
-      selectedScore, 
-      scoresCount: scores.length,
-      scores: scores.map(s => ({ id: s.value, name: s.label }))
-    });
-  }, [selectedScorecard, selectedScore, scores]);
 
   useEffect(() => {
     if (useMockData) return
@@ -145,12 +136,6 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         const scoreResults = await Promise.all(scorePromises)
         const allScores = scoreResults.flat();
         
-        console.debug('Fetched scores for scorecard:', {
-          scorecardId: selectedScorecard,
-          scoresCount: allScores.length,
-          scores: allScores.map(s => ({ id: s.id, name: s.name }))
-        });
-        
         // Use score IDs instead of names for values
         setScores(allScores.map(score => ({
           value: score.id,
@@ -166,19 +151,11 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
 
   const handleScoreChange = (value: string) => {
     const newValue = value === "all" ? null : value;
-    console.debug('Score selection changed:', { 
-      newValue, 
-      previousValue: selectedScore 
-    });
     setSelectedScore(newValue);
   };
 
   const handleScorecardChange = (value: string) => {
     const newValue = value === "all" ? null : value;
-    console.log('🏷️ SCORECARD SELECTION CHANGED:');
-    console.log('- Raw value:', value);
-    console.log('- New scorecard ID:', newValue);
-    console.log('- Previous scorecard ID:', selectedScorecard);
     setSelectedScorecard(newValue);
   };
 

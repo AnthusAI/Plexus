@@ -114,13 +114,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
         filter.scoreId = { in: config.scoreIds };
       }
 
-      console.log('🔍 Query strategy based on config:', {
-        hasScorecardId: !!config.scorecardId,
-        hasScoreId: !!config.scoreId,
-        hasScoreIds: !!config.scoreIds?.length,
-        days: config.days
-      });
-
       let allFeedbackItems: any[] = [];
       let nextToken: string | null = null;
       let pageCount = 0;
@@ -132,12 +125,8 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
 
       // For scorecard analysis, we need to fetch scoreIds first, then query each one
       if (config.scorecardId && !config.scoreId && config.accountId) {
-        console.log(`🚀 Using GSI for scorecard analysis: scorecardId=${config.scorecardId}`);
-          console.log(`📅 Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-
         try {
           // First, get all scores in this scorecard directly from the Scorecard
-          console.log('🔍 Step 1: Getting list of scores in scorecard directly...');
           
           const scorecardQuery = `
             query GetScorecardScores($scorecardId: ID!) {
@@ -158,7 +147,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
           }) as any;
           
           const scores = scorecardResponse.data?.getScorecard?.scores?.items || [];
-          console.log(`📋 Found ${scores.length} scores directly from scorecard`);
           
           // Build scoreId -> scoreName mapping
           scores.forEach((score: any) => {
@@ -169,21 +157,13 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
           
           const uniqueScoreIds = scores.map((score: any) => score.id).filter(Boolean);
           
-          console.log(`📋 Found ${uniqueScoreIds.length} unique scores in scorecard:`);
-          uniqueScoreIds.forEach((scoreId: string) => {
-            console.log(`  - ${scoreId}: ${scoreNameLookup[scoreId] || 'Unknown'}`);
-          });
-          
           if (uniqueScoreIds.length === 0) {
-            console.log('⚠️ No scores found in scorecard');
             allFeedbackItems = [];
           } else {
             // Step 2: Query each score individually using the efficient GSI
-            console.log('🔍 Step 2: Querying each score individually using GSI...');
             
             for (let i = 0; i < uniqueScoreIds.length; i++) {
               const scoreId = uniqueScoreIds[i];
-              console.log(`🎯 Querying score ${i + 1}/${uniqueScoreIds.length}: ${scoreId}`);
               
               let scorePageCount = 0;
               let scoreNextToken: string | null = null;
@@ -213,8 +193,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
                 nextToken: scoreNextToken
               };
                 
-                console.log(`🔍 Score ${scoreId} Page ${scorePageCount} query with nextToken: ${scoreNextToken ? 'yes' : 'no'}`);
-                
                 const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(gsiParams);
                 
                 if (response.errors && response.errors.length > 0) {
@@ -228,9 +206,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
                 scoreItemCount += pageItems.length;
                 allFeedbackItems.push(...pageItems);
                 
-                console.log(`📄 Score ${scoreId} Page ${scorePageCount}: ${pageItems.length} items (score total: ${scoreItemCount}, overall total: ${allFeedbackItems.length})`);
-                console.log(`🔗 Score ${scoreId} nextToken: ${newNextToken ? 'has more pages' : 'end of data'}`);
-                
                 scoreNextToken = newNextToken;
                 
                 if (scorePageCount > 10) {
@@ -240,16 +215,11 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
                 
                 // Important: If no more items on this page, break the pagination loop
                 if (pageItems.length === 0) {
-                  console.log(`📄 Score ${scoreId}: No more items, ending pagination`);
                   break;
                 }
                 
               } while (scoreNextToken);
-              
-              console.log(`✅ Score ${scoreId} complete: ${scoreItemCount} total items in ${scorePageCount} pages`);
             }
-            
-            console.log(`📋 Scorecard GSI queries complete: ${allFeedbackItems.length} total items across ${uniqueScoreIds.length} scores`);
           }
 
         } catch (scorecardError) {
@@ -260,9 +230,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
       
       // For per-score analysis, use the efficient GSI
       else if (config.scoreId && config.accountId) {
-        console.log(`🚀 Using GSI for per-score analysis: scoreId=${config.scoreId}`);
-        console.log(`📅 Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-
         try {
           // Try to resolve the score name to avoid showing IDs in headers
           try {
@@ -310,16 +277,7 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
               nextToken
             };
 
-            console.log(`🔍 GSI Query Page ${pageCount} with params:`, gsiParams);
-
             const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(gsiParams);
-
-            console.log(`📄 GSI Response:`, {
-              hasData: !!response.data,
-              dataLength: response.data?.length || 0,
-              hasErrors: !!response.errors,
-              errors: response.errors
-            });
 
             if (response.errors && response.errors.length > 0) {
               console.error('🚨 GSI query errors:', response.errors);
@@ -330,7 +288,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
             nextToken = response.nextToken;
             
             allFeedbackItems.push(...pageItems);
-            console.log(`📄 GSI Page ${pageCount}: ${pageItems.length} items (total: ${allFeedbackItems.length})`);
             
             if (pageCount > 3) {
               console.warn('🚨 GSI taking too many pages, something is wrong');
@@ -338,8 +295,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
             }
             
           } while (nextToken);
-
-          console.log(`📋 GSI query complete: ${allFeedbackItems.length} items`);
 
         } catch (gsiError) {
           console.warn('🔄 GSI failed, falling back to basic query:', gsiError);
@@ -353,8 +308,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
 
       // Use basic GraphQL query as fallback or for scorecard queries
       if (allFeedbackItems.length === 0) {
-        console.log('🔍 Using basic GraphQL query with filter:', filter);
-        
           do {
             pageCount++;
             const variables: any = {
@@ -362,8 +315,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
               limit: 1000,
               nextToken
             };
-
-            console.log(`📄 Basic Query Page ${pageCount}`);
 
             const response = await client.graphql({
               query: listFeedbackItemsQuery,
@@ -373,23 +324,7 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
             const pageItems = response.data?.listFeedbackItems?.items || [];
             nextToken = response.data?.listFeedbackItems?.nextToken;
             
-            // Log sample item structure on first page
-            if (pageItems.length > 0 && pageCount === 1) {
-              console.log('📋 Sample feedback item structure:', {
-                id: pageItems[0].id,
-                scoreId: pageItems[0].scoreId,
-                scorecardId: pageItems[0].scorecardId,
-                initialAnswerValue: pageItems[0].initialAnswerValue,
-                finalAnswerValue: pageItems[0].finalAnswerValue,
-                updatedAt: pageItems[0].updatedAt,
-                editedAt: pageItems[0].editedAt,
-                hasScore: !!pageItems[0].score,
-                hasItem: !!pageItems[0].item
-              });
-            }
-            
             allFeedbackItems.push(...pageItems);
-            console.log(`📄 Basic Page ${pageCount}: ${pageItems.length} items (total: ${allFeedbackItems.length})`);
             
             if (pageCount > 10) {
               console.warn('🚨 Basic query taking too many pages, stopping');
@@ -398,8 +333,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
             
           } while (nextToken);
         }
-
-      console.log(`📋 Total feedback items fetched: ${allFeedbackItems.length}`);
 
       // scoreNameLookup is already populated by scorecard queries above
 
@@ -426,10 +359,6 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
         startDate,
         endDate
       );
-      console.log(`📅 Client-side date filtering applied: ${transformedItems.length} → ${filteredItems.length} items`);
-      console.log(`📅 Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-
-      console.log(`📋 Final filtered items: ${filteredItems.length}`);
 
       // Perform analysis
       let analysisResult: { scores: ScoreAnalysisResult[]; overall: AnalysisResult };

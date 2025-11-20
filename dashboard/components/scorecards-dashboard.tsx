@@ -150,24 +150,9 @@ export default function ScorecardsComponent({
 
   // Handle deep linking - check if we're on a specific scorecard or score page
   useEffect(() => {
-    console.log('🔵 Deep linking useEffect triggered:', {
-      initialSelectedScorecardId,
-      scorecardsCount: scorecards.length,
-      scorecardIds: scorecards.map(sc => sc.id)
-    });
-    
     if (initialSelectedScorecardId) {
       // Find the scorecard in the list
       const scorecard = scorecards.find(sc => sc.id === initialSelectedScorecardId);
-      console.log('🔵 Looking for scorecard in deep linking:', {
-        targetId: initialSelectedScorecardId,
-        found: !!scorecard,
-        foundScorecard: scorecard ? {
-          id: scorecard.id,
-          name: scorecard.name,
-          hasExampleItems: 'exampleItems' in scorecard
-        } : null
-      });
       
       if (scorecard) {
         handleSelectScorecard(scorecard);
@@ -983,29 +968,10 @@ export default function ScorecardsComponent({
         filter: { accountId: { eq: foundAccountId } }
       })
 
-      // Debug: Log the first scorecard to check if guidelines are included
-      if (initialScorecards.data.length > 0) {
-        console.log('🔍 First scorecard data (checking for guidelines):', {
-          id: initialScorecards.data[0].id,
-          name: initialScorecards.data[0].name,
-          guidelines: initialScorecards.data[0].guidelines,
-          guidelinesType: typeof initialScorecards.data[0].guidelines,
-          guidelinesLength: initialScorecards.data[0].guidelines?.length,
-          hasGuidelines: 'guidelines' in initialScorecards.data[0],
-          allFields: Object.keys(initialScorecards.data[0])
-        });
-      }
-
       // Immediately set scorecards with placeholder data to show them instantly
       const quickScorecards = initialScorecards.data
         .filter(s => s.accountId === foundAccountId)
         .map(scorecard => {
-          console.log('🔍 Mapping scorecard:', {
-            id: scorecard.id,
-            name: scorecard.name,
-            guidelines: scorecard.guidelines,
-            hasGuidelines: 'guidelines' in scorecard
-          });
           return {
             ...scorecard,
             examples: [] as string[],
@@ -1032,7 +998,6 @@ export default function ScorecardsComponent({
       setScorecardCountsLoading(loadingStates);
 
       // Start progressive loading in the background (non-blocking)
-      console.log('🚀 Starting progressive loading for', quickScorecards.length, 'scorecards');
       setTimeout(() => {
         loadScoreCountsAndExamples(quickScorecards);
       }, 0);
@@ -1048,15 +1013,12 @@ export default function ScorecardsComponent({
 
   // Progressive loading of score counts and example items (optimized)
   const loadScoreCountsAndExamples = React.useCallback(async (scorecards: (Schema['Scorecard']['type'] & { examples: string[] })[]) => {
-    console.log('🔄 loadScoreCountsAndExamples called with', scorecards.length, 'scorecards');
-    
     // Process scorecards in small batches to avoid overwhelming the API
     const BATCH_SIZE = 3;
     const batches = [];
     for (let i = 0; i < scorecards.length; i += BATCH_SIZE) {
       batches.push(scorecards.slice(i, i + BATCH_SIZE));
     }
-    console.log('📦 Created', batches.length, 'batches of scorecards');
 
     // Process batches with small delays to improve perceived performance
     for (const [batchIndex, batch] of batches.entries()) {
@@ -1068,19 +1030,14 @@ export default function ScorecardsComponent({
       // Process all scorecards in this batch in parallel
       const batchPromises = batch.map(async (scorecard) => {
         try {
-          console.log(`🔍 Processing scorecard: ${scorecard.name} (${scorecard.id})`);
-          
           // Load sections directly from API (the scorecard.sections() method might not work on our placeholder objects)
           const sectionsResult = await amplifyClient.ScorecardSection.list({
             filter: { scorecardId: { eq: scorecard.id } }
           });
           const sections = sectionsResult.data || [];
           
-          console.log(`📂 Found ${sections.length} sections for scorecard ${scorecard.name}`);
-          
           if (sections.length === 0) {
             // No sections = no scores, update immediately
-            console.log(`⚠️ No sections found for scorecard ${scorecard.name}, setting count to 0`);
             setScorecardScoreCounts(prev => ({ ...prev, [scorecard.id]: 0 }));
             setScorecardCountsLoading(prev => ({ ...prev, [scorecard.id]: false }));
             return;
@@ -1089,7 +1046,6 @@ export default function ScorecardsComponent({
           // Load score counts for each section in parallel with timeout
           const sectionScorePromises = sections.map(async (section, index) => {
             try {
-              console.log(`  📊 Loading scores for section ${index + 1}/${sections.length}: ${section.name} (${section.id})`);
               
               // Add timeout to prevent hanging requests
               const timeoutPromise = new Promise((_, reject) => 
@@ -1099,7 +1055,6 @@ export default function ScorecardsComponent({
               
               const allScores = await Promise.race([scoresPromise, timeoutPromise]);
               const scoreCount = (allScores as any[]).length;
-              console.log(`  ✅ Section ${section.name} has ${scoreCount} scores`);
               return scoreCount;
             } catch (error) {
               console.warn(`  ❌ Error loading scores for section ${section.id} (${section.name}):`, error);
@@ -1111,7 +1066,6 @@ export default function ScorecardsComponent({
           const totalScoreCount = sectionScoreCounts.reduce((sum, count) => sum + count, 0);
 
           // Update score count immediately for this scorecard
-          console.log(`✅ Loaded ${totalScoreCount} scores for scorecard ${scorecard.name} (${scorecard.id})`);
           setScorecardScoreCounts(prev => ({
             ...prev,
             [scorecard.id]: totalScoreCount
@@ -1170,7 +1124,6 @@ export default function ScorecardsComponent({
 
   // Helper function to fetch all scores for a section
   const fetchAllScoresForSection = async (sectionId: string) => {
-    console.log('🔍 fetchAllScoresForSection called for sectionId:', sectionId);
     let allScores: Schema['Score']['type'][] = []
     let nextToken: string | null = null
     
@@ -1179,10 +1132,6 @@ export default function ScorecardsComponent({
         filter: { sectionId: { eq: sectionId } },
         ...(nextToken ? { nextToken } : {})
       })
-      
-      console.log('🔍 Scores result for section', sectionId, ':', scoresResult.data?.length, 'scores found');
-      
-
       
       // Process scores to ensure complete data before adding to state
       // This helps React render name and description together
@@ -1201,7 +1150,6 @@ export default function ScorecardsComponent({
       nextToken = scoresResult.nextToken
     } while (nextToken)
     
-    console.log('🔍 Final scores for section', sectionId, ':', allScores.map(s => ({id: s.id, name: s.name})));
     return allScores
   }
 

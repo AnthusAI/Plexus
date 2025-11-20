@@ -1450,7 +1450,6 @@ function ItemsDashboardInner() {
         
         if (pageHiddenTimeRef.current && (now - pageHiddenTimeRef.current) > WAKE_THRESHOLD_MS) {
           // Page was hidden for more than the threshold - likely wake from sleep
-          console.log('Wake from sleep detected, performing silent refresh...');
           
           // Perform silent refresh and restart subscriptions
           silentRefresh();
@@ -2047,9 +2046,6 @@ function ItemsDashboardInner() {
           }
         } else if (useScorecard) {
           // If only a scorecard is selected, use optimized ScoreResult GSI
-          console.log('🔍 SCORECARD FILTERING DEBUG (OPTIMIZED GSI):');
-          console.log('- Selected scorecard ID:', selectedScorecard);
-          console.log('- Account ID:', accountId);
           
           try {
             // Try the new optimized GSI first - sorted by itemId, createdAt for efficient deduplication
@@ -2104,9 +2100,6 @@ function ItemsDashboardInner() {
               limit: 300  // Query more since we'll deduplicate
             });
             
-            console.log('- OPTIMIZED GSI query response:', directQuery);
-            console.log('- Raw ScoreResults count:', directQuery.data?.listScoreResultByScorecardIdAndItemIdAndCreatedAt?.items?.length || 0);
-            
             if (directQuery.data?.listScoreResultByScorecardIdAndItemIdAndCreatedAt?.items) {
               // Efficiently deduplicate - since results are sorted by itemId, createdAt,
               // we can take the first (most recent) result for each itemId
@@ -2129,16 +2122,11 @@ function ItemsDashboardInner() {
               });
               
               nextTokenFromDirectQuery = directQuery.data.listScoreResultByScorecardIdAndItemIdAndCreatedAt.nextToken;
-              console.log('- ✅ Using optimized GSI! Unique items:', itemsFromDirectQuery.length);
             } else {
-              console.log('- Optimized GSI not available yet, using current method');
               throw new Error('Optimized GSI not ready, use current method');
             }
             
           } catch (error) {
-            console.log('- Optimized GSI error:', error);
-            console.log('- Using current ScoreResult method');
-            
             // Current ScoreResult-based approach
             const currentQuery = await graphqlRequest<{
               listScoreResultByScorecardIdAndUpdatedAt: {
@@ -2204,7 +2192,6 @@ function ItemsDashboardInner() {
                 return dateB - dateA;
               });
               nextTokenFromDirectQuery = currentQuery.data.listScoreResultByScorecardIdAndUpdatedAt.nextToken;
-              console.log('- ⚠️ Using current ScoreResult method, items found:', itemsFromDirectQuery.length);
             }
           }
         } else {
@@ -2681,7 +2668,6 @@ function ItemsDashboardInner() {
                   } else {
                     // In error filter mode - don't add existing items that just got score results
                     // Only new items (handled by item creation subscription) should appear
-                    console.log('🚫 Preventing existing item from appearing in error filter due to score result update:', updatedItem.id);
                     return prevItems;
                   }
                 }

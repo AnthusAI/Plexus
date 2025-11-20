@@ -1094,27 +1094,15 @@ export default function ScorecardComponent({
   const prevScoreIdRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
-    console.log('🔍 ScorecardComponent received score:', {
-      id: score.id,
-      name: score.name,
-      guidelines: score.guidelines,
-      guidelinesType: typeof score.guidelines,
-      guidelinesLength: score.guidelines?.length,
-      hasGuidelines: 'guidelines' in score,
-      allScoreFields: Object.keys(score)
-    });
-    
     // Update editedScore in two cases:
     // 1. We're switching to a different scorecard (different ID)
     // 2. We're on the same scorecard but have no unsaved changes (data was refreshed after save)
     if (prevScoreIdRef.current !== score.id) {
-      console.log('🔄 Switching to different scorecard, resetting editedScore');
       setEditedScore(score)
       setHasChanges(false)
       prevScoreIdRef.current = score.id
     } else if (!hasChanges) {
       // Same scorecard, no unsaved changes - update with fresh data from server
-      console.log('🔄 Updating editedScore with fresh data from server (no unsaved changes)');
       setEditedScore(score)
     }
   }, [score, hasChanges])

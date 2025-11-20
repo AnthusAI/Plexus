@@ -67,7 +67,6 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
-  console.log('ReportConfigurationDialog render - isOpen:', isOpen, 'selectedConfigId:', selectedConfigId, 'selectedConfig:', selectedConfig)
   
   // Fetch report configurations
   useEffect(() => {
@@ -140,7 +139,6 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
         return
       }
       
-      console.log('Fetching full configuration for ID:', selectedConfigId)
       
       try {
         const response = await getClient().graphql({
@@ -148,15 +146,11 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
           variables: { id: selectedConfigId }
         })
         
-        console.log('Configuration fetch response:', response)
         
         if ('data' in response && response.data?.getReportConfiguration) {
           const config = response.data.getReportConfiguration
-          console.log('Fetched configuration:', config)
-          console.log('Configuration content length:', config.configuration?.length || 0)
           setSelectedConfig(config)
         } else {
-          console.warn('No configuration data in response')
         }
       } catch (err) {
         console.error('Error fetching report configuration:', err)
@@ -172,17 +166,12 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       return
     }
     
-    console.log('handleRunReport - selectedConfig:', selectedConfig)
-    console.log('handleRunReport - configuration content:', selectedConfig?.configuration)
-    console.log('handleRunReport - hasParameters result:', selectedConfig?.configuration ? hasParameters(selectedConfig.configuration) : 'no configuration')
     
     // Check if this configuration has parameters
     if (selectedConfig?.configuration && hasParameters(selectedConfig.configuration)) {
-      console.log('Showing parameters dialog')
       // Show parameters dialog
       setShowParametersDialog(true)
     } else {
-      console.log('Running directly without parameters')
       // Run directly without parameters
       handleDispatchReport()
     }
