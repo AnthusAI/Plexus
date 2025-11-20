@@ -41,6 +41,13 @@ export interface MetricsConfig {
     useFeedbackItems?: boolean // Special flag to query feedbackItems instead of items
   }
   
+  // Time range configuration
+  timeRange?: {
+    start: Date
+    end: Date
+    period: 'hour' | 'day' | 'week'
+  }
+  
   // Optional transformations
   transformations?: {
     // Custom peak calculation
@@ -262,11 +269,15 @@ function calculateMetricsFromRecords(
 
 /**
  * Generate chart data from AggregatedMetrics records
- * Groups records into hourly buckets using hierarchical selection to avoid double-counting
+ * Groups records into buckets using hierarchical selection to avoid double-counting
+ * Bucket size adapts based on the time period
  */
 function generateChartData(
   itemsRecords: AggregatedMetricsRecord[],
-  scoreResultsRecords: AggregatedMetricsRecord[]
+  scoreResultsRecords: AggregatedMetricsRecord[],
+  startTime?: Date,
+  endTime?: Date,
+  period?: 'hour' | 'day' | 'week'
 ): Array<{
   time: string
   items: number
@@ -275,6 +286,10 @@ function generateChartData(
   bucketEnd: string
 }> {
   const now = new Date()
+  const end = endTime || now
+  const start = startTime || new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  const actualPeriod = period || 'day'
+  
   const chartData: Array<{
     time: string
     items: number
@@ -283,13 +298,32 @@ function generateChartData(
     bucketEnd: string
   }> = []
 
-  // Generate 24 hourly buckets
-  for (let i = 23; i >= 0; i--) {
-    const bucketEnd = new Date(now)
-    bucketEnd.setHours(bucketEnd.getHours() - i, 0, 0, 0)
-    
-    const bucketStart = new Date(bucketEnd)
-    bucketStart.setHours(bucketStart.getHours() - 1)
+  // Determine bucket size and count based on period
+  let bucketSizeMs: number
+  let bucketCount: number
+  
+  switch (actualPeriod) {
+    case 'hour':
+      // For 1 hour period: 12 buckets of 5 minutes each
+      bucketSizeMs = 5 * 60 * 1000
+      bucketCount = 12
+      break
+    case 'day':
+      // For 24 hour period: 24 buckets of 1 hour each
+      bucketSizeMs = 60 * 60 * 1000
+      bucketCount = 24
+      break
+    case 'week':
+      // For 7 day period: 28 buckets of 6 hours each
+      bucketSizeMs = 6 * 60 * 60 * 1000
+      bucketCount = 28
+      break
+  }
+
+  // Generate buckets from start to end
+  for (let i = bucketCount - 1; i >= 0; i--) {
+    const bucketEnd = new Date(end.getTime() - i * bucketSizeMs)
+    const bucketStart = new Date(bucketEnd.getTime() - bucketSizeMs)
 
     // Use hierarchical selection to avoid double-counting
     const itemsMetrics = calculateMetricsFromRecords(itemsRecords, bucketStart, bucketEnd)
@@ -349,8 +383,20 @@ export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetrics
 
     try {
       const now = new Date()
-      const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-      const last60min = new Date(now.getTime() - 60 * 60 * 1000)
+      
+      // Use custom time range if provided, otherwise default to last 24h
+      const timeRange = memoizedConfig.timeRange
+      const rangeEnd = timeRange?.end || now
+      const rangeStart = timeRange?.start || new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      const period = timeRange?.period || 'day'
+      
+      // Calculate the time window for per-hour gauge (last 60 minutes within the range)
+      // For historical periods, use the last hour of that period
+      const gaugeEnd = rangeEnd
+      const gaugeStart = new Date(Math.max(
+        gaugeEnd.getTime() - 60 * 60 * 1000,
+        rangeStart.getTime()
+      ))
 
       // Determine which items recordType to query based on filters
       let itemsRecordType: 'items' | 'predictionItems' | 'evaluationItems' | 'feedbackItems' = 'items'
@@ -372,8 +418,8 @@ export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetrics
 
       // Query AggregatedMetrics for items and scoreResults (or filtered variants)
       const [itemsRecords, scoreResultsRecords] = await Promise.all([
-        queryAggregatedMetrics(selectedAccount.id, itemsRecordType, last24h, now),
-        queryAggregatedMetrics(selectedAccount.id, scoreResultsRecordType, last24h, now)
+        queryAggregatedMetrics(selectedAccount.id, itemsRecordType, rangeStart, rangeEnd),
+        queryAggregatedMetrics(selectedAccount.id, scoreResultsRecordType, rangeStart, rangeEnd)
       ])
 
       // Debug logging
@@ -383,46 +429,47 @@ export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetrics
         console.log(`[useUnifiedMetrics] Available bucket sizes:`, [...new Set(itemsRecords.map(r => r.numberOfMinutes))].sort((a, b) => a - b))
       }
 
-      // Calculate hourly metrics (last 60 minutes)
-      const itemsHourly = calculateMetricsFromRecords(itemsRecords, last60min, now)
-      const scoreResultsHourly = calculateMetricsFromRecords(scoreResultsRecords, last60min, now)
+      // Calculate hourly metrics (last 60 minutes within the range)
+      const itemsHourly = calculateMetricsFromRecords(itemsRecords, gaugeStart, gaugeEnd)
+      const scoreResultsHourly = calculateMetricsFromRecords(scoreResultsRecords, gaugeStart, gaugeEnd)
       
       console.log(`[useUnifiedMetrics] Hourly: ${itemsHourly.count} items, ${scoreResultsHourly.count} scoreResults`)
 
-      // Calculate 24h totals
-      const items24h = calculateMetricsFromRecords(itemsRecords, last24h, now)
-      const scoreResults24h = calculateMetricsFromRecords(scoreResultsRecords, last24h, now)
+      // Calculate totals for the entire range
+      const itemsTotal = calculateMetricsFromRecords(itemsRecords, rangeStart, rangeEnd)
+      const scoreResultsTotal = calculateMetricsFromRecords(scoreResultsRecords, rangeStart, rangeEnd)
 
-      // Generate chart data
-      const chartData = generateChartData(itemsRecords, scoreResultsRecords)
+      // Generate chart data with custom time range
+      const chartData = generateChartData(itemsRecords, scoreResultsRecords, rangeStart, rangeEnd, period)
 
       // Calculate peaks
       const { itemsPeak, scoreResultsPeak } = memoizedConfig.transformations?.customPeakCalculation?.(chartData) || 
         calculatePeakValues(chartData)
 
-      // Calculate averages
-      const itemsAveragePerHour = Math.round(items24h.count / 24)
-      const scoreResultsAveragePerHour = Math.round(scoreResults24h.count / 24)
+      // Calculate averages based on the time period
+      const rangeHours = (rangeEnd.getTime() - rangeStart.getTime()) / (60 * 60 * 1000)
+      const itemsAveragePerHour = Math.round(itemsTotal.count / rangeHours)
+      const scoreResultsAveragePerHour = Math.round(scoreResultsTotal.count / rangeHours)
 
       // Detect errors
-      const hasErrorsLast24h = (items24h.errorCount + scoreResults24h.errorCount) > 0
-      const totalErrors24h = items24h.errorCount + scoreResults24h.errorCount
+      const hasErrorsInRange = (itemsTotal.errorCount + scoreResultsTotal.errorCount) > 0
+      const totalErrorsInRange = itemsTotal.errorCount + scoreResultsTotal.errorCount
 
       const metricsData: UnifiedMetricsData = {
         itemsPerHour: itemsHourly.count,
         itemsAveragePerHour,
         itemsPeakHourly: itemsPeak,
-        itemsTotal24h: items24h.count,
+        itemsTotal24h: itemsTotal.count,
         
         scoreResultsPerHour: scoreResultsHourly.count,
         scoreResultsAveragePerHour,
         scoreResultsPeakHourly: scoreResultsPeak,
-        scoreResultsTotal24h: scoreResults24h.count,
+        scoreResultsTotal24h: scoreResultsTotal.count,
         
         chartData,
         lastUpdated: now,
-        hasErrorsLast24h,
-        totalErrors24h
+        hasErrorsLast24h: hasErrorsInRange,
+        totalErrors24h: totalErrorsInRange
       }
 
       setMetrics(metricsData)
@@ -573,7 +620,7 @@ export function useTaskMetrics(): UseUnifiedMetricsResult {
       const tasks24h = calculateMetricsFromRecords(tasksRecords, last24h, now)
 
       // Generate chart data (only tasks, no scoreResults)
-      const chartData = generateChartData(tasksRecords, [])
+      const chartData = generateChartData(tasksRecords, [], last24h, now, 'day')
 
       // Calculate peaks with higher baseline for tasks
       const itemsPeak = Math.max(...chartData.map(point => point.items), 10) // Minimum 10 for tasks
@@ -710,7 +757,7 @@ export function useProceduresMetrics(): UseUnifiedMetricsResult {
       const graphNodes24h = calculateMetricsFromRecords(graphNodesRecords, last24h, now)
 
       // Generate chart data
-      const chartData = generateChartData(proceduresRecords, graphNodesRecords)
+      const chartData = generateChartData(proceduresRecords, graphNodesRecords, last24h, now, 'day')
 
       // Calculate peaks with higher baselines for procedures
       const itemsPeak = Math.max(...chartData.map(point => point.items), 10) // Minimum 10 for procedures
