@@ -26,6 +26,7 @@ echo "Creating Secrets Manager secret for $ENVIRONMENT environment..."
 echo ""
 
 # Build JSON secret value from environment variables
+# Include table ARNs if they exist in .env
 SECRET_VALUE=$(cat <<EOF
 {
   "account-key": "${PLEXUS_ACCOUNT_KEY}",
@@ -34,7 +35,19 @@ SECRET_VALUE=$(cat <<EOF
   "postgres-uri": "${PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI}",
   "openai-api-key": "${OPENAI_API_KEY}",
   "score-result-attachments-bucket": "${AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME}",
-  "report-block-details-bucket": "${AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME}"
+  "report-block-details-bucket": "${AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME}",
+  "table-item-name": "${TABLE_ITEM_NAME:-}",
+  "table-item-arn": "${TABLE_ITEM_ARN:-}",
+  "table-item-stream-arn": "${TABLE_ITEM_STREAM_ARN:-}",
+  "table-scoreresult-name": "${TABLE_SCORERESULT_NAME:-}",
+  "table-scoreresult-arn": "${TABLE_SCORERESULT_ARN:-}",
+  "table-scoreresult-stream-arn": "${TABLE_SCORERESULT_STREAM_ARN:-}",
+  "table-task-name": "${TABLE_TASK_NAME:-}",
+  "table-task-arn": "${TABLE_TASK_ARN:-}",
+  "table-task-stream-arn": "${TABLE_TASK_STREAM_ARN:-}",
+  "table-evaluation-name": "${TABLE_EVALUATION_NAME:-}",
+  "table-evaluation-arn": "${TABLE_EVALUATION_ARN:-}",
+  "table-evaluation-stream-arn": "${TABLE_EVALUATION_STREAM_ARN:-}"
 }
 EOF
 )
@@ -58,7 +71,8 @@ fi
 echo ""
 echo "📋 Secret details:"
 echo "  Name: $SECRET_NAME"
-echo "  Keys: account-key, api-key, api-url, postgres-uri, openai-api-key, score-result-attachments-bucket, report-block-details-bucket"
+echo "  Keys:"
+echo "$SECRET_VALUE" | jq -r 'keys[]' | sed 's/^/    - /'
 echo ""
 echo "🔍 View secret (without values):"
 echo "  aws secretsmanager describe-secret --secret-id $SECRET_NAME"

@@ -5,14 +5,26 @@ Script to read SQS messages containing scoring job IDs and generate a CSV report
 This script:
 1. Reads all messages from an SQS queue (without deleting them)
 2. Extracts the scoring_job_id from each message
-3. Queries the database to get the report_id and scorecard_id for each scoring job
+3. Queries the database to get the report_id and scorecard_id for each scoring job (in parallel)
 4. Generates a CSV with deduplicated results based on report_id
 
-Usage:
-    python scripts/extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL>
+Performance:
+- Uses parallel processing (default: 20 workers) for database lookups
+- On a powerful machine, can process hundreds of messages in seconds instead of minutes
+- Adjust max_workers parameter based on your system capabilities
 
-Example:
+Usage:
+    python scripts/extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers]
+
+Examples:
+    # Basic usage with defaults
     python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue
+    
+    # Specify output file
+    python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue output.csv
+    
+    # Use 50 parallel workers for maximum speed on a powerful machine
+    python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue output.csv 50
 """
 
 import os
@@ -23,6 +35,8 @@ import boto3
 from datetime import datetime
 from typing import Dict, List, Set
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 # Set up logging
 logging.basicConfig(
@@ -44,20 +58,23 @@ except ImportError as e:
 class ScoringJobExtractor:
     """Extracts scoring job information from SQS queue and generates CSV report."""
 
-    def __init__(self, queue_url: str):
+    def __init__(self, queue_url: str, max_workers: int = 20):
         """
         Initialize the extractor.
 
         Args:
             queue_url: The SQS queue URL to read messages from
+            max_workers: Maximum number of parallel workers for database lookups
         """
         self.queue_url = queue_url
+        self.max_workers = max_workers
         self.sqs_client = boto3.client('sqs')
         self.dashboard_client = PlexusDashboardClient()
 
         # Storage for results
         self.results: List[Dict[str, str]] = []
         self.seen_report_ids: Set[str] = set()
+        self.results_lock = Lock()  # Thread-safe access to results
 
     def extract_report_id_from_item_id(self, item_id: str) -> str:
         """
@@ -92,23 +109,28 @@ class ScoringJobExtractor:
 
         all_messages = []
         messages_received = 0
+        empty_receives = 0
+        max_empty_receives = 3  # Stop after 3 consecutive empty receives
 
-        while True:
+        while empty_receives < max_empty_receives:
             try:
                 # Receive messages (up to 10 at a time)
                 response = self.sqs_client.receive_message(
                     QueueUrl=self.queue_url,
                     MaxNumberOfMessages=10,  # Max allowed by SQS
-                    WaitTimeSeconds=5,  # Short poll since we're iterating
+                    WaitTimeSeconds=1,  # Shorter wait time for faster iteration
                     AttributeNames=['All']
                 )
 
                 messages = response.get('Messages', [])
 
                 if not messages:
-                    # No more messages available
-                    logger.info("No more messages in queue")
-                    break
+                    empty_receives += 1
+                    logger.debug(f"Empty receive {empty_receives}/{max_empty_receives}")
+                    continue
+                
+                # Reset empty counter when we get messages
+                empty_receives = 0
 
                 messages_received += len(messages)
                 logger.info(f"Received {len(messages)} messages (total: {messages_received})")
@@ -168,43 +190,78 @@ class ScoringJobExtractor:
                 'scorecard_id': 'ERROR'
             }
 
+    def process_single_message(self, message: Dict, message_num: int) -> Dict[str, str]:
+        """
+        Process a single message (for parallel execution).
+
+        Args:
+            message: Message body from SQS
+            message_num: Message number for logging
+
+        Returns:
+            Result dictionary or None if message should be skipped
+        """
+        try:
+            scoring_job_id = message.get('scoring_job_id')
+
+            if not scoring_job_id:
+                logger.warning(f"Message {message_num} missing 'scoring_job_id' field: {message}")
+                return None
+
+            # Look up the scoring job
+            result = self.lookup_scoring_job(scoring_job_id)
+            return result
+
+        except Exception as e:
+            logger.error(f"Error processing message {message_num}: {e}")
+            return None
+
     def process_messages(self, messages: List[Dict]) -> None:
         """
-        Process all messages and build results list.
+        Process all messages in parallel and build results list.
 
         Args:
             messages: List of message bodies from SQS
         """
-        logger.info(f"Processing {len(messages)} messages...")
+        logger.info(f"Processing {len(messages)} messages with {self.max_workers} parallel workers...")
 
-        for i, message in enumerate(messages, 1):
-            try:
-                scoring_job_id = message.get('scoring_job_id')
+        completed = 0
+        
+        # Use ThreadPoolExecutor for parallel processing
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all tasks
+            future_to_message = {
+                executor.submit(self.process_single_message, msg, i): i 
+                for i, msg in enumerate(messages, 1)
+            }
 
-                if not scoring_job_id:
-                    logger.warning(f"Message {i} missing 'scoring_job_id' field: {message}")
-                    continue
+            # Process completed tasks
+            for future in as_completed(future_to_message):
+                completed += 1
+                
+                try:
+                    result = future.result()
+                    
+                    if result is None:
+                        continue
 
-                # Look up the scoring job
-                result = self.lookup_scoring_job(scoring_job_id)
+                    # Thread-safe check and add
+                    report_id = result['report_id']
+                    
+                    with self.results_lock:
+                        if report_id not in self.seen_report_ids:
+                            self.results.append(result)
+                            self.seen_report_ids.add(report_id)
+                        else:
+                            logger.debug(f"Skipping duplicate report_id: {report_id}")
 
-                # Check if we've already seen this report_id
-                report_id = result['report_id']
+                    # Progress logging
+                    if completed % 50 == 0:
+                        with self.results_lock:
+                            logger.info(f"Processed {completed}/{len(messages)} messages, {len(self.results)} unique reports")
 
-                if report_id in self.seen_report_ids:
-                    logger.debug(f"Skipping duplicate report_id: {report_id}")
-                    continue
-
-                # Add to results
-                self.results.append(result)
-                self.seen_report_ids.add(report_id)
-
-                if i % 10 == 0:
-                    logger.info(f"Processed {i}/{len(messages)} messages, {len(self.results)} unique reports")
-
-            except Exception as e:
-                logger.error(f"Error processing message {i}: {e}")
-                continue
+                except Exception as e:
+                    logger.error(f"Error getting result from future: {e}")
 
         logger.info(f"Completed processing. Found {len(self.results)} unique reports")
 
@@ -248,6 +305,7 @@ class ScoringJobExtractor:
         logger.info("=" * 80)
         logger.info(f"Queue URL: {self.queue_url}")
         logger.info(f"Output file: {output_file}")
+        logger.info(f"Parallel workers: {self.max_workers}")
         logger.info("")
 
         # Step 1: Read messages from SQS
@@ -280,19 +338,30 @@ def main():
     """Main entry point for the script."""
     # Check command line arguments
     if len(sys.argv) < 2:
-        print("Usage: python extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv]")
+        print("Usage: python extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers]")
         print("")
-        print("Example:")
+        print("Arguments:")
+        print("  SQS_QUEUE_URL  - The SQS queue URL to read from")
+        print("  output_file.csv - (Optional) Output CSV filename")
+        print("  max_workers    - (Optional) Number of parallel workers (default: 20)")
+        print("")
+        print("Examples:")
         print("  python extract_scoring_jobs_from_sqs.py \\")
         print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue")
         print("")
         print("  python extract_scoring_jobs_from_sqs.py \\")
         print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue \\")
         print("    my_output.csv")
+        print("")
+        print("  python extract_scoring_jobs_from_sqs.py \\")
+        print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue \\")
+        print("    my_output.csv \\")
+        print("    50")
         sys.exit(1)
 
     queue_url = sys.argv[1]
     output_file = sys.argv[2] if len(sys.argv) > 2 else None
+    max_workers = int(sys.argv[3]) if len(sys.argv) > 3 else 20
 
     # Validate environment variables
     required_env_vars = ['PLEXUS_API_URL', 'PLEXUS_API_KEY']
@@ -305,7 +374,7 @@ def main():
 
     # Run the extractor
     try:
-        extractor = ScoringJobExtractor(queue_url)
+        extractor = ScoringJobExtractor(queue_url, max_workers=max_workers)
         extractor.run(output_file)
     except Exception as e:
         logger.error(f"Fatal error: {e}")

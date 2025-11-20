@@ -78,6 +78,8 @@ class BasePipelineStack(Stack):
                 commands=[
                     "cd infrastructure",
                     "pip install -r requirements.txt",
+                    # Build Lambda functions (metrics aggregator, etc.) before CDK synth
+                    "./build_lambda.sh",
                     "npx cdk synth"
                 ],
                 primary_output_directory="infrastructure/cdk.out"
@@ -187,7 +189,7 @@ class DeploymentStage(cdk.Stage):
             "LambdaScoreProcessor",
             environment=environment,
             ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
-            standard_request_queue_url=scoring_worker_stack.standard_request_queue.queue_url,
+            standard_request_queue=scoring_worker_stack.standard_request_queue,
             response_queue_url=scoring_worker_stack.response_queue.queue_url,
             stack_name=f"plexus-lambda-score-processor-{environment}",
             env=kwargs.get("env")
