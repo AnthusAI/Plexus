@@ -17,9 +17,9 @@ from aws_cdk.aws_lambda_event_sources import DynamoEventSource
 from aws_cdk.aws_lambda import StartingPosition
 from constructs import Construct
 import os
-from typing import Dict, Any
 
 from .shared.naming import get_resource_name
+from .shared.config import EnvironmentConfig
 
 
 class MetricsAggregationStack(Stack):
@@ -54,60 +54,52 @@ class MetricsAggregationStack(Stack):
         Tags.of(self).add("Environment", environment)
         Tags.of(self).add("Service", "metrics-aggregation")
         Tags.of(self).add("ManagedBy", "CDK")
+
+        # Load environment-specific configuration from Secrets Manager
+        config = EnvironmentConfig(self, environment)
         
-        # Get GraphQL credentials from environment variables
-        graphql_endpoint = os.environ.get('PLEXUS_API_URL')
-        graphql_api_key = os.environ.get('PLEXUS_API_KEY')
-        
-        if not graphql_endpoint or not graphql_api_key:
-            raise ValueError(
-                "PLEXUS_API_URL and PLEXUS_API_KEY must be set in .env file"
-            )
-        
-        # Load Amplify table ARNs from environment variables
-        # Run discover_and_save_tables.py first to populate these
-        print(f"Loading Amplify table ARNs from environment for {environment}...")
+        # Load Amplify table ARNs from Secrets Manager
+        # These are populated by running discover_and_save_tables.py and create-secrets-{environment}.sh
+        print(f"Loading Amplify table ARNs from Secrets Manager for {environment}...")
         region = kwargs.get('env').region if kwargs.get('env') else 'us-west-2'
-        
-        # Build tables dict from environment variables
+
+        # Build tables dict from Secrets Manager configuration
         tables = {}
-        table_types = ['item', 'scoreResult', 'task', 'evaluation']
-        
+        table_types = ['item', 'scoreresult', 'task', 'evaluation']
+
         for table_type in table_types:
-            env_prefix = f"TABLE_{table_type.upper()}"
-            table_name = os.environ.get(f"{env_prefix}_NAME")
-            table_arn = os.environ.get(f"{env_prefix}_ARN")
-            stream_arn = os.environ.get(f"{env_prefix}_STREAM_ARN")
-            
-            if table_name and table_arn and stream_arn:
-                tables[table_type] = {
-                    'table_name': table_name,
-                    'table_arn': table_arn,
-                    'stream_arn': stream_arn
-                }
-                print(f"  Loaded {table_type}: {table_name}")
-        
-        if not tables:
-            raise Exception(
-                "Could not load table ARNs from environment. "
-                "Run 'python3 discover_and_save_tables.py' first to populate .env file."
-            )
-        
-        print(f"Loaded {len(tables)} tables")
+            secret_prefix = f"table-{table_type.lower()}"
+            table_name = config.get_value(f"{secret_prefix}-name")
+            table_arn = config.get_value(f"{secret_prefix}-arn")
+            stream_arn = config.get_value(f"{secret_prefix}-stream-arn")
+
+            # Only add if all values exist (CDK tokens will be resolved at deploy time)
+            tables[table_type] = {
+                'table_name': table_name,
+                'table_arn': table_arn,
+                'stream_arn': stream_arn
+            }
+            print(f"  Loading {table_type} from Secrets Manager")
+
+        print(f"Configured {len(tables)} table stream sources")
         
         # Get the build directory containing the Lambda function code
-        # Run build_lambda.sh first to populate this directory
+        # If it doesn't exist, run the build script to create it
         function_dir = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             'build',
             'metrics_aggregator'
         )
-        
+
         if not os.path.exists(function_dir):
-            raise Exception(
-                f"Lambda build directory not found: {function_dir}\n"
-                "Run './build_lambda.sh' from the infrastructure directory first."
+            print(f"⚠️  Lambda build directory not found, running build_lambda.sh...")
+            import subprocess
+            build_script = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                'build_lambda.sh'
             )
+            subprocess.run(['bash', build_script], check=True, cwd=os.path.dirname(build_script))
+            print(f"✅ Lambda build completed")
         
         # Create IAM role for Lambda
         lambda_role = iam.Role(
@@ -168,7 +160,10 @@ class MetricsAggregationStack(Stack):
                 resources=['*']  # AppSync doesn't support resource-level permissions for GraphQL
             )
         )
-        
+
+        # Grant read access to Secrets Manager
+        config.secret.grant_read(lambda_role)
+
         # Create Lambda function
         self.lambda_function = lambda_.Function(
             self,
@@ -181,8 +176,8 @@ class MetricsAggregationStack(Stack):
             timeout=Duration.seconds(60),
             memory_size=512,
             environment={
-                'GRAPHQL_ENDPOINT': graphql_endpoint,
-                'GRAPHQL_API_KEY': graphql_api_key,
+                'GRAPHQL_ENDPOINT': config.get_value("api-url"),
+                'GRAPHQL_API_KEY': config.get_value("api-key"),
                 'ENVIRONMENT': environment
             },
             description=f"Processes DynamoDB streams to update AggregatedMetrics ({environment})"
