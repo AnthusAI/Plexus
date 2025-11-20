@@ -365,9 +365,8 @@ export function ItemsGauges({
               decimalPlaces={0}
               showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
               segments={[
-                { start: 0, end: 10, color: 'var(--false)' },
-                { start: 10, end: 90, color: 'var(--neutral)' },
-                { start: 90, end: 100, color: 'var(--true)' }
+                { start: 0, end: 90, color: 'var(--neutral)' },
+                { start: 90, end: 100, color: 'var(--false)' }
               ]}
               backgroundColor="var(--background)"
             />
@@ -399,9 +398,8 @@ export function ItemsGauges({
               decimalPlaces={0}
               showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
               segments={[
-                { start: 0, end: 10, color: 'var(--false)' },
-                { start: 10, end: 90, color: 'var(--neutral)' },
-                { start: 90, end: 100, color: 'var(--true)' }
+                { start: 0, end: 90, color: 'var(--neutral)' },
+                { start: 90, end: 100, color: 'var(--false)' }
               ]}
               backgroundColor="var(--background)"
             />

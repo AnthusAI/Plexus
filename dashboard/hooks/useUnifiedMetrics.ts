@@ -112,7 +112,7 @@ function alignTimeToBucket(time: Date, bucketMinutes: number): Date {
  */
 async function queryAggregatedMetrics(
   accountId: string,
-  recordType: 'items' | 'scoreResults' | 'tasks' | 'procedures' | 'graphNodes' | 'predictionItems' | 'evaluationItems' | 'feedbackItems' | 'predictionScoreResults' | 'evaluationScoreResults',
+  recordType: 'items' | 'scoreResults' | 'tasks' | 'procedures' | 'graphNodes' | 'predictionItems' | 'evaluationItems' | 'feedbackItems' | 'predictionScoreResults' | 'evaluationScoreResults' | 'evaluations',
   startTime: Date,
   endTime: Date
 ): Promise<AggregatedMetricsRecord[]> {
@@ -502,40 +502,6 @@ export function useUnifiedMetrics(config: MetricsConfig = {}): UseUnifiedMetrics
     }
   }, [selectedAccount, memoizedConfig])
 
-  // Setup subscriptions for real-time updates
-  useEffect(() => {
-    if (!selectedAccount) return
-
-    let handles: Array<{ unsubscribe: () => void }> = []
-
-    // Import subscription functions dynamically to avoid circular dependencies
-    import('@/utils/subscriptions').then(({ observeAggregatedMetricsCreation, observeAggregatedMetricsUpdates }) => {
-      // Subscribe to AggregatedMetrics creation
-      if (observeAggregatedMetricsCreation) {
-        const createSub = observeAggregatedMetricsCreation(selectedAccount.id, () => {
-          console.log('AggregatedMetrics created, refetching...')
-          fetchMetrics()
-        })
-        handles.push(createSub)
-      }
-
-      // Subscribe to AggregatedMetrics updates
-      if (observeAggregatedMetricsUpdates) {
-        const updateSub = observeAggregatedMetricsUpdates(selectedAccount.id, () => {
-          console.log('AggregatedMetrics updated, refetching...')
-          fetchMetrics()
-        })
-        handles.push(updateSub)
-      }
-    }).catch(err => {
-      console.warn('Could not setup AggregatedMetrics subscriptions:', err)
-    })
-
-    return () => {
-      handles.forEach(handle => handle.unsubscribe())
-    }
-  }, [selectedAccount?.id, fetchMetrics])
-
   // Initial fetch and periodic refresh
   useEffect(() => {
     fetchMetrics()
@@ -609,11 +575,23 @@ export function useFeedbackMetrics(): UseUnifiedMetricsResult {
  * Hook for task metrics
  * Queries the tasks recordType from AggregatedMetrics
  */
-export function useTaskMetrics(): UseUnifiedMetricsResult {
+export function useTaskMetrics(config: MetricsConfig = {}): UseUnifiedMetricsResult {
   const { selectedAccount } = useAccount()
   const [metrics, setMetrics] = useState<UnifiedMetricsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Memoize config to prevent unnecessary re-renders
+  const memoizedConfig = useMemo(() => config, [
+    JSON.stringify({
+      ...config,
+      timeRange: config.timeRange ? {
+        start: config.timeRange.start.getTime(),
+        end: config.timeRange.end.getTime(),
+        period: config.timeRange.period
+      } : undefined
+    })
+  ])
 
   const fetchMetrics = useCallback(async () => {
     if (!selectedAccount) {
@@ -627,21 +605,28 @@ export function useTaskMetrics(): UseUnifiedMetricsResult {
     setError(null)
 
     try {
+      // Use provided time range or default to last 24 hours
       const now = new Date()
-      const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-      const last60min = new Date(now.getTime() - 60 * 60 * 1000)
+      const chartEnd = memoizedConfig.timeRange?.end || now
+      const chartStart = memoizedConfig.timeRange?.start || new Date(chartEnd.getTime() - 24 * 60 * 60 * 1000)
+      
+      // Calculate gauge time ranges (always relative to chartEnd)
+      const gaugeEnd = chartEnd
+      const gaugeStart = new Date(gaugeEnd.getTime() - 60 * 60 * 1000) // Last 60 minutes
+      const dailyStart = new Date(chartEnd.getTime() - 24 * 60 * 60 * 1000) // Last 24 hours
+      const dailyEnd = chartEnd
 
       // Query AggregatedMetrics for tasks only
-      const tasksRecords = await queryAggregatedMetrics(selectedAccount.id, 'tasks', last24h, now)
+      const tasksRecords = await queryAggregatedMetrics(selectedAccount.id, 'tasks', chartStart, chartEnd)
 
-      // Calculate hourly metrics (last 60 minutes)
-      const tasksHourly = calculateMetricsFromRecords(tasksRecords, last60min, now)
+      // Calculate hourly metrics (last 60 minutes before chartEnd)
+      const tasksHourly = calculateMetricsFromRecords(tasksRecords, gaugeStart, gaugeEnd)
 
       // Calculate 24h totals
-      const tasks24h = calculateMetricsFromRecords(tasksRecords, last24h, now)
+      const tasks24h = calculateMetricsFromRecords(tasksRecords, dailyStart, dailyEnd)
 
       // Generate chart data (only tasks, no scoreResults)
-      const chartData = generateChartData(tasksRecords, [], last24h, now, 'day')
+      const chartData = generateChartData(tasksRecords, [], chartStart, chartEnd, memoizedConfig.timeRange?.period || 'day')
 
       // Calculate peaks with higher baseline for tasks
       const itemsPeak = Math.max(...chartData.map(point => point.items), 10) // Minimum 10 for tasks
@@ -666,7 +651,7 @@ export function useTaskMetrics(): UseUnifiedMetricsResult {
         scoreResultsTotal24h: 0,
         
         chartData,
-        lastUpdated: now,
+        lastUpdated: chartEnd,
         hasErrorsLast24h,
         totalErrors24h
       }
@@ -678,41 +663,7 @@ export function useTaskMetrics(): UseUnifiedMetricsResult {
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics')
       setIsLoading(false)
     }
-  }, [selectedAccount])
-
-  // Setup subscriptions for real-time updates
-  useEffect(() => {
-    if (!selectedAccount) return
-
-    let handles: Array<{ unsubscribe: () => void }> = []
-
-    // Import subscription functions dynamically to avoid circular dependencies
-    import('@/utils/subscriptions').then(({ observeAggregatedMetricsCreation, observeAggregatedMetricsUpdates }) => {
-      // Subscribe to AggregatedMetrics creation
-      if (observeAggregatedMetricsCreation) {
-        const createSub = observeAggregatedMetricsCreation(selectedAccount.id, () => {
-          console.log('AggregatedMetrics created, refetching task metrics...')
-          fetchMetrics()
-        })
-        handles.push(createSub)
-      }
-
-      // Subscribe to AggregatedMetrics updates
-      if (observeAggregatedMetricsUpdates) {
-        const updateSub = observeAggregatedMetricsUpdates(selectedAccount.id, () => {
-          console.log('AggregatedMetrics updated, refetching task metrics...')
-          fetchMetrics()
-        })
-        handles.push(updateSub)
-      }
-    }).catch(err => {
-      console.warn('Could not setup AggregatedMetrics subscriptions:', err)
-    })
-
-    return () => {
-      handles.forEach(handle => handle.unsubscribe())
-    }
-  }, [selectedAccount?.id, fetchMetrics])
+  }, [selectedAccount, memoizedConfig])
 
   // Initial fetch and periodic refresh
   useEffect(() => {
@@ -818,40 +769,6 @@ export function useProceduresMetrics(): UseUnifiedMetricsResult {
     }
   }, [selectedAccount])
 
-  // Setup subscriptions for real-time updates
-  useEffect(() => {
-    if (!selectedAccount) return
-
-    let handles: Array<{ unsubscribe: () => void }> = []
-
-    // Import subscription functions dynamically to avoid circular dependencies
-    import('@/utils/subscriptions').then(({ observeAggregatedMetricsCreation, observeAggregatedMetricsUpdates }) => {
-      // Subscribe to AggregatedMetrics creation
-      if (observeAggregatedMetricsCreation) {
-        const createSub = observeAggregatedMetricsCreation(selectedAccount.id, () => {
-          console.log('AggregatedMetrics created, refetching procedures metrics...')
-          fetchMetrics()
-        })
-        handles.push(createSub)
-      }
-
-      // Subscribe to AggregatedMetrics updates
-      if (observeAggregatedMetricsUpdates) {
-        const updateSub = observeAggregatedMetricsUpdates(selectedAccount.id, () => {
-          console.log('AggregatedMetrics updated, refetching procedures metrics...')
-          fetchMetrics()
-        })
-        handles.push(updateSub)
-      }
-    }).catch(err => {
-      console.warn('Could not setup AggregatedMetrics subscriptions:', err)
-    })
-
-    return () => {
-      handles.forEach(handle => handle.unsubscribe())
-    }
-  }, [selectedAccount?.id, fetchMetrics])
-
   // Initial fetch and periodic refresh
   useEffect(() => {
     fetchMetrics()
@@ -876,3 +793,127 @@ export function useProceduresMetrics(): UseUnifiedMetricsResult {
   }
 }
 
+
+/**
+ * Hook for evaluations metrics (Evaluation records + score results)
+ * Queries the 'evaluations' recordType from AggregatedMetrics
+ */
+export function useEvaluationsMetrics(config: MetricsConfig = {}): UseUnifiedMetricsResult {
+  const { selectedAccount } = useAccount()
+  const [metrics, setMetrics] = useState<UnifiedMetricsData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Memoize config to prevent unnecessary re-renders
+  const memoizedConfig = useMemo(() => config, [
+    JSON.stringify({
+      ...config,
+      timeRange: config.timeRange ? {
+        start: config.timeRange.start.getTime(),
+        end: config.timeRange.end.getTime(),
+        period: config.timeRange.period
+      } : undefined
+    })
+  ])
+
+  const fetchMetrics = useCallback(async () => {
+    if (!selectedAccount) {
+      setMetrics(null)
+      setIsLoading(false)
+      setError(null)
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Use provided time range or default to last 24 hours
+      const now = new Date()
+      const chartEnd = memoizedConfig.timeRange?.end || now
+      const chartStart = memoizedConfig.timeRange?.start || new Date(chartEnd.getTime() - 24 * 60 * 60 * 1000)
+      
+      // Calculate gauge time ranges (always relative to chartEnd)
+      const gaugeEnd = chartEnd
+      const gaugeStart = new Date(gaugeEnd.getTime() - 60 * 60 * 1000) // Last 60 minutes
+      const dailyStart = new Date(chartEnd.getTime() - 24 * 60 * 60 * 1000) // Last 24 hours
+      const dailyEnd = chartEnd
+
+      // Query AggregatedMetrics for evaluations and evaluation scoreResults
+      const [evaluationsRecords, scoreResultsRecords] = await Promise.all([
+        queryAggregatedMetrics(selectedAccount.id, 'evaluations', chartStart, chartEnd),
+        queryAggregatedMetrics(selectedAccount.id, 'evaluationScoreResults', chartStart, chartEnd)
+      ])
+
+      // Calculate hourly metrics (last 60 minutes before chartEnd)
+      const evaluationsHourly = calculateMetricsFromRecords(evaluationsRecords, gaugeStart, gaugeEnd)
+      const scoreResultsHourly = calculateMetricsFromRecords(scoreResultsRecords, gaugeStart, gaugeEnd)
+
+      // Calculate 24h totals
+      const evaluations24h = calculateMetricsFromRecords(evaluationsRecords, dailyStart, dailyEnd)
+      const scoreResults24h = calculateMetricsFromRecords(scoreResultsRecords, dailyStart, dailyEnd)
+
+      // Generate chart data
+      const chartData = generateChartData(evaluationsRecords, scoreResultsRecords, chartStart, chartEnd, memoizedConfig.timeRange?.period || 'day')
+
+      // Calculate peaks with higher baselines
+      const itemsPeak = Math.max(...chartData.map(point => point.items), 10) // Minimum 10 for evaluations
+      const scoreResultsPeak = Math.max(...chartData.map(point => point.scoreResults), 300) // Minimum 300 for score results
+
+      // Calculate averages
+      const itemsAveragePerHour = Math.round(evaluations24h.count / 24)
+      const scoreResultsAveragePerHour = Math.round(scoreResults24h.count / 24)
+
+      // Detect errors
+      const hasErrorsLast24h = evaluations24h.errorCount > 0 || scoreResults24h.errorCount > 0
+      const totalErrors24h = evaluations24h.errorCount + scoreResults24h.errorCount
+
+      const metricsData: UnifiedMetricsData = {
+        itemsPerHour: evaluationsHourly.count,
+        itemsAveragePerHour,
+        itemsPeakHourly: itemsPeak,
+        itemsTotal24h: evaluations24h.count,
+        
+        scoreResultsPerHour: scoreResultsHourly.count,
+        scoreResultsAveragePerHour,
+        scoreResultsPeakHourly: scoreResultsPeak,
+        scoreResultsTotal24h: scoreResults24h.count,
+        
+        chartData,
+        lastUpdated: chartEnd,
+        hasErrorsLast24h,
+        totalErrors24h
+      }
+
+      setMetrics(metricsData)
+      setIsLoading(false)
+    } catch (err) {
+      console.error('Error fetching evaluations metrics:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch metrics')
+      setIsLoading(false)
+    }
+  }, [selectedAccount, memoizedConfig])
+
+  // Initial fetch and periodic refresh
+  useEffect(() => {
+    fetchMetrics()
+
+    // Refresh every 30 seconds
+    const refreshInterval = setInterval(() => {
+      fetchMetrics()
+    }, 30000)
+
+    return () => clearInterval(refreshInterval)
+  }, [fetchMetrics])
+
+  const refetch = useCallback(() => {
+    fetchMetrics()
+  }, [fetchMetrics])
+
+  return {
+    metrics,
+    isLoading,
+    error,
+    refetch
+  }
+}

@@ -438,8 +438,9 @@ export async function listRecentEvaluations(
   limit: number = 100,
   accountId: string | null = null,
   selectedScorecard: string | null = null,
-  selectedScore: string | null = null
-): Promise<any[]> {
+  selectedScore: string | null = null,
+  nextToken: string | null = null
+): Promise<{ items: any[], nextToken: string | null }> {
   console.debug('listRecentEvaluations called with limit:', limit, 'filters:', { accountId, selectedScorecard, selectedScore });
   try {
     const client = getClient();
@@ -464,7 +465,8 @@ export async function listRecentEvaluations(
     let query = '';
     let variables: any = {
       sortDirection: 'DESC',
-      limit: limit || 100
+      limit: limit || 100,
+      nextToken: nextToken
     };
     
     // Determine which GSI to use based on the filters
@@ -475,11 +477,13 @@ export async function listRecentEvaluations(
           $scoreId: String!
           $sortDirection: ModelSortDirection!
           $limit: Int
+          $nextToken: String
         ) {
           listEvaluationByScoreIdAndUpdatedAt(
             scoreId: $scoreId
             sortDirection: $sortDirection
             limit: $limit
+            nextToken: $nextToken
           ) {
             items {
               ${EVALUATION_FIELDS}
@@ -496,11 +500,13 @@ export async function listRecentEvaluations(
           $scorecardId: String!
           $sortDirection: ModelSortDirection!
           $limit: Int
+          $nextToken: String
         ) {
           listEvaluationByScorecardIdAndUpdatedAt(
             scorecardId: $scorecardId
             sortDirection: $sortDirection
             limit: $limit
+            nextToken: $nextToken
           ) {
             items {
               ${EVALUATION_FIELDS}
@@ -517,11 +523,13 @@ export async function listRecentEvaluations(
           $accountId: String!
           $sortDirection: ModelSortDirection!
           $limit: Int
+          $nextToken: String
         ) {
           listEvaluationByAccountIdAndUpdatedAt(
             accountId: $accountId
             sortDirection: $sortDirection
             limit: $limit
+            nextToken: $nextToken
           ) {
             items {
               ${EVALUATION_FIELDS}
@@ -557,13 +565,13 @@ export async function listRecentEvaluations(
     
     if (!result?.items) {
       console.warn('No items found in evaluation response');
-      return [];
+      return { items: [], nextToken: null };
     }
     
-    return result.items;
+    return { items: result.items, nextToken: result.nextToken || null };
   } catch (error) {
     console.error('Error in listRecentEvaluations:', error);
-    return [];
+    return { items: [], nextToken: null };
   }
 }
 
@@ -580,21 +588,21 @@ export function observeRecentEvaluations(
     // Load initial data
     async function loadInitialEvaluations() {
       try {
-        const response = await listRecentEvaluations(limit, accountId, selectedScorecard, selectedScore);
+        const response = await listRecentEvaluations(limit, accountId, selectedScorecard, selectedScore, null);
         console.debug('Initial evaluations response:', {
-          count: response.length,
-          firstEvaluation: response[0] ? {
-            id: response[0].id,
-            type: response[0].type,
-            metrics: response[0].metrics,
-            task: response[0].task,
-            taskCompletedAt: response[0].task?.completedAt,
-            taskStartedAt: response[0].task?.startedAt,
-            taskStatus: response[0].task?.status,
-            rawTask: response[0].task,
-            taskKeys: response[0].task ? Object.keys(response[0].task) : [],
-            taskType: typeof response[0].task,
-            scoreResults: response[0].scoreResults
+          count: response.items.length,
+          firstEvaluation: response.items[0] ? {
+            id: response.items[0].id,
+            type: response.items[0].type,
+            metrics: response.items[0].metrics,
+            task: response.items[0].task,
+            taskCompletedAt: response.items[0].task?.completedAt,
+            taskStartedAt: response.items[0].task?.startedAt,
+            taskStatus: response.items[0].task?.status,
+            rawTask: response.items[0].task,
+            taskKeys: response.items[0].task ? Object.keys(response.items[0].task) : [],
+            taskType: typeof response.items[0].task,
+            scoreResults: response.items[0].scoreResults
           } : null,
           filters: {
             accountId,
@@ -603,7 +611,7 @@ export function observeRecentEvaluations(
           }
         });
         
-        evaluations = response;
+        evaluations = response.items;
         subscriber.next({ items: evaluations, isSynced: true });
       } catch (error) {
         console.error('Error loading initial evaluations:', error);
