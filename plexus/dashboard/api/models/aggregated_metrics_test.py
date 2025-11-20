@@ -216,7 +216,7 @@ def test_create_or_update_creates_new(mock_client, sample_metrics_data):
     def mock_execute(query, variables):
         if 'updateAggregatedMetrics' in query:
             # Simulate update failure (record doesn't exist)
-            raise Exception("conditional request failed")
+            raise Exception("record not found")
         elif 'createAggregatedMetrics' in query:
             # Return created record
             return {'createAggregatedMetrics': sample_metrics_data}

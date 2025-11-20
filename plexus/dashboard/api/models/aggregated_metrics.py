@@ -299,10 +299,20 @@ class AggregatedMetrics(BaseModel):
         update_input = {
             'accountId': account_id,
             'compositeKey': composite_key,
+            'recordType': record_type,
+            'timeRangeStart': time_range_start.isoformat().replace('+00:00', 'Z'),
+            'timeRangeEnd': time_range_end.isoformat().replace('+00:00', 'Z'),
+            'numberOfMinutes': number_of_minutes,
             'count': count,
             'complete': complete,
             'updatedAt': now.isoformat().replace('+00:00', 'Z')
         }
+        
+        # Add optional GSI fields
+        if scorecard_id:
+            update_input['scorecardId'] = scorecard_id
+        if score_id:
+            update_input['scoreId'] = score_id
             
         # Add optional fields if provided
         if cost is not None:
@@ -325,7 +335,7 @@ class AggregatedMetrics(BaseModel):
         except Exception as e:
             # If update fails (record doesn't exist), create it
             error_msg = str(e).lower()
-            if 'not found' in error_msg or 'does not exist' in error_msg or 'conditional request failed' in error_msg:
+            if 'not found' in error_msg or 'does not exist' in error_msg:
                 create_mutation = """
                 mutation CreateAggregatedMetrics($input: CreateAggregatedMetricsInput!) {
                     createAggregatedMetrics(input: $input) {
