@@ -2867,6 +2867,7 @@ class FeedbackEvaluation(Evaluation):
         account_id: Optional[str] = None,
         task_id: Optional[str] = None,
         api_client=None,
+        max_samples: Optional[int] = None,
         **kwargs
     ):
         """
@@ -2880,11 +2881,13 @@ class FeedbackEvaluation(Evaluation):
             account_id: Account ID
             task_id: Optional task ID for progress tracking
             api_client: Optional API client (if not provided, will be created from kwargs)
+            max_samples: Optional maximum number of feedback items to process (default: None = all)
             **kwargs: Additional arguments passed to parent Evaluation class
         """
         # Store api_client before calling super().__init__
         # Remove it from kwargs since parent Evaluation doesn't accept it
         self.api_client = api_client
+        self.max_samples = max_samples
         
         # Call parent init (which expects scorecard_name and scorecard at minimum)
         # For FeedbackEvaluation, we don't need a full scorecard object
@@ -2958,6 +2961,12 @@ class FeedbackEvaluation(Evaluation):
             )
             
             self.logger.info(f"Fetched {len(feedback_items)} feedback items")
+            
+            # Apply max_samples limit if specified
+            if self.max_samples and len(feedback_items) > self.max_samples:
+                import random
+                self.logger.info(f"Sampling {self.max_samples} items from {len(feedback_items)} total feedback items")
+                feedback_items = random.sample(feedback_items, self.max_samples)
             
             # Perform analysis on the feedback items
             overall_analysis = analyze_feedback_items(feedback_items, score_id=self.score_id)
@@ -3063,6 +3072,7 @@ class FeedbackEvaluation(Evaluation):
     ) -> List:
         """
         Fetch feedback items for a specific score within a date range.
+        Uses the optimized GSI query for better performance.
         
         Args:
             scorecard_id: Scorecard ID
@@ -3075,50 +3085,60 @@ class FeedbackEvaluation(Evaluation):
         """
         from plexus.dashboard.api.models.feedback_item import FeedbackItem
         
-        # Query feedback items using the API client
-        # Note: This uses the same approach as the FeedbackAnalysis report block
+        # Use the optimized GSI query (same as feedback_utils)
+        # This is MUCH faster than the old updatedAt filter
         query = """
-        query ListFeedbackItems(
-            $filter: ModelFeedbackItemFilterInput
-            $limit: Int
-            $nextToken: String
+        query ListFeedbackItemsByGSI(
+            $accountId: String!,
+            $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
+            $limit: Int,
+            $nextToken: String,
+            $sortDirection: ModelSortDirection
         ) {
-            listFeedbackItems(filter: $filter, limit: $limit, nextToken: $nextToken) {
+            listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+                accountId: $accountId,
+                scorecardIdScoreIdEditedAt: $composite_sk_condition,
+                limit: $limit,
+                nextToken: $nextToken,
+                sortDirection: $sortDirection
+            ) {
                 items {
                     id
                     accountId
                     scorecardId
                     scoreId
                     itemId
+                    cacheKey
                     initialAnswerValue
                     finalAnswerValue
                     isAgreement
+                    editedAt
                     createdAt
                     updatedAt
-                    scoreResults {
-                        items {
-                            id
-                            evaluationId
-                            explanation
-                            trace
-                        }
-                    }
                 }
                 nextToken
             }
         }
         """
         
-        # Build filter
-        filter_input = {
-            "scorecardId": {"eq": scorecard_id},
-            "scoreId": {"eq": score_id},
-            "updatedAt": {
-                "between": [
-                    start_date.isoformat().replace('+00:00', 'Z'),
-                    end_date.isoformat().replace('+00:00', 'Z')
-                ]
-            }
+        # Format dates for the GSI query
+        start_date_str = start_date.isoformat().replace('+00:00', 'Z')
+        end_date_str = end_date.isoformat().replace('+00:00', 'Z')
+        
+        # Build composite key for GSI
+        composite_key = {
+            "between": [
+                {
+                    "scorecardId": scorecard_id,
+                    "scoreId": score_id,
+                    "editedAt": start_date_str
+                },
+                {
+                    "scorecardId": scorecard_id,
+                    "scoreId": score_id,
+                    "editedAt": end_date_str
+                }
+            ]
         }
         
         all_items = []
@@ -3126,23 +3146,19 @@ class FeedbackEvaluation(Evaluation):
         
         while True:
             variables = {
-                "filter": filter_input,
+                "accountId": self.account_id,
+                "composite_sk_condition": composite_key,
+                "sortDirection": "DESC",
                 "limit": 1000,
                 "nextToken": next_token
             }
             
-            result = self.api_client.execute(query, variables)
+            result = await asyncio.to_thread(self.api_client.execute, query, variables)
             
-            if not result or 'listFeedbackItems' not in result:
+            if not result or 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt' not in result:
                 break
             
-            items_data = result['listFeedbackItems'].get('items', [])
-            # Debug: Log first item to see if scoreResults is in the response
-            if items_data and len(items_data) > 0:
-                first_item = items_data[0]
-                self.logger.debug(f"First FeedbackItem from GraphQL has scoreResults: {'scoreResults' in first_item}, keys: {first_item.keys()}")
-                if 'scoreResults' in first_item:
-                    self.logger.debug(f"scoreResults value: {first_item['scoreResults']}")
+            items_data = result['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt'].get('items', [])
             
             for item_data in items_data:
                 # Convert to FeedbackItem object
@@ -3150,10 +3166,10 @@ class FeedbackEvaluation(Evaluation):
                 item = FeedbackItem.from_dict(item_data, self.api_client)
                 all_items.append(item)
             
-            next_token = result['listFeedbackItems'].get('nextToken')
+            next_token = result['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt'].get('nextToken')
             if not next_token:
                 break
-        
+            
         return all_items
     
     async def _create_score_results_from_feedback(
@@ -3193,7 +3209,9 @@ class FeedbackEvaluation(Evaluation):
         created_count = 0
         failed_count = 0
         
-        for feedback_item in feedback_items:
+        # Create ScoreResults in parallel for better performance
+        def create_single_score_result(feedback_item):
+            """Helper to create a single ScoreResult."""
             try:
                 # Determine if the prediction was correct (initial matches final)
                 is_correct = feedback_item.initialAnswerValue == feedback_item.finalAnswerValue
@@ -3304,12 +3322,21 @@ class FeedbackEvaluation(Evaluation):
                     type='evaluation'  # Mark as evaluation type
                 )
                 
-                created_count += 1
+                return True
                 
             except Exception as e:
-                failed_count += 1
                 self.logger.error(f"Failed to create ScoreResult for FeedbackItem {feedback_item.id}: {e}")
-                # Continue processing other items even if one fails
+                return False
+        
+        # Process in parallel using ThreadPoolExecutor (max 20 concurrent)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {executor.submit(create_single_score_result, item): item for item in feedback_items}
+            for future in as_completed(futures):
+                if future.result():
+                    created_count += 1
+                else:
+                    failed_count += 1
         
         self.logger.info(f"Created {created_count} ScoreResult records, {failed_count} failed")
         
