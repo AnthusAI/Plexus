@@ -43,12 +43,12 @@ type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "editedAt";
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
 type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
-type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "recordType" | "timeRangeStart" | "timeRangeEnd" | "numberOfMinutes" | "count" | "cost" | "decisionCount" | "externalAiApiCount" | "cachedAiApiCount" | "errorCount" | "createdAt" | "updatedAt";
+type AggregatedMetricsIndexFields = "accountId" | "compositeKey" | "scorecardId" | "scoreId" | "recordType" | "timeRangeStart" | "timeRangeEnd" | "numberOfMinutes" | "count" | "cost" | "decisionCount" | "externalAiApiCount" | "cachedAiApiCount" | "errorCount" | "createdAt" | "updatedAt";
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
 type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
-type GraphNodeIndexFields = "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
+type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
 type ProcedureTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
@@ -82,6 +82,7 @@ const schema = a.schema({
             dataSets: a.hasMany('DataSet', 'accountId'),
             procedures: a.hasMany('Procedure', 'accountId'),
             procedureTemplates: a.hasMany('ProcedureTemplate', 'accountId'),
+            graphNodes: a.hasMany('GraphNode', 'accountId'),
             chatSessions: a.hasMany('ChatSession', 'accountId'),
         })
         .authorization((allow) => [
@@ -727,6 +728,7 @@ const schema = a.schema({
         .model({
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
+            compositeKey: a.string().required(), // "recordType#timeRangeStart#numberOfMinutes"
             scorecardId: a.string(),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
@@ -746,6 +748,7 @@ const schema = a.schema({
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
+        .identifier(['accountId', 'compositeKey'])
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
@@ -891,6 +894,8 @@ const schema = a.schema({
 
     GraphNode: a
         .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
             procedureId: a.id().required(),
             procedure: a.belongsTo('Procedure', 'procedureId'),
             parentNodeId: a.id(),
@@ -908,6 +913,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: GraphNodeIndexFields) => any) => [
+            idx("accountId").sortKeys(["createdAt"]).name("byAccountAndCreatedAt"),
             idx("procedureId").sortKeys(["createdAt"]).name("nodesByProcedureCreatedAt"),
             idx("parentNodeId").name("nodesByParent")
         ]),

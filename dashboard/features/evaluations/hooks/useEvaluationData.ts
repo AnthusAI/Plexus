@@ -81,8 +81,11 @@ type UseEvaluationDataProps = {
 type UseEvaluationDataReturn = {
   evaluations: ProcessedEvaluation[];
   isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
   error: string | null;
   refetch: () => void;
+  loadMore: () => void;
 };
 
 export function useEvaluationData({ 
@@ -93,6 +96,9 @@ export function useEvaluationData({
 }: UseEvaluationDataProps): UseEvaluationDataReturn {
   const [evaluations, setEvaluations] = useState<ProcessedEvaluation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextToken, setNextToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [evaluationMap, setEvaluationMap] = useState<Map<string, ProcessedEvaluation>>(new Map());
   const taskMapRef = useRef<Map<string, AmplifyTask>>(new Map());
@@ -323,6 +329,27 @@ export function useEvaluationData({
     let subscriptions: { unsubscribe: () => void }[] = [];
     const client = getClient();
 
+    // Initial direct load to capture nextToken for pagination
+    async function loadInitialData() {
+      try {
+        const response = await listRecentEvaluations(
+          limit,
+          accountId,
+          selectedScorecard,
+          selectedScore,
+          null
+        );
+        
+        // Set nextToken and hasMore for pagination
+        setNextToken(response.nextToken);
+        setHasMore(!!response.nextToken);
+      } catch (err) {
+        console.error('Error loading initial nextToken:', err);
+      }
+    }
+    
+    loadInitialData();
+
     // Initial data load and evaluation subscription
     const evaluationSubscription = observeRecentEvaluations(
       limit, 
@@ -445,11 +472,12 @@ export function useEvaluationData({
             limit,
             accountId,
             selectedScorecard,
-            selectedScore
+            selectedScore,
+            null
           );
           
           console.log('Loaded evaluations directly after subscription error:', {
-            count: response.length,
+            count: response.items.length,
             filters: {
               selectedScorecard,
               selectedScore
@@ -457,7 +485,7 @@ export function useEvaluationData({
           });
           
           // Transform items and filter out nulls
-          const transformedItems = response
+          const transformedItems = response.items
             .map(item => transformEvaluation(item))
             .filter((item): item is ProcessedEvaluation => item !== null);
             
@@ -1419,11 +1447,12 @@ console.error('STAGE_TRACE: Error in task stage update subscription:', error.mes
               filterValuesRef.current.limit,
               filterValuesRef.current.accountId,
               filterValuesRef.current.selectedScorecard,
-              filterValuesRef.current.selectedScore
+              filterValuesRef.current.selectedScore,
+              null
             );
             
             console.log('Loaded evaluations directly after subscription error:', {
-              count: response.length,
+              count: response.items.length,
               filters: {
                 selectedScorecard: filterValuesRef.current.selectedScorecard,
                 selectedScore: filterValuesRef.current.selectedScore
@@ -1431,7 +1460,7 @@ console.error('STAGE_TRACE: Error in task stage update subscription:', error.mes
             });
             
             // Transform items and filter out nulls
-            const transformedItems = response
+            const transformedItems = response.items
               .map(item => transformEvaluation(item))
               .filter((item): item is ProcessedEvaluation => item !== null);
               
@@ -1484,5 +1513,36 @@ console.error('STAGE_TRACE: Error in task stage update subscription:', error.mes
     activeSubscriptionRef.current = newSubscription;
   }, []);
 
-  return { evaluations, isLoading, error, refetch };
+  // Load more evaluations function
+  const loadMore = useCallback(async () => {
+    if (!accountId || !nextToken || isLoadingMore) return;
+    
+    setIsLoadingMore(true);
+    
+    try {
+      const response = await listRecentEvaluations(
+        limit,
+        accountId,
+        selectedScorecard,
+        selectedScore,
+        nextToken
+      );
+      
+      // Transform new items
+      const transformedItems = response.items
+        .map(item => transformEvaluation(item))
+        .filter((item): item is ProcessedEvaluation => item !== null);
+      
+      // Append to existing evaluations
+      setEvaluations(prev => [...prev, ...transformedItems]);
+      setNextToken(response.nextToken);
+      setHasMore(!!response.nextToken);
+      setIsLoadingMore(false);
+    } catch (err) {
+      console.error('Error loading more evaluations:', err);
+      setIsLoadingMore(false);
+    }
+  }, [accountId, nextToken, isLoadingMore, limit, selectedScorecard, selectedScore]);
+
+  return { evaluations, isLoading, isLoadingMore, hasMore, error, refetch, loadMore };
 } 

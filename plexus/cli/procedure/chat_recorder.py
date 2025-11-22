@@ -41,7 +41,9 @@ class ProcedureChatRecorder:
             # Create ChatSession record  
             # Use default account if not provided in context
             import os
-            default_account = os.environ.get('PLEXUS_ACCOUNT_KEY', 'call-criteria')
+            default_account = os.environ.get('PLEXUS_ACCOUNT_KEY')
+            if not default_account:
+                raise ValueError("PLEXUS_ACCOUNT_KEY environment variable must be set")
             
             # Get the actual IDs that are being passed
             scorecard_id = context.get('scorecard_id') if context else None

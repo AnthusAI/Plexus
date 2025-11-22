@@ -1679,7 +1679,7 @@ def accuracy(
                                 if score_id_for_eval and (isinstance(score_id_for_eval, int) or str(score_id_for_eval).isdigit()):
                                     try:
                                         # Use scorecard ID if available for better resolution
-                                        scorecard_id_for_resolution = scorecard_id if 'scorecard_record' in locals() and scorecard_record else None
+                                        scorecard_id_for_resolution = scorecard_instance.id if hasattr(scorecard_instance, 'id') else None
                                         resolved_uuid = resolve_score_external_id_to_uuid(client, str(score_id_for_eval), scorecard_id_for_resolution)
                                         if resolved_uuid:
                                             score_id_for_eval = resolved_uuid
@@ -2952,6 +2952,15 @@ def last(account_key: str, type: Optional[str]):
         else:
             click.echo("Score: Not specified")
         
+        # Always display score version field
+        if latest_evaluation.get('score_version_id'):
+            version_id = latest_evaluation['score_version_id']
+            # Show short version (first 8 chars) with full ID
+            short_version = version_id[:8] if len(version_id) > 8 else version_id
+            click.echo(f"Score Version: {short_version}... (Full ID: {version_id})")
+        else:
+            click.echo("Score Version: Not set (using champion version)")
+        
         click.echo(f"\n=== Progress & Metrics ===")
         if latest_evaluation['total_items']:
             click.echo(f"Total Items: {latest_evaluation['total_items']}")
@@ -3033,10 +3042,12 @@ def feedback(
     
     Examples:
         # Analyze feedback edits (default mode)
-        plexus evaluate feedback --scorecard "Call Criteria" --score "Greeting" --days 14
+        plexus evaluate feedback --scorecard "SampleScorecard" --score "SampleScore" --days 14
         
         # Test a specific version against feedback
-        plexus evaluate feedback --scorecard "Call Criteria" --score "Greeting" --days 30 --version abc123
+        plexus evaluate feedback --scorecard "SampleScorecard" --score "SampleScore" --days 30 --version abc123
+    
+    See also: 'plexus evaluate feedback-all' for bulk evaluation of all scores with feedback.
     """
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
@@ -3364,3 +3375,368 @@ def feedback(
         logging.error(f"Error during feedback evaluation: {e}", exc_info=True)
         console.print(f"[bold red]Error: {str(e)}[/bold red]")
         raise
+
+
+@evaluate.command()
+@click.option('--days', default=14, type=int, help='Number of days to look back for feedback items (default: 14)')
+@click.option('--start-date', type=str, help='Start date (YYYY-MM-DD). Overrides --days if provided.')
+@click.option('--end-date', type=str, help='End date (YYYY-MM-DD). Defaults to today.')
+@click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
+@click.option('--dry-run', is_flag=True, help='Show what would be evaluated without running evaluations')
+@click.option('--concurrency', default=10, type=int, help='Number of scorecards to check concurrently (default: 10)')
+@click.option('--min-feedback', default=10, type=int, help='Minimum number of feedback items required to run evaluation (default: 10)')
+@click.option('--yes', '-y', is_flag=True, help='Skip confirmation prompt')
+def feedback_all(
+    days: int,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    task_id: Optional[str],
+    dry_run: bool,
+    concurrency: int,
+    min_feedback: int,
+    yes: bool
+):
+    """
+    Run feedback evaluations on all scorecards and scores that have feedback in the time range.
+    
+    This command:
+    1. Identifies all scorecards in the account (in parallel for speed)
+    2. For each scorecard, identifies scores with feedback in the time range
+    3. Filters to scores with at least --min-feedback items (default: 10)
+    4. Runs a separate feedback evaluation for each qualifying score
+    5. Creates individual evaluation records that appear in the dashboard
+    
+    Use this to automatically evaluate all feedback across your entire account, rather than
+    running individual evaluations for each score manually.
+    
+    Examples:
+        # Evaluate all feedback from last 14 days (default, min 10 items)
+        plexus evaluate feedback-all
+        
+        # Evaluate feedback from last 30 days with higher concurrency
+        plexus evaluate feedback-all --days 30 --concurrency 20
+        
+        # Lower threshold to 5 feedback items minimum
+        plexus evaluate feedback-all --days 30 --min-feedback 5
+        
+        # Evaluate feedback for specific date range, skip confirmation
+        plexus evaluate feedback-all --start-date 2024-01-01 --end-date 2024-01-31 --yes
+        
+        # Dry run to see what would be evaluated
+        plexus evaluate feedback-all --days 14 --dry-run
+    
+    See also: 'plexus evaluate feedback' for evaluating a single score.
+    """
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.reports.blocks import feedback_utils
+    from datetime import datetime, timedelta, timezone
+    
+    console.print(f"[bold blue]Feedback Evaluation - All Scorecards[/bold blue]")
+    
+    try:
+        # Parse date range
+        if start_date:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        else:
+            start_dt = datetime.now(timezone.utc) - timedelta(days=days)
+        
+        if end_date:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+        else:
+            end_dt = datetime.now(timezone.utc)
+        
+        console.print(f"Date Range: {start_dt.date()} to {end_dt.date()}")
+        
+        # Create API client
+        client = create_client()
+        
+        # Resolve account ID
+        account_id = resolve_account_id_for_command(client, None)
+        if not account_id:
+            console.print("[bold red]Error: Could not resolve account ID[/bold red]")
+            return
+        
+        console.print(f"Account ID: {account_id}")
+        console.print("\n[bold]Identifying scorecards and scores with feedback...[/bold]")
+        
+        # Identify scorecards with feedback
+        scorecards_with_feedback = asyncio.run(
+            feedback_utils.identify_scorecards_with_feedback(
+                client,
+                account_id,
+                start_dt,
+                end_dt,
+                max_concurrent=concurrency
+            )
+        )
+        
+        if not scorecards_with_feedback:
+            console.print("[yellow]No scorecards with feedback found in the specified time range.[/yellow]")
+            return
+        
+        # Filter scores by minimum feedback threshold
+        filtered_scorecards = []
+        skipped_count = 0
+        for sc_info in scorecards_with_feedback:
+            filtered_scores = [
+                score for score in sc_info['scores_with_feedback']
+                if score['feedback_count'] >= min_feedback
+            ]
+            if filtered_scores:
+                filtered_scorecards.append({
+                    'scorecard': sc_info['scorecard'],
+                    'scores_with_feedback': filtered_scores
+                })
+            skipped_count += len(sc_info['scores_with_feedback']) - len(filtered_scores)
+        
+        scorecards_with_feedback = filtered_scorecards
+        
+        if not scorecards_with_feedback:
+            console.print(f"[yellow]No scores found with at least {min_feedback} feedback items.[/yellow]")
+            if skipped_count > 0:
+                console.print(f"[yellow]Skipped {skipped_count} score(s) with fewer than {min_feedback} feedback items.[/yellow]")
+            return
+        
+        # Count total scores to evaluate
+        total_scores = sum(len(sc['scores_with_feedback']) for sc in scorecards_with_feedback)
+        total_feedback_items = sum(
+            score['feedback_count']
+            for sc in scorecards_with_feedback
+            for score in sc['scores_with_feedback']
+        )
+        
+        console.print(f"\n[bold]Found:[/bold]")
+        console.print(f"  - {len(scorecards_with_feedback)} scorecard(s) with feedback")
+        console.print(f"  - {total_scores} score(s) with feedback (minimum {min_feedback} items)")
+        console.print(f"  - {total_feedback_items} total feedback items")
+        if skipped_count > 0:
+            console.print(f"  - Skipped {skipped_count} score(s) with fewer than {min_feedback} feedback items")
+        
+        # Display what will be evaluated
+        console.print("\n[bold]Scores to evaluate:[/bold]")
+        for sc_info in scorecards_with_feedback:
+            scorecard = sc_info['scorecard']
+            console.print(f"\n[cyan]{scorecard.name}[/cyan] (ID: {scorecard.id})")
+            for score_info in sc_info['scores_with_feedback']:
+                console.print(f"  • {score_info['score_name']} - {score_info['feedback_count']} feedback items")
+        
+        if dry_run:
+            console.print("\n[yellow]Dry run mode - no evaluations will be created.[/yellow]")
+            return
+        
+        # Confirm before proceeding (unless --yes flag is set)
+        if not yes:
+            console.print(f"\n[bold]Ready to create {total_scores} evaluation(s).[/bold]")
+            if not click.confirm("Continue?", default=True):
+                console.print("[yellow]Cancelled.[/yellow]")
+                return
+        else:
+            console.print(f"\n[bold]Creating {total_scores} evaluation(s)...[/bold]")
+        
+        # Run evaluations for each score (in parallel)
+        console.print(f"\n[bold]Running evaluations (max {concurrency} concurrent)...[/bold]")
+        
+        # Build list of evaluation tasks
+        eval_tasks = []
+        for sc_info in scorecards_with_feedback:
+            scorecard = sc_info['scorecard']
+            for score_info in sc_info['scores_with_feedback']:
+                eval_tasks.append({
+                    'scorecard': scorecard,
+                    'score_info': score_info
+                })
+        
+        completed_count = 0
+        failed_count = 0
+        results_lock = threading.Lock()
+        
+        def run_evaluation_task(task_info, index):
+            """Run a single evaluation task."""
+            scorecard = task_info['scorecard']
+            score_info = task_info['score_info']
+            score_id = score_info['score_id']
+            score_name = score_info['score_name']
+            feedback_count = score_info['feedback_count']
+            
+            nonlocal completed_count, failed_count
+            
+            try:
+                console.print(f"\n[{index}/{total_scores}] [bold]{scorecard.name}[/bold] > [bold]{score_name}[/bold] ({feedback_count} items)")
+                
+                evaluation_record = await_run_single_feedback_evaluation(
+                    client=client,
+                    account_id=account_id,
+                    scorecard_id=scorecard.id,
+                    scorecard_name=scorecard.name,
+                    score_id=score_id,
+                    score_name=score_name,
+                    days=days,
+                    start_date=start_dt,
+                    end_date=end_dt,
+                    task_id=task_id
+                )
+                
+                if evaluation_record:
+                    with results_lock:
+                        completed_count += 1
+                    console.print(f"  [green]✓ Complete[/green] - Evaluation ID: {evaluation_record.id}")
+                    return True
+                else:
+                    with results_lock:
+                        failed_count += 1
+                    console.print(f"  [red]✗ Failed[/red]")
+                    return False
+                    
+            except Exception as e:
+                with results_lock:
+                    failed_count += 1
+                console.print(f"  [red]✗ Error: {str(e)}[/red]")
+                logging.error(f"Error evaluating {scorecard.name} > {score_name}: {e}", exc_info=True)
+                return False
+        
+        # Run evaluations in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            futures = []
+            for i, task_info in enumerate(eval_tasks, 1):
+                future = executor.submit(run_evaluation_task, task_info, i)
+                futures.append(future)
+            
+            # Wait for all to complete
+            concurrent.futures.wait(futures)
+        
+        # Display summary
+        console.print("\n" + "="*60)
+        console.print(f"[bold green]✓ Completed {completed_count} feedback evaluation(s)[/bold green]")
+        if failed_count > 0:
+            console.print(f"[bold red]✗ Failed {failed_count} evaluation(s)[/bold red]")
+        console.print(f"[bold]Total feedback items analyzed: {total_feedback_items}[/bold]")
+        console.print(f"\n[bold]Dashboard:[/bold] https://app.plexusanalytics.com/evaluations")
+        
+    except Exception as e:
+        logging.error(f"Error during feedback-all evaluation: {e}", exc_info=True)
+        console.print(f"[bold red]Error: {str(e)}[/bold red]")
+        raise
+
+
+def await_run_single_feedback_evaluation(
+    client,
+    account_id: str,
+    scorecard_id: str,
+    scorecard_name: str,
+    score_id: str,
+    score_name: str,
+    days: int,
+    start_date: datetime,
+    end_date: datetime,
+    task_id: Optional[str] = None
+):
+    """
+    Helper function to run a single feedback evaluation.
+    
+    This is used by both the 'feedback' and 'feedback-all' commands.
+    
+    Args:
+        client: API client
+        account_id: Account ID
+        scorecard_id: Scorecard ID
+        scorecard_name: Scorecard name (for display)
+        score_id: Score ID
+        score_name: Score name (for display)
+        days: Number of days to look back
+        start_date: Start date for filtering (UTC aware)
+        end_date: End date for filtering (UTC aware)
+        task_id: Optional task ID for progress tracking
+        
+    Returns:
+        Evaluation record if successful, None otherwise
+    """
+    from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+    from plexus.Evaluation import FeedbackEvaluation
+    from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
+    import json
+    
+    try:
+        # Create Task and TaskStages for progress tracking
+        tracker = None
+        if not task_id:
+            # Create a new task for this evaluation
+            from plexus.dashboard.api.models.task import Task
+            
+            task = Task.create(
+                client=client,
+                accountId=account_id,
+                type='evaluation',
+                command='feedback-evaluation',
+                status='RUNNING',
+                target=f"evaluation/feedback/{scorecard_name}/{score_name}",
+                description=f"Feedback evaluation for {scorecard_name} > {score_name}"
+            )
+            task_id = task.id
+            
+            # Create tracker with feedback evaluation stage configs
+            stage_configs = get_feedback_evaluation_stage_configs(total_items=0)  # Will be updated when we know count
+            tracker = TaskProgressTracker(
+                total_items=0,
+                stage_configs=stage_configs,
+                task_id=task_id,
+                client=client,
+                account_id=account_id
+            )
+        
+        # Create evaluation record
+        started_at = datetime.now(timezone.utc)
+        evaluation_params = {
+            "type": "feedback",
+            "accountId": account_id,
+            "status": "SETUP",
+            "scorecardId": scorecard_id,
+            "scoreId": score_id,
+            "accuracy": 0.0,
+            "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
+            "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
+            "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
+            "totalItems": 0,
+            "processedItems": 0,
+            "parameters": json.dumps({
+                "days": days,
+                "scorecard": scorecard_name,
+                "score": score_name
+            }),
+            "taskId": task_id
+        }
+        
+        evaluation_record = DashboardEvaluation.create(client=client, **evaluation_params)
+        evaluation_id = evaluation_record.id
+        
+        # Create FeedbackEvaluation instance
+        # Limit to max 200 samples to avoid performance issues
+        feedback_eval = FeedbackEvaluation(
+            scorecard_name=scorecard_name,
+            scorecard=None,
+            days=days,
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            evaluation_id=evaluation_id,
+            account_id=account_id,
+            task_id=task_id,
+            api_client=client,
+            max_samples=200  # Limit feedback items to process
+        )
+        
+        # Run the evaluation with tracker
+        result = asyncio.run(feedback_eval.run(tracker=tracker))
+        
+        # Complete the task if we created it
+        if tracker:
+            tracker.complete()
+        
+        # Fetch the updated evaluation record
+        evaluation_record = DashboardEvaluation.get_by_id(evaluation_id, client=client)
+        return evaluation_record
+        
+    except Exception as e:
+        logging.error(f"Error in single feedback evaluation: {e}", exc_info=True)
+        if tracker:
+            tracker.fail_processing(str(e), traceback.format_exc())
+        return None

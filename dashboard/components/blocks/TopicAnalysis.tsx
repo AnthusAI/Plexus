@@ -25,6 +25,7 @@ import { IdentifierDisplay } from '../ui/identifier-display';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import { HierarchicalTopicView } from './HierarchicalTopicView';
 
 interface Identifier {
   id: string;
@@ -53,11 +54,6 @@ interface TopicStabilityData {
   std_stability?: number;
   per_topic_stability: Record<number, number>;
   methodology: string;
-  interpretation: {
-    high: string;
-    medium: string;
-    low: string;
-  };
 }
 
 interface TopicAnalysisData {
@@ -155,6 +151,15 @@ interface TopicAnalysisData {
   };
   block_title?: string;
   topic_stability?: TopicStabilityData;
+  hierarchical_topics?: {
+    leaf_topics: { [key: number]: any };
+    parent_nodes: { [key: number]: any };
+    metadata: {
+      total_leaf_topics: number;
+      total_parent_nodes: number;
+      max_distance: number;
+    };
+  };
   errors?: string[];
 }
 
@@ -342,6 +347,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const topics = data.topics || [];
   const errors = data.errors || [];
   const summary = data.summary;
+  const hierarchicalTopics = data.hierarchical_topics;
   
   // Debug logging for topics data
   console.log('🔍 TopicAnalysis: Topics data received:', {
@@ -406,15 +412,26 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
         )}
 
         {/* Main Topic Analysis Results */}
-        <TopicAnalysisResults 
-          topics={topics} 
-          summary={summary} 
-          bertopicAnalysis={bertopicAnalysis}
-          completeTopicsData={completeTopicsData}
-          loadingCompleteData={loadingCompleteData}
-          fetchCompleteTopicsData={fetchCompleteTopicsData}
-          attachedFiles={props.attachedFiles ?? undefined}
-        />
+        {hierarchicalTopics ? (
+          <HierarchicalTopicView
+            hierarchicalData={hierarchicalTopics}
+            topics={topics}
+            attachedFiles={props.attachedFiles ?? undefined}
+            completeTopicsData={completeTopicsData}
+            loadingCompleteData={loadingCompleteData}
+            fetchCompleteTopicsData={fetchCompleteTopicsData}
+          />
+        ) : (
+          <TopicAnalysisResults 
+            topics={topics} 
+            summary={summary} 
+            bertopicAnalysis={bertopicAnalysis}
+            completeTopicsData={completeTopicsData}
+            loadingCompleteData={loadingCompleteData}
+            fetchCompleteTopicsData={fetchCompleteTopicsData}
+            attachedFiles={props.attachedFiles ?? undefined}
+          />
+        )}
 
         {/* Analysis Details Section */}
         <div className="w-full">
@@ -540,7 +557,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
 /**
  * Helper function to clean topic names by removing prefixes like "0_"
  */
-const cleanTopicName = (name: string): string => {
+export const cleanTopicName = (name: string): string => {
   // Remove prefixes like "0_", "1_", etc., replace underscores, and capitalize
   const cleaned = name.replace(/^\d+_/, '');
   return cleaned
@@ -699,7 +716,7 @@ const TopicAnalysisResults: React.FC<{
  * Topic Examples Section Component
  * Shows representative example texts for a topic with collapsible display
  */
-const TopicExamplesSection: React.FC<{
+export const TopicExamplesSection: React.FC<{
   examples: TopicExample[];
 }> = ({ examples }) => {
   if (!examples || examples.length === 0) {
@@ -805,7 +822,7 @@ const TopicExamplesSection: React.FC<{
  * Topic N-grams Section Component
  * Shows complete n-gram list with c-TF-IDF scores for a topic
  */
-const TopicNgramsSection: React.FC<{
+export const TopicNgramsSection: React.FC<{
   topicId: number;
   topicName: string;
   attachedFiles?: string[];
@@ -1030,53 +1047,19 @@ const TopicStabilitySection: React.FC<{
   stabilityData: TopicStabilityData;
   topics: Array<{id: number; name: string}>;
 }> = ({ stabilityData, topics }) => {
-  // Determine stability level and color
-  const getStabilityLevel = (score: number): { level: string; color: string; description: string } => {
-    if (score > 0.7) {
-      return { 
-        level: 'High', 
-        color: 'text-green-600 dark:text-green-400',
-        description: stabilityData.interpretation.high
-      };
-    } else if (score >= 0.5) {
-      return { 
-        level: 'Medium', 
-        color: 'text-yellow-600 dark:text-yellow-400',
-        description: stabilityData.interpretation.medium
-      };
-    } else {
-      return { 
-        level: 'Low', 
-        color: 'text-red-600 dark:text-red-400',
-        description: stabilityData.interpretation.low
-      };
-    }
-  };
-  
-  const overallStability = getStabilityLevel(stabilityData.mean_stability);
   
   return (
     <div className="space-y-4 pt-2">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Overall Stability</CardTitle>
+          <CardTitle className="text-base">Topic Stability Metrics</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Overall Stability Score */}
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold">{(stabilityData.mean_stability * 100).toFixed(1)}%</span>
-                <Badge className={overallStability.color} variant="outline">
-                  {overallStability.level}
-                </Badge>
-              </div>
-              {/* Only show description for High and Medium stability */}
-              {stabilityData.mean_stability >= 0.5 && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  {overallStability.description}
-                </p>
-              )}
+              <div className="text-sm text-muted-foreground mb-1">Mean Stability Score</div>
+              <div className="text-2xl font-bold">{(stabilityData.mean_stability * 100).toFixed(1)}%</div>
             </div>
           </div>
           
@@ -1090,25 +1073,18 @@ const TopicStabilitySection: React.FC<{
           {/* Per-Topic Stability */}
           {Object.keys(stabilityData.per_topic_stability).length > 0 && (
             <div className="space-y-2 pt-2 border-t">
-              <h4 className="text-sm font-medium">Per-Topic Stability</h4>
+              <h4 className="text-sm font-medium">Per-Topic Stability Scores</h4>
               <div className="space-y-1">
                 {topics.map(topic => {
                   const topicStability = stabilityData.per_topic_stability[topic.id];
                   if (topicStability === undefined) return null;
                   
-                  const topicLevel = getStabilityLevel(topicStability);
-                  
                   return (
                     <div key={topic.id} className="flex items-center justify-between text-sm py-1 px-2 hover:bg-muted/50 rounded">
-                      <span className="font-medium">{topic.name}</span>
-                      <div className="flex items-center gap-2">
-                        <span className={topicLevel.color}>
-                          {(topicStability * 100).toFixed(1)}%
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          {topicLevel.level}
-                        </Badge>
-                      </div>
+                      <span className="font-medium">{cleanTopicName(topic.name)}</span>
+                      <span className="font-mono">
+                        {(topicStability * 100).toFixed(1)}%
+                      </span>
                     </div>
                   );
                 })}

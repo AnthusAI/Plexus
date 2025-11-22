@@ -64,12 +64,13 @@ class TestFeedbackEvaluation:
             scorecard_id="scorecard-123",
             score_id="score-456",
             evaluation_id="eval-789",
-            account_id="account-123"
+            account_id="account-123",
+            account_key="test-account-key"
         )
         
         # Mock the API response
         mock_api_client.execute = MagicMock(return_value={
-            'listFeedbackItems': {
+            'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt': {
                 'items': [
                     {
                         'id': item.id,

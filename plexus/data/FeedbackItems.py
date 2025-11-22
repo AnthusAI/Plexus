@@ -43,7 +43,7 @@ class FeedbackItems(DataCache):
         
         scorecard: Union[str, int] = Field(..., description="Scorecard identifier (name, key, ID, or external ID)")
         score: Union[str, int] = Field(..., description="Score identifier (name, key, ID, or external ID)")  
-        days: int = Field(..., description="Number of days back to search for feedback items")
+        days: Optional[int] = Field(None, description="Number of days back to search for feedback items (None = all time)")
         limit: Optional[int] = Field(None, description="Maximum total number of items in the dataset")
         limit_per_cell: Optional[int] = Field(None, description="Maximum number of items to sample from each confusion matrix cell")
         initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
@@ -56,7 +56,7 @@ class FeedbackItems(DataCache):
         
         @validator('days')
         def days_must_be_positive(cls, v):
-            if v <= 0:
+            if v is not None and v <= 0:
                 raise ValueError('days must be positive')
             return v
             
@@ -94,7 +94,8 @@ class FeedbackItems(DataCache):
         if self.parameters.feedback_id:
             logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for specific feedback_id='{self.parameters.feedback_id}' in scorecard='{self.parameters.scorecard}', score='{self.parameters.score}'")
         else:
-            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
+            days_str = f"days={self.parameters.days}" if self.parameters.days is not None else "all time"
+            logger.info(f"Initializing [magenta1][b]FeedbackItems[/b][/magenta1] for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', {days_str}")
 
     def _perform_reload(self, cache_identifier: str, scorecard_id: str, score_id: str, 
                         scorecard_name: str, score_name: str) -> pd.DataFrame:
@@ -388,8 +389,9 @@ class FeedbackItems(DataCache):
         if not fresh and not reload and self._cache_exists(cache_identifier):
             return self._load_from_cache(cache_identifier)
         
-        logger.error(f"🔍 FRESH LOAD DEBUG: Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
-        logger.info(f"Fetching fresh feedback data for {scorecard_name} / {score_name} (last {self.parameters.days} days)")
+        days_str = f"last {self.parameters.days} days" if self.parameters.days is not None else "all time"
+        logger.error(f"🔍 FRESH LOAD DEBUG: Fetching fresh feedback data for {scorecard_name} / {score_name} ({days_str})")
+        logger.info(f"Fetching fresh feedback data for {scorecard_name} / {score_name} ({days_str})")
         
         # Fetch feedback items
         try:

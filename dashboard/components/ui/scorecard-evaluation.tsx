@@ -66,6 +66,8 @@ interface ScorecardReportEvaluationProps {
   accountId?: string;
   // Prop to determine if this is the only score (for auto-expand behavior)
   isSingleScore?: boolean;
+  // Date range for filtering drill-down items
+  dateRange?: { start: string; end: string };
 }
 
 export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps> = ({ 
@@ -77,7 +79,8 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   onCellSelection,
   scorecardId,
   accountId,
-  isSingleScore = false
+  isSingleScore = false,
+  dateRange
 }) => {
   const [expanded, setExpanded] = useState(isSingleScore); // Auto-expand if single score
   
@@ -194,22 +197,17 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
     if (activeCellFilter && scoreDetailsContent && typeof scoreDetailsContent === 'string') {
       try {
         const parsedData = JSON.parse(scoreDetailsContent);
-        console.debug('Parsed data structure:', 
-          Object.keys(parsedData),
-          'Looking for:', activeCellFilter.predicted, activeCellFilter.actual);
           
         // Updated to handle the new structure where the keys are directly the predicted/actual values
         // instead of having a 'predicted' wrapper object
         const items = parsedData?.[activeCellFilter.predicted]?.[activeCellFilter.actual];
         
         if (Array.isArray(items)) {
-          console.debug(`Found ${items.length} items using predicted[actual] structure`);
           setFilteredScoreDetails(items);
         } else {
           // Try the opposite order in case the data structure is flipped
           const itemsAlt = parsedData?.[activeCellFilter.actual]?.[activeCellFilter.predicted];
           if (Array.isArray(itemsAlt)) {
-            console.debug(`Found ${itemsAlt.length} items using actual[predicted] structure`);
             setFilteredScoreDetails(itemsAlt);
           } else {
             setFilteredScoreDetails([]); 
@@ -229,7 +227,6 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const handleConfusionMatrixSelection = async (selection: { predicted: string | null; actual: string | null }) => {
     if (selection.predicted && selection.actual) {
       // Store the selected matrix cell values
-      console.debug('Selected confusion matrix cell:', selection);
       
       // For ReportBlock usage (when scoreDetailsFile exists), show details section
       if (scoreDetailsFile) {
@@ -247,16 +244,17 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
           scorecardId: scorecardId,
           scoreId: score.id,
           predicted: selection.predicted,
-          actual: selection.actual
+          actual: selection.actual,
+          // Include date range if provided
+          startDate: dateRange?.start ? new Date(dateRange.start) : undefined,
+          endDate: dateRange?.end ? new Date(dateRange.end) : undefined
         };
         
         setActiveCellFilter({ predicted: selection.predicted, actual: selection.actual });
         setShowOnDemandDetails(true);
         
-        console.debug('🔍 Fetching on-demand feedback items for filter:', filter);
         try {
           const items = await fetchFeedbackItems(filter);
-          console.debug('✅ Successfully fetched feedback items:', items.length, 'items');
           setOnDemandItems(items);
         } catch (error) {
           console.error('❌ Error fetching feedback items:', error);
@@ -275,7 +273,6 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
     }
     
     // Always call the external callback if provided (for both ReportBlock and on-demand usage)
-    console.debug('🎯 Calling onCellSelection callback:', selection);
     onCellSelection?.(selection);
   };
   

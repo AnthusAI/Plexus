@@ -240,7 +240,7 @@ class TestFeedbackAnalysis:
         
         # Verify logs were generated
         assert logs is not None
-        assert "ERROR: 'scorecard' (Call Criteria Scorecard ID) missing in block configuration." in logs
+        assert "Configuration or Value Error: 'scorecard' is required in the block configuration." in logs
     
     def test_analyze_feedback_data_gwet(self, mock_api_client, mock_feedback_items):
         """Tests the _analyze_feedback_data_gwet method directly."""

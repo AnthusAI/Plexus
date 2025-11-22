@@ -183,8 +183,8 @@ class TestFeedbackCommandExamples:
         runner = CliRunner()
         
         examples = [
-            ['--scorecard', 'Call Criteria', '--score', 'Greeting', '--days', '14'],
-            ['--scorecard', 'Call Criteria', '--score', 'Greeting', '--days', '30', '--version', 'abc123'],
+            ['--scorecard', 'SampleScorecard', '--score', 'SampleScore', '--days', '14'],
+            ['--scorecard', 'SampleScorecard', '--score', 'SampleScore', '--days', '30', '--version', 'abc123'],
             ['--scorecard', '1438', '--score', '45813', '--days', '7'],
         ]
         

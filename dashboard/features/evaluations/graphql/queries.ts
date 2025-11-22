@@ -30,6 +30,7 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
         id
         name
       }
+      scoreVersionId
       confusionMatrix
       scoreGoal
       datasetClassDistribution
