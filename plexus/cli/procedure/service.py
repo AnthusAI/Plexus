@@ -24,6 +24,7 @@ from plexus.dashboard.api.models.graph_node import GraphNode
 from plexus.dashboard.api.models.procedure_template import ProcedureTemplate
 from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
+from plexus.dashboard.api.models.task import Task
 from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
 from plexus.cli.scorecard.scorecards import resolve_account_identifier
 from plexus.cli.procedure.parameter_parser import ProcedureParameterParser

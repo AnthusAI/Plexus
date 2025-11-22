@@ -19,3 +19,4 @@ score_results/
 infrastructure/cdk.out/
 infrastructure/build/
 fine-tuning/dataset/
+dashboard/public/brands
