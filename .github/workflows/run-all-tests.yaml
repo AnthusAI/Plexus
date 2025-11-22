@@ -16,6 +16,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Free up disk space
+      run: |
+        echo "Disk space before cleanup:"
+        df -h
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        echo "Disk space after cleanup:"
+        df -h
+
     - name: Set up Conda with Python 3.11
       uses: conda-incubator/setup-miniconda@v3
       with:
@@ -31,17 +43,20 @@ jobs:
 
     - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install invoke
+        python -m pip install --upgrade pip --no-cache-dir
+        pip install invoke --no-cache-dir
         # Install build dependencies first to ensure they're available
-        pip install pybind11 cython setuptools wheel
-        pip install numpy
+        pip install pybind11 cython setuptools wheel --no-cache-dir
+        pip install numpy --no-cache-dir
 
         # Install fasttext-wheel instead of fasttext
-        # pip install fasttext-wheel==0.9.2
+        # pip install fasttext-wheel==0.9.2 --no-cache-dir
 
-        # Now install package dependencies
-        pip install -e .
+        # Now install package dependencies with no cache to save space
+        pip install -e . --no-cache-dir
+
+        echo "Disk space after Python installation:"
+        df -h
 
     - name: Run Python Tests
       run: |
