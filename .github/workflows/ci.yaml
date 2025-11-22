@@ -88,13 +88,6 @@ jobs:
       working-directory: ./dashboard
       run: npm run ci:unit
 
-    - name: Create brands directory for Storybook
-      working-directory: ./dashboard
-      run: |
-        # Create brands directory if it doesn't exist (symlink won't work in CI)
-        mkdir -p public/brands
-        echo "Created public/brands directory for Storybook build"
-
     - name: Build Storybook
       working-directory: ./dashboard
       run: npm run build-storybook --quiet
