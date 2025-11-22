@@ -928,6 +928,11 @@ export const DetailContent = React.memo(function DetailContent({
               icon: <ListCheck className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
             })) || [];
             
+            // Sort scores alphabetically by name (case-insensitive)
+            const sortedScores = [...processedScores].sort((a, b) => 
+              a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+            );
+            
             return (
               <div key={section.id} className="space-y-2 w-full">
                 <div className="flex justify-between items-center w-full">
@@ -962,7 +967,7 @@ export const DetailContent = React.memo(function DetailContent({
                 <div className="bg-background rounded-lg w-full">
                   <div className="@container w-full p-4">
                     <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4 w-full">
-                      {processedScores.map((scoreData) => (
+                      {sortedScores.map((scoreData) => (
                         <ScoreComponent
                           key={scoreData.id}
                           variant="grid"
@@ -1089,27 +1094,15 @@ export default function ScorecardComponent({
   const prevScoreIdRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
-    console.log('🔍 ScorecardComponent received score:', {
-      id: score.id,
-      name: score.name,
-      guidelines: score.guidelines,
-      guidelinesType: typeof score.guidelines,
-      guidelinesLength: score.guidelines?.length,
-      hasGuidelines: 'guidelines' in score,
-      allScoreFields: Object.keys(score)
-    });
-    
     // Update editedScore in two cases:
     // 1. We're switching to a different scorecard (different ID)
     // 2. We're on the same scorecard but have no unsaved changes (data was refreshed after save)
     if (prevScoreIdRef.current !== score.id) {
-      console.log('🔄 Switching to different scorecard, resetting editedScore');
       setEditedScore(score)
       setHasChanges(false)
       prevScoreIdRef.current = score.id
     } else if (!hasChanges) {
       // Same scorecard, no unsaved changes - update with fresh data from server
-      console.log('🔄 Updating editedScore with fresh data from server (no unsaved changes)');
       setEditedScore(score)
     }
   }, [score, hasChanges])

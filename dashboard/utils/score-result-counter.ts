@@ -191,8 +191,10 @@ export class ScoreResultCountManager {
     if (showLoading && (!existingCount || existingCount.count === 0)) {
       this.countCache.set(itemId, {
         itemId,
-        count: 0,
-        isLoading: true
+        count: existingCount?.count || 0,
+        isLoading: true,
+        // PRESERVE existing scorecardBreakdown to prevent flicker
+        scorecardBreakdown: existingCount?.scorecardBreakdown || []
       });
       this.notifyCallbacks();
     }

@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2 } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,8 @@ import isEqual from 'lodash/isEqual'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
 import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
+import Link from 'next/link'
+import { getClient } from '@/utils/amplify-client'
 
 export interface EvaluationMetric {
   name: string
@@ -158,6 +160,9 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     completedAt?: string
     errorMessage?: string
     statusMessage?: string
+    scorecardId?: string
+    scoreId?: string
+    scoreVersionId?: string
   }
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
@@ -268,7 +273,6 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   isSelected?: boolean;
 }) => {
 
-  console.log(`🔍 TRACE_STAGES: GridContent render - ${data.id} - stages: ${data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
 
   const progress = useMemo(() => 
     data.processedItems && data.totalItems ? 
@@ -323,7 +327,6 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   const stages = useMemo(() => {
     const stageItems = data.task?.stages?.items || [];
     
-    console.log(`🔍 TRACE_STAGES: GridContent useMemo stages - ${data.id} - creating TaskStatus configs for: ${stageItems.map(s => `${s.name}:${s.status}`).join(',')}`);
     
     return stageItems.map(stage => ({
       key: stage.name,
@@ -380,7 +383,6 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
       estimatedRemainingSeconds: data.estimatedRemainingSeconds
     };
     
-    console.log(`🔍 TRACE_STAGES: GridContent useMemo taskStatus - ${data.id} - final TaskStatus props stages: ${statusObj.stages.map(s => `${s.name}:${s.status}`).join(',')}`);
     
     return statusObj;
   }, [
@@ -447,10 +449,8 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
 
   const allow = stagesChanged || progressChanged || otherChanged;
   if (allow) {
-    console.log(`🔍 TRACE_STAGES: GridContent memo ALLOWING re-render - ${nextProps.data.id} - stagesChanged=${stagesChanged} progressChanged=${progressChanged} otherChanged=${otherChanged}`);
     return false;
   }
-  console.log(`🔍 TRACE_STAGES: GridContent memo BLOCKING re-render - ${nextProps.data.id} - no changes`);
   return true;
 });
 
@@ -654,29 +654,13 @@ const DetailContent = React.memo(({
   // Only show main panel if we're not in narrow view with a selected result
   const showMainPanel = isWideEnoughForThree || 
                         (isWideEnoughForTwo && (!showResultDetail || !showResultsList)) || 
-                        (!isWideEnoughForTwo && !showResultDetail) // Only show main panel in narrow view if no result selected
-
-  console.log('DetailContent render conditions:', {
-    containerWidth,
-    isWideEnoughForTwo,
-    isWideEnoughForThree,
-    hasScoreResults: !!data.scoreResults?.length,
-    parsedResultCount: parsedScoreResults.length,
-    showMainPanel,
-    showResultsList,
-    showResultDetail,
-    showScoreResultInNarrowView,
-    showAsColumns,
-    selectedScoreResult: selectedScoreResult?.id
-  });
+                        (!isWideEnoughForTwo && !showResultDetail); // Only show main panel in narrow view if no result selected
 
   const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
-    console.log('Score result selected:', result.id);
     onSelectScoreResult?.(result.id)
   }
 
   const handleScoreResultClose = () => {
-    console.log('Score result detail closed');
     onSelectScoreResult?.(null)
   }
 
@@ -981,13 +965,57 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   ...restProps
 }: EvaluationTaskProps) {
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
+  const [scoreVersionInfo, setScoreVersionInfo] = useState<{
+    createdAt: string;
+    isChampion: boolean;
+  } | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
   
-  console.log(`🔍 TRACE_STAGES: EvaluationTask render - ${data.id} - stages: ${data.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none'}`);
   
 
   // Add more detailed logging for incoming data
+
+  // Fetch score version information when scoreVersionId is available
+  useEffect(() => {
+    if (!task.scoreVersionId || variant !== 'detail') {
+      setScoreVersionInfo(null);
+      return;
+    }
+
+    const fetchScoreVersion = async () => {
+      try {
+        const client = getClient();
+        const result = await client.graphql({
+          query: `
+            query GetScoreVersion($id: ID!) {
+              getScoreVersion(id: $id) {
+                id
+                createdAt
+                score {
+                  championVersionId
+                }
+              }
+            }
+          `,
+          variables: { id: task.scoreVersionId }
+        });
+
+        const scoreVersion = (result as any).data?.getScoreVersion;
+        if (scoreVersion) {
+          setScoreVersionInfo({
+            createdAt: scoreVersion.createdAt,
+            isChampion: scoreVersion.score?.championVersionId === task.scoreVersionId
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching score version:', error);
+        setScoreVersionInfo(null);
+      }
+    };
+
+    fetchScoreVersion();
+  }, [task.scoreVersionId, variant]);
 
   // Function to generate universal YAML code for evaluation
   const generateUniversalCode = useCallback((evaluationData: EvaluationTaskData) => {
@@ -1144,7 +1172,6 @@ evaluation:
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => {
-              console.log('Get Code menu item selected');
               handleGetCode();
             }}>
               <MessageSquareCode className="mr-2 h-4 w-4" />
@@ -1152,7 +1179,6 @@ evaluation:
             </DropdownMenuItem>
             {onShare && (
               <DropdownMenuItem onSelect={() => {
-                console.log('Share menu item selected');
                 onShare();
               }}>
                 <Share className="mr-2 h-4 w-4" />
@@ -1161,7 +1187,6 @@ evaluation:
             )}
             {onDelete && (
               <DropdownMenuItem onSelect={() => {
-                console.log('Delete menu item selected');
                 onDelete(data.id);
               }}>
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -1180,7 +1205,6 @@ evaluation:
           <CardButton
             icon={X}
             onClick={() => {
-              console.log('EvaluationTask: X button clicked, calling onClose function');
               onClose();
             }}
           />
@@ -1191,44 +1215,51 @@ evaluation:
 
   const taskData = task.data?.task as TaskData | undefined;
 
-  const taskWithDefaults = useMemo(() => ({
-    id: task.id,
-    type: task.type ? task.type.split(' ').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-    ).join(' ') : 'Unknown',
-    scorecard: task.scorecard,
-    score: task.score,
-    time: task.time,
-    description: variant === 'detail' ? undefined : task.summary,
-    data: task.data,
-    command: taskData?.command,
-    stages: taskData?.stages?.items?.map(stage => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.name === 'Processing' ? 'bg-secondary' : (
-        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
-        stage.status === 'FAILED' ? 'bg-false' :
-        'bg-neutral'
-      ),
-      name: stage.name,
-      order: stage.order,
-      status: mapTaskStatus(stage.status),
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      statusMessage: stage.statusMessage
-    })) || [],
-    currentStageName: taskData?.currentStageId || undefined,
-    processedItems: task.data?.processedItems,
-    totalItems: task.data?.totalItems,
-    startedAt: taskData?.startedAt || task.data?.startedAt || undefined,
-    estimatedCompletionAt: taskData?.estimatedCompletionAt || undefined,
-    status: mapTaskStatus(taskData?.status || task.data?.status),
-    dispatchStatus: taskData?.dispatchStatus,
-    celeryTaskId: taskData?.celeryTaskId,
-    workerNodeId: taskData?.workerNodeId,
-    completedAt: taskData?.completedAt || undefined,
-    errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined
-  }), [task, taskData, variant]);
+  const taskWithDefaults = useMemo(() => {
+    // Debug: Log what we're receiving in EvaluationTask
+    
+    return {
+      id: task.id,
+      type: task.type ? task.type.split(' ').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      ).join(' ') : 'Unknown',
+      scorecard: task.scorecard,
+      score: task.score,
+      time: task.time,
+      description: variant === 'detail' ? undefined : task.summary,
+      data: task.data,
+      command: taskData?.command,
+      stages: taskData?.stages?.items?.map(stage => ({
+        key: stage.name,
+        label: stage.name,
+        color: stage.name === 'Processing' ? 'bg-secondary' : (
+          stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+          stage.status === 'FAILED' ? 'bg-false' :
+          'bg-neutral'
+        ),
+        name: stage.name,
+        order: stage.order,
+        status: mapTaskStatus(stage.status),
+        processedItems: stage.processedItems,
+        totalItems: stage.totalItems,
+        statusMessage: stage.statusMessage
+      })) || [],
+      currentStageName: taskData?.currentStageId || undefined,
+      processedItems: task.data?.processedItems,
+      totalItems: task.data?.totalItems,
+      startedAt: taskData?.startedAt || task.data?.startedAt || undefined,
+      estimatedCompletionAt: taskData?.estimatedCompletionAt || undefined,
+      status: mapTaskStatus(taskData?.status || task.data?.status),
+      dispatchStatus: taskData?.dispatchStatus,
+      celeryTaskId: taskData?.celeryTaskId,
+      workerNodeId: taskData?.workerNodeId,
+      completedAt: taskData?.completedAt || undefined,
+      errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined,
+      scorecardId: task.scorecardId,
+      scoreId: task.scoreId,
+      scoreVersionId: task.scoreVersionId
+    };
+  }, [task, taskData, variant]);
 
   // Type assertion to ensure all properties match BaseTaskProps
   const typedTask = {
@@ -1322,10 +1353,51 @@ evaluation:
                 </div>
               )}
               {props.task.scorecard && props.task.scorecard.trim() !== '' && (
-                <div className="font-semibold text-sm truncate">{props.task.scorecard}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.scorecard}</span>
+                  {variant === 'detail' && taskWithDefaults.scorecardId && (
+                    <Link 
+                      href={`/lab/scorecards/${taskWithDefaults.scorecardId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+                </div>
               )}
               {props.task.score && props.task.score.trim() !== '' && (
-                <div className="font-semibold text-sm truncate">{props.task.score}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.score}</span>
+            {variant === 'detail' && taskWithDefaults.scorecardId && taskWithDefaults.scoreId && (() => {
+              
+              const scoreLink = taskWithDefaults.scoreVersionId 
+                ? `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`
+                : `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}`;
+              
+                    
+                    return (
+                      <Link 
+                        href={scoreLink}
+                        className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    );
+                  })()}
+                </div>
+              )}
+              {variant === 'detail' && scoreVersionInfo && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Score Version:</span>
+                  <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
+                  {scoreVersionInfo.isChampion && (
+                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                      Champion
+                    </span>
+                  )}
+                </div>
               )}
               <Timestamp time={props.task.time} variant="relative" />
             </div>
@@ -1346,7 +1418,6 @@ evaluation:
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onSelect={() => {
-                            console.log('Get Code menu item selected');
                             handleGetCode();
                           }}>
                             <MessageSquareCode className="mr-2 h-4 w-4" />
@@ -1354,7 +1425,6 @@ evaluation:
                           </DropdownMenuItem>
                           {onShare && (
                             <DropdownMenuItem onSelect={() => {
-                              console.log('Share menu item selected');
                               onShare();
                             }}>
                               <Share className="mr-2 h-4 w-4" />
@@ -1363,7 +1433,6 @@ evaluation:
                           )}
                           {onDelete && (
                             <DropdownMenuItem onSelect={() => {
-                              console.log('Delete menu item selected');
                               onDelete(data.id);
                             }}>
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -1452,9 +1521,7 @@ evaluation:
   const nextStages = nextProps.task.data?.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
   
   if (shouldNotRerender) {
-    console.log(`🔍 TRACE_STAGES: EvaluationTask memo BLOCKING re-render - ${nextProps.task.id} - stages: [${nextStages}]`);
   } else {
-    console.log(`🔍 TRACE_STAGES: EvaluationTask memo ALLOWING re-render - ${nextProps.task.id} - stage change: [${prevStages}] → [${nextStages}]`);
   }
   
   return shouldNotRerender;
@@ -1494,3 +1561,4 @@ function getMetricInformation(metricName: string): string {
   }
   return descriptions[metricName] || ""
 }
+

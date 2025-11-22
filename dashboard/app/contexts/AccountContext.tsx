@@ -66,13 +66,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const refetchAccounts = async () => {
     if (authStatus !== 'authenticated') {
-      console.log('User not authenticated, cannot refetch accounts')
       return
     }
 
     setIsLoadingAccounts(true)
     try {
-      console.log('Refetching accounts...')
       const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
         client.models.Account
       )
@@ -110,7 +108,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   // Clear account state when user logs out
   useEffect(() => {
     if (authStatus === 'unauthenticated') {
-      console.log('User unauthenticated, clearing account state')
       setAccounts([])
       setSelectedAccount(null)
       setVisibleMenuItems(menuItems)
@@ -122,17 +119,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     async function fetchAccounts() {
       // Only fetch accounts if user is authenticated
       if (authStatus !== 'authenticated') {
-        console.log('User not authenticated, skipping account fetch. Auth status:', authStatus)
         setIsLoadingAccounts(false)
         return
       }
 
       try {
-        console.log('Fetching accounts for authenticated user...')
         const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
           client.models.Account
         )
-        console.log('Raw accounts data:', accountsData)
         
         const accountsWithParsedSettings = accountsData.map(account => ({
           ...account,
@@ -140,7 +134,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
             JSON.parse(account.settings) : account.settings
         }))
         
-        console.log('Processed accounts:', accountsWithParsedSettings)
         setAccounts(accountsWithParsedSettings)
         
         // Set default account if none is selected
@@ -150,7 +143,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
             ? accountsWithParsedSettings.find(account => account.key === defaultAccountKey)
             : null) || accountsWithParsedSettings[0]
           
-          console.log('Setting default account:', defaultAccount)
           if (defaultAccount) {
             setSelectedAccount(defaultAccount)
             updateVisibleMenuItems(defaultAccount)

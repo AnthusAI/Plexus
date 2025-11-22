@@ -128,7 +128,6 @@ export async function listRecentTasks(limit: number = 12): Promise<{ tasks: Proc
     }
 
     const accountId = accountResponse.data[0].id;
-    console.debug('Fetching tasks for account:', accountId);
 
     const response = await currentClient.graphql({
       query: `

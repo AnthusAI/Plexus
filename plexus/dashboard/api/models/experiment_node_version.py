@@ -19,6 +19,7 @@ from .base import BaseModel
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
+    from .experiment_node import ExperimentNode
 
 logger = logging.getLogger(__name__)
 
@@ -305,20 +306,21 @@ class ExperimentNodeVersion(BaseModel):
         except ValueError:
             return None
 
-    def get_experiment(self) -> Optional['Experiment']:
-        """Get the experiment this version belongs to.
-        
-        Returns:
-            The Experiment this version belongs to, or None if not found
-        """
-        if not self._client:
-            return None
-            
-        from .experiment import Experiment
-        try:
-            return Experiment.get_by_id(self.experimentId, self._client)
-        except ValueError:
-            return None
+    # NOTE: Commented out - Experiment model does not exist in the codebase
+    # def get_experiment(self) -> Optional['Experiment']:
+    #     """Get the experiment this version belongs to.
+    #
+    #     Returns:
+    #         The Experiment this version belongs to, or None if not found
+    #     """
+    #     if not self._client:
+    #         return None
+    #
+    #     from .experiment import Experiment
+    #     try:
+    #         return Experiment.get_by_id(self.experimentId, self._client)
+    #     except ValueError:
+    #         return None
 
     def mark_running(self) -> 'ExperimentNodeVersion':
         """Mark this version as running.

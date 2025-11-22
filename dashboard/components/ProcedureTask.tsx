@@ -255,8 +255,6 @@ export default function ProcedureTask({
     };
   });
   
-  console.log('[ProcedureTask] Formatted stages for procedure', procedure.id, ':', formattedStages.map(s => `${s.name}:${s.status}`).join(', '));
-  
   const taskObject = {
     id: procedure.id,
     type: 'Procedure',

@@ -48,12 +48,12 @@ def sanitize_metadata_for_graphql(metadata: dict) -> dict:
     """
     Sanitize metadata for GraphQL compatibility.
 
-    Handles various data types and applies size limits to ensure the metadata
-    can be safely stored in GraphQL/DynamoDB:
-    - Truncates long strings
-    - Summarizes large complex objects
-    - Removes problematic characters
+    Handles various data types to ensure the metadata can be safely stored in GraphQL/DynamoDB:
+    - Removes problematic characters (null bytes, etc.)
+    - Converts complex objects to JSON strings
     - Handles serialization errors gracefully
+    
+    Note: Does NOT truncate data - all metadata is preserved in full.
 
     Args:
         metadata: Dictionary of metadata to sanitize
@@ -70,29 +70,18 @@ def sanitize_metadata_for_graphql(metadata: dict) -> dict:
                 elif isinstance(meta_value, bool):
                     sanitized_metadata[key] = meta_value
                 elif isinstance(meta_value, (int, float)):
-                    # Ensure numeric values are reasonable for GraphQL
-                    if abs(meta_value) < 1e10:
-                        sanitized_metadata[key] = meta_value
+                    sanitized_metadata[key] = meta_value
                 elif isinstance(meta_value, str):
-                    # Truncate very long strings and remove problematic characters
-                    cleaned_str = meta_value.replace('\x00', '').replace('\r', '').replace('\n', ' ')
-                    if len(cleaned_str) > 500:
-                        cleaned_str = cleaned_str[:497] + "..."
+                    # Remove problematic characters but preserve the full string
+                    cleaned_str = meta_value.replace('\x00', '')
                     sanitized_metadata[key] = cleaned_str
                 elif isinstance(meta_value, (dict, list)):
-                    # Convert complex objects to JSON strings with size limit
+                    # Convert complex objects to JSON strings (preserves all data)
                     json_str = json.dumps(meta_value, default=str)
-                    if len(json_str) > 1000:
-                        # Store summary instead of full object
-                        if isinstance(meta_value, dict):
-                            sanitized_metadata[key] = f"{{dict with {len(meta_value)} keys}}"
-                        elif isinstance(meta_value, list):
-                            sanitized_metadata[key] = f"[list with {len(meta_value)} items]"
-                    else:
-                        sanitized_metadata[key] = json_str
+                    sanitized_metadata[key] = json_str
                 else:
-                    # Convert other types to string with size limit
-                    str_value = str(meta_value)[:500]
+                    # Convert other types to string
+                    str_value = str(meta_value)
                     sanitized_metadata[key] = str_value
             except Exception as e:
                 logging.warning(f"Failed to sanitize metadata key '{key}': {e}")

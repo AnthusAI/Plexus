@@ -142,10 +142,6 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
         // Get the account ID by key
         const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || '';
-        if (!ACCOUNT_KEY) {
-          console.error('NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY environment variable not set');
-          return;
-        }
         const accountResponse = await (currentClient.models.Account as any).list({ 
           filter: { key: { eq: ACCOUNT_KEY } } 
         }) as AmplifyListResult<Schema['Account']['type']>;
@@ -155,7 +151,6 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
         }
 
         const accountId = accountResponse.data[0].id;
-        console.debug('Fetching evaluations for account:', accountId);
 
         const response = await currentClient.graphql({
           query: `
@@ -306,24 +301,10 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
         const handleEvaluationChange = (evaluation: Schema['Evaluation']['type'], action: 'create' | 'update' | 'delete') => {
           if (!evaluation || !isSubscribed) return;
 
-          console.debug(`Handling ${action} for evaluation:`, {
-            evaluationId: evaluation.id,
-            type: evaluation.type,
-            status: evaluation.status
-          });
-
           if (action === 'delete') {
             evaluations = evaluations.filter(e => e.id !== evaluation.id);
           } else {
             const existingEvaluation = evaluations.find(e => e.id === evaluation.id);
-            
-            console.debug('Existing evaluation state:', {
-              evaluationId: evaluation.id,
-              hasExistingEval: !!existingEvaluation,
-              existingTaskData: existingEvaluation?.task,
-              existingTaskId: existingEvaluation?.taskId,
-              action
-            });
 
             const finalEvaluation = {
               ...evaluation,
@@ -431,7 +412,6 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           }`
         }) as unknown as GraphQLSubscriptionResult<CreateEvaluationResponse>).subscribe({
           next: (response: { data?: CreateEvaluationResponse }) => {
-            console.debug('Create subscription event received:', response.data);
             if (response.data?.onCreateEvaluation) {
               handleEvaluationChange(response.data.onCreateEvaluation, 'create');
             }
@@ -532,7 +512,6 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           }`
         }) as unknown as GraphQLSubscriptionResult<UpdateEvaluationResponse>).subscribe({
           next: (response: { data?: UpdateEvaluationResponse }) => {
-            console.debug('Update subscription event received:', response.data);
             if (response.data?.onUpdateEvaluation) {
               handleEvaluationChange(response.data.onUpdateEvaluation, 'update');
             }
@@ -555,7 +534,6 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           }`
         }) as unknown as GraphQLSubscriptionResult<DeleteEvaluationResponse>).subscribe({
           next: (response: { data?: DeleteEvaluationResponse }) => {
-            console.debug('Delete subscription event received:', response.data);
             if (response.data?.onDeleteEvaluation) {
               handleEvaluationChange(response.data.onDeleteEvaluation, 'delete');
             }
@@ -583,7 +561,6 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
     // Return cleanup function
     return () => {
       isSubscribed = false;
-      console.debug('Cleaning up evaluation subscriptions');
       subscriptions.forEach(sub => {
         try {
           if (sub && typeof sub.unsubscribe === 'function') {
@@ -599,8 +576,6 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 }
 
 export function observeScoreResults(evaluationId: string) {
-  console.log('Setting up score results subscription for evaluation:', evaluationId);
-  
   const client = getClient();
   const subscriptions: { unsubscribe: () => void }[] = [];
 
@@ -612,20 +587,10 @@ export function observeScoreResults(evaluationId: string) {
       // Function to fetch latest data using the GSI with pagination
       const fetchLatestData = async () => {
         try {
-          console.log('Starting to fetch ScoreResults for evaluation:', evaluationId);
-          
           let allData: Schema['ScoreResult']['type'][] = [];
           let nextToken: string | null = null;
-          let pageCount = 0;
           
           do {
-            pageCount++;
-            console.log('Fetching ScoreResult page:', {
-              pageNumber: pageCount,
-              nextToken,
-              evaluationId
-            });
-
             const response = await (client.models.ScoreResult as any).listScoreResultByEvaluationId({
               evaluationId,
               limit: 10000,
@@ -691,7 +656,6 @@ export function observeScoreResults(evaluationId: string) {
       // Subscribe to create events
       const createSub = ((client.models.ScoreResult as any).onCreate() as AmplifySubscription).subscribe({
         next: () => {
-          console.log('ScoreResult onCreate triggered, fetching latest data');
           fetchLatestData();
         },
         error: (error: Error) => {
@@ -704,7 +668,6 @@ export function observeScoreResults(evaluationId: string) {
       // Subscribe to update events
       const updateSub = ((client.models.ScoreResult as any).onUpdate() as AmplifySubscription).subscribe({
         next: () => {
-          console.log('ScoreResult onUpdate triggered, fetching latest data');
           fetchLatestData();
         },
         error: (error: Error) => {
@@ -717,7 +680,6 @@ export function observeScoreResults(evaluationId: string) {
       // Subscribe to delete events
       const deleteSub = ((client.models.ScoreResult as any).onDelete() as AmplifySubscription).subscribe({
         next: () => {
-          console.log('ScoreResult onDelete triggered, fetching latest data');
           fetchLatestData();
         },
         error: (error: Error) => {
@@ -841,12 +803,6 @@ export function observeTaskUpdates() {
     const createSub = (client.graphql({ query: onCreateTaskSubscriptionQuery }) as any)
       .subscribe({
         next: ({ data }: { data: any }) => {
-          console.log('Task create subscription event:', {
-            taskId: data?.onCreateTask?.id,
-            type: data?.onCreateTask?.type,
-            status: data?.onCreateTask?.status,
-            data: data?.onCreateTask
-          });
           observer.next({ type: 'create', data: data?.onCreateTask });
         },
         error: (error: any) => {
@@ -860,12 +816,6 @@ export function observeTaskUpdates() {
     const updateSub = (client.graphql({ query: onUpdateTaskSubscriptionQuery }) as any)
       .subscribe({
         next: ({ data }: { data: any }) => {
-          console.log('Task update subscription event:', {
-            taskId: data?.onUpdateTask?.id,
-            type: data?.onUpdateTask?.type,
-            status: data?.onUpdateTask?.status,
-            data: data?.onUpdateTask
-          });
           observer.next({ type: 'update', data: data?.onUpdateTask });
         },
         error: (error: any) => {
@@ -890,9 +840,6 @@ export function observeTaskStageUpdates() {
     const createSub = (client.graphql({ query: onCreateTaskStageSubscriptionQuery }) as any)
       .subscribe({
         next: (response: { data?: { onCreateTaskStage?: any }, errors?: any[] }) => {
-          // Log the full response first
-          console.log('Raw TaskStage create subscription response:', response);
-          
           const taskStageData = response?.data?.onCreateTaskStage;
           
           // Check for specific timestamp-related errors but still process the data
@@ -902,13 +849,6 @@ export function observeTaskStageUpdates() {
               !error.message.includes('createdAt') && 
               !error.message.includes('updatedAt')
             );
-            
-            // Only log timestamp errors at debug level
-            response.errors.forEach(error => {
-              if (error.message.includes('AWSDateTime')) {
-                console.debug('Ignorable timestamp error:', error);
-              }
-            });
 
             // If we have other errors, log them as warnings
             if (nonTimestampErrors.length > 0) {
@@ -918,12 +858,6 @@ export function observeTaskStageUpdates() {
 
           // Process the data even if we have timestamp errors
           if (taskStageData?.id && taskStageData?.taskId) {
-            console.log('TaskStage create subscription event:', {
-              stageId: taskStageData.id,
-              taskId: taskStageData.taskId,
-              name: taskStageData.name,
-              status: taskStageData.status
-            });
             observer.next({ type: 'create', data: taskStageData });
           } else if (!response.errors || response.errors.every(e => e.message.includes('AWSDateTime'))) {
             // Only warn if we're missing data and it's not just timestamp errors
@@ -941,9 +875,6 @@ export function observeTaskStageUpdates() {
     const updateSub = (client.graphql({ query: onUpdateTaskStageSubscriptionQuery }) as any)
       .subscribe({
         next: (response: { data?: { onUpdateTaskStage?: any }, errors?: any[] }) => {
-          // Log the full response first
-          console.log('Raw TaskStage update subscription response:', response);
-          
           const taskStageData = response?.data?.onUpdateTaskStage;
 
           // Check for specific timestamp-related errors but still process the data
@@ -953,13 +884,6 @@ export function observeTaskStageUpdates() {
               !error.message.includes('createdAt') && 
               !error.message.includes('updatedAt')
             );
-            
-            // Only log timestamp errors at debug level
-            response.errors.forEach(error => {
-              if (error.message.includes('AWSDateTime')) {
-                console.debug('Ignorable timestamp error:', error);
-              }
-            });
 
             // If we have other errors, log them as warnings
             if (nonTimestampErrors.length > 0) {
@@ -969,12 +893,6 @@ export function observeTaskStageUpdates() {
 
           // Process the data even if we have timestamp errors
           if (taskStageData?.id && taskStageData?.taskId) {
-            console.log('TaskStage update subscription event:', {
-              stageId: taskStageData.id,
-              taskId: taskStageData.taskId,
-              name: taskStageData.name,
-              status: taskStageData.status
-            });
             observer.next({ type: 'update', data: taskStageData });
           } else if (!response.errors || response.errors.every(e => e.message.includes('AWSDateTime'))) {
             // Only warn if we're missing data and it's not just timestamp errors
@@ -998,24 +916,17 @@ export function observeItemCreations() {
   const client = getClient();
   const subscriptions: { unsubscribe: () => void }[] = [];
   
-  console.log('🔧 Creating Item creation subscription observer');
-  
   return {
     subscribe(handler: SubscriptionHandler<any>) {
-      console.log('🆕 Setting up Item creation subscription using client.models pattern...');
-      
       // Subscribe to create events using the same pattern as ScoreResult
       const createSub = ((client.models.Item as any).onCreate() as AmplifySubscription).subscribe({
         next: (response: any) => {
-          console.log('🆕 Item onCreate triggered:', response);
-          
           // Like ScoreResults, we expect null data, so trigger a refresh instead
           // of trying to parse specific data
-          console.log('🆕 Item creation detected, triggering refresh');
           handler.next({ data: { action: 'create', needsRefetch: true } });
         },
         error: (error: Error) => {
-          console.error('🆕 Item onCreate subscription error:', error);
+          console.error('Item onCreate subscription error:', error);
           handler.error(error);
         }
       });
@@ -1023,7 +934,6 @@ export function observeItemCreations() {
 
       return {
         unsubscribe: () => {
-          console.log('🆕 Unsubscribing from Item creation subscription');
           subscriptions.forEach(sub => sub.unsubscribe());
         }
       };
@@ -1167,13 +1077,6 @@ export function observeGraphNodeUpdates() {
     const createSub = (client.graphql({ query: onCreateGraphNodeSubscriptionQuery }) as any)
       .subscribe({
         next: ({ data }: { data: any }) => {
-          console.log('GraphNode create subscription event:', {
-            nodeId: data?.onCreateGraphNode?.id,
-            procedureId: data?.onCreateGraphNode?.procedureId,
-            name: data?.onCreateGraphNode?.name,
-            status: data?.onCreateGraphNode?.status,
-            data: data?.onCreateGraphNode
-          });
           observer.next({ type: 'create', data: data?.onCreateGraphNode });
         },
         error: (error: any) => {
@@ -1187,13 +1090,6 @@ export function observeGraphNodeUpdates() {
     const updateSub = (client.graphql({ query: onUpdateGraphNodeSubscriptionQuery }) as any)
       .subscribe({
         next: ({ data }: { data: any }) => {
-          console.log('GraphNode update subscription event:', {
-            nodeId: data?.onUpdateGraphNode?.id,
-            procedureId: data?.onUpdateGraphNode?.procedureId,
-            name: data?.onUpdateGraphNode?.name,
-            status: data?.onUpdateGraphNode?.status,
-            data: data?.onUpdateGraphNode
-          });
           observer.next({ type: 'update', data: data?.onUpdateGraphNode });
         },
         error: (error: any) => {
@@ -1208,3 +1104,4 @@ export function observeGraphNodeUpdates() {
     };
   });
 }
+

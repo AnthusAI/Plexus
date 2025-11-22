@@ -173,6 +173,7 @@ const LIST_EVALUATIONS = `
           id
           name
         }
+        scoreVersionId
         confusionMatrix
         scoreGoal
         datasetClassDistribution
@@ -270,29 +271,12 @@ interface ScoreResult {
 }
 
 export function transformEvaluationLocal(evaluation: Schema['Evaluation']['type']) {
-  console.debug('transformEvaluation input:', {
-    evaluationId: evaluation?.id,
-    hasTask: !!evaluation?.task,
-    taskType: typeof evaluation?.task,
-    taskData: evaluation?.task,
-    taskKeys: evaluation?.task ? Object.keys(evaluation.task) : [],
-    status: evaluation?.status,
-    type: evaluation?.type
-  });
-
   if (!evaluation) return null;
 
   // Unwrap the lazy loader and cast task data properly
   const rawTask = getValueFromLazyLoader(evaluation.task);
   // Cast through unknown first to avoid type overlap errors
   const taskData = ((rawTask ? rawTask : evaluation.task) as any) as AmplifyTask & { stages?: any };
-  if (!taskData) {
-    console.debug('No task data found in evaluation:', {
-      evaluationId: evaluation.id,
-      status: evaluation.status,
-      type: evaluation.type
-    });
-  }
 
   // Get the score results
   const scoreResults = evaluation.scoreResults as unknown as {
@@ -343,21 +327,6 @@ export function transformEvaluationLocal(evaluation: Schema['Evaluation']['type'
   const rawStages = taskData?.stages;
   const transformedStages = transformStages(rawStages);
 
-  console.debug('Processing evaluation data:', {
-    evaluationId: evaluation.id,
-    hasTaskData: !!taskData,
-    taskType: typeof taskData,
-    taskKeys: taskData ? Object.keys(taskData) : [],
-    hasScoreResults: !!scoreResults?.items?.length,
-    rawStages,
-    rawStagesType: typeof rawStages,
-    rawStagesKeys: rawStages ? Object.keys(rawStages) : [],
-    rawStagesData: rawStages?.data,
-    rawStagesItems: rawStages?.items,
-    transformedStages,
-    transformedStagesCount: transformedStages?.items?.length
-  });
-
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: Evaluation = {
     id: evaluation.id,
@@ -393,14 +362,6 @@ export function transformEvaluationLocal(evaluation: Schema['Evaluation']['type'
     } as AmplifyTask) : null,
     scoreResults: scoreResults
   };
-
-  console.debug('Final transformed evaluation:', {
-    evaluationId: transformedEvaluation.id,
-    hasTask: !!transformedEvaluation.task,
-    taskType: typeof transformedEvaluation.task,
-    taskKeys: transformedEvaluation.task ? Object.keys(transformedEvaluation.task) : [],
-    taskStages: transformedEvaluation.task?.stages
-  });
 
   return transformedEvaluation;
 }
@@ -546,7 +507,6 @@ export default function EvaluationsDashboard({
 
   // Handle closing the selected evaluation
   const handleCloseEvaluation = () => {
-    console.log('handleCloseEvaluation called, clearing selectedEvaluationId:', selectedEvaluationId);
     setSelectedEvaluationId(null);
     setSelectedScoreResultId(null);
     setIsFullWidth(false);
@@ -576,7 +536,6 @@ export default function EvaluationsDashboard({
           const id = accountResponse.data.listAccounts.items[0].id
           setAccountId(id)
         } else {
-          console.warn('No account found with key:', ACCOUNT_KEY)
           setAccountError('No account found')
         }
       } catch (error) {
@@ -588,23 +547,19 @@ export default function EvaluationsDashboard({
   }, [])
 
   // Use the new hook for evaluation data
-  const { evaluations, isLoading, error, refetch } = useEvaluationData({ 
+  const { evaluations, isLoading, isLoadingMore, hasMore, error, refetch, loadMore } = useEvaluationData({ 
     accountId,
     selectedScorecard,
     selectedScore
   });
 
-  // Debug logging for scorecard and score selection
+  // Infinite scrolling - load more when the sentinel div is in view
   useEffect(() => {
-    console.debug('Evaluations dashboard filters:', {
-      selectedScorecard,
-      selectedScore,
-      evaluationsCount: evaluations.length
-    });
-  }, [selectedScorecard, selectedScore, evaluations.length]);
+    if (inView && hasMore && !isLoadingMore) {
+      loadMore();
+    }
+  }, [inView, hasMore, isLoadingMore, loadMore]);
 
-  // Add logging to track evaluation updates
-  // Reduced logging
 
   // Set dataHasLoadedOnce to true once data has loaded
   useEffect(() => {
@@ -829,20 +784,7 @@ export default function EvaluationsDashboard({
     const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId);
     if (!evaluation) return null;
 
-    // Reduced logging
-
-    console.log('Rendering selected task:', {
-      evaluationId: evaluation.id,
-      hasScoreResults: !!evaluation.scoreResults,
-      scoreResultsType: typeof evaluation.scoreResults,
-      scoreResultsIsArray: Array.isArray(evaluation.scoreResults),
-      scoreResultsCount: Array.isArray(evaluation.scoreResults) ? evaluation.scoreResults.length : 
-                        (evaluation.scoreResults && typeof evaluation.scoreResults === 'object' && 'items' in evaluation.scoreResults ? 
-                         (evaluation.scoreResults as any).items.length : 0),
-      firstScoreResult: Array.isArray(evaluation.scoreResults) ? evaluation.scoreResults[0] : 
-                       (evaluation.scoreResults && typeof evaluation.scoreResults === 'object' && 'items' in evaluation.scoreResults ? 
-                        (evaluation.scoreResults as any).items[0] : undefined)
-    });
+        // Debug: Log the scoreVersionId
 
     return (
       <TaskDisplay
@@ -851,7 +793,10 @@ export default function EvaluationsDashboard({
         evaluationData={{
           ...evaluation,
           // Pass lazily loaded score results when available
-          scoreResults: selectedEvaluationScoreResults ?? null
+          scoreResults: selectedEvaluationScoreResults ?? null,
+          scorecardId: evaluation.scorecardId ?? undefined,
+          scoreId: evaluation.scoreId ?? undefined,
+          scoreVersionId: evaluation.scoreVersionId ?? undefined
         }}
 
         isFullWidth={isFullWidth}
@@ -916,7 +861,6 @@ export default function EvaluationsDashboard({
         });
         
         // Keep the share modal open so user can see and copy the URL
-        console.log("Setting modal to stay open after clipboard error");
         setIsShareModalOpen(true);
       }
     } catch (error) {
@@ -1072,7 +1016,10 @@ export default function EvaluationsDashboard({
                           evaluationData={{
                             ...evaluation,
                             // Pass the raw score results - they will be standardized in the components
-                            scoreResults: evaluation.scoreResults
+                            scoreResults: evaluation.scoreResults,
+                            scorecardId: evaluation.scorecardId ?? undefined,
+                            scoreId: evaluation.scoreId ?? undefined,
+                            scoreVersionId: evaluation.scoreVersionId ?? undefined
                           }}
                           isSelected={evaluation.id === selectedEvaluationId}
                           onClick={clickHandler}
