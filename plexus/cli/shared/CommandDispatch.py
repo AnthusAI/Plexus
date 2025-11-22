@@ -37,6 +37,8 @@ class StatusColumn(ProgressColumn):
 
 load_dotenv()
 
+console = Console()
+
 def create_celery_app() -> Celery:
     """Create a configured Celery application with AWS credentials."""
     # Get AWS credentials from standard environment variables

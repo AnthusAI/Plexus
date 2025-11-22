@@ -10,14 +10,20 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
+
+    - name: Set up Conda with Python 3.11
+      uses: conda-incubator/setup-miniconda@v3
       with:
         python-version: "3.11"
-        
+        miniforge-version: latest
+        activate-environment: plexus-ci
+        auto-activate-base: false
+
     - name: Install system dependencies
       run: |
         sudo apt-get update
@@ -25,25 +31,24 @@ jobs:
 
     - name: Install Python dependencies
       run: |
-        PYTHONPATH=$GITHUB_WORKSPACE python -m pip install --upgrade pip
-        PYTHONPATH=$GITHUB_WORKSPACE pip install invoke
+        python -m pip install --upgrade pip
+        pip install invoke
         # Install build dependencies first to ensure they're available
-        PYTHONPATH=$GITHUB_WORKSPACE pip install pybind11 cython setuptools wheel
-        PYTHONPATH=$GITHUB_WORKSPACE pip install numpy
-        
+        pip install pybind11 cython setuptools wheel
+        pip install numpy
+
         # Install fasttext-wheel instead of fasttext
-        # PYTHONPATH=$GITHUB_WORKSPACE pip install fasttext-wheel==0.9.2
-        
+        # pip install fasttext-wheel==0.9.2
+
         # Now install package dependencies
-        PYTHONPATH=$GITHUB_WORKSPACE pip install -e .
+        pip install -e .
 
     - name: Run Python Tests
       run: |
         echo "Current directory: $(pwd)"
-        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-        cd $GITHUB_WORKSPACE
-        echo "Changed to directory: $(pwd)"
-        PYTHONPATH=$GITHUB_WORKSPACE invoke ci
+        echo "Python version: $(python --version)"
+        echo "Conda environment: $CONDA_DEFAULT_ENV"
+        invoke ci
 
     - name: Setup Node.js
       uses: actions/setup-node@v4

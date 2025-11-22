@@ -1679,7 +1679,7 @@ def accuracy(
                                 if score_id_for_eval and (isinstance(score_id_for_eval, int) or str(score_id_for_eval).isdigit()):
                                     try:
                                         # Use scorecard ID if available for better resolution
-                                        scorecard_id_for_resolution = scorecard_id if 'scorecard_record' in locals() and scorecard_record else None
+                                        scorecard_id_for_resolution = scorecard_instance.id if hasattr(scorecard_instance, 'id') else None
                                         resolved_uuid = resolve_score_external_id_to_uuid(client, str(score_id_for_eval), scorecard_id_for_resolution)
                                         if resolved_uuid:
                                             score_id_for_eval = resolved_uuid

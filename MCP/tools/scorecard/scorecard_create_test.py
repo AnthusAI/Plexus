@@ -57,10 +57,12 @@ class TestScorecardCreationValidation:
         # Then validation should identify the missing fields
         
         # Test that name is required
-        assert "" != "Test Scorecard"  # Empty name should fail
+        empty_name = ""
+        assert empty_name != "Test Scorecard"  # Empty name should fail
         
         # Test that account identifier resolution is needed
-        assert "account123" is not None  # Account must be resolvable
+        account_id = "account123"
+        assert account_id is not None  # Account must be resolvable
         
         # Test that key generation/validation works
         test_name = "Test Scorecard"
