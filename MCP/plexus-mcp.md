@@ -2,6 +2,8 @@
 
 The Plexus MCP (Multi-Agent Cooperative Protocol) system enables AI agents and tools to interact with Plexus functionality through a standardized protocol. This document provides an overview of the system architecture and key components.
 
+> **For a user guide on interacting with these tools, please see the [Agent Integration Guide](../AGENTS.md).**
+
 ## Core Components
 
 ### Server Implementation

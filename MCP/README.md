@@ -1,6 +1,8 @@
 # Plexus MCP Server - Refactored Structure
 
-This directory contains a refactored version of the Plexus MCP server where each tool is organized into separate files for better maintainability and organization.
+This directory contains the Plexus MCP server where each tool is organized into separate files for better maintainability and organization.
+
+> **For a comprehensive guide on using these tools with AI agents, see the [Agent Integration Guide](../AGENTS.md).**
 
 ## Directory Structure
 
