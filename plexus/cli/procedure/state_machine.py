@@ -35,7 +35,8 @@ class ProcedureStateMachine(StateMachine):
         - analyze: evaluation → hypothesis (begin hypothesis generation)
         - start_testing: hypothesis → test (begin testing hypothesis)
         - analyze_results: test → insights (analyze test results)
-        - finish_from_insights: insights → completed (insights complete)
+        - continue_iteration: insights → hypothesis (loop back for next round)
+        - finish_from_insights: insights → completed (insights complete, no more iterations)
         - finish_from_hypothesis: hypothesis → completed (decided no testing needed)
         - fail_*: any state → error (error occurred)
         - retry_from_error: error → evaluation (retry after error)
@@ -56,6 +57,7 @@ class ProcedureStateMachine(StateMachine):
     analyze = evaluation.to(hypothesis)
     start_testing = hypothesis.to(test)
     analyze_results = test.to(insights)
+    continue_iteration = insights.to(hypothesis)  # NEW: Loop back for next round
     finish_from_insights = insights.to(completed)
     finish_from_hypothesis = hypothesis.to(completed)
 
@@ -120,6 +122,13 @@ class ProcedureStateMachine(StateMachine):
         # Mark "test" stage as completed and "insights" stage as running
         self._update_task_stages("test", "COMPLETED")
         self._update_task_stages("insights", "RUNNING")
+
+    def on_continue_iteration(self):
+        """Called when transitioning insights → hypothesis (looping back for next round)"""
+        logger.info(f"Procedure {self.procedure_id}: Insights complete, starting next hypothesis round")
+        # Mark "insights" stage as completed and "hypothesis" stage as running again
+        self._update_task_stages("insights", "COMPLETED")
+        self._update_task_stages("hypothesis", "RUNNING")
 
     def on_finish_from_insights(self):
         """Called when transitioning insights → completed"""
