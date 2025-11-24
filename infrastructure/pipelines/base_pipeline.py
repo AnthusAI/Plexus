@@ -17,6 +17,8 @@ from constructs import Construct
 from stacks.scoring_worker_stack import ScoringWorkerStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
 from stacks.metrics_aggregation_stack import MetricsAggregationStack
+from stacks.command_worker_stack import CommandWorkerStack
+from stacks.code_deploy_stack import CodeDeployStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 
 
@@ -150,10 +152,57 @@ class BasePipelineStack(Stack):
             env=kwargs.get("env")
         )
 
-        # Add deployment stage with Docker build as a pre-step
+        # Create CodeDeploy step to deploy code to EC2 after infrastructure is deployed
+        deploy_to_ec2_step = pipelines.CodeBuildStep(
+            "DeployCodeToEC2",
+            input=source,
+            commands=[
+                # Create deployment bundle with code and deployment artifacts
+                "zip -r deployment.zip . -x '*.git*' -x '*node_modules*' -x '*.venv*' -x '*__pycache__*' -x 'infrastructure/cdk.out/*'",
+                "mkdir -p deployment_package",
+                "unzip -q deployment.zip -d deployment_package",
+                "cp -r infrastructure/deployment_artifacts/* deployment_package/",
+                "cd deployment_package && zip -r ../final_deployment.zip . && cd ..",
+                # Upload to S3 (using a consistent key that gets overwritten)
+                f"aws s3 cp final_deployment.zip s3://plexus-{environment}-code-deployments/latest.zip",
+                # Trigger CodeDeploy deployment
+                f"aws deploy create-deployment --application-name plexus-code-deploy-{environment}-app --deployment-group-name plexus-code-deploy-{environment}-group --s3-location bucket=plexus-{environment}-code-deployments,key=latest.zip,bundleType=zip --description 'Deployed from infrastructure pipeline'"
+            ],
+            build_environment=codebuild.BuildEnvironment(
+                build_image=codebuild.LinuxBuildImage.STANDARD_7_0
+            ),
+            role_policy_statements=[
+                # Grant permissions to trigger CodeDeploy
+                iam.PolicyStatement(
+                    actions=[
+                        "codedeploy:*"
+                    ],
+                    resources=["*"]
+                ),
+                # Grant permissions to upload to S3
+                iam.PolicyStatement(
+                    actions=[
+                        "s3:PutObject",
+                        "s3:GetObject"
+                    ],
+                    resources=[f"arn:aws:s3:::plexus-{environment}-code-deployments/*"]
+                ),
+                # Grant permissions to create S3 bucket if it doesn't exist
+                iam.PolicyStatement(
+                    actions=[
+                        "s3:CreateBucket",
+                        "s3:ListBucket"
+                    ],
+                    resources=[f"arn:aws:s3:::plexus-{environment}-code-deployments"]
+                )
+            ]
+        )
+
+        # Add deployment stage with Docker build as pre-step and EC2 deployment as post-step
         pipeline.add_stage(
             deployment_stage,
-            pre=[docker_build_step]  # Build Docker image before deploying
+            pre=[docker_build_step],  # Build Docker image before deploying infrastructure
+            post=[deploy_to_ec2_step]  # Deploy code to EC2 after infrastructure is deployed
         )
 
 
@@ -210,6 +259,25 @@ class DeploymentStage(cdk.Stage):
             "MetricsAggregation",
             environment=environment,
             stack_name=f"plexus-metrics-aggregation-{environment}",
+            env=kwargs.get("env")
+        )
+
+        # Deploy command worker stack (manages EC2 command worker configuration)
+        command_worker_stack = CommandWorkerStack(
+            self,
+            "CommandWorker",
+            environment=environment,
+            stack_name=f"plexus-command-worker-{environment}",
+            env=kwargs.get("env")
+        )
+
+        # Deploy CodeDeploy stack (manages code deployments to EC2)
+        self.code_deploy_stack = CodeDeployStack(
+            self,
+            "CodeDeploy",
+            environment=environment,
+            ec2_role=command_worker_stack.ec2_role,
+            stack_name=f"plexus-code-deploy-{environment}",
             env=kwargs.get("env")
         )
 
