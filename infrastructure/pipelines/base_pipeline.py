@@ -107,7 +107,14 @@ class BasePipelineStack(Stack):
                 build_environment=codebuild.BuildEnvironment(
                     build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                     privileged=True,  # Required for Docker builds
-                )
+                ),
+                role_policy=[
+                    # Grant permission to read GitHub connection ARN from SSM
+                    iam.PolicyStatement(
+                        actions=["ssm:GetParameter"],
+                        resources=[f"arn:aws:ssm:{kwargs.get('env').region if kwargs.get('env') else 'us-west-2'}:{kwargs.get('env').account if kwargs.get('env') else '*'}:parameter/plexus/github-connection-arn"]
+                    )
+                ]
             ),
             docker_enabled_for_synth=True,  # Enable Docker for the synth step
         )
