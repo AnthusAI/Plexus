@@ -15,6 +15,7 @@ from plexus.dashboard.api.models.report_block import ReportBlock
 from plexus.dashboard.api.models.item import Item  # Add Item model import
 
 from .base import BaseReportBlock
+from . import feedback_utils
 
 logger = logging.getLogger(__name__)
 
@@ -183,67 +184,10 @@ class FeedbackAnalysis(BaseReportBlock):
                     self._log(f"ERROR looking up specific Plexus Score (CC Question ID: {cc_question_id_param}): {e}. This score will be skipped.", level="ERROR")
             else:
                 self._log(f"Fetching all Plexus Scores for Scorecard '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id}) to find mappable scores.")
-                # Query for scores, assuming 'position' field exists for scores
-                # to establish a definitive order. Section order will be based on API return order.
-                scores_query = """
-                query GetScorecardScores($scorecardId: ID!) {
-                    getScorecard(id: $scorecardId) {
-                        id
-                        name
-                        sections {
-                            items {
-                                id # Section ID
-                                # position # Removed as it does not exist on ScorecardSection
-                                scores {
-                                    items {
-                                        id
-                                        name
-                                        externalId
-                                        order # Attempting to use 'order' field for scores
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                """
+                # Use the utility function to fetch scores
                 try:
-                    result = await asyncio.to_thread(self.api_client.execute, scores_query, {'scorecardId': plexus_scorecard_obj.id})
-                    scorecard_data = result.get('getScorecard')
-                    
-                    raw_scores_with_positions = [] # Collect all scores with their positions
-
-                    if scorecard_data and scorecard_data.get('sections') and scorecard_data['sections'].get('items'):
-                        for section_index, section in enumerate(scorecard_data['sections']['items']):
-                            # Use section_index as the primary sort order for sections.
-                            section_order = section_index
-                            
-                            if section.get('scores') and section['scores'].get('items'):
-                                for score_index, score_item in enumerate(section['scores']['items']):
-                                    if score_item.get('externalId'):
-                                        # Use score's 'order' field if available, otherwise fall back to its index within the section.
-                                        score_order = score_item.get('order', score_index)
-                                        raw_scores_with_positions.append({
-                                            'plexus_score_id': score_item['id'],
-                                            'plexus_score_name': score_item['name'],
-                                            'cc_question_id': score_item['externalId'],
-                                            'section_order': section_order,
-                                            'score_order': score_order
-                                        })
-                                    else:
-                                        self._log(f"Plexus Score '{score_item.get('name')}' (ID: {score_item.get('id')}) is missing an externalId (CC Question ID). Skipping.", level="DEBUG")
-                    
-                    # Sort the collected scores by section order (index), then by score order (position or index) within the section.
-                    raw_scores_with_positions.sort(key=lambda s: (s['section_order'], s['score_order']))
-                    
-                    # Populate scores_to_process in the now sorted order, removing temporary sort keys.
-                    scores_to_process = [
-                        {k: v for k, v in s.items() if k not in ['section_order', 'score_order']}
-                        for s in raw_scores_with_positions
-                    ]
-                    
+                    scores_to_process = await feedback_utils.fetch_scores_for_scorecard(self.api_client, plexus_scorecard_obj.id)
                     self._log(f"Identified and sorted {len(scores_to_process)} Plexus Scores with externalIds to process.")
-
                 except Exception as e:
                     self._log(f"ERROR fetching and sorting scores for Plexus Scorecard '{plexus_scorecard_obj.name}': {e}", level="ERROR")
                     # Continue if some scores were found before error, or caught by next check
@@ -504,41 +448,15 @@ class FeedbackAnalysis(BaseReportBlock):
             self._log("ERROR: Could not determine account_id for fetching scorecards", level="ERROR")
             return []
 
-        try:
-            # GraphQL query to list all scorecards for the account
-            query = """
-            query ListScorecards($accountId: String!) {
-                listScorecards(filter: {accountId: {eq: $accountId}}, limit: 1000) {
-                    items {
-                        id
-                        name
-                        key
-                        externalId
-                        accountId
-                        createdAt
-                        updatedAt
-                    }
-                }
-            }
-            """
-
-            variables = {"accountId": account_id}
-            result = await asyncio.to_thread(self.api_client.execute, query, variables)
-
-            if result and 'listScorecards' in result and result['listScorecards']:
-                scorecard_items = result['listScorecards'].get('items', [])
-                scorecards = [Scorecard.from_dict(item, self.api_client) for item in scorecard_items]
-                self._log(f"Found {len(scorecards)} scorecards for account {account_id}")
-                return scorecards
-            else:
-                self._log("No scorecards found or unexpected response format", level="WARNING")
-                return []
-
-        except Exception as e:
-            self._log(f"Error fetching scorecards: {e}", level="ERROR")
-            import traceback
-            self._log(traceback.format_exc())
-            return []
+        # Use the utility function
+        scorecards = await feedback_utils.fetch_all_scorecards(self.api_client, account_id)
+        
+        if scorecards:
+            self._log(f"Found {len(scorecards)} scorecards for account {account_id}")
+        else:
+            self._log("No scorecards found or unexpected response format", level="WARNING")
+        
+        return scorecards
 
     async def _analyze_single_scorecard_for_all_mode(self, scorecard: Scorecard, idx: int, total: int) -> Dict[str, Any]:
         """
@@ -772,19 +690,18 @@ class FeedbackAnalysis(BaseReportBlock):
         if start_date and end_date:
             self._log(f"With date filtering: {start_date.isoformat()} to {end_date.isoformat()}")
         
-        all_items_for_score = []
-        account_id = self.params.get("account_id") # Assuming account_id is in self.params from Task context
+        # Get account_id
+        account_id = self.params.get("account_id")
         if not account_id and hasattr(self.api_client, 'context') and self.api_client.context:
-             account_id = self.api_client.context.account_id # Try to get from client context
+             account_id = self.api_client.context.account_id
 
         if not account_id:
             # Attempt to resolve account_id if not directly available in params or context
             try:
                 self._log("Attempting to resolve account_id via PlexusDashboardClient...", level="DEBUG")
-                # Ensure _resolve_account_id can be called or account_id is pre-resolved.
                 if hasattr(self.api_client, '_resolve_account_id'):
                     account_id = await asyncio.to_thread(self.api_client._resolve_account_id) 
-                elif hasattr(self.api_client, 'account_id'): # if it was resolved and stored
+                elif hasattr(self.api_client, 'account_id'):
                     account_id = self.api_client.account_id
 
                 if account_id:
@@ -793,7 +710,7 @@ class FeedbackAnalysis(BaseReportBlock):
                     self._log("WARNING: account_id could not be resolved. FeedbackItem fetching might be incomplete or fail.", level="WARNING")
             except Exception as e:
                 self._log(f"Error resolving account_id: {e}. Proceeding with account_id as None.", level="WARNING")
-                account_id = None # Ensure it's None if resolution fails
+                account_id = None
         else:
             self._log(f"Using account_id: {account_id}", level="DEBUG")
 
@@ -801,227 +718,18 @@ class FeedbackAnalysis(BaseReportBlock):
             self._log("No account_id available. Cannot fetch feedback items.", level="ERROR")
             return []
 
-        try:
-            # Try using the optimized GSI directly with GraphQL
-            if plexus_scorecard_id and plexus_score_id and start_date and end_date:
-                self._log("Using direct GraphQL query with GSI", level="DEBUG")
-                
-                # First, try to get schema information for the GSI query
-                self._log("Querying schema information for correct parameters...", level="INFO")
-                schema_query = """
-                query IntrospectionQuery {
-                  __schema {
-                    queryType {
-                      fields {
-                        name
-                        args {
-                          name
-                          type {
-                            name
-                            kind
-                            ofType {
-                              name
-                              kind
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-                """
-                
-                try:
-                    schema_response = await asyncio.to_thread(self.api_client.execute, schema_query, {})
-                    if schema_response and '__schema' in schema_response:
-                        query_fields = schema_response['__schema']['queryType']['fields']
-                        gsi_field = next((f for f in query_fields if f['name'] == 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt'), None)
-                        if gsi_field:
-                            self._log(f"GSI arguments: {gsi_field['args']}", level="INFO")
-                        else:
-                            self._log("Could not find GSI in schema", level="WARNING")
-                except Exception as e:
-                    self._log(f"Error querying schema: {e}", level="WARNING")
-                
-                # Construct a direct GraphQL query using the new GSI
-                # The GSI query field name is listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt
-                # It takes `accountId` and a composite sort key argument.
-                # The composite sort key is formed from scorecardId, scoreId, and editedAt.
-                # We'll name the GraphQL variable for this composite key `composite_sk_condition`
-                # and assume its type is ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput
-                # (or similar, based on actual schema introspection).
-                query = """
-                query ListFeedbackItemsByGSI(
-                    $accountId: String!,
-                    $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
-                    $limit: Int,
-                    $nextToken: String,
-                    $sortDirection: ModelSortDirection
-                ) {
-                    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
-                        accountId: $accountId,
-                        scorecardIdScoreIdEditedAt: $composite_sk_condition, # This is the argument for the composite sort key
-                        limit: $limit,
-                        nextToken: $nextToken,
-                        sortDirection: $sortDirection
-                    ) {
-                        items {
-                            id
-                            accountId
-                            scorecardId
-                            scoreId
-                            itemId
-                            cacheKey
-                            initialAnswerValue
-                            finalAnswerValue
-                            initialCommentValue
-                            finalCommentValue
-                            editCommentValue
-                            editedAt
-                            editorName
-                            isAgreement
-                            createdAt
-                            updatedAt
-                            item {
-                                id
-                                identifiers
-                                externalId
-                            }
-                        }
-                        nextToken
-                    }
-                }
-                """
-                
-                # Prepare variables for the query
-                # The composite sort key condition 'scorecardIdScoreIdEditedAt'
-                # expects a 'between' operator with two objects.
-                variables = {
-                    "accountId": account_id,
-                    "composite_sk_condition": {
-                        "between": [
-                            {
-                                "scorecardId": str(plexus_scorecard_id),
-                                "scoreId": str(plexus_score_id),
-                                "editedAt": start_date.isoformat()
-                            },
-                            {
-                                "scorecardId": str(plexus_scorecard_id), # Must match the start for range scan
-                                "scoreId": str(plexus_score_id),     # Must match the start for range scan
-                                "editedAt": end_date.isoformat()
-                            }
-                        ]
-                    },
-                    "limit": 100,
-                    "nextToken": None,
-                    "sortDirection": "DESC"
-                }
-                
-                # Log the exact query and variables to INFO level so they show up
-                self._log(f"GraphQL query: {query}", level="INFO")
-                self._log(f"GraphQL variables: {variables}", level="INFO")
-                
-                next_token = None
-                
-                while True:
-                    if next_token:
-                        variables["nextToken"] = next_token
-                    
-                    try:
-                        # Execute the query
-                        self._log(f"Executing GraphQL query with variables: {variables}", level="INFO")
-                        response = await asyncio.to_thread(self.api_client.execute, query, variables)
-                        
-                        # If there's an error, log it
-                        if response and 'errors' in response:
-                            self._log(f"GraphQL errors: {response.get('errors')}", level="ERROR")
-                            
-                            # Try a simplified query without any optional parameters
-                            self._log("Trying a simplified fallback query...", level="INFO")
-                            simplified_query = """
-                            query SimplifiedFeedbackQuery {
-                              listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
-                                accountId: "%s"
-                                limit: 1
-                              ) {
-                                items {
-                                  id
-                                  accountId
-                                  scorecardId
-                                  scoreId
-                                  itemId
-                                  editedAt
-                                  editorName
-                                  item {
-                                    id
-                                    identifiers
-                                  }
-                                }
-                                nextToken
-                              }
-                            }
-                            """ % account_id
-                            
-                            self._log(f"Simplified query: {simplified_query}", level="INFO")
-                            try:
-                                # No variables with hardcoded query
-                                simplified_response = await asyncio.to_thread(self.api_client.execute, simplified_query, {})
-                                self._log(f"Simplified query response: {simplified_response}", level="INFO")
-                            except Exception as e:
-                                self._log(f"Even simplified query failed: {e}", level="ERROR")
-                        
-                        if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt' in response:
-                            result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt']
-                            item_dicts = result.get('items', [])
-                            
-                            # Log the first few items to verify we're getting identifiers
-                            if item_dicts:
-                                for i, item_dict in enumerate(item_dicts[:3]):  # Show first 3 items
-                                    if 'item' in item_dict and item_dict['item'] and 'identifiers' in item_dict['item']:
-                                        self._log(f"Found item with identifiers: {item_dict['item']['identifiers']}", level="INFO")
-                                    else:
-                                        self._log(f"Item {i} missing nested item or identifiers", level="WARNING")
-                            
-                            # Convert to FeedbackItem objects
-                            items = [FeedbackItem.from_dict(item_dict, client=self.api_client) for item_dict in item_dicts]
-                            
-                            # Log sample items to verify item relationships are correctly loaded
-                            for i, item in enumerate(items[:2]):  # Show first 2 items
-                                if hasattr(item, 'item') and item.item:
-                                    self._log(f"Processed FeedbackItem {item.id} has linked Item: {item.item.id}, identifiers: {item.item.identifiers}", level="INFO")
-                                else:
-                                    self._log(f"Processed FeedbackItem {item.id} is missing linked Item", level="WARNING")
-                            
-                            all_items_for_score.extend(items)
-                            
-                            self._log(f"Fetched {len(items)} items using GSI query (total: {len(all_items_for_score)})")
-                            
-                            # Get next token for pagination
-                            next_token = result.get('nextToken')
-                            if not next_token:
-                                break
-                        else:
-                            if response and 'errors' in response:
-                                self._log(f"GraphQL errors with GSI query: {response.get('errors')}", level="WARNING")
-                            else:
-                                self._log("Unexpected response format from GSI query", level="WARNING")
-                            raise ValueError("Invalid response format")
-                            
-                    except Exception as e:
-                        self._log(f"Error during GSI query execution: {e}. No fallback will be attempted. Current items (if any from GSI) will be cleared.", level="WARNING")
-                        # Clear items and break GSI pagination loop.
-                        all_items_for_score = []
-                        break # This break exits the GSI pagination loop.
-            
-            # The 'if plexus_scorecard_id and plexus_score_id and start_date and end_date:' block (for GSI query) ends above.
-            # The standard query fallback logic (which started with 'if not all_items_for_score:')
-            # that was previously located here has been completely removed.
-            
-        except Exception as e: # This is the outer catch block for the _fetch_feedback_items_for_score method
-            self._log(f"Error during feedback item fetch for score {plexus_score_id}: {str(e)}", level="ERROR")
+        # Use the utility function
+        items = await feedback_utils.fetch_feedback_items_for_score(
+            self.api_client,
+            account_id,
+            plexus_scorecard_id,
+            plexus_score_id,
+            start_date,
+            end_date
+        )
         
-        self._log(f"Total items fetched for score {plexus_score_id}: {len(all_items_for_score)}")
-        return all_items_for_score
+        self._log(f"Total items fetched for score {plexus_score_id}: {len(items)}")
+        return items
     
     def _analyze_feedback_data_gwet(self, feedback_items: List[FeedbackItem], score_id_info: str) -> Dict[str, Any]:
         """

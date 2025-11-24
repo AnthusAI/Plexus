@@ -28,9 +28,8 @@ const feedbackGaugesConfig: BaseGaugesConfig = {
       unit: '',
       decimalPlaces: 0,
       segments: [
-        { start: 0, end: 10, color: 'var(--false)' },
-        { start: 10, end: 90, color: 'var(--neutral)' },
-        { start: 90, end: 100, color: 'var(--true)' }
+        { start: 0, end: 90, color: 'var(--neutral)' },
+        { start: 90, end: 100, color: 'var(--false)' }
       ]
     }
   ],
@@ -77,15 +76,15 @@ export function FeedbackItemsGauges({
   } = useFeedbackMetrics()
 
   // Transform metrics data to BaseGaugesData format
-  // For feedback metrics, we use the scoreResults data since feedback items are tracked there
+  // For feedback metrics, we use the items data which contains feedbackItems counts
   const data: BaseGaugesData | null = metricsData ? {
-    feedbackItemsPerHour: metricsData.scoreResultsPerHour || 0,
-    feedbackItemsAveragePerHour: metricsData.scoreResultsAveragePerHour || 0,
-    feedbackItemsPeakHourly: metricsData.scoreResultsPeakHourly || 0,
-    feedbackItemsTotal24h: metricsData.scoreResultsTotal24h || 0,
+    feedbackItemsPerHour: metricsData.itemsPerHour || 0,
+    feedbackItemsAveragePerHour: metricsData.itemsAveragePerHour || 0,
+    feedbackItemsPeakHourly: metricsData.itemsPeakHourly || 10,
+    feedbackItemsTotal24h: metricsData.itemsTotal24h || 0,
     chartData: metricsData.chartData?.map((point: any) => ({
       time: point.time,
-      feedbackItems: (point as any).feedback || 0 // Extract feedback data from chart
+      feedbackItems: point.items || 0 // Map items to feedbackItems for chart display
     })) || [],
     lastUpdated: metricsData.lastUpdated || new Date(),
     hasErrorsLast24h: metricsData.hasErrorsLast24h || false,

@@ -40,6 +40,7 @@ import { ItemsDashboardSkeleton, ItemCardSkeleton } from './loading-skeleton'
 import { ScoreResultCountManager, type ScoreResultCount } from '@/utils/score-result-counter'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ItemsGauges } from './ItemsGauges'
+import { useVirtualItems } from '@/hooks/useVirtualItems'
 
 // Get the current date and time
 const now = new Date();
@@ -168,6 +169,19 @@ const GridContent = ({
   hasInitiallyLoaded: boolean;
   itemsWithErrors: Set<string>;
 }) => {
+  // Use virtual scrolling to only render visible items
+  const { shouldRenderItem } = useVirtualItems({
+    items: filteredItems,
+    itemRefsMap,
+    selectedItemId: selectedItem,
+    bufferRows: 2, // Keep 2 rows above/below viewport
+  });
+
+  // Filter items to only those that should be rendered
+  const visibleItems = useMemo(() => {
+    return filteredItems.filter(item => shouldRenderItem(item.id));
+  }, [filteredItems, shouldRenderItem]);
+
   // Only show "No items found" if we're not loading and have actually finished the initial load
   if (filteredItems.length === 0 && !isLoading && hasInitiallyLoaded) {
     return (
@@ -192,7 +206,7 @@ const GridContent = ({
         }}
       >
         <AnimatePresence mode="popLayout">
-          {filteredItems.map((item) => {
+          {visibleItems.map((item) => {
             const scoreCount = scoreResultCounts.get(item.id);
             return (
               <GridItemCard
@@ -1114,6 +1128,8 @@ function ItemsDashboardInner() {
               ...(freshItem.text !== undefined && { text: freshItem.text }),
               // Preserve isNew status
               isNew: prevItem.isNew,
+              // PRESERVE scorecards to prevent flicker - score count manager updates this separately
+              scorecards: prevItem.scorecards || [],
             };
           }
           return prevItem;
@@ -1340,6 +1356,8 @@ function ItemsDashboardInner() {
                       ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
                       // Only update text if it's actually present in the update
                       ...(updatedItem.text !== undefined && { text: updatedItem.text }),
+                      // PRESERVE scorecards to prevent flicker - score count manager updates this separately
+                      scorecards: prevItems[existingItemIndex].scorecards || [],
                     };
                     return updatedItems;
                   } else {
@@ -1432,7 +1450,6 @@ function ItemsDashboardInner() {
         
         if (pageHiddenTimeRef.current && (now - pageHiddenTimeRef.current) > WAKE_THRESHOLD_MS) {
           // Page was hidden for more than the threshold - likely wake from sleep
-          console.log('Wake from sleep detected, performing silent refresh...');
           
           // Perform silent refresh and restart subscriptions
           silentRefresh();
@@ -2029,9 +2046,6 @@ function ItemsDashboardInner() {
           }
         } else if (useScorecard) {
           // If only a scorecard is selected, use optimized ScoreResult GSI
-          console.log('🔍 SCORECARD FILTERING DEBUG (OPTIMIZED GSI):');
-          console.log('- Selected scorecard ID:', selectedScorecard);
-          console.log('- Account ID:', accountId);
           
           try {
             // Try the new optimized GSI first - sorted by itemId, createdAt for efficient deduplication
@@ -2086,9 +2100,6 @@ function ItemsDashboardInner() {
               limit: 300  // Query more since we'll deduplicate
             });
             
-            console.log('- OPTIMIZED GSI query response:', directQuery);
-            console.log('- Raw ScoreResults count:', directQuery.data?.listScoreResultByScorecardIdAndItemIdAndCreatedAt?.items?.length || 0);
-            
             if (directQuery.data?.listScoreResultByScorecardIdAndItemIdAndCreatedAt?.items) {
               // Efficiently deduplicate - since results are sorted by itemId, createdAt,
               // we can take the first (most recent) result for each itemId
@@ -2111,16 +2122,11 @@ function ItemsDashboardInner() {
               });
               
               nextTokenFromDirectQuery = directQuery.data.listScoreResultByScorecardIdAndItemIdAndCreatedAt.nextToken;
-              console.log('- ✅ Using optimized GSI! Unique items:', itemsFromDirectQuery.length);
             } else {
-              console.log('- Optimized GSI not available yet, using current method');
               throw new Error('Optimized GSI not ready, use current method');
             }
             
           } catch (error) {
-            console.log('- Optimized GSI error:', error);
-            console.log('- Using current ScoreResult method');
-            
             // Current ScoreResult-based approach
             const currentQuery = await graphqlRequest<{
               listScoreResultByScorecardIdAndUpdatedAt: {
@@ -2186,7 +2192,6 @@ function ItemsDashboardInner() {
                 return dateB - dateA;
               });
               nextTokenFromDirectQuery = currentQuery.data.listScoreResultByScorecardIdAndUpdatedAt.nextToken;
-              console.log('- ⚠️ Using current ScoreResult method, items found:', itemsFromDirectQuery.length);
             }
           }
         } else {
@@ -2643,6 +2648,8 @@ function ItemsDashboardInner() {
                     ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
                     // Only update text if it's actually present in the update
                     ...(updatedItem.text !== undefined && { text: updatedItem.text }),
+                    // PRESERVE scorecards to prevent flicker - score count manager updates this separately
+                    scorecards: prevItems[existingItemIndex].scorecards || [],
                   };
                   return updatedItems;
                 } else {
@@ -2661,7 +2668,6 @@ function ItemsDashboardInner() {
                   } else {
                     // In error filter mode - don't add existing items that just got score results
                     // Only new items (handled by item creation subscription) should appear
-                    console.log('🚫 Preventing existing item from appearing in error filter due to score result update:', updatedItem.id);
                     return prevItems;
                   }
                 }
@@ -2681,8 +2687,8 @@ function ItemsDashboardInner() {
           }
           
           // Trigger a re-count of score results for this item
+          // Don't clear first - just reload to avoid flickering
           if (scoreCountManagerRef.current) {
-            scoreCountManagerRef.current.clearCount(updatedItem.id);
             scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
           }
         }

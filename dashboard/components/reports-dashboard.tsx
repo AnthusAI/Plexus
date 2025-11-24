@@ -452,15 +452,6 @@ const getNestedProperty = (obj: any, path: string[], defaultValue: any = null) =
 function transformReportData(report: Report): ReportDisplayData | null {
   if (!report) return null;
 
-  console.log('Raw report data in transform:', { 
-    id: report.id, 
-    name: report.name, 
-    hasName: !!report.name,
-    nameType: typeof report.name,
-    reportType: typeof report,
-    configId: report.reportConfigurationId
-  });
-
   const taskData = report.task ? getValueFromLazyLoader(report.task) : null;
   const configData = report.reportConfiguration ? getValueFromLazyLoader(report.reportConfiguration) : null;
 
@@ -510,12 +501,6 @@ function transformReportData(report: Report): ReportDisplayData | null {
     task: taskData as Task | null
   };
 
-  console.log('Transformed report data:', { 
-    id: transformed.id, 
-    name: transformed.name,
-    configName: transformed.reportConfiguration?.name
-  });
-
   return transformed;
 }
 
@@ -526,7 +511,6 @@ export default function ReportsDashboard({
 } = {}) {
   // Add a useEffect to potentially log when setup runs relative to mount
   useEffect(() => {
-    console.log("ReportsDashboard mounted. Block registry setup should have run.");
   }, []); 
 
   const { user } = useAuthenticator()
@@ -592,7 +576,6 @@ export default function ReportsDashboard({
           const id = accountResponse.data.listAccounts.items[0].id
           setAccountId(id)
         } else {
-          console.warn('No account found with key:', ACCOUNT_KEY)
           setError('No account found')
           setIsLoading(false)
         }
@@ -618,7 +601,6 @@ export default function ReportsDashboard({
       
       if (reportConfigId) {
         // Fetch reports by report configuration ID
-        console.log(`Fetching reports for config ${reportConfigId} with nextToken: ${currentNextToken}`);
         reportsResponse = await getClient().graphql<ListReportsByConfigResponse>({
           query: LIST_REPORTS_BY_CONFIG,
           variables: {
@@ -635,18 +617,15 @@ export default function ReportsDashboard({
             .map(transformReportData)
             .filter((item: unknown): item is ReportDisplayData => item !== null);
 
-          console.log(`Fetched ${transformedItems.length} reports for config ${reportConfigId}`);
 
           setReports(prevReports => currentNextToken ? [...prevReports, ...transformedItems] : transformedItems);
           setNextToken(reportsResponse.data.listReportByReportConfigurationIdAndCreatedAt.nextToken);
         } else {
-          console.warn('No reports data found for config:', reportConfigId);
           setReports(prevReports => currentNextToken ? prevReports : []);
           setNextToken(null);
         }
       } else {
         // Fetch all reports by account ID
-        console.log(`Fetching reports for account ${currentAccountId} with nextToken: ${currentNextToken}`);
         reportsResponse = await getClient().graphql<ListReportsResponse>({
           query: LIST_REPORTS,
           variables: {
@@ -663,12 +642,10 @@ export default function ReportsDashboard({
             .map(transformReportData)
             .filter((item: unknown): item is ReportDisplayData => item !== null);
 
-          console.log(`Fetched ${transformedItems.length} reports`);
 
           setReports(prevReports => currentNextToken ? [...prevReports, ...transformedItems] : transformedItems);
           setNextToken(reportsResponse.data.listReportByAccountIdAndUpdatedAt.nextToken);
         } else {
-          console.warn('No reports data found in response:', reportsResponse);
           setReports(prevReports => currentNextToken ? prevReports : []);
           setNextToken(null);
         }
@@ -717,7 +694,6 @@ export default function ReportsDashboard({
   useEffect(() => {
     if (!accountId) return;
 
-    console.log('Setting up report subscriptions for accountId:', accountId);
     const subscriptionHandlers: { unsubscribe: () => void }[] = [];
 
     // Subscribe to new report creations
@@ -727,10 +703,8 @@ export default function ReportsDashboard({
         variables: { accountId }
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onCreateReport: any } }) => {
-          console.log('🔔 New report created SUB-EVENT:', data?.onCreateReport);
           if (data?.onCreateReport) {
             const newReport = data.onCreateReport;
-            console.log('🔔 SUB-EVENT: Original new report name:', newReport.name, 'type:', typeof newReport.name);
             
             // DIRECT APPROACH: Create a report display object manually to ensure name is preserved
             const manualTransformedReport: ReportDisplayData = {
@@ -750,13 +724,10 @@ export default function ReportsDashboard({
               task: newReport.task || null
             };
             
-            console.log('🔔 SUB-EVENT: Manually transformed report:', manualTransformedReport);
-            console.log('🔔 SUB-EVENT: Manual transformed name:', manualTransformedReport.name);
             
             // Use the manual transformation to ensure name is preserved
             setReports(prevReports => {
               const newReports = [manualTransformedReport, ...prevReports];
-              console.log('🔔 SUB-EVENT: Updated reports array:', newReports.map(r => ({ id: r.id, name: r.name })));
               return newReports;
             });
           }
@@ -778,12 +749,10 @@ export default function ReportsDashboard({
         variables: { accountId }
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onUpdateReport: any } }) => {
-          console.log('Report updated:', data?.onUpdateReport);
           if (data?.onUpdateReport) {
             const updatedReport = data.onUpdateReport;
             // Cast to any to avoid type issues with transformReportData
             const transformedReport = transformReportData(updatedReport as any);
-            console.log('Transformed report from update subscription:', transformedReport);
             if (transformedReport) {
               // Ensure the name is properly set
               if (!transformedReport.name && updatedReport.name) {
@@ -812,7 +781,6 @@ export default function ReportsDashboard({
 
     // Cleanup on unmount or accountId change
     return () => {
-      console.log('Cleaning up report subscriptions');
       subscriptionHandlers.forEach(subscription => {
         try {
           subscription.unsubscribe();
@@ -827,7 +795,6 @@ export default function ReportsDashboard({
   const fetchReportBlocks = async (reportId: string) => {
     try {
       // Keep this log to show when blocks are being fetched
-      console.log(`Fetching blocks for report ${reportId}`);
       const response = await getClient().graphql<GetReportResponse>({
         query: GET_REPORT_WITH_BLOCKS,
         variables: { id: reportId }
@@ -857,7 +824,6 @@ export default function ReportsDashboard({
         });
         
         // Important log to verify block count
-        console.log(`Fetched ${transformedBlocks.length} blocks for report ${reportId}`);
         
         // Force a state update by creating a new array
         setSelectedReportBlocks([...transformedBlocks]);
@@ -868,7 +834,6 @@ export default function ReportsDashboard({
           return prevReports.map(r => {
             if (r.id === reportId) {
               // Keep this log to verify the report is being updated
-              console.log(`Updating report ${reportId} with fresh data to trigger re-render`);
               // Create a new object to trigger reference change
               return { 
                 ...r,
@@ -880,7 +845,6 @@ export default function ReportsDashboard({
           });
         });
       } else {
-        console.log(`No blocks found for report ${reportId}`);
         setSelectedReportBlocks([]);
       }
     } catch (err: any) {
@@ -893,7 +857,6 @@ export default function ReportsDashboard({
   useEffect(() => {
     if (!selectedReportId) return;
 
-    console.log('Setting up report block subscriptions for reportId:', selectedReportId);
     const blockSubscriptionHandlers: { unsubscribe: () => void }[] = [];
 
     // Subscribe to new report block creations
@@ -903,7 +866,6 @@ export default function ReportsDashboard({
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onCreateReportBlock: { id: string, reportId: string, name?: string, position: number, output: any, log?: string } } }) => {
           // Important log to verify subscription is receiving events
-          console.log('New report block created via subscription:', data?.onCreateReportBlock?.id);
           if (data?.onCreateReportBlock && data.onCreateReportBlock.reportId === selectedReportId) {
             // When a new block is created for the selected report, refresh blocks
             fetchReportBlocks(selectedReportId);
@@ -927,7 +889,6 @@ export default function ReportsDashboard({
         next: ({ data }: { data?: { onUpdateReportBlock: { id: string, reportId: string, name?: string, position: number, output: any, log?: string } } }) => {
           if (data?.onUpdateReportBlock && data.onUpdateReportBlock.reportId === selectedReportId) {
             // Key log to verify subscription events
-            console.log('Report block updated via subscription:', data.onUpdateReportBlock.id);
             
             // When a block is updated for the selected report, refresh blocks
             fetchReportBlocks(selectedReportId);
@@ -948,7 +909,6 @@ export default function ReportsDashboard({
 
     // Cleanup on unmount or selectedReportId change
     return () => {
-      console.log('Cleaning up report block subscriptions');
       blockSubscriptionHandlers.forEach(subscription => {
         try {
           subscription.unsubscribe();
@@ -962,7 +922,6 @@ export default function ReportsDashboard({
   // Cleanup all subscriptions on component unmount
   useEffect(() => {
     return () => {
-      console.log('Cleaning up all subscriptions on unmount');
       subscriptions.forEach(subscription => {
         try {
           subscription.unsubscribe();
@@ -982,7 +941,6 @@ export default function ReportsDashboard({
       (entries) => {
         const first = entries[0];
         if (first.isIntersecting && !isLoadingMore) {
-          console.log('Loading more reports...');
           fetchReports(accountId, nextToken, selectedReportConfiguration);
         }
       },
@@ -1051,7 +1009,6 @@ export default function ReportsDashboard({
   // Delete handler
   const handleDelete = async (reportId: string) => {
     try {
-      console.log("Attempting to delete report:", reportId);
       
       const currentClient = getClient();
       await currentClient.graphql({
@@ -1155,7 +1112,6 @@ export default function ReportsDashboard({
   useEffect(() => {
     // Remove excessive logging of report state updates
     if (reports.length > 0) {
-      console.log('Reports updated:', reports.length);
     }
   }, [reports]);
 
@@ -1164,13 +1120,6 @@ export default function ReportsDashboard({
     if (!selectedReportId) return null;
     const report = reports.find(r => r.id === selectedReportId);
     if (!report) return null; // Report might not be loaded yet
-
-    // Streamlined log with just key information
-    console.log('Rendering selected report:', {
-      id: report.id,
-      name: report.name,
-      blocks: selectedReportBlocks?.length || 0
-    });
 
     // Safely extract stages
     const stages = [];

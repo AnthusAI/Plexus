@@ -128,10 +128,6 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   useEffect(() => {
     async function processTaskData() {
       if (!task) {
-        console.debug('TaskDisplay: No task data provided', {
-          dataId: reportData?.id || evaluationData?.id,
-          evaluationStatus: evaluationData?.status
-        });
         setProcessedTask(null);
         return;
       }
@@ -286,11 +282,6 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
 
   // Conditionally render EvaluationTask or ReportTask
   if (evaluationData) {
-    // Debug: Log scoreVersionId in TaskDisplay
-    console.log('🔍 DEBUG TaskDisplay evaluationData.scoreVersionId =', evaluationData.scoreVersionId);
-    console.log('🔍 DEBUG TaskDisplay evaluationData.scorecardId =', evaluationData.scorecardId);
-    console.log('🔍 DEBUG TaskDisplay evaluationData.scoreId =', evaluationData.scoreId);
-    
     // Construct props specific to EvaluationTask
     const evaluationTaskProps = {
       task: {
@@ -505,7 +496,6 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   }
 
   // Fallback or loading state if neither data type is provided
-  console.warn("TaskDisplay rendered without evaluationData or reportData");
   return <div>Loading...</div>;
 }, (prevProps, nextProps) => {
   // Custom comparison function to prevent unnecessary re-renders

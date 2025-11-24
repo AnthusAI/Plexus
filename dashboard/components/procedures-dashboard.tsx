@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
 import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
+import { ProceduresGauges } from "@/components/ProceduresGauges"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
@@ -95,7 +96,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     try {
       setIsLoading(true)
       lastLoadTimeRef.current = Date.now()
-      console.log('Loading procedures for account:', selectedAccount.id)
       // First get procedures
       const proceduresResult = await client.graphql({
         query: `
@@ -140,7 +140,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           limit: 1000
         }
       })
-      console.log('Raw procedure query result:', proceduresResult)
       const proceduresData = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || []
       
       // Then get tasks related to procedures (via metadata)
@@ -197,9 +196,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         }
       })
       
-      console.log('Raw tasks query result:', tasksResult)
       const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
-      console.log(`[loadProcedures] Found ${allTasks.length} total tasks`)
       
       // Filter tasks that have procedure_id in metadata
       const procedureTasks = allTasks.filter((task: Task) => {
@@ -213,12 +210,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       
       // Create a map of procedure_id -> task for quick lookup
       const procedureTaskMap = new Map()
-      console.log(`[loadProcedures] Found ${procedureTasks.length} procedure tasks`)
       procedureTasks.forEach((task: Task) => {
         try {
           const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
           if (metadata && metadata.procedure_id) {
-            console.log(`[loadProcedures] Mapping task ${task.id} to procedure ${metadata.procedure_id}, stages: ${(task.stages as any)?.items?.length || 0}`)
             procedureTaskMap.set(metadata.procedure_id, task)
           }
         } catch {
@@ -231,16 +226,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         const task = procedureTaskMap.get(procedure.id) || null
         if (task) {
           const stageStatuses = task.stages?.items?.map((s: any) => `${s.name}:${s.status}`).join(', ') || 'none';
-          console.log(`[loadProcedures] Procedure ${procedure.id} has task ${task.id} with ${task.stages?.items?.length || 0} stages: ${stageStatuses}`)
         } else {
-          console.log(`[loadProcedures] Procedure ${procedure.id} has NO task`)
         }
         return {
           ...procedure,
           task
         }
       })
-      console.log('Procedures data from query:', data)
       
       // Check if we're looking for a specific procedure (for debugging)
       if (force) {
@@ -258,16 +250,11 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         const dateB = new Date(b.updatedAt || b.createdAt)
         return dateB.getTime() - dateA.getTime()
       }) || []
-      console.log('Sorted procedures data:', sortedData)
       
       // Only update state if data has actually changed
       setProcedures(prevProcedures => {
-        console.log('Previous procedures:', prevProcedures.length, 'items')
-        console.log('New procedures:', sortedData.length, 'items')
-        
         // Quick comparison: check length first
         if (prevProcedures.length !== sortedData.length) {
-          console.log('Length changed, updating procedures list')
           return sortedData
         }
         
@@ -298,12 +285,9 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
   // Task monitoring with real-time subscriptions for procedure tasks
   useEffect(() => {
-    console.log('Setting up task subscriptions for procedures')
-
     const taskSubscription = observeTaskUpdates().subscribe({
       next: (value: any) => {
         const { type, data } = value;
-        console.log(`Task ${type} update for procedures:`, data);
         
         // Check if this is a procedure task by looking for procedure_id in metadata
         if (data?.metadata) {
@@ -339,7 +323,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     const stageSubscription = observeTaskStageUpdates().subscribe({
       next: (value: any) => {
         const { type, data } = value;
-        console.log(`TaskStage ${type} update for procedures:`, data);
         
         if (data?.taskId) {
           // Update the procedures list with new stage data
@@ -388,7 +371,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     });
 
     return () => {
-      console.log('Cleaning up task subscriptions for procedures');
       taskSubscription.unsubscribe();
       stageSubscription.unsubscribe();
     };
@@ -836,6 +818,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
       {/* Procedures Content */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* ProceduresGauges at the top - only show when not in mobile selected procedure view */}
+        {!(selectedProcedureId && isNarrowViewport) && (
+          <div className="pb-3">
+            <ProceduresGauges />
+          </div>
+        )}
+        
         <AnimatePresence mode="popLayout">
           <motion.div 
             key="procedures-layout"

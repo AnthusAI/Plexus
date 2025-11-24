@@ -29,15 +29,6 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
   const [isLoading, setIsLoading] = useState(!useMockData)
   const [accountId, setAccountId] = useState<string | null>(null)
 
-  // Debug logging
-  useEffect(() => {
-    console.debug('ReportConfigurationSelector state:', { 
-      selectedReportConfiguration, 
-      configsCount: reportConfigurations.length,
-      configs: reportConfigurations.map(c => ({ id: c.value, name: c.label }))
-    });
-  }, [selectedReportConfiguration, reportConfigurations]);
-
   // Fetch account ID first (similar to Reports Dashboard)
   useEffect(() => {
     const fetchAccountId = async () => {
@@ -63,7 +54,6 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
           const id = accountResponse.data.listAccounts.items[0].id
           setAccountId(id)
         } else {
-          console.warn('No account found with key:', ACCOUNT_KEY)
         }
       } catch (err: any) {
         console.error('Error fetching account:', err)
@@ -109,10 +99,6 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
   }, [accountId, useMockData])
 
   const handleConfigurationChange = (value: string) => {
-    console.debug('Report configuration selection changed:', { 
-      newValue: value, 
-      previousValue: selectedReportConfiguration 
-    });
     setSelectedReportConfiguration(value === "all" ? null : value);
   };
 

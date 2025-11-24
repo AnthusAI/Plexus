@@ -18,8 +18,93 @@ applications:
             - npm --version
             - export PARCEL_WATCHER_BACKEND=inotify
             - npm ci --cache .npm --prefer-offline
+            # Fetch brand assets if BRAND_ASSETS_URL or BRAND_ASSETS_REPO is set
+            # Supports: 
+            #   - BRAND_ASSETS_URL: Public HTTPS URLs, S3 presigned URLs
+            #   - BRAND_ASSETS_REPO: GitHub repo URLs (public or private)
+            - |
+              echo "=== Brand Asset Fetching ==="
+              echo "BRAND_ASSETS_REPO: ${BRAND_ASSETS_REPO:-not set}"
+              echo "BRAND_ASSETS_URL: ${BRAND_ASSETS_URL:-not set}"
+              echo "NEXT_PUBLIC_BRAND_CONFIG_URL: ${NEXT_PUBLIC_BRAND_CONFIG_URL:-not set}"
+              echo ""
+              
+              # Remove any existing brands directory or symlink
+              if [ -e "./public/brands" ] || [ -L "./public/brands" ]; then
+                echo "→ Removing existing public/brands (symlink or directory)"
+                rm -rf ./public/brands
+                echo "  ✓ Removed"
+              fi
+              echo ""
+              
+              if [ ! -z "$BRAND_ASSETS_REPO" ]; then
+                echo "→ Cloning brand assets from $BRAND_ASSETS_REPO"
+                TEMP_DIR=$(mktemp -d)
+                echo "  Temp directory: $TEMP_DIR"
+                
+                # If GITHUB_TOKEN is set, use it for authentication
+                if [ ! -z "$GITHUB_TOKEN" ]; then
+                  echo "  Using GITHUB_TOKEN for authentication"
+                  # Convert https://github.com/org/repo.git to https://token@github.com/org/repo.git
+                  AUTH_REPO=$(echo "$BRAND_ASSETS_REPO" | sed "s|https://github.com|https://${GITHUB_TOKEN}@github.com|")
+                  git clone "$AUTH_REPO" "$TEMP_DIR" 2>&1 | head -10
+                else
+                  echo "  No GITHUB_TOKEN set, attempting public clone"
+                  git clone "$BRAND_ASSETS_REPO" "$TEMP_DIR" 2>&1 | head -10
+                fi
+                echo "  ✓ Clone complete"
+                
+                echo "  Contents of cloned repo:"
+                ls -la "$TEMP_DIR" | head -20
+                echo ""
+                
+                echo "  → Copying brand assets to public/brands"
+                mkdir -p ./public/brands
+                cp -r "$TEMP_DIR"/* ./public/brands/
+                rm -rf ./public/brands/.git ./public/brands/.gitignore ./public/brands/README.md ./public/brands/Makefile
+                echo "  ✓ Copied brand assets"
+                
+                rm -rf "$TEMP_DIR"
+                echo "  ✓ Cleaned up temp directory"
+                echo ""
+                echo "  Final contents of public/brands:"
+                ls -la ./public/brands
+                echo ""
+                echo "✓ Brand assets fetched and extracted successfully"
+                
+              elif [ ! -z "$BRAND_ASSETS_URL" ]; then
+                echo "→ Fetching brand assets from $BRAND_ASSETS_URL"
+                mkdir -p ./public/brands
+                cd ./public/brands
+                curl -L -o brands.tar.gz "$BRAND_ASSETS_URL"
+                echo "  ✓ Downloaded tarball"
+                tar -xzf brands.tar.gz
+                echo "  ✓ Extracted tarball"
+                rm brands.tar.gz
+                cd ../..
+                echo ""
+                echo "  Contents of public/brands:"
+                ls -la ./public/brands
+                echo ""
+                echo "✓ Brand assets fetched and extracted successfully"
+                
+              else
+                echo "ℹ No BRAND_ASSETS_URL or BRAND_ASSETS_REPO configured"
+                echo "  Using default Plexus branding"
+              fi
+              echo "=== End Brand Asset Fetching ==="
+              echo ""
         build:
           commands:
+            - echo "=== Verifying brand assets before build ==="
+            - |
+              if [ -d "./public/brands" ]; then
+                echo "✓ public/brands exists"
+                ls -la ./public/brands
+              else
+                echo "✗ public/brands does NOT exist!"
+              fi
+            - echo "=== Starting Next.js build ==="
             - npm run build:fast
       artifacts:
         baseDirectory: .next

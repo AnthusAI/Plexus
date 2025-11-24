@@ -1,5 +1,5 @@
 [flake8]
-exclude = 
+exclude =
     .git,
     __pycache__,
     build,
@@ -8,7 +8,8 @@ exclude =
     node_modules,
     dashboard/node_modules,
     venv,
-    .venv
+    .venv,
+    infrastructure/cdk.out
 
 # Only show errors that are likely to be real issues
 select = E9,F63,F7,F82,E225,E226,E227,E228,E231,E241,E251,E261,E262,E265,E266,E271,E272
@@ -26,7 +27,4 @@ max-line-length = 127
 max-complexity = 10
 
 # Format output to be more concise
-format = %(path)s:%(row)d:%(col)d: %(code)s %(text)s
-
-# Limit the number of errors shown
-max-violations-per-file = 5 
+format = %(path)s:%(row)d:%(col)d: %(code)s %(text)s 
