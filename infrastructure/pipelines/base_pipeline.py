@@ -5,13 +5,14 @@ This provides shared pipeline logic for both staging and production environments
 """
 
 import aws_cdk as cdk
+import os
+import boto3
 from aws_cdk import (
     Stack,
     pipelines as pipelines,
     aws_codebuild as codebuild,
     aws_ecr as ecr,
     aws_iam as iam,
-    SecretValue,
 )
 from constructs import Construct
 from stacks.scoring_worker_stack import ScoringWorkerStack
@@ -53,11 +54,27 @@ class BasePipelineStack(Stack):
         """
         super().__init__(scope, construct_id, **kwargs)
 
-        # Use GitHub token from Secrets Manager
-        source = pipelines.CodePipelineSource.git_hub(
+        # Fetch GitHub CodeConnection ARN from SSM Parameter Store at synth time
+        # This avoids storing the ARN in the repository
+        # Create the parameter with: aws ssm put-parameter --name /plexus/github-connection-arn --value "arn:aws:..." --type String
+        ssm = boto3.client('ssm', region_name=kwargs.get('env').region if kwargs.get('env') else 'us-west-2')
+        try:
+            response = ssm.get_parameter(Name='/plexus/github-connection-arn')
+            connection_arn = response['Parameter']['Value']
+        except Exception as e:
+            raise ValueError(
+                f"Failed to fetch GitHub connection ARN from SSM Parameter Store: {e}\n"
+                "Create it with: aws ssm put-parameter --name /plexus/github-connection-arn "
+                "--value 'arn:aws:codeconnections:us-west-2:ACCOUNT:connection/ID' --type String"
+            )
+
+        # Use CodeConnection for GitHub source (no automatic webhook triggers)
+        # Pipeline will only run when manually triggered (e.g., by GitHub Actions)
+        source = pipelines.CodePipelineSource.connection(
             f"{github_owner}/{github_repo}",
             branch,
-            authentication=SecretValue.secrets_manager("github-token")
+            connection_arn=connection_arn,
+            trigger_on_push=False  # Disable automatic triggers - GitHub Actions will trigger it
         )
 
         # Reference ECR repository (created in separate EcrRepositoriesStack)
