@@ -566,40 +566,155 @@ class ProcedureService:
             return None
     
     async def _get_existing_experiment_nodes(self, procedure_id: str) -> str:
-        """Get existing procedure nodes formatted for AI system prompt."""
+        """Get existing procedure nodes formatted for AI system prompt.
+
+        This includes both hypothesis nodes and insights nodes to provide full context
+        for the next round of hypothesis generation.
+
+        Also includes reference to score guidelines which remain constant across all versions.
+        """
         try:
+            import json
+
+            # Get procedure info to access score details
+            from plexus.dashboard.api.models.procedure import Procedure
+            procedure = Procedure.get_by_id(procedure_id, self.client)
+
+            # Add note about guidelines at the start
+            guidelines_note = """# Context for Hypothesis Generation
+
+## Score Guidelines
+**NOTE:** The score guidelines remain constant across all versions tested below. Only the YAML configuration (code) changes.
+You can query the current guidelines using the `plexus_score_info` tool with the score ID from the procedure context.
+
+"""
+
             # Get all nodes for this procedure (excluding root node)
             all_nodes = GraphNode.list_by_procedure(procedure_id, self.client)
-            hypothesis_nodes = [node for node in all_nodes if not node.is_root]
-            
-            if not hypothesis_nodes:
-                return "No existing hypothesis nodes found."
-            
-            # Format nodes for AI consumption
-            nodes_text = "## Existing Hypothesis Procedure Nodes\n\n"
-            nodes_text += "**IMPORTANT:** The following hypothesis nodes already exist in this procedure. "
-            nodes_text += "Avoid creating duplicate or overly similar hypotheses. Build upon these ideas or explore different approaches.\n\n"
-            
-            for i, node in enumerate(hypothesis_nodes, 1):
-                nodes_text += f"### Node {i}: {node.name or 'Unnamed Node'}\n\n"
-                
-                # Add hypothesis description if available
-                if hasattr(node, 'hypothesisDescription') and node.hypothesisDescription:
-                    nodes_text += f"**Hypothesis Description:**\n{node.hypothesisDescription}\n\n"
-                
-                # Add creation timestamp for context
-                if hasattr(node, 'createdAt') and node.createdAt:
-                    nodes_text += f"**Created:** {node.createdAt}\n\n"
-                
-                # Add a separator between nodes
-                if i < len(hypothesis_nodes):
-                    nodes_text += "---\n\n"
-            
-            nodes_text += "**Remember:** Your new hypotheses should address different aspects of the scoring problems "
-            nodes_text += "or explore alternative approaches not covered by the existing nodes above.\n\n"
-            
+
+            # Separate into hypothesis nodes and insights nodes
+            hypothesis_nodes = []
+            insights_nodes = []
+
+            for node in all_nodes:
+                if node.is_root:
+                    continue
+
+                # Check node type from metadata
+                node_type = None
+                if node.metadata:
+                    try:
+                        metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+                        node_type = metadata.get('type', metadata.get('node_type'))
+                    except:
+                        pass
+
+                if node_type == 'insights':
+                    insights_nodes.append(node)
+                else:
+                    hypothesis_nodes.append(node)
+
+            # Build formatted text starting with guidelines note
+            nodes_text = guidelines_note
+
+            # Add insights nodes first (most important context for next round)
+            if insights_nodes:
+                nodes_text += "## Previous Insights\n\n"
+                nodes_text += "**IMPORTANT:** The following insights summarize what was learned from previous hypothesis testing rounds. Use these insights to guide your new hypotheses.\n\n"
+
+                # Sort by round (most recent last)
+                insights_nodes.sort(key=lambda n: (
+                    json.loads(n.metadata if isinstance(n.metadata, str) else json.dumps(n.metadata or {})).get('round', 0)
+                ))
+
+                for node in insights_nodes:
+                    try:
+                        metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+                        round_num = metadata.get('round', '?')
+                        summary = metadata.get('summary', 'No summary available')
+
+                        nodes_text += f"### {node.name} (Round {round_num})\n\n"
+                        nodes_text += f"{summary}\n\n"
+                        nodes_text += "---\n\n"
+                    except Exception as e:
+                        logger.warning(f"Failed to format insights node {node.id}: {e}")
+
+            # Add hypothesis nodes second (for context on what was already tried)
+            if hypothesis_nodes:
+                nodes_text += "## Previous Hypotheses\n\n"
+                nodes_text += "**CONTEXT:** The following hypotheses were already tested in previous rounds. "
+                nodes_text += "Avoid creating duplicate hypotheses. Build upon these ideas or explore different approaches based on the insights above.\n\n"
+
+                for i, node in enumerate(hypothesis_nodes, 1):
+                    nodes_text += f"### Hypothesis {i}: {node.name or 'Unnamed Node'}\n\n"
+
+                    # Extract hypothesis description and test results from metadata
+                    try:
+                        metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata if node.metadata else {}
+
+                        hypothesis_desc = metadata.get('hypothesis', 'No description available')
+                        score_version_id = metadata.get('scoreVersionId', 'N/A')
+                        parent_version_id = metadata.get('parent_version_id', 'N/A')
+
+                        # Parse evaluation summary (now JSON format with metrics, confusion matrix, and diff)
+                        eval_summary_raw = metadata.get('evaluation_summary', 'Not yet evaluated')
+
+                        nodes_text += f"**Description:** {hypothesis_desc}\n\n"
+                        nodes_text += f"**Score Version ID:** {score_version_id}\n"
+                        nodes_text += f"**Parent Version ID:** {parent_version_id}\n\n"
+
+                        # Try to parse and format evaluation summary
+                        try:
+                            if isinstance(eval_summary_raw, str) and eval_summary_raw.startswith('{'):
+                                eval_data = json.loads(eval_summary_raw)
+
+                                # Extract key info
+                                metrics = eval_data.get('metrics', {})
+                                accuracy = metrics.get('accuracy', 'N/A')
+                                ac1 = metrics.get('ac1_agreement', 'N/A')
+                                confusion_matrix = eval_data.get('confusion_matrix', {})
+                                code_diff = eval_data.get('code_diff')
+
+                                nodes_text += f"**Test Results:**\n"
+                                nodes_text += f"- Accuracy: {accuracy}%\n"
+                                nodes_text += f"- AC1 Agreement: {ac1}\n"
+
+                                # Add confusion matrix summary if available
+                                if confusion_matrix and 'matrix' in confusion_matrix:
+                                    nodes_text += f"- Confusion Matrix: Available (see full data below)\n"
+
+                                # Include code diff if available
+                                if code_diff and code_diff != "No changes detected between versions":
+                                    nodes_text += f"\n**Code Changes:**\n```diff\n{code_diff}\n```\n\n"
+                                elif code_diff:
+                                    nodes_text += f"\n**Code Changes:** {code_diff}\n\n"
+
+                                # Add full structured data for AI reference
+                                nodes_text += f"\n<details>\n<summary>Full Evaluation Data (click to expand)</summary>\n\n```json\n{json.dumps(eval_data, indent=2)}\n```\n</details>\n\n"
+                            else:
+                                # Old format or not JSON - display as-is
+                                nodes_text += f"**Test Results:** {eval_summary_raw}\n\n"
+                        except:
+                            # Fallback if parsing fails
+                            nodes_text += f"**Test Results:** {eval_summary_raw}\n\n"
+
+                    except Exception as e:
+                        logger.warning(f"Failed to extract hypothesis data from node {node.id}: {e}")
+                        if hasattr(node, 'hypothesisDescription') and node.hypothesisDescription:
+                            nodes_text += f"**Description:** {node.hypothesisDescription}\n\n"
+
+                    # Add separator
+                    if i < len(hypothesis_nodes):
+                        nodes_text += "---\n\n"
+
+            # If no nodes at all
+            if not hypothesis_nodes and not insights_nodes:
+                return "No existing hypothesis or insights nodes found. This is the first round of hypothesis generation."
+
+            nodes_text += "\n**Remember:** Use the insights and previous results above to guide your new hypotheses. Focus on untested ideas that build on successful approaches or avoid failed patterns.\n\n"
+
             return nodes_text
-            
+
         except Exception as e:
             logger.warning(f"Failed to get existing procedure nodes: {e}")
             return "Could not retrieve existing procedure nodes."
@@ -716,28 +831,130 @@ class ProcedureService:
                 logger.warning(f"Unexpected state: {current_state}, treating as evaluation")
                 current_state = STATE_EVALUATION
 
-            # Check if we should skip hypothesis generation (nodes already exist)
+            # NOTE: Active parent detection moved to AFTER _ensure_procedure_structure()
+            # so that the root node exists when we query for it
             skip_hypothesis_generation = False
-            if current_state == STATE_HYPOTHESIS:
-                # Query for all nodes in this procedure
+            active_parent_node_id = None  # Will be set to root or insights node that needs hypotheses
+
+            # Placeholder - will be set after root node creation
+            if False:  # Disabled - moved to after _ensure_procedure_structure()
+                # Find the active parent node that needs hypothesis generation
+                # Active = root node or most recent insights node that is NOT in 'completed' state
                 try:
+                    import json
                     all_nodes = GraphNode.list_by_procedure(procedure_id, self.client)
-                    # Count nodes without 'code' in metadata (hypothesis nodes) and excluding root node (parentNodeId is None)
-                    hypothesis_nodes = [n for n in all_nodes if n.parentNodeId is not None and not (n.metadata and 'code' in str(n.metadata))]
-                    logger.info(f"Found {len(hypothesis_nodes)} hypothesis nodes for procedure {procedure_id}")
-                    if len(hypothesis_nodes) >= 3:
-                        logger.info(f"Found {len(hypothesis_nodes)} existing hypothesis nodes, skipping hypothesis generation")
-                        skip_hypothesis_generation = True
-                        # Transition to test state since hypotheses already exist
-                        logger.info("Hypothesis nodes already exist, transitioning to test state")
-                        self._update_procedure_state(procedure_id, STATE_TEST, STATE_HYPOTHESIS)
-                        if procedure_info.procedure.rootNodeId:
-                            self._update_node_status(procedure_info.procedure.rootNodeId, STATE_TEST)
-                        current_state = STATE_TEST
+
+                    # Separate nodes by type
+                    root_node = None
+                    insights_nodes = []
+                    hypothesis_nodes_by_parent = {}  # parent_id -> [hypothesis nodes]
+
+                    logger.info(f"[DEBUG] Found {len(all_nodes)} total nodes for procedure {procedure_id}")
+
+                    for n in all_nodes:
+                        if n.parentNodeId is None:
+                            root_node = n
+                            logger.info(f"[DEBUG] Found root node: {root_node.id}")
+                            continue
+
+                        # Parse metadata
+                        try:
+                            metadata = json.loads(n.metadata) if isinstance(n.metadata, str) else n.metadata if n.metadata else {}
+                            node_type = metadata.get('type', metadata.get('node_type'))
+
+                            if node_type == 'insights':
+                                insights_nodes.append(n)
+                            else:
+                                # This is a hypothesis node - track by parent
+                                parent_id = n.parentNodeId
+                                if parent_id not in hypothesis_nodes_by_parent:
+                                    hypothesis_nodes_by_parent[parent_id] = []
+                                hypothesis_nodes_by_parent[parent_id].append(n)
+                        except:
+                            # If metadata parsing fails, treat as hypothesis node
+                            parent_id = n.parentNodeId
+                            if parent_id not in hypothesis_nodes_by_parent:
+                                hypothesis_nodes_by_parent[parent_id] = []
+                            hypothesis_nodes_by_parent[parent_id].append(n)
+
+                    # Find active parent node
+                    # Priority: Most recent incomplete insights node, then root node if incomplete
+
+                    # Sort insights by creation time (most recent last)
+                    insights_nodes.sort(key=lambda n: n.createdAt if hasattr(n, 'createdAt') else '', reverse=False)
+
+                    # Check insights nodes from most recent to oldest
+                    for insights_node in reversed(insights_nodes):
+                        try:
+                            metadata = json.loads(insights_node.metadata) if isinstance(insights_node.metadata, str) else insights_node.metadata
+                            node_state = metadata.get('state', 'active')  # Default to active if not set
+
+                            if node_state != 'completed':
+                                # This insights node is active - check if it needs hypotheses
+                                child_hypotheses = hypothesis_nodes_by_parent.get(insights_node.id, [])
+                                if len(child_hypotheses) < 3:
+                                    active_parent_node_id = insights_node.id
+                                    logger.info(f"Found active insights node {insights_node.id} with {len(child_hypotheses)} hypotheses - needs more")
+                                    break
+                        except:
+                            pass
+
+                    # If no active insights node found, check root node
+                    if not active_parent_node_id and root_node:
+                        logger.info(f"[DEBUG] Checking root node {root_node.id} for active status")
+                        try:
+                            root_metadata = json.loads(root_node.metadata) if isinstance(root_node.metadata, str) else root_node.metadata if root_node.metadata else {}
+                            root_state = root_metadata.get('state', 'active')  # Default to active
+                            logger.info(f"[DEBUG] Root node metadata: {root_metadata}")
+                            logger.info(f"[DEBUG] Root node state: {root_state}")
+
+                            if root_state != 'completed':
+                                child_hypotheses = hypothesis_nodes_by_parent.get(root_node.id, [])
+                                logger.info(f"[DEBUG] Root node has {len(child_hypotheses)} child hypotheses")
+                                if len(child_hypotheses) < 3:
+                                    active_parent_node_id = root_node.id
+                                    logger.info(f"Root node is active with {len(child_hypotheses)} hypotheses - needs more")
+                                else:
+                                    logger.info(f"[DEBUG] Root node has enough hypotheses ({len(child_hypotheses)} >= 3)")
+                            else:
+                                logger.info(f"[DEBUG] Root node state is 'completed', skipping")
+                        except Exception as e:
+                            # If metadata parsing fails, assume root is active
+                            logger.warning(f"[DEBUG] Exception parsing root metadata: {e}")
+                            child_hypotheses = hypothesis_nodes_by_parent.get(root_node.id, [])
+                            if len(child_hypotheses) < 3:
+                                active_parent_node_id = root_node.id
+                                logger.info(f"Root node (fallback) has {len(child_hypotheses)} hypotheses - needs more")
+                    elif not root_node:
+                        logger.error(f"[DEBUG] No root node found! root_node variable is None")
+
+                    # Determine if we should skip or proceed
+                    if active_parent_node_id:
+                        skip_hypothesis_generation = False
+                        logger.info(f"Will generate hypotheses under parent node: {active_parent_node_id}")
+                        logger.info(f"DEBUG: Root node ID from procedure: {procedure_info.procedure.rootNodeId if procedure_info.procedure else 'N/A'}")
+                        logger.info(f"DEBUG: Total nodes found: {len(all_nodes)}, Insights: {len(insights_nodes)}, Hypothesis nodes by parent: {[(k, len(v)) for k, v in hypothesis_nodes_by_parent.items()]}")
+                    else:
+                        # CRITICAL: No active parent found - this should rarely happen
+                        # As a safety fallback, use root node if it exists
+                        if procedure_info.procedure and procedure_info.procedure.rootNodeId:
+                            logger.warning(f"No active parent found! Using root node as emergency fallback: {procedure_info.procedure.rootNodeId}")
+                            active_parent_node_id = procedure_info.procedure.rootNodeId
+                            skip_hypothesis_generation = False
+                        else:
+                            skip_hypothesis_generation = True
+                            logger.error("CRITICAL: No active parent node and no root node - cannot generate hypotheses!")
+                            logger.info("All parent nodes completed, transitioning to test state")
+                            self._update_procedure_state(procedure_id, STATE_TEST, STATE_HYPOTHESIS)
+                            if procedure_info.procedure.rootNodeId:
+                                self._update_node_status(procedure_info.procedure.rootNodeId, STATE_TEST)
+                            current_state = STATE_TEST
+
                 except Exception as e:
-                    logger.warning(f"Could not check for existing hypothesis nodes: {e}")
-                    # If we can't check, assume we need to generate hypotheses
-                    pass
+                    logger.warning(f"Could not check for active parent nodes: {e}", exc_info=True)
+                    # If we can't check, assume root node is active
+                    active_parent_node_id = procedure_info.procedure.rootNodeId if procedure_info.procedure else None
+                    skip_hypothesis_generation = False
 
             # Extract options for future use
             max_iterations = options.get('max_iterations', 500)
@@ -794,6 +1011,109 @@ class ProcedureService:
 
                 # 3.5. PROGRAMMATIC PHASE: Ensure proper procedure structure with correct score version
                 await self._ensure_procedure_structure(procedure_info, score_version_id)
+
+                # 3.6. NOW determine active parent node (root node is guaranteed to exist now)
+                logger.info("[DEBUG] Determining active parent node after ensuring procedure structure...")
+                try:
+                    import json
+                    all_nodes = GraphNode.list_by_procedure(procedure_id, self.client)
+
+                    # Separate nodes by type
+                    root_node = None
+                    insights_nodes = []
+                    hypothesis_nodes_by_parent = {}  # parent_id -> [hypothesis nodes]
+
+                    logger.info(f"[DEBUG] Found {len(all_nodes)} total nodes for procedure {procedure_id}")
+
+                    for n in all_nodes:
+                        if n.parentNodeId is None:
+                            root_node = n
+                            logger.info(f"[DEBUG] Found root node: {root_node.id}")
+                            continue
+
+                        # Parse metadata
+                        try:
+                            metadata = json.loads(n.metadata) if isinstance(n.metadata, str) else n.metadata if n.metadata else {}
+                            node_type = metadata.get('type', metadata.get('node_type'))
+
+                            if node_type == 'insights':
+                                insights_nodes.append(n)
+                            else:
+                                # This is a hypothesis node - track by parent
+                                parent_id = n.parentNodeId
+                                if parent_id not in hypothesis_nodes_by_parent:
+                                    hypothesis_nodes_by_parent[parent_id] = []
+                                hypothesis_nodes_by_parent[parent_id].append(n)
+                        except:
+                            # If metadata parsing fails, treat as hypothesis node
+                            parent_id = n.parentNodeId
+                            if parent_id not in hypothesis_nodes_by_parent:
+                                hypothesis_nodes_by_parent[parent_id] = []
+                            hypothesis_nodes_by_parent[parent_id].append(n)
+
+                    # Find active parent node
+                    # Priority: Most recent incomplete insights node, then root node if incomplete
+
+                    # Sort insights by creation time (most recent last)
+                    insights_nodes.sort(key=lambda n: n.createdAt if hasattr(n, 'createdAt') else '', reverse=False)
+
+                    # Check insights nodes from most recent to oldest
+                    for insights_node in reversed(insights_nodes):
+                        try:
+                            metadata = json.loads(insights_node.metadata) if isinstance(insights_node.metadata, str) else insights_node.metadata
+                            node_state = metadata.get('state', 'active')  # Default to active if not set
+
+                            if node_state != 'completed':
+                                # This insights node is active - check if it needs hypotheses
+                                child_hypotheses = hypothesis_nodes_by_parent.get(insights_node.id, [])
+                                if len(child_hypotheses) < 3:
+                                    active_parent_node_id = insights_node.id
+                                    logger.info(f"Found active insights node {insights_node.id} with {len(child_hypotheses)} hypotheses - needs more")
+                                    break
+                        except:
+                            pass
+
+                    # If no active insights node found, check root node
+                    if not active_parent_node_id and root_node:
+                        logger.info(f"[DEBUG] Checking root node {root_node.id} for active status")
+                        try:
+                            root_metadata = json.loads(root_node.metadata) if isinstance(root_node.metadata, str) else root_node.metadata if root_node.metadata else {}
+                            root_state = root_metadata.get('state', 'active')  # Default to active
+                            logger.info(f"[DEBUG] Root node metadata keys: {list(root_metadata.keys())}")
+                            logger.info(f"[DEBUG] Root node state: {root_state}")
+
+                            if root_state != 'completed':
+                                child_hypotheses = hypothesis_nodes_by_parent.get(root_node.id, [])
+                                logger.info(f"[DEBUG] Root node has {len(child_hypotheses)} child hypotheses")
+                                if len(child_hypotheses) < 3:
+                                    active_parent_node_id = root_node.id
+                                    logger.info(f"✓ Root node is active with {len(child_hypotheses)} hypotheses - needs more")
+                                else:
+                                    logger.info(f"[DEBUG] Root node has enough hypotheses ({len(child_hypotheses)} >= 3)")
+                            else:
+                                logger.info(f"[DEBUG] Root node state is 'completed', skipping")
+                        except Exception as e:
+                            # If metadata parsing fails, assume root is active
+                            logger.warning(f"[DEBUG] Exception parsing root metadata: {e}")
+                            child_hypotheses = hypothesis_nodes_by_parent.get(root_node.id, [])
+                            if len(child_hypotheses) < 3:
+                                active_parent_node_id = root_node.id
+                                logger.info(f"✓ Root node (fallback) has {len(child_hypotheses)} hypotheses - needs more")
+                    elif not root_node:
+                        logger.error(f"[DEBUG] No root node found after _ensure_procedure_structure!")
+
+                    # Log final decision
+                    if active_parent_node_id:
+                        logger.info(f"✓ Active parent node determined: {active_parent_node_id}")
+                    else:
+                        logger.warning(f"✗ No active parent node found - hypothesis generation will be skipped")
+
+                except Exception as e:
+                    logger.error(f"Error determining active parent node: {e}", exc_info=True)
+                    # Emergency fallback: use root node if it exists
+                    if procedure_info.procedure and procedure_info.procedure.rootNodeId:
+                        active_parent_node_id = procedure_info.procedure.rootNodeId
+                        logger.warning(f"Using root node as emergency fallback: {active_parent_node_id}")
 
                 # 4. Get score configuration for the determined version
                 if score_version_id:
@@ -899,7 +1219,8 @@ class ProcedureService:
                     'score_yaml_format_docs': score_yaml_docs,
                     'current_score_config': current_score_config,
                     'evaluation_results': evaluation_results,  # NEW: Evaluation results instead of feedback summary
-                    'existing_nodes': existing_nodes
+                    'existing_nodes': existing_nodes,
+                    'active_parent_node_id': active_parent_node_id  # NEW: Parent node for hypothesis generation
                 }
                 
                 logger.info("Successfully pre-loaded all context for AI agent")
@@ -1005,6 +1326,20 @@ class ProcedureService:
                         # Transition hypothesis → test after hypothesis generation completes
                         if current_state == STATE_HYPOTHESIS:
                             logger.info("Hypothesis generation complete, transitioning to test state")
+
+                            # Mark the active parent node as completed
+                            if active_parent_node_id:
+                                try:
+                                    node = GraphNode.get_by_id(active_parent_node_id, self.client)
+                                    if node:
+                                        import json
+                                        metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata if node.metadata else {}
+                                        metadata['state'] = 'completed'
+                                        node.update_content(metadata=metadata)
+                                        logger.info(f"Marked parent node {active_parent_node_id} as completed")
+                                except Exception as e:
+                                    logger.warning(f"Could not mark parent node as completed: {e}")
+
                             self._update_procedure_state(procedure_id, STATE_TEST, STATE_HYPOTHESIS)
                             if procedure_info.procedure.rootNodeId:
                                 self._update_node_status(procedure_info.procedure.rootNodeId, STATE_TEST)
@@ -1035,7 +1370,7 @@ class ProcedureService:
 
                         # Execute insights phase if we're in INSIGHTS state
                         if current_state == STATE_INSIGHTS:
-                            logger.info("Executing insights phase: running evaluations on new ScoreVersions")
+                            logger.info("Executing insights phase: analyzing tested hypotheses and creating insights node")
                             insights_results = await self._execute_insights_phase(
                                 procedure_id,
                                 procedure_info,
@@ -1043,11 +1378,56 @@ class ProcedureService:
                             )
 
                             if insights_results.get('success'):
-                                logger.info("Insights phase completed successfully")
+                                logger.info("Insights phase completed successfully, transitioning to hypothesis state for next round")
                                 result['insights_phase'] = insights_results
+
+                                # Update active_parent_node_id to point to the newly created insights node
+                                new_insights_node_id = insights_results.get('insights_node_id')
+                                if new_insights_node_id:
+                                    logger.info(f"Updating active_parent_node_id to new insights node: {new_insights_node_id}")
+                                    experiment_context['active_parent_node_id'] = new_insights_node_id
+                                else:
+                                    logger.warning("No insights_node_id in results, active_parent_node_id not updated")
+
+                                # Transition back to hypothesis state for next round
+                                self._update_procedure_state(procedure_id, STATE_HYPOTHESIS, STATE_INSIGHTS)
+                                if procedure_info.procedure.rootNodeId:
+                                    self._update_node_status(procedure_info.procedure.rootNodeId, STATE_HYPOTHESIS)
+                                current_state = STATE_HYPOTHESIS
+
+                                logger.info("Ready for next round of hypothesis generation based on insights")
+
+                                # Now run hypothesis generation for the next round
+                                logger.info("Starting next round of hypothesis generation with insights context")
+                                from .procedure_sop_agent import run_sop_guided_procedure
+
+                                openai_api_key = options.get('openai_api_key')
+                                next_round_result = await run_sop_guided_procedure(
+                                    procedure_id=procedure_id,
+                                    experiment_yaml=experiment_yaml,
+                                    mcp_server=mcp_server,
+                                    openai_api_key=openai_api_key,
+                                    experiment_context=experiment_context,
+                                    client=self.client
+                                )
+
+                                if next_round_result.get('success'):
+                                    logger.info("Next round hypothesis generation completed successfully")
+                                    result['next_round_hypothesis'] = next_round_result
+
+                                    # Transition to TEST state for the new hypotheses
+                                    self._update_procedure_state(procedure_id, STATE_TEST, STATE_HYPOTHESIS)
+                                    if procedure_info.procedure.rootNodeId:
+                                        self._update_node_status(procedure_info.procedure.rootNodeId, STATE_TEST)
+                                    current_state = STATE_TEST
+                                else:
+                                    logger.error(f"Next round hypothesis generation failed: {next_round_result.get('error')}")
+                                    result['next_round_hypothesis'] = next_round_result
+
                             else:
                                 logger.error(f"Insights phase failed: {insights_results.get('error')}")
                                 result['insights_phase'] = insights_results
+                                # Stay in INSIGHTS state for retry
 
                         # Add AI results to the response
                         result['ai_execution'] = {
@@ -1738,6 +2118,7 @@ Based on this data, you should prioritize examining error types with the highest
                 ('evaluation', 'hypothesis'): 'analyze',
                 ('hypothesis', 'test'): 'start_testing',
                 ('test', 'insights'): 'analyze_results',
+                ('insights', 'hypothesis'): 'continue_iteration',  # NEW: Loop back for next round
                 ('insights', 'completed'): 'finish_from_insights',
                 ('hypothesis', 'completed'): 'finish_from_hypothesis',
                 ('hypothesis', 'error'): 'fail_from_hypothesis',
@@ -2128,22 +2509,17 @@ Based on this data, you should prioritize examining error types with the highest
                 # Clean up temp files
                 test_agent.cleanup()
 
-                # Check ScoreVersion creation success
+                # Check ScoreVersion creation success, but do not abort the entire phase
                 successful_version_count = sum(1 for r in test_results if r['success'])
                 failed_version_count = len(test_results) - successful_version_count
 
                 if failed_version_count > 0:
-                    logger.error(f"Failed to create ScoreVersions for {failed_version_count} nodes")
-                    return {
-                        "success": False,
-                        "nodes_tested": len(nodes_needing_versions),
-                        "nodes_successful": successful_version_count,
-                        "nodes_failed": failed_version_count,
-                        "results": test_results,
-                        "message": f"ScoreVersion creation failed for {failed_version_count} nodes"
-                    }
-
-                logger.info(f"✓ Part 1 complete: Created {successful_version_count} ScoreVersions")
+                    logger.error(f"Failed to create ScoreVersions for {failed_version_count} nodes (continuing with successes)")
+                
+                if successful_version_count > 0:
+                    logger.info(f"✓ Part 1 complete: Created {successful_version_count} ScoreVersions")
+                else:
+                    logger.warning("No ScoreVersions were created successfully in Part 1")
             else:
                 logger.info("PART 1: Skipped - all nodes already have ScoreVersions")
 
@@ -2155,15 +2531,35 @@ Based on this data, you should prioritize examining error types with the highest
 
             # Add nodes that just got versions created
             if nodes_needing_versions:
-                # Re-fetch to get updated metadata with scoreVersionId
+                # Re-fetch ONLY nodes that successfully created versions to get updated metadata with scoreVersionId
                 from plexus.dashboard.api.models.graph_node import GraphNode
-                newly_versioned_nodes = [GraphNode.get_by_id(node.id, self.client) for node in nodes_needing_versions]
-                nodes_to_evaluate.extend(newly_versioned_nodes)
+                successful_node_ids = {r['node_id'] for r in test_results if r.get('success')}
+                if successful_node_ids:
+                    newly_versioned_nodes = [
+                        GraphNode.get_by_id(node.id, self.client)
+                        for node in nodes_needing_versions
+                        if node.id in successful_node_ids
+                    ]
+                    nodes_to_evaluate.extend(newly_versioned_nodes)
 
             # Add nodes that already had versions but need evaluation
             nodes_to_evaluate.extend(nodes_needing_evaluation)
 
             logger.info(f"PART 2: Running evaluations for {len(nodes_to_evaluate)} ScoreVersions")
+
+            if not nodes_to_evaluate:
+                # Nothing we can evaluate; keep phase result but don't crash
+                return {
+                    "success": False,
+                    "nodes_tested": 0,
+                    "nodes_needing_versions": len(nodes_needing_versions),
+                    "nodes_needing_evaluation": len(nodes_needing_evaluation),
+                    "nodes_successful": 0,
+                    "nodes_failed": len(nodes_needing_versions),
+                    "score_version_results": test_results,
+                    "evaluation_results": [],
+                    "message": "No nodes available for evaluation after version creation (all failed or none needed)"
+                }
 
             evaluation_results = []
             for node in nodes_to_evaluate:
@@ -2361,36 +2757,41 @@ Based on this data, you should prioritize examining error types with the highest
         eval_data: Dict[str, Any]
     ) -> str:
         """
-        Create a token-efficient LLM summary of evaluation results vs hypothesis.
+        Create a structured summary of evaluation results with metrics, confusion matrix, and code diff.
+
+        This summary is stored in node metadata and used by the hypothesis engine to understand
+        what was tested and what the results were.
 
         Args:
-            node: GraphNode with hypothesis in metadata
+            node: GraphNode with hypothesis and scoreVersionId in metadata
             eval_data: Evaluation results dict
 
         Returns:
-            Concise summary string for storage in node metadata
+            Structured JSON string with metrics, confusion matrix, and code diff for storage in node metadata
         """
         try:
             import json
-            from langchain_openai import ChatOpenAI
-            from langchain_core.messages import SystemMessage, HumanMessage
 
-            # Extract hypothesis from node metadata
+            # Extract metadata from node
             hypothesis_text = "No hypothesis description available"
+            score_version_id = None
+            parent_version_id = None
+
             if node.metadata:
                 try:
                     metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
                     hypothesis_text = metadata.get('hypothesis', hypothesis_text)
+                    score_version_id = metadata.get('scoreVersionId')
+                    parent_version_id = metadata.get('parent_version_id')  # Baseline version used
                 except:
                     pass
 
             # Extract key metrics from evaluation
-            # Note: evaluation_runner returns different structure:
-            # - 'accuracy' is at top level (already in %)
+            # Note: evaluation_runner returns:
+            # - 'accuracy' at top level (already in %)
             # - 'metrics' is a list of {"name": "Accuracy", "value": 64.0} objects
             # - 'confusionMatrix' not 'confusion_matrix'
 
-            # Get accuracy from top-level field (already in percentage)
             accuracy = eval_data.get('accuracy')
 
             # Try to find AC1 in metrics list
@@ -2404,50 +2805,34 @@ Based on this data, you should prioritize examining error types with the highest
 
             confusion_matrix = eval_data.get('confusionMatrix', {})
 
-            # Build prompt
-            system_prompt = """You are an expert at analyzing ML evaluation results. Create a concise 2-3 sentence summary that:
-1. States whether the hypothesis was validated or not (based on metrics)
-2. Highlights the most important metric changes (accuracy, AC1, confusion matrix patterns)
-3. Provides a clear recommendation (promote, iterate, or reject)
+            # Get code diff if we have both version IDs
+            code_diff = None
+            if score_version_id and parent_version_id:
+                code_diff = await self._get_code_diff(parent_version_id, score_version_id)
 
-Be direct and factual. Focus on actionable insights."""
+            # Build structured summary
+            summary = {
+                "hypothesis": hypothesis_text,
+                "score_version_id": score_version_id,
+                "parent_version_id": parent_version_id,
+                "metrics": {
+                    "accuracy": accuracy,
+                    "ac1_agreement": ac1
+                },
+                "confusion_matrix": confusion_matrix,
+                "code_diff": code_diff
+            }
 
-            user_prompt = f"""Hypothesis: {hypothesis_text}
-
-Evaluation Results:
-- Accuracy: {accuracy if accuracy is not None else 'N/A'}
-- AC1 Agreement: {ac1 if ac1 is not None else 'N/A'}
-- Confusion Matrix: {json.dumps(confusion_matrix, indent=2)}
-
-Create a concise summary (2-3 sentences) of whether this hypothesis improved the score."""
-
-            # Get OpenAI API key
-            from plexus.config.loader import load_config
-            load_config()
-            import os
-            api_key = os.getenv('OPENAI_API_KEY')
-
-            if not api_key:
-                logger.error("No OpenAI API key available for summary generation")
-                return f"Evaluation complete. Accuracy: {accuracy}, AC1: {ac1}"
-
-            # Call LLM
-            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, openai_api_key=api_key)
-            response = llm.invoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ])
-
-            summary = response.content.strip()
-            logger.info(f"Generated evaluation summary: {summary[:100]}...")
-            return summary
+            # Return as formatted JSON
+            summary_json = json.dumps(summary, indent=2)
+            logger.info(f"Generated evaluation summary with metrics and code diff for node {node.id}")
+            return summary_json
 
         except Exception as e:
             logger.error(f"Error creating evaluation summary: {e}", exc_info=True)
             # Fallback to simple summary with safe access
             try:
                 if isinstance(eval_data, dict):
-                    # Get accuracy from top-level field
                     accuracy = eval_data.get('accuracy', 'N/A')
 
                     # Try to find AC1/Alignment in metrics list
@@ -2458,12 +2843,81 @@ Create a concise summary (2-3 sentences) of whether this hypothesis improved the
                             if isinstance(metric, dict) and metric.get('name') == 'Alignment':
                                 ac1 = metric.get('value', 'N/A')
                                 break
+
+                    fallback = {
+                        "error": str(e)[:200],
+                        "metrics": {"accuracy": accuracy, "ac1_agreement": ac1}
+                    }
+                    return json.dumps(fallback, indent=2)
                 else:
-                    accuracy = 'N/A'
-                    ac1 = 'N/A'
-                return f"Evaluation complete. Accuracy: {accuracy}%, Alignment: {ac1}%. Error generating detailed summary: {str(e)[:100]}"
+                    return json.dumps({"error": f"Invalid eval_data: {str(e)[:200]}"}, indent=2)
             except:
-                return f"Evaluation complete. Error extracting metrics: {str(e)[:100]}"
+                return json.dumps({"error": f"Critical error: {str(e)[:200]}"}, indent=2)
+
+    async def _get_code_diff(self, old_version_id: str, new_version_id: str) -> Optional[str]:
+        """
+        Get a unified diff between two score versions.
+
+        Args:
+            old_version_id: ID of the baseline/parent version
+            new_version_id: ID of the new version to compare
+
+        Returns:
+            Unified diff string or None if unable to generate
+        """
+        try:
+            import difflib
+
+            # Fetch both versions
+            query = """
+            query GetScoreVersionCode($id: ID!) {
+                getScoreVersion(id: $id) {
+                    id
+                    configuration
+                }
+            }
+            """
+
+            # Get old version
+            old_result = self.client.execute(query, {"id": old_version_id})
+            if not old_result or 'getScoreVersion' not in old_result or not old_result['getScoreVersion']:
+                logger.warning(f"Could not fetch old version {old_version_id}")
+                return None
+
+            old_code = old_result['getScoreVersion'].get('configuration', '')
+
+            # Get new version
+            new_result = self.client.execute(query, {"id": new_version_id})
+            if not new_result or 'getScoreVersion' not in new_result or not new_result['getScoreVersion']:
+                logger.warning(f"Could not fetch new version {new_version_id}")
+                return None
+
+            new_code = new_result['getScoreVersion'].get('configuration', '')
+
+            # Generate unified diff
+            old_lines = old_code.splitlines(keepends=True)
+            new_lines = new_code.splitlines(keepends=True)
+
+            diff = difflib.unified_diff(
+                old_lines,
+                new_lines,
+                fromfile=f'version_{old_version_id[:8]}',
+                tofile=f'version_{new_version_id[:8]}',
+                lineterm=''
+            )
+
+            diff_text = ''.join(diff)
+
+            if diff_text:
+                logger.info(f"Generated diff between {old_version_id[:8]} and {new_version_id[:8]} ({len(diff_text)} chars)")
+                return diff_text
+            else:
+                logger.warning(f"No differences found between versions {old_version_id[:8]} and {new_version_id[:8]}")
+                return "No changes detected between versions"
+
+        except Exception as e:
+            logger.error(f"Error generating code diff: {e}", exc_info=True)
+            return None
 
     async def _update_node_with_evaluation(
         self,
@@ -2510,6 +2964,321 @@ Create a concise summary (2-3 sentences) of whether this hypothesis improved the
         except Exception as e:
             logger.error(f"Error updating node with evaluation: {e}", exc_info=True)
             return False
+
+    async def _execute_insights_phase(
+        self,
+        procedure_id: str,
+        procedure_info: 'ProcedureInfo',
+        experiment_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute the insights phase: analyze all tested hypotheses and create an insights node.
+
+        This method:
+        1. Collects all hypothesis nodes with their test results (evaluation summaries)
+        2. Creates comprehensive context with all hypothesis data + test results
+        3. Uses an LLM agent to:
+           - Analyze what was learned from all tested hypotheses
+           - Summarize successful approaches and failures
+           - Suggest ideas for the next round of hypotheses
+        4. Creates a new insights node under the base node (or under previous insights node)
+        5. Transitions back to hypothesis state for the next round
+
+        The insights node serves as a checkpoint that captures learnings and guides
+        the next hypothesis generation cycle.
+
+        Args:
+            procedure_id: The procedure ID
+            procedure_info: ProcedureInfo with node details
+            experiment_context: Context dict with score info, docs, etc.
+
+        Returns:
+            Dict with success status and insights node details
+        """
+        try:
+            from plexus.dashboard.api.models.graph_node import GraphNode
+            import json
+
+            logger.info("Starting insights phase execution")
+
+            # 1. Collect all hypothesis nodes with their test results
+            all_nodes = GraphNode.list_by_procedure(procedure_id, self.client)
+
+            # Separate nodes by type:
+            # - root_node: The base node (has code in metadata, parentNodeId is None)
+            # - hypothesis_nodes: Test hypotheses (parentNodeId is not None, no 'insights' in metadata type)
+            # - previous_insights_nodes: Previous insights summaries (has 'insights' in metadata type)
+
+            root_node = procedure_info.root_node
+            hypothesis_nodes = []
+            previous_insights_nodes = []
+
+            for node in all_nodes:
+                if node.id == root_node.id:
+                    continue  # Skip root node
+
+                # Parse metadata to check node type
+                node_type = None
+                if node.metadata:
+                    try:
+                        metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
+                        node_type = metadata.get('type', metadata.get('node_type'))
+                    except:
+                        pass
+
+                if node_type == 'insights':
+                    previous_insights_nodes.append(node)
+                elif node.parentNodeId is not None:  # Non-root node
+                    hypothesis_nodes.append(node)
+
+            if not hypothesis_nodes:
+                logger.warning("No hypothesis nodes found for insights phase")
+                return {
+                    "success": False,
+                    "error": "No hypothesis nodes to analyze",
+                    "insights_node_id": None
+                }
+
+            logger.info(f"Found {len(hypothesis_nodes)} hypothesis nodes to analyze")
+            logger.info(f"Found {len(previous_insights_nodes)} previous insights nodes")
+
+            # 2. Build comprehensive context for LLM
+            insights_context = await self._build_insights_context(
+                hypothesis_nodes,
+                previous_insights_nodes,
+                root_node,
+                experiment_context
+            )
+
+            # 3. Run LLM agent to generate insights
+            logger.info("Running LLM agent to generate insights summary")
+            insights_summary = await self._generate_insights_with_llm(insights_context, experiment_context)
+
+            if not insights_summary:
+                return {
+                    "success": False,
+                    "error": "Failed to generate insights summary",
+                    "insights_node_id": None
+                }
+
+            # 4. Create insights node
+            # Determine parent: if there are previous insights nodes, use the most recent one
+            # Otherwise, use the root node
+            if previous_insights_nodes:
+                # Sort by creation time (most recent first)
+                previous_insights_nodes.sort(key=lambda n: n.createdAt if hasattr(n, 'createdAt') else '', reverse=True)
+                parent_node_id = previous_insights_nodes[0].id
+                logger.info(f"Creating insights node under previous insights node {parent_node_id}")
+            else:
+                parent_node_id = root_node.id
+                logger.info(f"Creating first insights node under root node {parent_node_id}")
+
+            insights_node = GraphNode.create(
+                client=self.client,
+                procedureId=procedure_id,
+                parentNodeId=parent_node_id,
+                name=f"Insights Round {len(previous_insights_nodes) + 1}",
+                status='COMPLETED',  # Insights nodes are immediately completed
+                metadata={
+                    'type': 'insights',
+                    'node_type': 'insights',
+                    'round': len(previous_insights_nodes) + 1,
+                    'summary': insights_summary,
+                    'hypothesis_count': len(hypothesis_nodes),
+                    'created_by': 'system:insights_phase'
+                }
+            )
+
+            logger.info(f"✓ Successfully created insights node {insights_node.id}")
+
+            # 5. Transition back to hypothesis state will happen in the main run_experiment method
+
+            return {
+                "success": True,
+                "insights_node_id": insights_node.id,
+                "insights_summary": insights_summary,
+                "hypothesis_count": len(hypothesis_nodes),
+                "message": f"Created insights node analyzing {len(hypothesis_nodes)} hypotheses"
+            }
+
+        except Exception as e:
+            logger.error(f"Error executing insights phase: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "insights_node_id": None
+            }
+
+    async def _build_insights_context(
+        self,
+        hypothesis_nodes: List,
+        previous_insights_nodes: List,
+        root_node,
+        experiment_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Build comprehensive context for insights generation.
+
+        Args:
+            hypothesis_nodes: List of hypothesis GraphNodes
+            previous_insights_nodes: List of previous insights GraphNodes
+            root_node: The root GraphNode
+            experiment_context: Procedure context dict
+
+        Returns:
+            Dict with all necessary context for LLM insights generation
+        """
+        import json
+
+        # Extract hypothesis data with test results
+        hypothesis_data = []
+        for node in hypothesis_nodes:
+            try:
+                metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata if node.metadata else {}
+
+                hypothesis_info = {
+                    'node_id': node.id,
+                    'name': node.name,
+                    'hypothesis': metadata.get('hypothesis', 'No hypothesis description'),
+                    'score_version_id': metadata.get('scoreVersionId'),
+                    'evaluation_id': metadata.get('evaluation_id'),
+                    'evaluation_summary': metadata.get('evaluation_summary', 'No evaluation summary available'),
+                    'status': node.status,
+                    'created_at': node.createdAt if hasattr(node, 'createdAt') else None
+                }
+
+                hypothesis_data.append(hypothesis_info)
+            except Exception as e:
+                logger.warning(f"Failed to extract data from hypothesis node {node.id}: {e}")
+
+        # Extract previous insights
+        previous_insights_data = []
+        for node in previous_insights_nodes:
+            try:
+                metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata if node.metadata else {}
+
+                insights_info = {
+                    'node_id': node.id,
+                    'round': metadata.get('round', 0),
+                    'summary': metadata.get('summary', 'No summary available'),
+                    'created_at': node.createdAt if hasattr(node, 'createdAt') else None
+                }
+
+                previous_insights_data.append(insights_info)
+            except Exception as e:
+                logger.warning(f"Failed to extract data from insights node {node.id}: {e}")
+
+        # Get baseline evaluation data from root node
+        baseline_eval_data = None
+        if root_node.metadata:
+            try:
+                root_metadata = json.loads(root_node.metadata) if isinstance(root_node.metadata, str) else root_node.metadata
+                baseline_eval_id = root_metadata.get('evaluation_id')
+                if baseline_eval_id:
+                    # We could fetch full evaluation data here if needed
+                    baseline_eval_data = {'evaluation_id': baseline_eval_id}
+            except:
+                pass
+
+        return {
+            'hypotheses': hypothesis_data,
+            'previous_insights': previous_insights_data,
+            'baseline_evaluation': baseline_eval_data,
+            'scorecard_name': experiment_context.get('scorecard_name'),
+            'score_name': experiment_context.get('score_name'),
+            'procedure_id': experiment_context.get('procedure_id')
+        }
+
+    async def _generate_insights_with_llm(
+        self,
+        insights_context: Dict[str, Any],
+        experiment_context: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        Use LLM to generate insights summary from tested hypotheses.
+
+        Args:
+            insights_context: Dict with hypothesis data, test results, previous insights
+            experiment_context: Procedure context dict
+
+        Returns:
+            Insights summary string, or None on failure
+        """
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import SystemMessage, HumanMessage
+            import json
+
+            # Get OpenAI API key
+            from plexus.config.loader import load_config
+            load_config()
+            import os
+            api_key = os.getenv('OPENAI_API_KEY')
+
+            if not api_key:
+                logger.error("No OpenAI API key available for insights generation")
+                return None
+
+            # Build system prompt
+            system_prompt = """You are an expert at analyzing machine learning experiment results and extracting actionable insights.
+
+Your task is to analyze a series of tested hypotheses for improving a classification score configuration, and provide:
+1. Summary of what was learned from all tested hypotheses
+2. Identification of successful approaches vs. failed approaches
+3. Patterns across the test results
+4. Specific, actionable recommendations for the next round of hypotheses
+
+Be concise but thorough. Focus on insights that will guide future hypothesis generation."""
+
+            # Build user prompt with all context
+            hypotheses_summary = "\n\n".join([
+                f"### Hypothesis {i+1}: {h['name']}\n"
+                f"**Description:** {h['hypothesis']}\n"
+                f"**Test Results:** {h['evaluation_summary']}\n"
+                f"**Status:** {h['status']}"
+                for i, h in enumerate(insights_context['hypotheses'])
+            ])
+
+            previous_insights_summary = ""
+            if insights_context['previous_insights']:
+                previous_insights_summary = "\n## Previous Insights Rounds:\n\n" + "\n\n".join([
+                    f"### Round {ins['round']}\n{ins['summary']}"
+                    for ins in insights_context['previous_insights']
+                ])
+
+            user_prompt = f"""Analyze the following tested hypotheses for the score '{insights_context['score_name']}' in scorecard '{insights_context['scorecard_name']}':
+
+## Tested Hypotheses and Results:
+
+{hypotheses_summary}
+
+{previous_insights_summary}
+
+## Your Task:
+
+Provide a comprehensive insights summary that includes:
+
+1. **Key Learnings:** What did we learn from these tests?
+2. **Successful Approaches:** Which hypotheses showed improvement? What patterns made them successful?
+3. **Failed Approaches:** Which hypotheses didn't help or made things worse? Why?
+4. **Recommendations for Next Round:** Based on these learnings, what should we try next?
+
+Format your response as a clear, structured summary that will guide the next round of hypothesis generation."""
+
+            # Call LLM
+            llm = ChatOpenAI(model="gpt-4o", temperature=0.3, openai_api_key=api_key)
+            response = llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ])
+
+            insights_summary = response.content.strip()
+            logger.info(f"Generated insights summary ({len(insights_summary)} characters)")
+            return insights_summary
+
+        except Exception as e:
+            logger.error(f"Error generating insights with LLM: {e}", exc_info=True)
+            return None
 
     def _get_or_create_task_with_stages_for_procedure(
         self,
