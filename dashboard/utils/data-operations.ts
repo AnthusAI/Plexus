@@ -438,9 +438,9 @@ export async function listRecentEvaluations(
   limit: number = 100,
   accountId: string | null = null,
   selectedScorecard: string | null = null,
-  selectedScore: string | null = null
-): Promise<any[]> {
-  console.debug('listRecentEvaluations called with limit:', limit, 'filters:', { accountId, selectedScorecard, selectedScore });
+  selectedScore: string | null = null,
+  nextToken: string | null = null
+): Promise<{ items: any[], nextToken: string | null }> {
   try {
     const client = getClient();
     
@@ -464,7 +464,8 @@ export async function listRecentEvaluations(
     let query = '';
     let variables: any = {
       sortDirection: 'DESC',
-      limit: limit || 100
+      limit: limit || 100,
+      nextToken: nextToken
     };
     
     // Determine which GSI to use based on the filters
@@ -475,11 +476,13 @@ export async function listRecentEvaluations(
           $scoreId: String!
           $sortDirection: ModelSortDirection!
           $limit: Int
+          $nextToken: String
         ) {
           listEvaluationByScoreIdAndUpdatedAt(
             scoreId: $scoreId
             sortDirection: $sortDirection
             limit: $limit
+            nextToken: $nextToken
           ) {
             items {
               ${EVALUATION_FIELDS}
@@ -496,11 +499,13 @@ export async function listRecentEvaluations(
           $scorecardId: String!
           $sortDirection: ModelSortDirection!
           $limit: Int
+          $nextToken: String
         ) {
           listEvaluationByScorecardIdAndUpdatedAt(
             scorecardId: $scorecardId
             sortDirection: $sortDirection
             limit: $limit
+            nextToken: $nextToken
           ) {
             items {
               ${EVALUATION_FIELDS}
@@ -517,11 +522,13 @@ export async function listRecentEvaluations(
           $accountId: String!
           $sortDirection: ModelSortDirection!
           $limit: Int
+          $nextToken: String
         ) {
           listEvaluationByAccountIdAndUpdatedAt(
             accountId: $accountId
             sortDirection: $sortDirection
             limit: $limit
+            nextToken: $nextToken
           ) {
             items {
               ${EVALUATION_FIELDS}
@@ -541,14 +548,6 @@ export async function listRecentEvaluations(
     // Extract data from the response
     const responseData = response?.data || {};
     
-    console.debug('Evaluations response:', {
-      itemCount: 
-        responseData?.listEvaluationByAccountIdAndUpdatedAt?.items?.length || 
-        responseData?.listEvaluationByScorecardIdAndUpdatedAt?.items?.length || 
-        responseData?.listEvaluationByScoreIdAndUpdatedAt?.items?.length || 0,
-      filters: { accountId, selectedScorecard, selectedScore }
-    });
-    
     // Extract items from the response based on which query was used
     const result = 
       responseData?.listEvaluationByAccountIdAndUpdatedAt || 
@@ -556,14 +555,13 @@ export async function listRecentEvaluations(
       responseData?.listEvaluationByScoreIdAndUpdatedAt;
     
     if (!result?.items) {
-      console.warn('No items found in evaluation response');
-      return [];
+      return { items: [], nextToken: null };
     }
     
-    return result.items;
+    return { items: result.items, nextToken: result.nextToken || null };
   } catch (error) {
     console.error('Error in listRecentEvaluations:', error);
-    return [];
+    return { items: [], nextToken: null };
   }
 }
 
@@ -580,30 +578,9 @@ export function observeRecentEvaluations(
     // Load initial data
     async function loadInitialEvaluations() {
       try {
-        const response = await listRecentEvaluations(limit, accountId, selectedScorecard, selectedScore);
-        console.debug('Initial evaluations response:', {
-          count: response.length,
-          firstEvaluation: response[0] ? {
-            id: response[0].id,
-            type: response[0].type,
-            metrics: response[0].metrics,
-            task: response[0].task,
-            taskCompletedAt: response[0].task?.completedAt,
-            taskStartedAt: response[0].task?.startedAt,
-            taskStatus: response[0].task?.status,
-            rawTask: response[0].task,
-            taskKeys: response[0].task ? Object.keys(response[0].task) : [],
-            taskType: typeof response[0].task,
-            scoreResults: response[0].scoreResults
-          } : null,
-          filters: {
-            accountId,
-            selectedScorecard,
-            selectedScore
-          }
-        });
+        const response = await listRecentEvaluations(limit, accountId, selectedScorecard, selectedScore, null);
         
-        evaluations = response;
+        evaluations = response.items;
         subscriber.next({ items: evaluations, isSynced: true });
       } catch (error) {
         console.error('Error loading initial evaluations:', error);
@@ -617,22 +594,6 @@ export function observeRecentEvaluations(
 
       // Helper function to handle evaluation changes
       const handleEvaluationChange = (evaluation: any, action: 'create' | 'update') => {
-        console.debug(`Handling ${action} for evaluation:`, {
-          evaluationId: evaluation.id,
-          type: evaluation.type,
-          scorecardId: evaluation.scorecardId,
-          scorecard: evaluation.scorecard,
-          scorecardName: evaluation.scorecard?.name,
-          scoreId: evaluation.scoreId,
-          score: evaluation.score,
-          scoreName: evaluation.score?.name,
-          taskData: evaluation.task,
-          taskId: evaluation.task?.id,
-          taskStatus: evaluation.task?.status,
-          taskType: typeof evaluation.task,
-          taskKeys: evaluation.task ? Object.keys(evaluation.task) : []
-        });
-
         if (action === 'create') {
           evaluations = [evaluation, ...evaluations];
         } else {
@@ -644,15 +605,6 @@ export function observeRecentEvaluations(
                 scorecard: evaluation.scorecard || e.scorecard,
                 score: evaluation.score || e.score
               };
-              console.debug('Updated evaluation with preserved scorecard/score:', {
-                evaluationId: updatedEvaluation.id,
-                originalScorecard: evaluation.scorecard,
-                originalScore: evaluation.score,
-                existingScorecard: e.scorecard,
-                existingScore: e.score,
-                finalScorecard: updatedEvaluation.scorecard,
-                finalScore: updatedEvaluation.score
-              });
               return updatedEvaluation;
             }
             return e;
@@ -800,7 +752,6 @@ export function observeRecentEvaluations(
       const createSub = (client.graphql({ query: createEvaluationSubscriptionQuery }) as unknown as { subscribe: (observer: { next: ({ data }: { data: any }) => void, error: (error: any) => void }) => any }).subscribe({
         next: ({ data }: { data: any }) => {
           // Handle the subscription event
-          console.debug('Create subscription event received:', { data });
           if (data?.onCreateEvaluation) {
             handleEvaluationChange(data.onCreateEvaluation, 'create');
           }
@@ -814,7 +765,6 @@ export function observeRecentEvaluations(
       // For update subscription
       const updateSub = (client.graphql({ query: updateEvaluationSubscriptionQuery }) as unknown as { subscribe: (observer: { next: ({ data }: { data: any }) => void, error: (error: any) => void }) => any }).subscribe({
         next: ({ data }: { data: any }) => {
-          console.debug('Update subscription event received:', { data });
           if (data?.onUpdateEvaluation) {
             handleEvaluationChange(data.onUpdateEvaluation, 'update');
           }
@@ -907,13 +857,6 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
 
   if (!evaluation) return null;
 
-  // Debug: Log scoreVersionId from raw evaluation
-  console.log('🔍 DEBUG transformEvaluation raw evaluation.scoreVersionId =', evaluation.scoreVersionId);
-  console.log('🔍 DEBUG transformEvaluation raw evaluation.scoreId =', evaluation.scoreId);
-  console.log('🔍 DEBUG transformEvaluation raw evaluation.scorecardId =', evaluation.scorecardId);
-  console.log('🔍 DEBUG transformEvaluation raw evaluation.id =', evaluation.id);
-  console.log('🔍 DEBUG transformEvaluation raw evaluation keys =', Object.keys(evaluation));
-
   // Handle task data - properly handle both function and object cases
   let taskData: AmplifyTask | null = null;
   if (evaluation.task) {
@@ -944,15 +887,6 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     }
   }
 
-  // Only log when we actually have stage changes to reduce noise
-  if (stageItems.length > 0) {
-    console.log('🔍 TRACE_STAGES: transformEvaluation found stage data:', {
-      evaluationId: evaluation.id,
-      taskDataId: taskData?.id,
-      stageCount: stageItems.length,
-      stageStatuses: stageItems.map((s: any) => ({ name: s.name, status: s.status }))
-    });
-  }
 
 
   // Get scorecard and score data
@@ -965,18 +899,6 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     (typeof evaluation.score === 'function' ?
       getValueFromLazyLoader(evaluation.score)?.data :
       evaluation.score) : null;
-
-  console.debug('transformEvaluation scorecard/score processing:', {
-    evaluationId: evaluation.id,
-    rawScorecard: evaluation.scorecard,
-    rawScore: evaluation.score,
-    scorecardType: typeof evaluation.scorecard,
-    scoreType: typeof evaluation.score,
-    scorecardData,
-    scoreData,
-    finalScorecardName: scorecardData?.name,
-    finalScoreName: scoreData?.name
-  });
 
   // Get score results data - handle both function and object cases
   let rawScoreResults: any = null;

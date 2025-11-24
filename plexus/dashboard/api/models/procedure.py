@@ -20,6 +20,7 @@ from .base import BaseModel
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
+    from .graph_node import GraphNode
 
 logger = logging.getLogger(__name__)
 

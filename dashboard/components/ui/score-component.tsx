@@ -694,9 +694,6 @@ const DetailContent = React.memo(({
   };
 
   const handleTestScoreWithItem = async (itemId: string) => {
-    console.log('Testing score with item:', { scoreId: score.id, scoreName: score.name, itemId });
-    console.log('Account context:', { selectedAccount });
-    
     try {
       const command = `predict --scorecard "${scorecardName || 'Unknown'}" --score "${score.name}" --item ${itemId}`;
       const taskInput = {
@@ -708,11 +705,7 @@ const DetailContent = React.memo(({
         status: 'PENDING'
       };
       
-      console.log('Creating task with input:', taskInput);
-      
       const task = await createTask(taskInput);
-      
-      console.log('Task creation result:', task);
       
       if (task) {
         toast.success("Score test dispatched", {
@@ -1511,7 +1504,6 @@ export function ScoreComponent({
 
   // Version selection handler
   const handleVersionSelect = (version: ScoreVersion) => {
-    console.log('🔍 Loading version:', version.id, 'Guidelines:', version.guidelines)
     setSelectedVersionId(version.id)
     setVersionNote(version.note || '')
     
@@ -1548,7 +1540,6 @@ export function ScoreComponent({
           // Store the complete configuration for the editor
           configuration: version.configuration
         };
-        console.log('🔧 Setting editedScore guidelines to:', updated.guidelines)
         return updated;
       })
       
@@ -1657,7 +1648,6 @@ export function ScoreComponent({
         
         if ('data' in response && response.data?.listScoreVersionByScoreIdAndCreatedAt?.items) {
           const versionItems = response.data.listScoreVersionByScoreIdAndCreatedAt.items;
-          console.log('🔍 Loaded versions:', versionItems.map(v => ({ id: v.id, guidelines: v.guidelines })));
           setVersions(versionItems);
           
           // Sort versions by createdAt in descending order
@@ -1679,7 +1669,6 @@ export function ScoreComponent({
             // Try to select the version specified in the URL
             const initialVersion = versionItems.find(v => v.id === initialSelectedVersionId);
             if (initialVersion) {
-              console.log('🔗 Deep link: Selecting initial version:', initialVersion.id);
               handleVersionSelect(initialVersion);
             } else {
               console.warn('⚠️ Deep link: Initial version not found, falling back to champion');
@@ -1692,11 +1681,9 @@ export function ScoreComponent({
             }
           } else if (champion) {
             // No deep link, select champion version
-            console.log('👑 Selecting champion version:', champion.id);
             handleVersionSelect(champion);
           } else if (sortedVersions.length > 0) {
             // No champion, select most recent version
-            console.log('📅 Selecting most recent version:', sortedVersions[0].id);
             handleVersionSelect(sortedVersions[0]);
             
             // Only set the most recent version as champion if there are no champions at all
@@ -1746,10 +1733,6 @@ export function ScoreComponent({
     try {
       setIsSavingGuidelines(true)
       
-      // Debug: Check what we actually have
-      console.log('🔍 handleSaveGuidelines - guidelinesEditValue type:', typeof guidelinesEditValue)
-      console.log('🔍 handleSaveGuidelines - guidelinesEditValue value:', guidelinesEditValue)
-      
       // This should always be a string - if it's not, we have a bug to fix
       if (typeof guidelinesEditValue !== 'string') {
         console.error('❌ BUG: guidelinesEditValue is not a string!', guidelinesEditValue)
@@ -1784,9 +1767,6 @@ export function ScoreComponent({
   }
 
   const handleGuidelinesChange = (value: string) => {
-    console.log('🔍 handleGuidelinesChange called with type:', typeof value)
-    console.log('🔍 handleGuidelinesChange called with value:', value)
-    
     if (typeof value !== 'string') {
       console.error('❌ BUG: handleGuidelinesChange received non-string!', value)
       console.trace('Stack trace for non-string value')
@@ -1966,16 +1946,10 @@ export function ScoreComponent({
 
   const handleSave = async (overrideGuidelines?: string) => {
     try {
-      console.log('ScoreComponent handleSave called for score:', score);
-      console.log('editedScore data:', editedScore);
-      console.log('versions array:', versions);
-      console.log('championVersionId:', championVersionId);
-      
       // Signal to DetailContent to reset editing state
       setResetEditingCounter(prev => prev + 1)
       
       // Update the Score record with the new values
-      console.log('Updating Score record...');
       const updateResult = await client.graphql({
         query: `
           mutation UpdateScore($input: UpdateScoreInput!) {
@@ -1998,8 +1972,6 @@ export function ScoreComponent({
           }
         }
       });
-      
-      console.log('Score record update result:', updateResult);
 
       // Check if we're editing an existing version or creating a new one
       const isEditingExistingVersion = selectedVersionId && versions.some(v => v.id === selectedVersionId);
@@ -2103,8 +2075,6 @@ export function ScoreComponent({
         updatedAt: now
       };
 
-      console.log('Creating ScoreVersion with payload:', versionPayload);
-      console.log('🔍 Guidelines being saved:', overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''));
       const createVersionResponse = await client.graphql({
         query: `
           mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
@@ -2125,12 +2095,9 @@ export function ScoreComponent({
         }
       }) as GraphQLResult<CreateScoreVersionResponse>;
       
-      console.log('CreateScoreVersion response:', createVersionResponse);
-      
       const newVersion = 'data' in createVersionResponse && createVersionResponse.data?.createScoreVersion;
       
       // Update local state with the new version
-      console.log('🔍 Created newVersion with guidelines:', newVersion && 'guidelines' in newVersion ? newVersion.guidelines : 'N/A');
       if (newVersion) {
         const placeholderVersion = {
           ...newVersion,

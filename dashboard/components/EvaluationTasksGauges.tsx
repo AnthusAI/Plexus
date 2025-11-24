@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
-import { useEvaluationTaskMetrics } from '../hooks/useUnifiedMetrics'
+import { useEvaluationsMetrics } from '../hooks/useUnifiedMetrics'
 
 // Configuration for evaluation-specific gauges (two gauges: evaluations + score results)  
 const evaluationTasksGaugesConfig: BaseGaugesConfig = {
@@ -35,9 +35,8 @@ const evaluationTasksGaugesConfig: BaseGaugesConfig = {
       unit: '',
       decimalPlaces: 0,
       segments: [
-        { start: 0, end: 10, color: 'var(--false)' },
-        { start: 10, end: 90, color: 'var(--neutral)' },
-        { start: 90, end: 100, color: 'var(--true)' }
+        { start: 0, end: 90, color: 'var(--neutral)' },
+        { start: 90, end: 100, color: 'var(--false)' }
       ]
     },
     {
@@ -51,9 +50,8 @@ const evaluationTasksGaugesConfig: BaseGaugesConfig = {
       unit: '',
       decimalPlaces: 0,
       segments: [
-        { start: 0, end: 50, color: 'var(--false)' },
-        { start: 50, end: 450, color: 'var(--neutral)' },
-        { start: 450, end: 500, color: 'var(--true)' }
+        { start: 0, end: 90, color: 'var(--neutral)' },
+        { start: 90, end: 100, color: 'var(--false)' }
       ]
     }
   ],
@@ -102,12 +100,17 @@ export function EvaluationTasksGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: EvaluationTasksGaugesProps) {
-  // Use evaluation metrics (items and score results filtered for evaluations)
+  // Time range state for navigation
+  const [timeRange, setTimeRange] = React.useState<{ start: Date; end: Date; period: 'hour' | 'day' | 'week' } | null>(null)
+  
+  // Use evaluations metrics (Evaluation records + evaluation score results)
   const { 
     metrics: metricsData, 
     isLoading, 
     error 
-  } = useEvaluationTaskMetrics()
+  } = useEvaluationsMetrics({
+    timeRange: timeRange || undefined
+  })
 
   // Transform metrics data to BaseGaugesData format
   // For evaluations, we use both task data (evaluation tasks) and scoreResults data (score results from evaluations)
@@ -143,11 +146,13 @@ export function EvaluationTasksGauges({
       data={useRealData ? data : null}
       isLoading={isLoading}
       error={error}
-title="Evaluations & Score Results, Last 24 Hours"
+      title="Evaluations & Score Results"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}
       onErrorClick={onErrorClick}
+      enableTimeNavigation={true}
+      onTimeRangeChange={setTimeRange}
     />
   )
 } 

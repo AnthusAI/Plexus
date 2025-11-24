@@ -1,6 +1,6 @@
 import os
 import json
-import mlflow
+# import mlflow
 from plexus.scores import Score
 from pydantic import BaseModel, validator, ValidationError
 import numpy as np
@@ -621,4 +621,4 @@ class DeepLearningSemanticClassifier(Score):
         plt.savefig(file_name)
         plt.show()
 
-        mlflow.log_artifact(file_name)
+        # mlflow.log_artifact(file_name)

@@ -5,11 +5,18 @@ import { Gauge } from '@/components/gauge'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { cn } from '@/lib/utils'
-import { useAllItemsMetrics, UnifiedMetricsData } from '@/hooks/useUnifiedMetrics'
+import { useUnifiedMetrics, UnifiedMetricsData } from '@/hooks/useUnifiedMetrics'
 import { Timestamp } from '@/components/ui/timestamp'
 import NumberFlowWrapper from '@/components/ui/number-flow'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 // Fallback data for the area chart when loading or no data
 const fallbackChartData = [
@@ -20,6 +27,68 @@ const fallbackChartData = [
   { time: '16:00', items: 0, scoreResults: 0 },
   { time: '20:00', items: 0, scoreResults: 0 },
 ]
+
+// Helper function to calculate time range based on period and offset
+function calculateTimeRange(period: 'hour' | 'day' | 'week', offset: number): { start: Date; end: Date } {
+  const now = new Date()
+  let end: Date
+  let start: Date
+  
+  if (offset === 0) {
+    end = now
+  } else {
+    // Calculate historical end time
+    switch (period) {
+      case 'hour':
+        end = new Date(now.getTime() + offset * 60 * 60 * 1000)
+        break
+      case 'day':
+        end = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000)
+        break
+      case 'week':
+        end = new Date(now.getTime() + offset * 7 * 24 * 60 * 60 * 1000)
+        break
+    }
+  }
+  
+  // Calculate start based on period
+  switch (period) {
+    case 'hour':
+      start = new Date(end.getTime() - 60 * 60 * 1000)
+      break
+    case 'day':
+      start = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+      break
+    case 'week':
+      start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000)
+      break
+  }
+  
+  return { start, end }
+}
+
+// Helper function to format time range label
+function formatTimeRangeLabel(period: 'hour' | 'day' | 'week', offset: number, start: Date, end: Date): string {
+  if (offset === 0) {
+    switch (period) {
+      case 'hour': return 'Last Hour'
+      case 'day': return 'Last 24 Hours'
+      case 'week': return 'Last Week'
+    }
+  }
+  
+  // Historical format: "Nov 19, 2pm-3pm", "Nov 19", "Nov 11-18"
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  
+  switch (period) {
+    case 'hour':
+      return `${monthNames[start.getMonth()]} ${start.getDate()}, ${start.getHours() % 12 || 12}${start.getHours() >= 12 ? 'pm' : 'am'}-${end.getHours() % 12 || 12}${end.getHours() >= 12 ? 'pm' : 'am'}`
+    case 'day':
+      return `${monthNames[start.getMonth()]} ${start.getDate()}`
+    case 'week':
+      return `${monthNames[start.getMonth()]} ${start.getDate()}-${end.getDate()}`
+  }
+}
 
 const chartConfig = {
   items: {
@@ -108,6 +177,11 @@ interface ItemsGaugesProps {
   hasErrorsLast24h?: boolean
   errorsCount24h?: number
   onErrorClick?: () => void
+  // Time navigation props (for Storybook/testing)
+  timePeriod?: 'hour' | 'day' | 'week'
+  timeOffset?: number
+  onTimePeriodChange?: (period: 'hour' | 'day' | 'week') => void
+  onTimeOffsetChange?: (offset: number) => void
 }
 
 export function ItemsGauges({ 
@@ -125,9 +199,70 @@ export function ItemsGauges({
   disableEmergenceAnimation = false,
   hasErrorsLast24h: overrideHasErrors,
   errorsCount24h: overrideErrorsCount,
-  onErrorClick
+  onErrorClick,
+  timePeriod: controlledTimePeriod,
+  timeOffset: controlledTimeOffset,
+  onTimePeriodChange,
+  onTimeOffsetChange
 }: ItemsGaugesProps) {
-  const { metrics, isLoading, error } = useAllItemsMetrics()
+  // Time navigation state (internal or controlled)
+  const [internalTimePeriod, setInternalTimePeriod] = React.useState<'hour' | 'day' | 'week'>('day')
+  const [internalTimeOffset, setInternalTimeOffset] = React.useState<number>(0)
+  
+  // Use controlled props if provided, otherwise use internal state
+  const timePeriod = controlledTimePeriod !== undefined ? controlledTimePeriod : internalTimePeriod
+  const timeOffset = controlledTimeOffset !== undefined ? controlledTimeOffset : internalTimeOffset
+  
+  // Calculate time range based on period and offset
+  const timeRange = React.useMemo(() => {
+    const { start, end } = calculateTimeRange(timePeriod, timeOffset)
+    return { start, end, period: timePeriod }
+  }, [timePeriod, timeOffset])
+  
+  // Format the time range label
+  const timeRangeLabel = React.useMemo(() => {
+    return formatTimeRangeLabel(timePeriod, timeOffset, timeRange.start, timeRange.end)
+  }, [timePeriod, timeOffset, timeRange])
+  
+  // Fetch metrics with custom time range
+  const { metrics, isLoading, error } = useUnifiedMetrics(
+    useRealData ? { timeRange } : {}
+  )
+  
+  // Navigation handlers
+  const handleTimePeriodChange = (newPeriod: 'hour' | 'day' | 'week') => {
+    // Always reset to "now" when changing period
+    if (onTimePeriodChange) {
+      onTimePeriodChange(newPeriod)
+    } else {
+      setInternalTimePeriod(newPeriod)
+    }
+    
+    // Reset offset to 0 (now) regardless of controlled/uncontrolled
+    if (onTimeOffsetChange) {
+      onTimeOffsetChange(0)
+    } else {
+      setInternalTimeOffset(0)
+    }
+  }
+  
+  const handleNavigateBack = () => {
+    const newOffset = timeOffset - 1
+    if (onTimeOffsetChange) {
+      onTimeOffsetChange(newOffset)
+    } else {
+      setInternalTimeOffset(newOffset)
+    }
+  }
+  
+  const handleNavigateForward = () => {
+    const newOffset = timeOffset + 1
+    if (onTimeOffsetChange) {
+      onTimeOffsetChange(newOffset)
+    } else {
+      setInternalTimeOffset(newOffset)
+    }
+  }
   
   // Removed skeleton loader - component handles its own loading state
   
@@ -230,9 +365,8 @@ export function ItemsGauges({
               decimalPlaces={0}
               showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
               segments={[
-                { start: 0, end: 10, color: 'var(--false)' },
-                { start: 10, end: 90, color: 'var(--neutral)' },
-                { start: 90, end: 100, color: 'var(--true)' }
+                { start: 0, end: 90, color: 'var(--neutral)' },
+                { start: 90, end: 100, color: 'var(--false)' }
               ]}
               backgroundColor="var(--background)"
             />
@@ -264,9 +398,8 @@ export function ItemsGauges({
               decimalPlaces={0}
               showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
               segments={[
-                { start: 0, end: 10, color: 'var(--false)' },
-                { start: 10, end: 90, color: 'var(--neutral)' },
-                { start: 90, end: 100, color: 'var(--true)' }
+                { start: 0, end: 90, color: 'var(--neutral)' },
+                { start: 90, end: 100, color: 'var(--false)' }
               ]}
               backgroundColor="var(--background)"
             />
@@ -282,8 +415,40 @@ export function ItemsGauges({
           - @[1100px]:grid-cols-6 (≥ 1100px): spans 4 remaining columns (col-span-4)
         */}
         <div className="col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4 bg-card rounded-lg p-4 h-48 flex flex-col relative">
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
-            <h3 className="text-sm font-medium text-muted-foreground">Items, Last 24 Hours</h3>
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleNavigateBack}
+              className="h-6 w-6"
+              title="Go back in time"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            
+            <Select value={timePeriod} onValueChange={handleTimePeriodChange}>
+              <SelectTrigger className="h-6 w-auto border-0 bg-transparent px-2 text-sm font-medium text-muted-foreground hover:text-foreground focus:ring-0">
+                <SelectValue>
+                  <span className="text-sm font-medium text-muted-foreground">Items, {timeRangeLabel}</span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hour">Last Hour</SelectItem>
+                <SelectItem value="day">Last 24 Hours</SelectItem>
+                <SelectItem value="week">Last Week</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleNavigateForward}
+              disabled={timeOffset === 0}
+              className="h-6 w-6"
+              title="Go forward in time"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
           <div className="flex flex-col h-full min-w-0">
             {/* Chart area - responsive height based on width - taller when wide */}
@@ -419,7 +584,7 @@ export function ItemsGauges({
                   <span className="text-muted-foreground text-xs leading-tight @[500px]:hidden @[700px]:block">Items / day</span>
                 </div>
               </div>
-              {/* Center: Error indicator or Last updated timestamp - absolutely centered in the chart card */}
+              {/* Center: Error indicator - absolutely centered in the chart card */}
               <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 mb-1 flex flex-col items-center z-10">
                 {useRealData && hasErrorsLast24h && onErrorClick && (
                   <div className="relative">
@@ -439,17 +604,6 @@ export function ItemsGauges({
                       </div>
                     </Button>
                   </div>
-                )}
-                {useRealData && !hasErrorsLast24h && metrics?.lastUpdated && (
-                  <>
-                    <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
-                    <Timestamp 
-                      time={metrics.lastUpdated} 
-                      variant="relative" 
-                      showIcon={false}
-                      className="text-[10px] text-muted-foreground"
-                    />
-                  </>
                 )}
               </div>
               {/* Score Results metric - right-justified with color on the right */}

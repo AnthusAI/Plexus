@@ -966,9 +966,13 @@ class TaskProgressTracker:
                 created_stages = self.api_task.create_stages_batch(stages_to_create)
                 
                 # Map created stages to our internal stage IDs
-                for stage in created_stages:
-                    self._stage_ids[stage.name] = stage.id
-                    logging.debug(f"Successfully created API stage '{stage.name}' with ID: {stage.id}")
+                # Handle case where created_stages returns a non-iterable (like Mock object)
+                if hasattr(created_stages, '__iter__') and not isinstance(created_stages, (str, bytes)):
+                    for stage in created_stages:
+                        self._stage_ids[stage.name] = stage.id
+                        logging.debug(f"Successfully created API stage '{stage.name}' with ID: {stage.id}")
+                else:
+                    logging.warning(f"create_stages_batch returned non-iterable: {type(created_stages)}")
                 
                 logging.debug(f"Task progress tracker: created {len(created_stages)} stages")
                 

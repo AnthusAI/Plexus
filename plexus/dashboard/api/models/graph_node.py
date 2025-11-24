@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GraphNode(BaseModel):
+    accountId: str
     procedureId: str
     parentNodeId: Optional[str]
     name: Optional[str]
@@ -32,6 +33,7 @@ class GraphNode(BaseModel):
     def __init__(
         self,
         id: str,
+        accountId: str,
         procedureId: str,
         createdAt: str,
         updatedAt: str,
@@ -42,6 +44,7 @@ class GraphNode(BaseModel):
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
+        self.accountId = accountId
         self.procedureId = procedureId
         self.parentNodeId = parentNodeId
         self.name = name
@@ -54,6 +57,7 @@ class GraphNode(BaseModel):
     def fields(cls) -> str:
         return """
             id
+            accountId
             procedureId
             parentNodeId
             name
@@ -77,6 +81,7 @@ class GraphNode(BaseModel):
         
         return cls(
             id=data['id'],
+            accountId=data['accountId'],
             procedureId=data['procedureId'],
             parentNodeId=data.get('parentNodeId'),
             name=data.get('name'),
@@ -91,6 +96,7 @@ class GraphNode(BaseModel):
     def create(
         cls,
         client: '_BaseAPIClient',
+        accountId: str,
         procedureId: str,
         parentNodeId: Optional[str] = None,
         name: Optional[str] = None,
@@ -101,6 +107,7 @@ class GraphNode(BaseModel):
         
         Args:
             client: The API client
+            accountId: ID of the account this node belongs to
             procedureId: ID of the procedure this node belongs to
             parentNodeId: ID of the parent node (None for root nodes)
             name: Name of the node (optional)
@@ -113,6 +120,7 @@ class GraphNode(BaseModel):
         logger.debug(f"Creating graph node for procedure {procedureId}")
         
         input_data = {
+            'accountId': accountId,
             'procedureId': procedureId
         }
         

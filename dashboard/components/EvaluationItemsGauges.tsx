@@ -115,7 +115,7 @@ export function EvaluationItemsGauges({
       data={transformedData}
       isLoading={isLoading}
       error={error}
-      title="Evaluations Items, Last 24 Hours"
+      title="Evaluation Items, Last 24 Hours"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}

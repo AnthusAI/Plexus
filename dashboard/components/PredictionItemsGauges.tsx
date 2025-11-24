@@ -115,7 +115,7 @@ export function PredictionItemsGauges({
       data={transformedData}
       isLoading={isLoading}
       error={error}
-      title="Predictions Items, Last 24 Hours"
+      title="Prediction Items, Last 24 Hours"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}

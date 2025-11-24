@@ -346,19 +346,6 @@ function transformTaskToActivity(task: ProcessedTask) {
     }
   }
 
-
-  // Debug logging to see task data after transformation
-  console.log('transformTaskToActivity - Task data after processing:', {
-    id: task.id,
-    type: task.type,
-    output: task.output ? `${task.output.substring(0, 100)}...` : null,
-    outputLength: task.output?.length,
-    attachedFiles: task.attachedFiles,
-    stdout: task.stdout ? `${task.stdout.substring(0, 50)}...` : null,
-    stderr: task.stderr ? `${task.stderr.substring(0, 50)}...` : null,
-    command: task.command
-  });
-
   const result = {
     id: task.id,
     type: 'Task',
@@ -539,15 +526,6 @@ export default function ActivityDashboard({
   const fetchRecentTasks = async () => {
     try {
       const { tasks } = await listRecentTasks();
-      console.warn('Initial data load complete:', {
-        count: tasks.length,
-        taskIds: tasks.map((item: ProcessedTask) => item.id),
-        taskDetails: tasks.map((item: ProcessedTask) => ({
-          id: item.id,
-          status: item.status,
-          type: item.type
-        }))
-      });
       setRecentTasks(tasks);
       setIsInitialLoading(false);
     } catch (error) {
@@ -560,7 +538,6 @@ export default function ActivityDashboard({
     fetchRecentTasks();
 
     // Set up real-time subscription
-    console.log('Setting up real-time task subscription');
     const subscription = observeRecentTasks().subscribe({
       next: ({ data: processedTask }) => {
         if (processedTask) {
@@ -584,7 +561,6 @@ export default function ActivityDashboard({
     });
 
     return () => {
-      console.log('Cleaning up task subscription');
       subscription.unsubscribe();
     };
   }, []);
@@ -671,19 +647,9 @@ export default function ActivityDashboard({
     const task = displayedTasks.find(t => t.id === selectedTask)
     if (!task) return null
 
-    console.debug('Rendering selected task in Activity Dashboard:', {
-      taskId: task.id,
-      type: task.type,
-      command: task.description || task.data?.command,
-      isEvaluation: task.type.toLowerCase().includes('evaluation'),
-      commandDisplay: 'full' // Verify we're setting this correctly
-    });
-
     const handleAnnounceAgain = async () => {
-      console.log('Announcing task again:', task.id)
       try {
         // First update the main task record - reset all timing and error fields
-        console.log('Resetting task:', task.id, 'Current status:', task.status)
         const updatedTask = await updateTask(task.id, {
           dispatchStatus: undefined,
           workerNodeId: null,
