@@ -930,9 +930,14 @@ Your response will become the next user message to guide the coding assistant.
         2. There are hypothesis nodes without associated ScoreVersions
         """
         try:
-            from ..states import STATE_HYPOTHESIS, STATE_TEST
+            # Use correct sibling-package import for state constants
+            from .states import STATE_HYPOTHESIS, STATE_TEST
             from plexus.dashboard.api.models.procedure import Procedure
             from plexus.dashboard.api.models.graph_node import GraphNode
+            # Lazily create an API client if not present
+            if not hasattr(self, 'client') or self.client is None:
+                from plexus.dashboard.api.client import PlexusDashboardClient
+                self.client = PlexusDashboardClient()
             
             # Get current procedure state from TaskStages (source of truth)
             procedure = Procedure.get_by_id(self.procedure_id, self.client)
@@ -941,7 +946,7 @@ Your response will become the next user message to guide the coding assistant.
                 return
 
             # Use ProcedureService to get state from TaskStages
-            from ..service import ProcedureService
+            from .service import ProcedureService
             service = ProcedureService(self.client)
             current_state = service._get_current_state_from_task_stages(self.procedure_id, procedure.accountId)
             if current_state is None:
@@ -971,7 +976,7 @@ Your response will become the next user message to guide the coding assistant.
                 logger.info(f"Transitioning from {STATE_HYPOTHESIS} → {STATE_TEST}")
 
                 # Use ProcedureService which now uses state machine for validation
-                from ..service import ProcedureService
+                from .service import ProcedureService
                 service = ProcedureService(self.client)
                 service._update_procedure_state(self.procedure_id, STATE_TEST, current_state=current_state)
                 # Also update root node status to match
