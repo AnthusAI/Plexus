@@ -16,6 +16,7 @@ import os
 import tempfile
 import uuid
 import yaml
+import re
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
@@ -89,9 +90,16 @@ class TestPhaseAgent:
                     "temp_yaml_path": temp_yaml_path
                 }
 
-            # 4. Validate edited YAML
+            # 4. Validate edited YAML with auto-fix attempt
             logger.info(f"Validating edited YAML")
             validation_result = await self._validate_yaml(temp_yaml_path, procedure_context)
+
+            if not validation_result["success"]:
+                logger.warning(f"Initial YAML validation failed. Attempting auto-fix reformat: {validation_result['error']}")
+                auto_fix_ok = self._attempt_yaml_autofix(temp_yaml_path)
+                if auto_fix_ok:
+                    logger.info("Re-validating after auto-fix")
+                    validation_result = await self._validate_yaml(temp_yaml_path, procedure_context)
 
             if not validation_result["success"]:
                 return {
@@ -119,8 +127,8 @@ class TestPhaseAgent:
                 }
 
             # 6. Update GraphNode metadata
-            logger.info(f"Updating GraphNode metadata with new ScoreVersion ID")
-            await self._update_node_metadata(hypothesis_node.id, new_version_id)
+            logger.info(f"Updating GraphNode metadata with new ScoreVersion ID and parent version ID")
+            await self._update_node_metadata(hypothesis_node.id, new_version_id, score_version_id)
 
             logger.info(f"✓ Successfully created ScoreVersion {new_version_id} for hypothesis node {hypothesis_node.id}")
 
@@ -343,6 +351,17 @@ START NOW: Use read_file first to see the current YAML configuration."""
                     return f"Error editing file: {e}"
 
             @tool
+            def check_yaml_syntax(path: str) -> str:
+                """Validate YAML syntax for the file at path. Returns 'OK' or an error message."""
+                try:
+                    with open(path, 'r') as f:
+                        content = f.read()
+                    yaml.safe_load(content)
+                    return "OK"
+                except Exception as e:
+                    return f"YAML Error: {e}"
+
+            @tool
             def stop_procedure(reason: str) -> str:
                 """
                 Signal that editing is complete.
@@ -364,13 +383,15 @@ START NOW: Use read_file first to see the current YAML configuration."""
 
             # Create LLM with tools (using gpt-4o for larger context window)
             llm = ChatOpenAI(model="gpt-4o", temperature=0.1, openai_api_key=api_key)
-            tools = [read_file, edit_file, stop_procedure]
+            tools = [read_file, edit_file, check_yaml_syntax, stop_procedure]
             llm_with_tools = llm.bind_tools(tools)
 
             # Run ReAct loop
             messages = [SystemMessage(content=system_prompt)]
             max_iterations = 50
             stop_called = False
+            validation_repair_attempts = 0
+            max_repair_attempts = 5
 
             for iteration in range(max_iterations):
                 logger.info(f"LLM editing iteration {iteration + 1}/{max_iterations}")
@@ -403,6 +424,8 @@ START NOW: Use read_file first to see the current YAML configuration."""
                     elif tool_name == 'edit_file':
                         logger.info(f"edit_file args: path={tool_args.get('path')}, old_content length={len(tool_args.get('old_content', ''))}, new_content length={len(tool_args.get('new_content', ''))}")
                         result = edit_file.func(**tool_args)
+                    elif tool_name == 'check_yaml_syntax':
+                        result = check_yaml_syntax.func(**tool_args)
                     else:
                         result = f"Unknown tool: {tool_name}"
 
@@ -410,8 +433,47 @@ START NOW: Use read_file first to see the current YAML configuration."""
                     messages.append(ToolMessage(content=str(result), tool_call_id=tool_call['id']))
 
                     if stop_called:
-                        logger.info("✓ LLM editing completed successfully")
-                        return True
+                        # Instead of immediately finishing, run validation and feed errors back for iterative repair
+                        logger.info("Validating YAML after stop signal")
+                        validation = await self._validate_yaml(yaml_path, context)
+                        if validation.get('success'):
+                            logger.info("✓ YAML validation passed after stop_procedure")
+                            return True
+                        else:
+                            validation_repair_attempts += 1
+                            if validation_repair_attempts > max_repair_attempts:
+                                logger.error("Maximum validation repair attempts reached; failing editing loop")
+                                return False
+
+                            # Prepare helpful feedback with error details and code excerpt
+                            error_msg = validation.get('error', 'Unknown validation error')
+                            excerpt = ''
+                            try:
+                                # Attempt to extract line number from error message
+                                line_match = re.search(r"line\s+(\d+)", error_msg)
+                                line_num = int(line_match.group(1)) if line_match else None
+                                with open(yaml_path, 'r') as f:
+                                    file_lines = f.readlines()
+                                if line_num is not None and 1 <= line_num <= len(file_lines):
+                                    start = max(1, line_num - 3)
+                                    end = min(len(file_lines), line_num + 3)
+                                    snippet = ''.join(file_lines[start-1:end])
+                                    excerpt = f"\nHere is a code excerpt around the error (lines {start}-{end}):\n" + snippet
+                            except Exception:
+                                pass
+
+                            feedback = (
+                                "Validation failed for the YAML you produced. Please fix the issues and try again.\n"
+                                f"Error details: {error_msg}{excerpt}\n\n"
+                                "Instructions:\n"
+                                "1) Use read_file to inspect the YAML.\n"
+                                "2) Apply targeted edits with edit_file.\n"
+                                "3) Optionally call check_yaml_syntax to verify syntax before stopping.\n"
+                                "4) When confident, call stop_procedure again to re-run validation.\n"
+                            )
+                            # Feed back as a human message to continue the loop
+                            messages.append(HumanMessage(content=feedback))
+                            stop_called = False
 
             # Max iterations reached without stop
             logger.error(f"Max iterations ({max_iterations}) reached without stop_procedure call")
@@ -447,7 +509,7 @@ START NOW: Use read_file first to see the current YAML configuration."""
                     "error": f"Invalid YAML syntax: {e}"
                 }
 
-            # 2. Run predictions on sample items
+            # 2. Run predictions on sample items (iterative check)
             logger.info("Running predictions on sample items")
 
             # Get sample items from evaluation results
@@ -493,6 +555,7 @@ START NOW: Use read_file first to see the current YAML configuration."""
                         break
 
                 if predict_fn:
+                    prediction_errors: List[str] = []
                     for item_id in test_item_ids:
                         try:
                             result = await predict_fn(
@@ -504,23 +567,20 @@ START NOW: Use read_file first to see the current YAML configuration."""
 
                             # Check for errors
                             if isinstance(result, str) and result.startswith("Error"):
-                                return {
-                                    "success": False,
-                                    "error": f"Prediction failed: {result}"
-                                }
+                                prediction_errors.append(f"{item_id}: {result}")
                             elif isinstance(result, dict) and not result.get('success', True):
-                                return {
-                                    "success": False,
-                                    "error": f"Prediction failed: {result.get('error', 'Unknown error')}"
-                                }
-
-                            logger.info(f"✓ Prediction succeeded for item {item_id}")
+                                prediction_errors.append(f"{item_id}: {result.get('error', 'Unknown error')}")
+                            else:
+                                logger.info(f"✓ Prediction succeeded for item {item_id}")
 
                         except Exception as e:
-                            return {
-                                "success": False,
-                                "error": f"Prediction error on item {item_id}: {e}"
-                            }
+                            prediction_errors.append(f"{item_id}: {e}")
+
+                    if prediction_errors:
+                        return {
+                            "success": False,
+                            "error": "One or more predictions failed: " + "; ".join(prediction_errors)
+                        }
                 else:
                     logger.warning("Could not find plexus_predict function for validation")
             else:
@@ -534,6 +594,47 @@ START NOW: Use read_file first to see the current YAML configuration."""
                 "success": False,
                 "error": f"Validation error: {e}"
             }
+
+    def _attempt_yaml_autofix(self, yaml_path: str) -> bool:
+        """
+        Attempt minimal YAML auto-fixes for common issues:
+        - Ensure document has a single top-level mapping
+        - Remove trailing BOM or non-printable characters
+        - Normalize indentation and line endings
+
+        Returns True if a change was made that might fix syntax; False otherwise.
+        """
+        try:
+            with open(yaml_path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+
+            original_content = content
+
+            # Strip BOM
+            if content.startswith('\ufeff'):
+                content = content.lstrip('\ufeff')
+
+            # Normalize Windows newlines to Unix
+            content = content.replace('\r\n', '\n').replace('\r', '\n')
+
+            # Trim leading/trailing whitespace-only lines
+            lines = content.split('\n')
+            # Drop completely empty lines at start and end which can confuse block mappings
+            while lines and lines[0].strip() == '':
+                lines.pop(0)
+            while lines and lines[-1].strip() == '':
+                lines.pop()
+            content = '\n'.join(lines) + ('\n' if lines else '')
+
+            if content != original_content:
+                with open(yaml_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                return True
+
+            return False
+        except Exception as e:
+            logger.warning(f"YAML auto-fix attempt failed: {e}")
+            return False
 
     async def _push_new_version(
         self,
@@ -593,13 +694,14 @@ START NOW: Use read_file first to see the current YAML configuration."""
             logger.error(f"Error pushing new version: {e}", exc_info=True)
             return None
 
-    async def _update_node_metadata(self, node_id: str, score_version_id: str) -> bool:
+    async def _update_node_metadata(self, node_id: str, score_version_id: str, parent_version_id: Optional[str] = None) -> bool:
         """
-        Update GraphNode metadata with scoreVersionId.
+        Update GraphNode metadata with scoreVersionId and parent_version_id.
 
         Args:
             node_id: ID of GraphNode to update
             score_version_id: ID of ScoreVersion to store in metadata
+            parent_version_id: Optional ID of the baseline/parent version used for comparison
 
         Returns:
             True if successful, False otherwise
@@ -619,13 +721,15 @@ START NOW: Use read_file first to see the current YAML configuration."""
                 except:
                     pass
 
-            # Add scoreVersionId
+            # Add scoreVersionId and parent_version_id
             metadata['scoreVersionId'] = score_version_id
+            if parent_version_id:
+                metadata['parent_version_id'] = parent_version_id
 
             # Update node
             node.update_content(metadata=metadata)
 
-            logger.info(f"✓ Updated node {node_id} with scoreVersionId: {score_version_id}")
+            logger.info(f"✓ Updated node {node_id} with scoreVersionId: {score_version_id}, parent: {parent_version_id}")
             return True
 
         except Exception as e:

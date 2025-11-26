@@ -279,67 +279,42 @@ class TestExecuteTestPhase(unittest.IsolatedAsyncioTestCase):
         mock_update.assert_called_once()
 
     async def test_create_evaluation_summary_with_correct_metrics(self):
-        """Test that _create_evaluation_summary correctly parses metrics list."""
+        """Test that _create_evaluation_summary returns structured JSON with metrics."""
         # Create a mock node with hypothesis
         node = self._create_mock_node('node-1', has_version=True)
 
-        # Mock LLM call and API key
-        with patch('langchain_openai.ChatOpenAI') as mock_llm_class, \
-             patch('os.getenv') as mock_getenv:
+        # Execute (no need to mock LLM - we now return structured data directly)
+        summary = await self.service._create_evaluation_summary(node, self.mock_eval_result)
 
-            # Mock API key to be present (prevents fallback in CI)
-            mock_getenv.return_value = 'sk-test-key-123'
+        # Verify: Summary is valid JSON
+        import json
+        summary_data = json.loads(summary)
 
-            mock_llm = Mock()
-            mock_llm_class.return_value = mock_llm
-
-            mock_response = Mock()
-            mock_response.content = "Test summary of evaluation results."
-            mock_llm.invoke.return_value = mock_response
-
-            # Execute
-            summary = await self.service._create_evaluation_summary(node, self.mock_eval_result)
-
-        # Verify: Summary was generated
-        self.assertEqual(summary, "Test summary of evaluation results.")
-
-        # Verify: LLM was called with correct data structure
-        mock_llm.invoke.assert_called_once()
-        call_args = mock_llm.invoke.call_args[0][0]
-
-        # Find the HumanMessage with the metrics
-        human_message = None
-        for msg in call_args:
-            if hasattr(msg, 'content') and 'Accuracy:' in msg.content:
-                human_message = msg.content
-                break
-
-        # Verify metrics were extracted correctly
-        self.assertIn('Accuracy: 64.0', human_message)
-        self.assertIn('AC1 Agreement: 45.2', human_message)  # The prompt says "AC1 Agreement"
+        # Verify: Contains expected fields
+        self.assertEqual(summary_data['hypothesis'], 'Test hypothesis for node node-1')
+        self.assertEqual(summary_data['score_version_id'], 'version-node-1')
+        self.assertEqual(summary_data['metrics']['accuracy'], 64.0)
+        self.assertEqual(summary_data['metrics']['ac1_agreement'], 45.2)
+        self.assertIn('confusion_matrix', summary_data)
+        self.assertIn('code_diff', summary_data)
 
     async def test_create_evaluation_summary_fallback(self):
         """Test that _create_evaluation_summary falls back gracefully on error."""
-        # Create a mock node
-        node = self._create_mock_node('node-1', has_version=True)
+        # Create a mock node with missing metadata to trigger an error path
+        node = Mock()
+        node.id = 'node-error'
+        node.metadata = None  # This will trigger exception handling
 
-        # Mock LLM to raise an error, but provide API key so it tries to call LLM
-        with patch('langchain_openai.ChatOpenAI') as mock_llm_class, \
-             patch('os.getenv') as mock_getenv:
+        # Create invalid eval_data to test error handling
+        invalid_eval_data = "not a dict"
 
-            # Mock API key to be present (so it attempts LLM call)
-            mock_getenv.return_value = 'sk-test-key-123'
+        # Execute
+        summary = await self.service._create_evaluation_summary(node, invalid_eval_data)
 
-            # Mock LLM to raise an error
-            mock_llm_class.side_effect = Exception("API error")
-
-            # Execute
-            summary = await self.service._create_evaluation_summary(node, self.mock_eval_result)
-
-        # Verify: Fallback summary was generated
-        self.assertIn('Evaluation complete', summary)
-        self.assertIn('64.0', summary)  # Accuracy
-        self.assertIn('45.2', summary)  # Alignment
+        # Verify: Fallback summary is valid JSON with error info
+        import json
+        summary_data = json.loads(summary)
+        self.assertIn('error', summary_data)
 
     @patch('plexus.dashboard.api.models.graph_node.GraphNode')
     async def test_no_hypothesis_nodes(self, mock_graphnode):

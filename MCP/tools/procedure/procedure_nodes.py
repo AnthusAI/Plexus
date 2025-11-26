@@ -46,7 +46,16 @@ def register_procedure_node_tools(server, procedure_context: Optional[Dict[str, 
                 - description: General description
                 - config: YAML or other configuration data
                 - created_by: Who/what created this node
-                Example: '{"hypothesis": "Test idea", "created_by": "agent"}'
+
+                IMPORTANT: When passing metadata_json:
+                1. The entire value must be a valid JSON string
+                2. Use \\u escapes for special characters (like apostrophes: \\u2019 instead of ')
+                3. Avoid newlines in strings - use spaces instead
+                4. Keep descriptions concise to avoid JSON parsing issues
+
+                Good example: '{"hypothesis": "Test immediate-window copay detection", "created_by": "agent", "description": "Add proximity rules for guarantee cues"}'
+
+                Bad example: '{"hypothesis": "Test\nidea", "description": "Uses 'quotes' and\nnewlines"}'
 
         Returns:
             JSON string with operation result and node details
@@ -79,7 +88,13 @@ def register_procedure_node_tools(server, procedure_context: Optional[Dict[str, 
                     if not isinstance(metadata_fields, dict):
                         return "Error: metadata_json must be a JSON object (dict)"
                 except json.JSONDecodeError as e:
-                    return f"Error: Invalid JSON in metadata_json: {e}"
+                    return (f"Error: Invalid JSON in metadata_json: {e}\n\n"
+                           f"HINT: Common issues:\n"
+                           f"1. Unescaped quotes or apostrophes in strings - use \\u2019 for apostrophes\n"
+                           f"2. Newlines in strings - replace with spaces\n"
+                           f"3. Control characters - remove or escape them\n"
+                           f"4. Long descriptions - keep them concise\n\n"
+                           f"Try simplifying your description and removing special characters.")
 
             # Get Plexus client from procedure context if available
             if procedure_context and 'client' in procedure_context:
@@ -130,18 +145,42 @@ def register_procedure_node_tools(server, procedure_context: Optional[Dict[str, 
                 
                 # Determine parent node
                 if not parent_node_id:
-                    # Use root node as parent - AI agents CANNOT create root nodes
-                    if not procedure.rootNodeId:
+                    # Try to use active_parent_node_id from context first (for round-based hypothesis generation)
+                    if procedure_context and 'active_parent_node_id' in procedure_context:
+                        parent_node_id = procedure_context['active_parent_node_id']
+                        logger.info(f"Using active parent node from context: {parent_node_id}")
+                    # Fall back to root node - AI agents CANNOT create root nodes
+                    elif not procedure.rootNodeId:
                         return "Error: Procedure has no root node. Root nodes must be created programmatically."
-                    parent_node_id = procedure.rootNodeId
-                
-                # Verify parent node exists
+                    else:
+                        parent_node_id = procedure.rootNodeId
+                        logger.info(f"Using root node as parent: {parent_node_id}")
+
+                # Verify parent node exists - if not, fall back to root
                 try:
                     parent_node_check = GraphNode.get_by_id(parent_node_id, client)
                     if not parent_node_check:
-                        return f"Error: Parent node {parent_node_id} not accessible"
+                        logger.warning(f"Parent node {parent_node_id} not found, falling back to root node")
+                        if not procedure.rootNodeId:
+                            return "Error: Procedure has no root node to fall back to"
+                        parent_node_id = procedure.rootNodeId
+                        # Verify root node exists
+                        parent_node_check = GraphNode.get_by_id(parent_node_id, client)
+                        if not parent_node_check:
+                            return f"Error: Root node {parent_node_id} not accessible"
+                        logger.info(f"Successfully fell back to root node: {parent_node_id}")
                 except Exception as e:
-                    return f"Error: Cannot verify parent node {parent_node_id}: {str(e)}"
+                    logger.warning(f"Cannot verify parent node {parent_node_id}: {e}, falling back to root")
+                    if not procedure.rootNodeId:
+                        return f"Error: Cannot verify parent node and no root node available: {str(e)}"
+                    parent_node_id = procedure.rootNodeId
+                    try:
+                        parent_node_check = GraphNode.get_by_id(parent_node_id, client)
+                        if not parent_node_check:
+                            return f"Error: Root node {parent_node_id} not accessible"
+                        logger.info(f"Successfully fell back to root node: {parent_node_id}")
+                    except Exception as e2:
+                        return f"Error: Cannot access root node {parent_node_id}: {str(e2)}"
                 
                 # Auto-generate node name if not provided
                 if not node_name or not node_name.strip():
