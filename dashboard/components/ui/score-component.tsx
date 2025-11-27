@@ -66,6 +66,7 @@ export interface ScoreVersion {
   isFeatured: boolean
   isChampion?: boolean
   note?: string
+  branch?: string // Branch name - null/undefined represents 'main'
   createdAt: string
   updatedAt: string
   user?: {
@@ -154,7 +155,9 @@ interface DetailContentProps {
   onToggleFeature?: (versionId: string) => void
   onPromoteToChampion?: (versionId: string) => void
   versionNote: string
+  versionBranch: string
   onNoteChange: (note: string) => void
+  onBranchChange: (branch: string) => void
   resetEditingCounter: number
   forceExpandHistory?: boolean
   exampleItems?: Array<{
@@ -438,7 +441,9 @@ const DetailContent = React.memo(({
   onToggleFeature,
   onPromoteToChampion,
   versionNote,
+  versionBranch,
   onNoteChange,
+  onBranchChange,
   resetEditingCounter,
   forceExpandHistory,
   exampleItems = [],
@@ -1320,37 +1325,51 @@ const DetailContent = React.memo(({
           
           {/* Save/Cancel buttons - only show when there are changes */}
           {(hasChanges || hasGuidelinesChanges) && (
-            <div className="flex items-center gap-3 p-4 bg-background">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setNewVersionNote('')
-                  setIsEditorFullscreen(false)
-                }}
-                disabled={isSavingGuidelines}
-                className="h-10"
-              >
-                Cancel
-              </Button>
-              <textarea
-                value={newVersionNote}
-                onChange={(e) => {
-                  setNewVersionNote(e.target.value)
-                  onNoteChange?.(e.target.value)
-                }}
-                placeholder="Please say what you changed and why..."
-                className="flex-1 px-3 py-2 rounded-md bg-background text-sm resize-none h-10 border border-muted
-                         placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                rows={1}
-              />
-              <Button
-                variant="default"
-                onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
-                disabled={isSavingGuidelines}
-                className="h-10"
-              >
-                {isSavingGuidelines ? 'Saving...' : 'Save'}
-              </Button>
+            <div className="flex flex-col gap-2 p-4 bg-background">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setNewVersionNote('')
+                    setIsEditorFullscreen(false)
+                  }}
+                  disabled={isSavingGuidelines}
+                  className="h-10"
+                >
+                  Cancel
+                </Button>
+                <textarea
+                  value={newVersionNote}
+                  onChange={(e) => {
+                    setNewVersionNote(e.target.value)
+                    onNoteChange?.(e.target.value)
+                  }}
+                  placeholder="Please say what you changed and why..."
+                  className="flex-1 px-3 py-2 rounded-md bg-background text-sm resize-none h-10 border border-muted
+                           placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  rows={1}
+                />
+                <Button
+                  variant="default"
+                  onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
+                  disabled={isSavingGuidelines}
+                  className="h-10"
+                >
+                  {isSavingGuidelines ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground shrink-0">Branch:</label>
+                <input
+                  type="text"
+                  value={versionBranch}
+                  onChange={(e) => onBranchChange?.(e.target.value)}
+                  placeholder="Leave empty for main branch"
+                  className="flex-1 px-3 py-1.5 rounded-md bg-background text-sm h-8 border border-muted
+                           placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <span className="text-xs text-muted-foreground">Create new branch or leave empty for main</span>
+              </div>
             </div>
           )}
         </div>
@@ -1361,35 +1380,49 @@ const DetailContent = React.memo(({
       {/* Unified Save/Cancel Bar - appears when there are changes */}
       {(hasChanges || hasGuidelinesChanges) && !isEditorFullscreen && (
         <div className="mt-3">
-          <div className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setNewVersionNote('')
-                onCancel?.()
-              }}
-              className="shrink-0 h-10"
-            >
-              Cancel
-            </Button>
-            <input
-              type="text"
-              value={newVersionNote}
-              onChange={(e) => {
-                setNewVersionNote(e.target.value)
-                onNoteChange(e.target.value)
-              }}
-              placeholder="Please say what you changed and why..."
-              className="flex-1 px-3 py-2 rounded-md bg-background text-sm h-10
-                       placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <Button
-              variant="default"
-              onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
-              className="shrink-0 h-10"
-            >
-              Save Changes
-            </Button>
+          <div className="flex flex-col gap-2 bg-muted/50 rounded-lg p-3">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setNewVersionNote('')
+                  onCancel?.()
+                }}
+                className="shrink-0 h-10"
+              >
+                Cancel
+              </Button>
+              <input
+                type="text"
+                value={newVersionNote}
+                onChange={(e) => {
+                  setNewVersionNote(e.target.value)
+                  onNoteChange(e.target.value)
+                }}
+                placeholder="Please say what you changed and why..."
+                className="flex-1 px-3 py-2 rounded-md bg-background text-sm h-10
+                         placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <Button
+                variant="default"
+                onClick={() => hasGuidelinesChanges ? onSaveGuidelines?.() : onSave?.()}
+                className="shrink-0 h-10"
+              >
+                Save Changes
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground shrink-0">Branch:</label>
+              <input
+                type="text"
+                value={versionBranch}
+                onChange={(e) => onBranchChange?.(e.target.value)}
+                placeholder="Leave empty for main branch"
+                className="flex-1 px-3 py-1.5 rounded-md bg-background text-sm h-8
+                         placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <span className="text-xs text-muted-foreground">Create new branch or leave empty for main</span>
+            </div>
           </div>
         </div>
       )}
@@ -1501,12 +1534,14 @@ export function ScoreComponent({
   const [guidelinesEditValue, setGuidelinesEditValue] = React.useState('')
   const [hasGuidelinesChanges, setHasGuidelinesChanges] = React.useState(false)
   const [isSavingGuidelines, setIsSavingGuidelines] = React.useState(false)
+  const [versionBranch, setVersionBranch] = React.useState('')
 
   // Version selection handler
   const handleVersionSelect = (version: ScoreVersion) => {
     setSelectedVersionId(version.id)
     setVersionNote(version.note || '')
-    
+    setVersionBranch(version.branch || '') // Default to current version's branch
+
     // Call parent's version select handler to update URL
     onVersionSelect?.(version.id)
     
@@ -1630,6 +1665,7 @@ export function ScoreComponent({
                   guidelines
                   isFeatured
                   note
+                  branch
                   createdAt
                   updatedAt
                 }
@@ -1890,6 +1926,7 @@ export function ScoreComponent({
   const handleCancel = () => {
     setEditedScore(score)
     setVersionNote('') // Reset note on cancel
+    setVersionBranch('') // Reset branch on cancel
     setHasChanges(false)
     setHasGuidelinesChanges(false) // Also reset guidelines changes
     setGuidelinesEditValue(editedScore.guidelines || '') // Reset guidelines to original value
@@ -2065,7 +2102,7 @@ export function ScoreComponent({
 
       
       const now = new Date().toISOString();
-      const versionPayload = {
+      const versionPayload: any = {
         scoreId: String(score.id),
         configuration: configurationYaml,
         guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
@@ -2074,6 +2111,11 @@ export function ScoreComponent({
         createdAt: now,
         updatedAt: now
       };
+
+      // Only include branch if it's not empty (empty = main branch)
+      if (versionBranch && versionBranch.trim() !== '') {
+        versionPayload.branch = versionBranch.trim();
+      }
 
       const createVersionResponse = await client.graphql({
         query: `
@@ -2085,6 +2127,7 @@ export function ScoreComponent({
               guidelines
               isFeatured
               note
+              branch
               createdAt
               updatedAt
             }
@@ -2146,6 +2189,7 @@ export function ScoreComponent({
       
       setHasChanges(false);
       setVersionNote('');
+      setVersionBranch(''); // Reset branch after save
       setForceExpandHistory(true); // Auto-expand version history after save
       
       // Call the parent's onSave callback if provided
@@ -2239,7 +2283,7 @@ export function ScoreComponent({
           {variant === 'grid' ? (
             <GridContent score={editedScore} isSelected={isSelected} />
           ) : (
-            <DetailContent 
+            <DetailContent
               score={editedScore}
               isFullWidth={isFullWidth}
               onToggleFullWidth={onToggleFullWidth}
@@ -2258,7 +2302,9 @@ export function ScoreComponent({
               onToggleFeature={handleToggleFeature}
               onPromoteToChampion={handlePromoteToChampion}
               versionNote={versionNote}
+              versionBranch={versionBranch}
               onNoteChange={handleNoteChange}
+              onBranchChange={setVersionBranch}
               resetEditingCounter={resetEditingCounter}
               forceExpandHistory={forceExpandHistory}
               exampleItems={exampleItems}

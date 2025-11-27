@@ -16,7 +16,6 @@ from plexus.cli.batch.operations import batch
 from plexus.cli.evaluation.evaluations import evaluate, evaluations
 from plexus.cli.prediction.predictions import predict
 from plexus.cli.analyze.analysis import analyze
-from plexus.cli.tuning.operations import tuning
 from plexus.cli.training.operations import train
 from plexus.cli.result.results import score_results, score_result, result, results
 from plexus.cli.report.reports import report
@@ -69,7 +68,6 @@ cli.add_command(batch)
 cli.add_command(evaluate)
 cli.add_command(predict)
 cli.add_command(analyze)
-cli.add_command(tuning)
 cli.add_command(train)
 cli.add_command(score_results)
 cli.add_command(score_result)
