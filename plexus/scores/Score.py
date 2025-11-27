@@ -328,16 +328,83 @@ class Score(ABC,
         """
         return os.path.join(self.report_directory_path(), file_name).replace(' ', '_')
 
+    class TrainingNotSupportedException(Exception):
+        """Raised when a Score class does not support training."""
+        def __init__(self, score_class_name: str):
+            self.score_class_name = score_class_name
+            super().__init__(
+                f"Score class '{score_class_name}' does not support training. "
+                f"Override train_model() to implement training for this Score."
+            )
+
+    @classmethod
+    def supports_training(cls) -> bool:
+        """
+        Check if this Score class supports training.
+
+        This class method checks whether train_model() has been overridden from the
+        base Score class. If train_model() has been overridden, the Score supports
+        training. If not, calling train_model() will raise TrainingNotSupportedException.
+
+        Returns
+        -------
+        bool
+            True if this Score class has overridden train_model(), False otherwise.
+
+        Examples
+        --------
+        Check if a Score class supports training:
+            >>> from plexus.scores.LangGraphScore import LangGraphScore
+            >>> from plexus.scores.BERTClassifier import BERTClassifier
+            >>> LangGraphScore.supports_training()
+            False
+            >>> BERTClassifier.supports_training()
+            True
+
+        Query all scores in a scorecard:
+            >>> for score_name, score_class in scorecard.score_registry.items():
+            ...     if score_class.supports_training():
+            ...         print(f"{score_name} needs training")
+        """
+        # Walk the MRO to find which class first defines train_model
+        for klass in cls.__mro__:
+            if 'train_model' in klass.__dict__:
+                # If the base Score class is the one defining it, training not supported
+                return klass.__name__ != 'Score'
+        return False
+
     def train_model(self):
         """
         Train the model on the training data.
 
+        By default, Scores do not support training (e.g., LLM-based inference scores,
+        rule-based scores, etc.). Subclasses that support training must override this
+        method to implement their training logic.
+
+        Raises
+        ------
+        TrainingNotSupportedException
+            If this Score class does not support training.
+
         Returns
         -------
         object
-            The trained model.
+            The trained model (for subclasses that override this method).
+
+        Examples
+        --------
+        Implementing training in a subclass:
+            class BERTClassifier(Score):
+                def train_model(self):
+                    # Load training data
+                    X_train, y_train = self.get_training_data()
+                    # Train the model
+                    self.model.fit(X_train, y_train)
+                    # Save the model
+                    self.save_model()
+                    return self.model
         """
-        pass
+        raise self.TrainingNotSupportedException(self.__class__.__name__)
 
     def predict_validation(self):
         """

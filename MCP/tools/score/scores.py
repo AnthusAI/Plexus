@@ -248,6 +248,7 @@ def register_score_tools(mcp: FastMCP):
                                     id
                                     createdAt
                                     note
+                                    branch
                                 }}
                             }}
                         }}
@@ -263,12 +264,13 @@ def register_score_tools(mcp: FastMCP):
                         score_data_with_versions = versions_response.get('getScore')
                         if score_data_with_versions:
                             all_versions = score_data_with_versions.get('versions', {}).get('items', [])
-                            # Format version list with just ID, timestamp, and note
+                            # Format version list with ID, timestamp, note, and branch
                             response["versions"] = [
                                 {
                                     "id": v.get('id'),
                                     "createdAt": v.get('createdAt'),
-                                    "note": v.get('note')
+                                    "note": v.get('note'),
+                                    "branch": v.get('branch')
                                 }
                                 for v in all_versions
                             ]
@@ -289,12 +291,12 @@ def register_score_tools(mcp: FastMCP):
                                 id
                                 configuration
                                 guidelines
-                                description
                                 createdAt
                                 updatedAt
                                 note
                                 isFeatured
                                 parentVersionId
+                                branch
                             }}
                         }}
                         """
@@ -305,18 +307,14 @@ def register_score_tools(mcp: FastMCP):
                             # Include code and guidelines from the version
                             response["code"] = version_data.get('configuration')
                             response["guidelines"] = version_data.get('guidelines')
-                            
-                            # Use version description if available, otherwise fall back to Score description
-                            version_description = version_data.get('description')
-                            if version_description:
-                                response["description"] = version_description
-                            else:
-                                response["description"] = score.get('description')
-                                
+
+                            # Description comes from Score, not ScoreVersion
+                            response["description"] = score.get('description')
+
                             # Explicitly show which version ID is being returned
                             response["targetVersionId"] = target_version_id
                             response["isChampionVersion"] = target_version_id == score.get('championVersionId')
-                            
+
                             # Add version details for the returned version
                             response["versionDetails"] = {
                                 "id": target_version_id,
@@ -325,6 +323,7 @@ def register_score_tools(mcp: FastMCP):
                                 "note": version_data.get('note'),
                                 "isFeatured": version_data.get('isFeatured'),
                                 "parentVersionId": version_data.get('parentVersionId'),
+                                "branch": version_data.get('branch'),
                                 "isChampion": target_version_id == score.get('championVersionId')
                             }
                             
@@ -622,18 +621,20 @@ def register_score_tools(mcp: FastMCP):
     async def plexus_score_push(
         scorecard_identifier: str,
         score_identifier: str,
-        version_note: Optional[str] = None
+        version_note: Optional[str] = None,
+        branch: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
         Pushes a score's local code and guidelines files to create a new version.
         Automatically detects which files have changed and pushes accordingly.
         Uses the reusable Score.push_code_and_guidelines() method for implementation.
-        
+
         Parameters:
         - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
         - score_identifier: Identifier for the score (ID, name, key, or external ID)
         - version_note: Optional note describing the changes made in this version
-        
+        - branch: Optional branch name for this version. If not provided or empty, version belongs to main branch.
+
         Returns:
         - Information about the pushed code/guidelines and new version
         """
@@ -773,48 +774,51 @@ def register_score_tools(mcp: FastMCP):
         code: Optional[str] = None,
         guidelines: Optional[str] = None,
         parent_version_id: Optional[str] = None,
-        version_note: Optional[str] = None
+        version_note: Optional[str] = None,
+        branch: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
         **RECOMMENDED TOOL** for most score updates. Intelligently updates a score's metadata and/or creates a new version with updated code/guidelines.
-        
+
         **When to use this tool:**
         - Most score updates (creating/updating YAML configurations)
         - Quick score modifications without local file management
         - When you want to specify a parent version for lineage control
-        
+        - Creating branches for experimental score variants
+
         **When to use pull/push instead:**
         - Complex multi-file workflows requiring local editing
         - Integration with external editors or version control
         - When you need to work with local files for extended periods
-        
+
         This tool can update:
         1. Score metadata (name, key, external_id, description, etc.) - updates the Score record directly
         2. Score version content (code YAML, guidelines) - creates a new ScoreVersion if content changed
-        
+
         The tool uses the same change detection logic as score push - it compares the provided
         code/guidelines against the parent version and only creates a new version if either has changed.
-        
+
         Parameters:
         - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
         - score_identifier: Identifier for the score (ID, name, key, or external ID)
-        
+
         Score Metadata Updates (updates Score record):
         - name: New display name for the score
-        - key: New unique key for the score  
+        - key: New unique key for the score
         - external_id: New external ID for the score
         - description: New description for the score
         - is_disabled: Whether the score should be disabled
         - ai_provider: New AI provider
         - ai_model: New AI model
         - order: New display order
-        
+
         ScoreVersion Updates (creates new version if content changed):
         - code: The new YAML code content for the score
         - guidelines: The new guidelines content for the score
         - parent_version_id: Optional parent version ID to compare against. If not provided, uses champion version.
         - version_note: Optional note describing the changes made in this version
-        
+        - branch: Optional branch name for this version. If not provided or empty, version belongs to main branch.
+
         Returns:
         - Information about what was updated (metadata and/or version), including dashboard URL
         """
@@ -1078,7 +1082,8 @@ def register_score_tools(mcp: FastMCP):
                         code_content=code,
                         guidelines=guidelines,
                         parent_version_id=comparison_version_id,
-                        note=version_note or "Updated via MCP server"
+                        note=version_note or "Updated via MCP server",
+                        branch=branch
                     )
                     
                     if result["success"]:
@@ -1632,14 +1637,15 @@ async def _create_version_from_code_with_parent(
     code_content: str,
     guidelines: Optional[str] = None,
     parent_version_id: Optional[str] = None,
-    note: Optional[str] = None
+    note: Optional[str] = None,
+    branch: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Enhanced version creation that compares against a specific parent version.
-    
+
     This function implements the same change detection logic as Score.create_version_from_code()
     but allows specifying a custom parent version for comparison instead of always using champion.
-    
+
     Args:
         score: Score instance
         client: API client
@@ -1647,7 +1653,8 @@ async def _create_version_from_code_with_parent(
         guidelines: Optional guidelines content as a string
         parent_version_id: Optional parent version ID to compare against and set as parent
         note: Optional version note
-        
+        branch: Optional branch name for this version
+
     Returns:
         Dict containing:
             - success: bool
@@ -1726,16 +1733,20 @@ async def _create_version_from_code_with_parent(
             'note': note or 'Updated via MCP score update tool',
             'isFeatured': True  # Mark as featured by default
         }
-        
+
         # Add guidelines if provided
         if guidelines:
             stripped_guidelines = guidelines.strip()
             if stripped_guidelines:
                 version_input['guidelines'] = stripped_guidelines
-        
+
         # Include parent version if available
         if parent_version_id:
             version_input['parentVersionId'] = parent_version_id
+
+        # Add branch if provided (empty string means main branch, so we only add if non-empty)
+        if branch and branch.strip():
+            version_input['branch'] = branch.strip()
         
         result = client.execute(mutation, {'input': version_input})
         

@@ -850,13 +850,6 @@ class LangGraphScore(Score, LangChainUser):
         Save the model.
         """
 
-    def train_model(self):
-        """
-        Placeholder method to satisfy the base class requirement.
-        This validator doesn't require traditional training.
-        """
-        pass
-
     def predict_validation(self):
         """
         Placeholder method to satisfy the base class requirement.

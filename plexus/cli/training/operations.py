@@ -7,6 +7,7 @@ import copy
 from plexus.CustomLogging import logging
 from plexus.cli.shared.console import console
 from plexus.Registries import scorecard_registry
+from plexus.training import TrainingDispatcher
 
 from rich.console import Console
 from rich.table import Table
@@ -19,71 +20,153 @@ from rich.pretty import pprint
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', help='The name of the score to train.')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
-def train(scorecard_name, score_name, fresh):
+@click.option('--training-type', type=click.Choice(['ml', 'llm-finetune']), help='Override training type (ml or llm-finetune).')
+@click.option('--target', type=click.Choice(['local', 'sagemaker']), help='Override training target (local or sagemaker).')
+@click.option('--epochs', type=int, help='Number of training epochs (ML training only).')
+@click.option('--batch-size', type=int, help='Batch size (ML training only).')
+@click.option('--learning-rate', type=float, help='Learning rate (ML training only).')
+@click.option('--maximum-number', type=int, help='Total examples to generate (LLM fine-tuning only).')
+@click.option('--train-ratio', type=float, help='Training/validation split ratio (LLM fine-tuning only).')
+@click.option('--threads', type=int, help='Parallel processing threads (LLM fine-tuning only).')
+@click.option('--clean-existing', is_flag=True, help='Remove existing output files first (LLM fine-tuning only).')
+@click.option('--verbose', is_flag=True, help='Enable verbose output.')
+def train(scorecard_name, score_name, fresh, training_type, target,
+          epochs, batch_size, learning_rate,
+          maximum_number, train_ratio, threads, clean_existing, verbose):
     """
-    This command will handle dispatching to the :func:`plexus.cli.TrainingCommands.train_score` function
-    for each score in the scorecard if a scorecard is specified, or for a
-    single score if a score is specified.
+    Unified training command for ML models and LLM fine-tuning.
+
+    Auto-detects training type from Score configuration, with CLI overrides available.
+    Supports multiple training workflows through Trainer abstraction.
     """
     logging.info(f"Training Scorecard [magenta1][b]{scorecard_name}[/b][/magenta1]...")
 
-    plexus.Scorecard.load_and_register_scorecards('scorecards/')
-    scorecard_class = scorecard_registry.get(scorecard_name)
-
-    if scorecard_class is None:
-        logging.error(f"Scorecard with name '{scorecard_name}' not found.")
-        return
-
-    logging.info(f"Found registered Scorecard named [magenta1][b]{scorecard_class.name}[/b][/magenta1] implemented in Python class [magenta1][b]{scorecard_class.__name__}[/b][/magenta1]")
+    # Build extra parameters from CLI flags
+    extra_params = {}
+    if epochs is not None:
+        extra_params['epochs'] = epochs
+    if batch_size is not None:
+        extra_params['batch_size'] = batch_size
+    if learning_rate is not None:
+        extra_params['learning_rate'] = learning_rate
+    if maximum_number is not None:
+        extra_params['maximum_number'] = maximum_number
+    if train_ratio is not None:
+        extra_params['train_ratio'] = train_ratio
+    if threads is not None:
+        extra_params['threads'] = threads
+    if clean_existing:
+        extra_params['clean_existing'] = clean_existing
+    if verbose:
+        extra_params['verbose'] = verbose
 
     if score_name:
-        train_score(score_name, scorecard_class, fresh)
+        # Train single score using TrainingDispatcher
+        result = train_score_with_dispatcher(
+            scorecard_name, score_name, fresh,
+            training_type, target, extra_params
+        )
+
+        # Display results
+        _display_training_result(result, score_name)
     else:
-        logging.info(f"No score name provided. Training all scores for Scorecard [magenta1][b]{scorecard_class.name}[/b][/magenta1]...")
-        for score_name in scorecard_class.scores.keys():
+        # Train all scores in scorecard
+        logging.info(f"No score name provided. Training all scores for Scorecard [magenta1][b]{scorecard_name}[/b][/magenta1]...")
+
+        # Load scorecard to get score names
+        plexus.Scorecard.load_and_register_scorecards('scorecards/')
+        scorecard_class = scorecard_registry.get(scorecard_name)
+
+        if not scorecard_class:
+            logging.error(f"Scorecard '{scorecard_name}' not found.")
+            return
+
+        # Get score names (handle both dict and list formats)
+        if isinstance(scorecard_class.scores, dict):
+            score_names = list(scorecard_class.scores.keys())
+        else:
+            score_names = [s.get('name', 'Unknown') for s in scorecard_class.scores if isinstance(s, dict)]
+
+        # Train each score
+        results = []
+        for name in score_names:
             try:
-                train_score(score_name, scorecard_class)
+                result = train_score_with_dispatcher(
+                    scorecard_name, name, fresh,
+                    training_type, target, extra_params
+                )
+                results.append((name, result))
             except Exception as e:
-                logging.error(f"Failed to train score '{score_name}': {str(e)}")
+                logging.error(f"Failed to train score '{name}': {str(e)}")
 
-def train_score(score_name, scorecard_class, fresh):
+        # Display summary
+        _display_batch_training_summary(results)
+
+
+def train_score_with_dispatcher(scorecard_name: str, score_name: str,
+                                 fresh: bool,
+                                 training_type_override: str,
+                                 target_override: str,
+                                 extra_params: dict):
     """
-    This function will train and evaluate a single score.
+    Train a single score using TrainingDispatcher.
+
+    Args:
+        scorecard_name: Name of the scorecard
+        score_name: Name of the score
+        fresh: Pull fresh data from data lake
+        training_type_override: Optional training type override
+        target_override: Optional target override
+        extra_params: Additional parameters from CLI flags
+
+    Returns:
+        TrainingResult
     """
-    logging.info(f"Training Score [magenta1][b]{score_name}[/b][/magenta1]...")
-    score_to_train_configuration = scorecard_class.scores[score_name]
+    dispatcher = TrainingDispatcher(
+        scorecard_name=scorecard_name,
+        score_name=score_name,
+        training_type_override=training_type_override,
+        target_override=target_override,
+        fresh=fresh,
+        **extra_params
+    )
 
-    if score_name not in scorecard_class.scores:
-        logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name}'.")
-        return
+    return dispatcher.dispatch()
 
-    logging.info(f"Score Configuration: {rich.pretty.pretty_repr(score_to_train_configuration)}")
 
-    # Score class instance setup
+def _display_training_result(result, score_name: str):
+    """Display training result in Rich format."""
+    if result.success:
+        logging.info(f"\n[green]✓[/green] Training completed successfully for [magenta1][b]{score_name}[/b][/magenta1]")
 
-    score_class_name = score_to_train_configuration['class']
-    score_module_path = f'plexus.scores.{score_class_name}'
-    score_module = importlib.import_module(score_module_path)
-    score_class = getattr(score_module, score_class_name)
+        # Display metrics
+        if result.metrics:
+            logging.info("\nMetrics:")
+            for key, value in result.metrics.items():
+                logging.info(f"  {key}: {value}")
 
-    if not isinstance(score_class, type):
-        logging.error(f"{score_class_name} is not a class.")
-        return
+        # Display artifacts
+        if result.artifacts:
+            logging.info("\nArtifacts:")
+            for artifact_type, location in result.artifacts.items():
+                logging.info(f"  {artifact_type}: {location}")
+    else:
+        logging.error(f"\n[red]✗[/red] Training failed for [magenta1][b]{score_name}[/b][/magenta1]")
+        logging.error(f"Error: {result.error}")
 
-    # Add the scorecard name and score name to the parameters.
-    score_to_train_configuration['scorecard_name'] = scorecard_class.name
-    score_to_train_configuration['score_name'] = score_name
-    score_instance = score_class(**score_to_train_configuration)
 
-    # Use the new instance to log its own configuration.
-    score_instance.record_configuration(score_to_train_configuration)
+def _display_batch_training_summary(results: list):
+    """Display summary of batch training results."""
+    successful = sum(1 for _, r in results if r.success)
+    total = len(results)
 
-    # Data processing
-    score_instance.load_data(data=score_to_train_configuration['data'], fresh=fresh)
-    score_instance.process_data()
+    logging.info(f"\n{'='*80}")
+    logging.info(f"Batch Training Summary: {successful}/{total} successful")
+    logging.info(f"{'='*80}")
 
-    # Training
-    score_instance.train_model()
+    for score_name, result in results:
+        status = "[green]✓[/green]" if result.success else "[red]✗[/red]"
+        logging.info(f"{status} {score_name}: {result.training_type}")
 
-    # Evaluation
-    score_instance.evaluate_model()
+        if not result.success:
+            logging.error(f"    Error: {result.error}")

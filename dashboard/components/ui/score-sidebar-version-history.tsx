@@ -5,6 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Crown, Clock, PanelLeftOpen, PanelLeftClose } from 'lucide-react'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreVersion } from "./score-component"
+import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface ScoreSidebarVersionHistoryProps {
   versions?: ScoreVersion[]
@@ -25,6 +33,20 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
 }) => {
   // State for sidebar width (in pixels)
   const [sidebarWidth, setSidebarWidth] = React.useState(320) // Default 320px (w-80)
+
+  // State for branch filter
+  const [selectedBranchFilter, setSelectedBranchFilter] = React.useState<string>("all")
+
+  // Extract unique branches from versions
+  const uniqueBranches = React.useMemo(() => {
+    const branches = new Set<string>()
+    versions.forEach(v => {
+      if (v.branch) {
+        branches.add(v.branch)
+      }
+    })
+    return Array.from(branches).sort()
+  }, [versions])
 
   // Drag resize handler
   const handleDragStart = React.useCallback((e: React.MouseEvent) => {
@@ -70,7 +92,19 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
   }, [isSidebarCollapsed, sidebarWidth])
 
   const championVersion = versions.find(v => v.id === championVersionId)
-  const sortedVersions = [...versions].sort((a, b) => 
+
+  // Filter versions based on selected branch
+  const filteredVersions = React.useMemo(() => {
+    if (selectedBranchFilter === "all") {
+      return versions
+    } else if (selectedBranchFilter === "main") {
+      return versions.filter(v => !v.branch) // null/undefined = main
+    } else {
+      return versions.filter(v => v.branch === selectedBranchFilter)
+    }
+  }, [versions, selectedBranchFilter])
+
+  const sortedVersions = [...filteredVersions].sort((a, b) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
 
@@ -80,22 +114,39 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
       style={!isSidebarCollapsed ? { width: `${sidebarWidth}px` } : {}}
     >
       {/* Sidebar Header */}
-      <div className="p-3 border-b border-border flex items-center justify-between">
-        {!isSidebarCollapsed && (
-          <h3 className="text-sm font-medium">Version History ({versions?.length || 0})</h3>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleSidebar}
-          className="h-8 w-8 p-0"
-        >
-          {isSidebarCollapsed ? (
-            <PanelLeftOpen className="h-4 w-4" />
-          ) : (
-            <PanelLeftClose className="h-4 w-4" />
+      <div className="p-3 border-b border-border">
+        <div className="flex items-center justify-between mb-2">
+          {!isSidebarCollapsed && (
+            <h3 className="text-sm font-medium">Version History ({versions?.length || 0})</h3>
           )}
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onToggleSidebar}
+            className="h-8 w-8 p-0"
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+        {/* Branch Filter Dropdown */}
+        {!isSidebarCollapsed && (
+          <Select value={selectedBranchFilter} onValueChange={setSelectedBranchFilter}>
+            <SelectTrigger className="w-full h-8 text-xs">
+              <SelectValue placeholder="Filter by branch" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Branches</SelectItem>
+              <SelectItem value="main">main</SelectItem>
+              {uniqueBranches.map(branch => (
+                <SelectItem key={branch} value={branch}>{branch}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
       
       {/* Version List */}
@@ -113,8 +164,15 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <Crown className="h-4 w-4 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium truncate">
-                    Champion Version
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="text-xs font-medium truncate">
+                      Champion Version
+                    </div>
+                    {championVersion.branch && (
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
+                        {championVersion.branch}
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground truncate">
                     {championVersion.note || `Version ${championVersion.id.slice(0, 8)}`}
@@ -139,8 +197,15 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <Clock className="h-4 w-4 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium truncate">
-                    {version.note || `Version ${version.id.slice(0, 8)}`}
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="text-xs font-medium truncate">
+                      {version.note || `Version ${version.id.slice(0, 8)}`}
+                    </div>
+                    {version.branch && (
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
+                        {version.branch}
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     <Timestamp time={version.createdAt} variant="relative" showIcon={false} className="text-xs" />
