@@ -91,8 +91,6 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
     }
   }, [isSidebarCollapsed, sidebarWidth])
 
-  const championVersion = versions.find(v => v.id === championVersionId)
-
   // Filter versions based on selected branch
   const filteredVersions = React.useMemo(() => {
     if (selectedBranchFilter === "all") {
@@ -103,6 +101,9 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
       return versions.filter(v => v.branch === selectedBranchFilter)
     }
   }, [versions, selectedBranchFilter])
+
+  // Find champion version from filtered versions (respects branch filter)
+  const championVersion = filteredVersions.find(v => v.id === championVersionId)
 
   const sortedVersions = [...filteredVersions].sort((a, b) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
