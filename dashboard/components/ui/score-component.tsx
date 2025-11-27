@@ -1397,7 +1397,7 @@ const DetailContent = React.memo(({
                 value={newVersionNote}
                 onChange={(e) => {
                   setNewVersionNote(e.target.value)
-                  onNoteChange(e.target.value)
+                  onNoteChange?.(e.target.value)
                 }}
                 placeholder="Please say what you changed and why..."
                 className="flex-1 px-3 py-2 rounded-md bg-background text-sm h-10
