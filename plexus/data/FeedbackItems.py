@@ -25,6 +25,7 @@ from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
+from plexus.training.utils import normalize_name_to_key
 
 logger = logging.getLogger(__name__)
 
@@ -1076,7 +1077,7 @@ class FeedbackItems(DataCache):
                     identifiers_dict = {}
                     for identifier in client_identifiers:
                         if isinstance(identifier, dict) and 'name' in identifier and 'value' in identifier:
-                            name = str(identifier['name']).lower().replace(' ', '_')
+                            name = normalize_name_to_key(str(identifier['name']))
                             identifiers_dict[name] = str(identifier['value'])
                     
                     # Upsert the Item with extracted identifiers to ensure it has proper Identifier records

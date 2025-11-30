@@ -481,8 +481,8 @@ def lookup_data_source(client: PlexusDashboardClient, name: Optional[str] = None
     
     elif key:
         query = """
-        query ListDataSourcesByKey($key: String!) {
-            listDataSourcesByKey(key: $key) {
+        query ListDataSourceByKey($key: String!) {
+            listDataSourceByKey(key: $key) {
                 items {
                     id
                     name
@@ -496,9 +496,9 @@ def lookup_data_source(client: PlexusDashboardClient, name: Optional[str] = None
         }
         """
         result = client.execute(query, {'key': key})
-        if not result or 'listDataSourcesByKey' not in result or not result['listDataSourcesByKey']['items']:
+        if not result or 'listDataSourceByKey' not in result or not result['listDataSourceByKey']['items']:
             raise ValueError(f"DataSource with key {key} not found")
-        return result['listDataSourcesByKey']['items'][0]
+        return result['listDataSourceByKey']['items'][0]
     
     else:  # name
         query = """
@@ -521,20 +521,24 @@ def lookup_data_source(client: PlexusDashboardClient, name: Optional[str] = None
             raise ValueError(f"DataSource with name {name} not found")
         return result['listDataSourcesByName']['items'][0]
 
-def get_latest_dataset_for_data_source(client: PlexusDashboardClient, data_source_id: str) -> dict:
+async def get_latest_dataset_for_data_source(client: PlexusDashboardClient, data_source_id: str) -> dict:
     """Get the most recent DataSet for a DataSource by finding its current version"""
-    
-    # First, get the DataSource and its current version
-    data_source = lookup_data_source(client, id=data_source_id)
-    current_version_id = data_source.get('currentVersionId')
-    
+    from plexus.cli.shared.identifier_resolution import resolve_data_source
+
+    # First, get the DataSource and its current version using shared DRY function
+    data_source = await resolve_data_source(client, data_source_id)
+    if not data_source:
+        raise ValueError(f"DataSource not found: {data_source_id}")
+
+    current_version_id = data_source.currentVersionId
+
     if not current_version_id:
         raise ValueError(f"DataSource {data_source_id} has no current version")
     
     
     # Now get datasets for this version
     query = """
-    query ListDataSetsForDataSourceVersion($dataSourceVersionId: ID!) {
+    query ListDataSetsForDataSourceVersion($dataSourceVersionId: String) {
         listDataSets(filter: {dataSourceVersionId: {eq: $dataSourceVersionId}}) {
             items {
                 id
@@ -1263,9 +1267,7 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--visualize', is_flag=True, default=False, help='Generate PNG visualization of LangGraph scores')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 @click.option('--dry-run', is_flag=True, help='Skip database operations (for testing API loading)')
-@click.option('--data-source-name', default=None, type=str, help='Name of the cloud data source to use (overrides score data config)')
-@click.option('--data-source-key', default=None, type=str, help='Key of the cloud data source to use (overrides score data config)')
-@click.option('--data-source-id', default=None, type=str, help='ID of the cloud data source to use (overrides score data config)')
+@click.option('--data', default=None, type=str, help='DataSource identifier (ID, key, or name) to override the score\'s data configuration. Uses latest dataset from the source.')
 @click.option('--dataset-id', default=None, type=str, help='Specific dataset ID to use (overrides score data config)')
 @click.option('--allow-no-labels', is_flag=True, default=False, help='Allow evaluation without ground truth labels (creates score results and distribution metrics only)')
 def accuracy(
@@ -1285,9 +1287,7 @@ def accuracy(
     visualize: bool,
     task_id: Optional[str],
     dry_run: bool,
-    data_source_name: Optional[str],
-    data_source_key: Optional[str],
-    data_source_id: Optional[str],
+    data: Optional[str],
     dataset_id: Optional[str],
     allow_no_labels: bool
     ):
@@ -1812,8 +1812,8 @@ def accuracy(
                 logging.info(f"Using fallback: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             
             # Check if any cloud dataset options are provided
-            use_cloud_dataset = any([data_source_name, data_source_key, data_source_id, dataset_id])
-            
+            use_cloud_dataset = any([data, dataset_id])
+
             if use_cloud_dataset:
                 # Load samples from cloud dataset
                 try:
@@ -1821,14 +1821,12 @@ def accuracy(
                         logging.info(f"Using specific dataset ID: {dataset_id}")
                         cloud_dataset = get_dataset_by_id(client, dataset_id)
                     else:
-                        # Look up data source and get latest dataset
-                        data_source = lookup_data_source(
-                            client, 
-                            name=data_source_name, 
-                            key=data_source_key, 
-                            id=data_source_id
-                        )
-                        cloud_dataset = get_latest_dataset_for_data_source(client, data_source['id'])
+                        # Look up data source and get latest dataset using shared DRY function
+                        from plexus.cli.shared.identifier_resolution import resolve_data_source
+                        data_source = await resolve_data_source(client, data)
+                        if not data_source:
+                            raise ValueError(f"DataSource not found: {data}")
+                        cloud_dataset = await get_latest_dataset_for_data_source(client, data_source.id)
                     
                     logging.info(f"Using cloud dataset: {cloud_dataset['name']} (ID: {cloud_dataset['id']})")
                     
@@ -3156,9 +3154,10 @@ def feedback(
                 
                 # Create a minimal scorecard structure with just this score
                 # Include key and id if available from the resolved scorecard
+                from plexus.training.utils import normalize_name_to_key
                 scorecard_data = {
                     'name': scorecard,
-                    'key': scorecard.lower().replace(' ', '_').replace('-', '_'),
+                    'key': normalize_name_to_key(scorecard),
                     'id': scorecard_id,  # Use the resolved scorecard ID
                     'scores': [score_data]
                 }
@@ -3204,12 +3203,13 @@ def feedback(
                 
                 # Create scorecard instance using the API data approach
                 console.print("[dim]Creating scorecard instance from modified YAML...[/dim]")
+                from plexus.training.utils import normalize_name_to_key
                 scorecard_obj = Scorecard.create_instance_from_api_data(
                     scorecard_id=scorecard_id,
                     api_data={
                         'id': scorecard_id,
                         'name': scorecard,
-                        'key': temp_scorecard_data.get('key', scorecard.lower().replace(' ', '_').replace('-', '_')),
+                        'key': temp_scorecard_data.get('key', normalize_name_to_key(scorecard)),
                         'description': f'Scorecard for feedback evaluation with FeedbackItems dataset'
                     },
                     scores_config=temp_scorecard_data.get('scores', [])

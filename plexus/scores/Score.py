@@ -304,10 +304,23 @@ class Score(ABC,
 
     def report_directory_path(self):
         import os
+        from plexus.training.utils import normalize_name_to_key
+
         base_dir = os.getenv('PLEXUS_REPORTS_DIR', './tmp/reports')
-        return f"{base_dir}/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
+
+        # Use key-based normalization for filesystem-safe paths
+        scorecard_key = normalize_name_to_key(self.parameters.scorecard_name)
+        score_key = normalize_name_to_key(self.parameters.name)
+
+        return f"{base_dir}/{scorecard_key}/{score_key}/"
     def model_directory_path(self):
-        return f"./models/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
+        from plexus.training.utils import normalize_name_to_key
+
+        # Use key-based normalization for filesystem-safe paths
+        scorecard_key = normalize_name_to_key(self.parameters.scorecard_name)
+        score_key = normalize_name_to_key(self.parameters.name)
+
+        return f"./models/{scorecard_key}/{score_key}/"
 
     @ensure_report_directory_exists
     def report_file_name(self, file_name):
@@ -324,9 +337,12 @@ class Score(ABC,
         Returns
         -------
         str
-            The full path to the report file with spaces replaced by underscores.
+            The full path to the report file with filesystem-safe naming.
         """
-        return os.path.join(self.report_directory_path(), file_name).replace(' ', '_')
+        from plexus.training.utils import normalize_name_to_key
+        # Normalize the filename while the directory path is already normalized
+        safe_filename = normalize_name_to_key(file_name)
+        return os.path.join(self.report_directory_path(), safe_filename)
 
     class TrainingNotSupportedException(Exception):
         """Raised when a Score class does not support training."""
@@ -405,6 +421,155 @@ class Score(ABC,
                     return self.model
         """
         raise self.TrainingNotSupportedException(self.__class__.__name__)
+
+    class ProvisioningNotSupportedException(Exception):
+        """Raised when a Score class does not support endpoint provisioning."""
+        def __init__(self, score_class_name: str):
+            self.score_class_name = score_class_name
+            super().__init__(
+                f"Score class '{score_class_name}' does not support endpoint provisioning. "
+                f"Override provision_endpoint() to implement provisioning for this Score."
+            )
+
+    @classmethod
+    def supports_provisioning(cls) -> bool:
+        """
+        Check if this Score class supports endpoint provisioning.
+
+        This class method checks whether provision_endpoint() has been overridden from the
+        base Score class. If provision_endpoint() has been overridden, the Score supports
+        provisioning. If not, calling provision_endpoint() will raise ProvisioningNotSupportedException.
+
+        Returns
+        -------
+        bool
+            True if this Score class has overridden provision_endpoint(), False otherwise.
+
+        Examples
+        --------
+        Check if a Score class supports provisioning:
+            >>> from plexus.scores.LangGraphScore import LangGraphScore
+            >>> from plexus.scores.BERTClassifier import BERTClassifier
+            >>> LangGraphScore.supports_provisioning()
+            False
+            >>> BERTClassifier.supports_provisioning()
+            True
+        """
+        # Walk the MRO to find which class first defines provision_endpoint
+        for klass in cls.__mro__:
+            if 'provision_endpoint' in klass.__dict__:
+                # If the base Score class is the one defining it, provisioning not supported
+                return klass.__name__ != 'Score'
+        return False
+
+    def provision_endpoint(self, **kwargs):
+        """
+        Provision an inference endpoint for this trained model.
+
+        By default, Scores do not support provisioning (e.g., rule-based scores,
+        computational scores that don't need deployed endpoints). Subclasses that
+        support provisioning must override this method to implement their provisioning logic.
+
+        Different Score types may provision differently:
+        - BERTClassifier: Deploy to SageMaker Serverless Inference
+        - LLM-based scores: May provision via API configuration
+        - Local models: May set up local serving infrastructure
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Provisioning parameters specific to the Score type. Common parameters:
+            - deployment_type: str (e.g., 'serverless', 'realtime')
+            - memory_mb: int (memory allocation)
+            - max_concurrency: int (concurrent invocations)
+            - model_s3_uri: str (location of trained model)
+
+        Raises
+        ------
+        ProvisioningNotSupportedException
+            If this Score class does not support provisioning.
+
+        Returns
+        -------
+        dict
+            Dictionary containing provisioning result with keys:
+            - success: bool
+            - endpoint_name: str
+            - status: str
+            - message: str
+
+        Examples
+        --------
+        Implementing provisioning in a subclass:
+            class BERTClassifier(Score):
+                def provision_endpoint(self, deployment_type='serverless', **kwargs):
+                    # Deploy to SageMaker
+                    result = self._deploy_to_sagemaker(
+                        deployment_type=deployment_type,
+                        **kwargs
+                    )
+                    return result
+        """
+        raise self.ProvisioningNotSupportedException(self.__class__.__name__)
+
+    def test_endpoint(self, endpoint_name: str, **kwargs):
+        """
+        Test a provisioned endpoint to verify it's working correctly.
+
+        By default, Scores do not support endpoint testing. Subclasses that support
+        provisioning should also override this method to implement appropriate testing.
+
+        Different Score types test differently:
+        - BERTClassifier: Send Lorem Ipsum text and verify we get a prediction
+        - LLM-based scores: Send test prompt and verify response format
+        - Entity extraction: Send sample text and verify entity structure
+
+        Parameters
+        ----------
+        endpoint_name : str
+            Name of the provisioned endpoint to test
+        **kwargs : dict
+            Testing parameters specific to the Score type
+
+        Returns
+        -------
+        dict
+            Dictionary containing test result with keys:
+            - success: bool
+            - message: str
+            - prediction: any (optional, the prediction received)
+            - latency_ms: float (optional, response time)
+
+        Examples
+        --------
+        Implementing testing in a subclass:
+            class BERTClassifier(Score):
+                def test_endpoint(self, endpoint_name: str, **kwargs):
+                    # Send test text to endpoint
+                    test_text = "Lorem ipsum dolor sit amet"
+                    prediction = self._invoke_sagemaker_endpoint(
+                        endpoint_name=endpoint_name,
+                        text=test_text
+                    )
+                    return {
+                        'success': True,
+                        'message': 'Endpoint responding correctly',
+                        'prediction': prediction
+                    }
+        """
+        # Default: no-op if provisioning not supported
+        if not self.supports_provisioning():
+            return {
+                'success': True,
+                'message': f'Score {self.__class__.__name__} does not require endpoint testing'
+            }
+
+        # If provisioning is supported but testing not implemented, warn
+        logging.warning(f"Score {self.__class__.__name__} supports provisioning but test_endpoint() not overridden")
+        return {
+            'success': True,
+            'message': 'Endpoint testing not implemented for this Score type'
+        }
 
     def predict_validation(self):
         """
@@ -779,10 +944,10 @@ class Score(ABC,
             
             if not isinstance(config, dict):
                 raise ValueError(f"Invalid configuration format for score '{score_name}'")
-            
+
             # Create Score instance from the configuration
-            score_instance = cls._create_score_from_config(config)
-            
+            score_instance = cls._create_score_from_config(config, scorecard_name=scorecard_structure.get('name'))
+
             loading_mode = "yaml-only" if yaml_only else ("api-with-cache" if use_cache else "api-no-cache")
             logging.info(f"Successfully loaded score '{score_name}' (mode: {loading_mode})")
             return score_instance
@@ -812,11 +977,11 @@ class Score(ABC,
             
             yaml_parser = YAML(typ='safe')
             config = yaml_parser.load(config_yaml)
-            
+
             if not isinstance(config, dict):
                 raise ValueError(f"Invalid configuration format in {yaml_path}")
-            
-            score_instance = cls._create_score_from_config(config)
+
+            score_instance = cls._create_score_from_config(config, scorecard_name=scorecard_identifier)
             logging.info(f"Successfully loaded score '{score_name}' from {yaml_path}")
             return score_instance
             
@@ -872,26 +1037,31 @@ class Score(ABC,
             logging.warning(f"Failed to cache configuration to {yaml_path}: {str(e)}")
     
     @classmethod
-    def _create_score_from_config(cls, config: dict):
+    def _create_score_from_config(cls, config: dict, scorecard_name: Optional[str] = None):
         """Create a Score instance from configuration dictionary."""
         import importlib
-        
+
         # Get the score class
         class_name = config.get('class')
         if not class_name:
             raise ValueError("No 'class' field found in score configuration")
-        
+
         try:
             # Import the score class
             module = importlib.import_module('plexus.scores')
             score_class = getattr(module, class_name)
-            
+
             # Create instance with parameters from config
             parameters = {k: v for k, v in config.items() if k != 'class'}
+
+            # Inject scorecard_name if provided and not already in config
+            if scorecard_name and 'scorecard_name' not in parameters:
+                parameters['scorecard_name'] = scorecard_name
+
             score_instance = score_class(**parameters)
-            
+
             return score_instance
-            
+
         except Exception as e:
             raise ValueError(f"Error creating score instance from config: {str(e)}") from e
 

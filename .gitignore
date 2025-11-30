@@ -18,5 +18,8 @@ plexus/scores/reports/Test_scorecard/None/configuration.json
 score_results/
 infrastructure/cdk.out/
 infrastructure/build/
+infrastructure/models/
+infrastructure/scorecards/
 fine-tuning/dataset/
 dashboard/public/brands
+/models/

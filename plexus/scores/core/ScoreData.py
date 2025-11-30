@@ -86,6 +86,14 @@ class ScoreData:
         return self.dataframe
 
     def _load_data_cache(self):
+        if self.parameters.data is None:
+            raise ValueError(
+                f"No data configuration found for score '{self.parameters.name}'. "
+                f"Either:\n"
+                f"  1. Add a 'data:' section to the score YAML configuration, OR\n"
+                f"  2. Use the --data flag to specify a data source (e.g., --data 'data-source-name')"
+            )
+
         data_cache_class_path = self.parameters.data['class']
         
         # Check if the provided class path includes a module or is just the class name

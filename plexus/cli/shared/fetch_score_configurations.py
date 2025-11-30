@@ -182,13 +182,19 @@ def fetch_score_configurations(
                 
                 # Get the YAML file path
                 yaml_path = get_score_yaml_path(scorecard_name, score_name)
-                
+
                 # Write to file with proper formatting
                 with open(yaml_path, 'w') as f:
                     yaml.dump(ordered_config, f)
-                
-                # Store the configuration in memory
-                configurations[score_id] = config_yaml
+
+                # Convert ordered_config back to YAML string for storage
+                import io
+                stream = io.StringIO()
+                yaml.dump(ordered_config, stream)
+                updated_config_yaml = stream.getvalue()
+
+                # Store the UPDATED configuration in memory (with champion version)
+                configurations[score_id] = updated_config_yaml
                 
                 logging.info(f"==== CONFIGURATION SAVED ====")
                 logging.info(f"Score: {score_name}")

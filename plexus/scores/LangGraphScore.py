@@ -778,11 +778,14 @@ class LangGraphScore(Score, LangChainUser):
         """
         from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
         import os
-        
-        # Clean up the output path - replace spaces with underscores
+        from plexus.training.utils import normalize_name_to_key
+
+        # Clean up the output path with filesystem-safe naming
         output_dir = os.path.dirname(output_path)
         filename = os.path.basename(output_path)
-        clean_filename = filename.replace(' ', '_')
+        # Preserve the file extension while normalizing the base name
+        name_part, ext = os.path.splitext(filename)
+        clean_filename = normalize_name_to_key(name_part) + ext
         output_path = os.path.join(output_dir, clean_filename)
         
         logging.info("Getting workflow graph...")

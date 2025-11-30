@@ -40,9 +40,11 @@ def test_report_directory_creation(tmp_path):
     assert report_directory.exists()
 
 def test_report_file_name():
+    from plexus.training.utils import normalize_name_to_key
     score = ConcreteScore(scorecard_name="Test scorecard", score_name="Test score")
     report_file = score.report_file_name("test_file.txt")
-    expected_path = "./reports/Test_scorecard/Test_score/test_file.txt".replace(' ', '_')
+    # Now uses hyphen-based normalization instead of underscores
+    expected_path = f"./reports/{normalize_name_to_key('Test scorecard')}/{normalize_name_to_key('Test score')}/{normalize_name_to_key('test_file.txt')}"
     assert report_file == expected_path
 
 def test_record_configuration():
@@ -55,11 +57,13 @@ def test_record_configuration():
     assert recorded_config == configuration
 
 def test_report_file_name(tmp_path):
+    from plexus.training.utils import normalize_name_to_key
     score = ConcreteScore(scorecard_name="Test scorecard", score_name="Test score")
     report_directory = tmp_path / "reports" / "Test_scorecard" / "Test_score"
     score.report_directory_path = lambda: str(report_directory)
     report_file = score.report_file_name("explicit_test_file.txt")
-    expected_path = str(report_directory / "explicit_test_file.txt").replace(' ', '_')
+    # Now uses hyphen-based normalization for the filename
+    expected_path = str(report_directory / normalize_name_to_key("explicit_test_file.txt"))
     assert report_file == expected_path
     assert report_directory.exists()
     

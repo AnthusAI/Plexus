@@ -18,20 +18,141 @@ from langchain_anthropic import ChatAnthropic
 logger = logging.getLogger(__name__)
 
 
-def get_output_dir(scorecard_name: str, score_name: str, subsampled: bool = False, max_tokens: Optional[int] = None) -> str:
+def normalize_name_to_key(name: str) -> str:
     """
-    Get the output directory path for training files.
+    Normalize a display name to a filesystem-safe key.
+
+    Converts name to lowercase and replaces runs of one or more non-word
+    characters with hyphens.
 
     Args:
-        scorecard_name: Name of the scorecard
-        score_name: Name of the score
+        name: Display name to normalize (e.g., "A Test Scorecard v 1.0")
+
+    Returns:
+        Normalized key (e.g., "a-test-scorecard-v-1-0")
+
+    Examples:
+        >>> normalize_name_to_key("A Test Scorecard v 1.0")
+        'a-test-scorecard-v-1-0'
+        >>> normalize_name_to_key("Randall Reilly v1.0")
+        'randall-reilly-v1-0'
+        >>> normalize_name_to_key("SelectQuote HCS Medium-Risk")
+        'selectquote-hcs-medium-risk'
+    """
+    # Handle None input
+    if name is None:
+        return None
+
+    # Lowercase the name
+    normalized = name.lower()
+
+    # Replace runs of one or more non-word characters with a single hyphen
+    # \W matches any non-word character (not a-z, A-Z, 0-9, or _)
+    normalized = re.sub(r'\W+', '-', normalized)
+
+    # Remove leading/trailing hyphens
+    normalized = normalized.strip('-')
+
+    return normalized
+
+
+def get_scorecard_key(scorecard_config: Optional[Dict[str, Any]] = None,
+                      scorecard_name: Optional[str] = None) -> str:
+    """
+    Get the key for a scorecard, preferring explicit 'key' field or normalizing the name.
+
+    Args:
+        scorecard_config: Scorecard configuration dict (may contain 'key' field)
+        scorecard_name: Scorecard display name (fallback if no config or no key in config)
+
+    Returns:
+        Scorecard key suitable for filesystem paths
+
+    Raises:
+        ValueError: If neither config nor name provided
+    """
+    # Try to get key from config first
+    if scorecard_config and isinstance(scorecard_config, dict):
+        if 'key' in scorecard_config:
+            return scorecard_config['key']
+        if 'name' in scorecard_config:
+            return normalize_name_to_key(scorecard_config['name'])
+
+    # Fallback to provided name
+    if scorecard_name:
+        return normalize_name_to_key(scorecard_name)
+
+    raise ValueError("Must provide either scorecard_config with name/key or scorecard_name")
+
+
+def get_score_key(score_config: Dict[str, Any]) -> str:
+    """
+    Get the key for a score, preferring explicit 'key' field or normalizing the name.
+
+    Args:
+        score_config: Score configuration dict (may contain 'key' and 'name' fields)
+
+    Returns:
+        Score key suitable for filesystem paths
+
+    Raises:
+        ValueError: If score_config doesn't have 'key' or 'name'
+    """
+    if 'key' in score_config:
+        return score_config['key']
+
+    if 'name' in score_config:
+        return normalize_name_to_key(score_config['name'])
+
+    raise ValueError("score_config must have either 'key' or 'name' field")
+
+
+def get_output_dir(scorecard_name: Optional[str] = None,
+                   score_name: Optional[str] = None,
+                   scorecard_config: Optional[Dict[str, Any]] = None,
+                   score_config: Optional[Dict[str, Any]] = None,
+                   subsampled: bool = False,
+                   max_tokens: Optional[int] = None) -> str:
+    """
+    Get the output directory path for training files using filesystem-safe keys.
+
+    Prefers using explicit 'key' fields from configs, otherwise normalizes names.
+    This ensures paths are filesystem-safe without spaces or special characters.
+
+    Args:
+        scorecard_name: DEPRECATED - Use scorecard_config instead
+        score_name: DEPRECATED - Use score_config instead
+        scorecard_config: Scorecard configuration dict (contains 'key' or 'name')
+        score_config: Score configuration dict (contains 'key' or 'name')
         subsampled: Whether this is a subsampled directory
         max_tokens: Maximum tokens (for subsampled directories)
 
     Returns:
-        Directory path string
+        Directory path string using filesystem-safe keys
+
+    Examples:
+        >>> get_output_dir(score_config={'key': 'my-score'}, scorecard_config={'key': 'my-scorecard'})
+        'tuning/my-scorecard/my-score'
+        >>> get_output_dir(score_config={'name': 'Test Score'}, scorecard_config={'name': 'Test Scorecard'})
+        'tuning/test-scorecard/test-score'
     """
-    base_dir = f"tuning/{scorecard_name}/{score_name}"
+    # Get scorecard key (prefer config, fallback to name)
+    if scorecard_config:
+        scorecard_key = get_scorecard_key(scorecard_config=scorecard_config)
+    elif scorecard_name:
+        scorecard_key = get_scorecard_key(scorecard_name=scorecard_name)
+    else:
+        raise ValueError("Must provide either scorecard_config or scorecard_name")
+
+    # Get score key (prefer config, fallback to name)
+    if score_config:
+        score_key = get_score_key(score_config)
+    elif score_name:
+        score_key = normalize_name_to_key(score_name)
+    else:
+        raise ValueError("Must provide either score_config or score_name")
+
+    base_dir = f"tuning/{scorecard_key}/{score_key}"
     if subsampled and max_tokens:
         return f"{base_dir}/{max_tokens}_tokens"
     return base_dir
