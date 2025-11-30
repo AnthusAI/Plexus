@@ -20,6 +20,7 @@ from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
 from stacks.metrics_aggregation_stack import MetricsAggregationStack
 from stacks.command_worker_stack import CommandWorkerStack
 from stacks.code_deploy_stack import CodeDeployStack
+from stacks.ml_training_stack import MLTrainingStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 
 
@@ -302,6 +303,15 @@ class DeploymentStage(cdk.Stage):
             environment=environment,
             ec2_role=command_worker_stack.ec2_role,
             stack_name=f"plexus-code-deploy-{environment}",
+            env=kwargs.get("env")
+        )
+
+        # Deploy ML Training stack (S3 bucket and IAM roles for model training)
+        MLTrainingStack(
+            self,
+            "MLTraining",
+            environment=environment,
+            stack_name=f"plexus-ml-training-{environment}",
             env=kwargs.get("env")
         )
 

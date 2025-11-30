@@ -82,8 +82,8 @@ class LLMFineTuneTrainer(Trainer):
         """Return training type identifier."""
         return "llm-finetune"
 
-    def get_target(self) -> Optional[str]:
-        """Return target platform (not applicable for data generation)."""
+    def get_platform(self) -> Optional[str]:
+        """Return training platform (not applicable for data generation)."""
         return None
 
     def validate(self):
@@ -138,8 +138,8 @@ class LLMFineTuneTrainer(Trainer):
         # Clean existing files if requested
         if self.clean_existing:
             output_dir = get_output_dir(
-                self.scorecard_class.name,
-                self.score_config.get('name')
+                scorecard_name=self.scorecard_name,
+                score_config=self.score_config
             )
             if os.path.exists(output_dir):
                 for file in os.listdir(output_dir):
@@ -356,8 +356,8 @@ class LLMFineTuneTrainer(Trainer):
             Dictionary with paths to training and validation files
         """
         output_dir = get_output_dir(
-            self.scorecard_class.name,
-            self.score_config.get('name')
+            scorecard_name=self.scorecard_name,
+            score_config=self.score_config
         )
         os.makedirs(output_dir, exist_ok=True)
 

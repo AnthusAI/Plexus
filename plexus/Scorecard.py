@@ -356,8 +356,21 @@ class Scorecard:
             score_info['scorecard_name'] = scorecard_properties['name']
             if 'class' in score_info:
                 class_name = score_info['class']
+                # Try to get the class from plexus.scores module first
                 module = importlib.import_module('plexus.scores')
-                score_class = getattr(module, class_name)
+                if hasattr(module, class_name):
+                    score_class = getattr(module, class_name)
+                else:
+                    # If not in __init__.py, try importing directly from the class file
+                    try:
+                        class_module = importlib.import_module(f'plexus.scores.{class_name}')
+                        score_class = getattr(class_module, class_name)
+                    except (ImportError, AttributeError) as e:
+                        raise ImportError(
+                            f"Could not import Score class '{class_name}'. "
+                            f"Make sure the class exists in plexus/scores/{class_name}.py "
+                            f"or is imported in plexus/scores/__init__.py. Error: {e}"
+                        )
                 scorecard_class.score_registry.register(
                     cls=score_class,
                     properties=score_info,

@@ -5,4 +5,5 @@ Each should override the parameters to define whatever parameters it needs, and 
 """
 from .DataCache import DataCache
 from .AWSDataLakeCache import AWSDataLakeCache
+from .DatasetCache import DatasetCache
 from .FeedbackItems import FeedbackItems

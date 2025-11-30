@@ -28,6 +28,7 @@ from plexus.cli.scorecard.scorecards import scorecards, scorecard
 from plexus.cli.record_count.counting import count
 from plexus.cli.metrics.commands import metrics_group
 from plexus.cli.procedure.procedures import procedure
+from plexus.cli.provisioning.provision import provision
 
 # Define OrderCommands class for command ordering
 class OrderCommands(click.Group):
@@ -85,6 +86,7 @@ cli.add_command(count)
 cli.add_command(metrics_group)
 cli.add_command(dataset)
 cli.add_command(procedure)
+cli.add_command(provision)
 
 def main():
     """

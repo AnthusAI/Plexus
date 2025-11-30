@@ -57,6 +57,7 @@ class ConfigLoader:
         'aws.storage.datasets_bucket': 'AMPLIFY_STORAGE_DATASETS_BUCKET_NAME',
         'aws.storage.task_attachments_bucket': 'AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME',
         'aws.storage.score_result_attachments_bucket': 'AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME',
+        'aws.storage.training_bucket': 'PLEXUS_S3_BUCKET',
         
         # Data Lake
         'aws.data_lake.database_name': 'PLEXUS_TRAINING_DATA_LAKE_DATABASE_NAME',

@@ -898,11 +898,13 @@ class Evaluation:
             except ValueError as e:
                 self.logging.info(f"Could not get score instance for report folder: {e}")
                 # Fallback to default report folder structure
-                scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
-                score_name = self.subset_of_score_names[0].replace(' ', '_')
+                from plexus.training.utils import normalize_name_to_key
+                scorecard_name = normalize_name_to_key(self.scorecard.name) if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else normalize_name_to_key(str(self.scorecard_name))
+                score_name = normalize_name_to_key(self.subset_of_score_names[0])
                 report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
         else:
-            scorecard_name = self.scorecard.name.replace(' ', '_')
+            from plexus.training.utils import normalize_name_to_key
+            scorecard_name = normalize_name_to_key(self.scorecard.name)
             report_folder_path = f"./score_results/{scorecard_name}/combined"
 
         # Ensure the report folder exists
@@ -1382,18 +1384,20 @@ class Evaluation:
             asyncio.create_task(process_text(row, idx))
             for idx, (_, row) in enumerate(selected_sample_rows.iterrows())
         ]
-        
-        # Wait for all tasks to complete
-        results = []
-        for task in asyncio.as_completed(tasks):
-            try:
-                result = await task
-                if result:
-                    results.append(result)
-            except Exception as e:
-                logging.error(f"Error in task for {score_name}: {e}")
-        
-        return results
+
+        # Wait for all tasks to complete in parallel
+        try:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Filter out None values and exceptions
+            valid_results = [r for r in results if r is not None and not isinstance(r, Exception)]
+            # Log any exceptions
+            for r in results:
+                if isinstance(r, Exception):
+                    logging.error(f"Error in task for {score_name}: {r}")
+            return valid_results
+        except Exception as e:
+            logging.error(f"Error gathering results for {score_name}: {e}")
+            return []
 
     async def maybe_start_metrics_task(self, score_name: str, is_final_result: bool = False):
         """Start a metrics computation task if one isn't running, or if this is the final result"""
@@ -3691,17 +3695,19 @@ class AccuracyEvaluation(Evaluation):
                     except ValueError as e:
                         if "not found" in str(e):
                             # Use default report folder when scorecard not found in registry
+                            from plexus.training.utils import normalize_name_to_key
                             # Get scorecard name - it's a method for instances, class attribute for classes
                             scorecard_name_raw = self.scorecard.name() if callable(self.scorecard.name) else self.scorecard.name
-                            scorecard_name = scorecard_name_raw.replace(' ', '_')
-                            score_name = self.subset_of_score_names[0].replace(' ', '_')
+                            scorecard_name = normalize_name_to_key(scorecard_name_raw)
+                            score_name = normalize_name_to_key(self.subset_of_score_names[0])
                             report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
                         else:
                             raise
                 else:
+                    from plexus.training.utils import normalize_name_to_key
                     # Get scorecard name - it's a method for instances, class attribute for classes
                     scorecard_name_raw = self.scorecard.name() if callable(self.scorecard.name) else self.scorecard.name
-                    scorecard_name = scorecard_name_raw.replace(' ', '_')
+                    scorecard_name = normalize_name_to_key(scorecard_name_raw)
                     report_folder_path = f"./score_results/{scorecard_name}/combined"
 
                 # Ensure the report folder exists

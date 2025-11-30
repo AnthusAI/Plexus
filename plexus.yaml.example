@@ -2,6 +2,11 @@
 # This file demonstrates the YAML configuration structure for Plexus.
 # Copy this file to `.plexus/config.yaml` in your project directory or to `~/.plexus/config.yaml`
 # and modify the values as needed.
+#
+# Note on Training vs. Deployment:
+# - training.platform: Where to train models (local or sagemaker)
+# - training.deployment_target: Where to deploy for inference (local, sagemaker_serverless, sagemaker_realtime)
+# These are independent - you can train locally and deploy to SageMaker, or vice versa.
 
 # Environment and Debug Settings
 environment: development  # development, staging, production
@@ -34,6 +39,7 @@ aws:
     score_result_attachments_bucket: "amplify-your-app-scoreresultattachmentsbucket-uniqueid"
     datasets_bucket: "amplify-your-app-datasourcesbucket-uniqueid"
     task_attachments_bucket: "amplify-your-app-taskattachmentsbucket-uniqueid"
+    training_bucket: "plexus-development-training"  # For ML model training and artifacts
   
   # Data Lake Configuration
   data_lake:

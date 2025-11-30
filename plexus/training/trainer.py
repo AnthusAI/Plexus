@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
 
+from plexus.training.utils import get_scorecard_key, get_score_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,7 @@ class TrainingResult:
     Attributes:
         success: Whether training completed successfully
         training_type: Type of training performed ('ml', 'llm-finetune', etc.)
-        target: Target platform ('local', 'sagemaker', etc.) or None
+        platform: Training platform ('local', 'sagemaker', etc.) or None
         metrics: Dictionary of training metrics (accuracy, loss, etc.)
         artifacts: Dictionary mapping artifact types to their locations
         error: Error message if training failed
@@ -31,7 +33,7 @@ class TrainingResult:
     """
     success: bool
     training_type: str
-    target: Optional[str] = None
+    platform: Optional[str] = None
     metrics: Dict[str, Any] = field(default_factory=dict)
     artifacts: Dict[str, str] = field(default_factory=dict)
     error: Optional[str] = None
@@ -65,20 +67,24 @@ class Trainer(ABC):
         - get_target(): Return target platform or None
     """
 
-    def __init__(self, scorecard_class, score_config: dict,
-                 fresh: bool = False, **kwargs):
+    def __init__(self, scorecard_class, scorecard_name: str, score_config: dict,
+                 fresh: bool = False, use_yaml: bool = False, **kwargs):
         """
         Initialize trainer.
 
         Args:
-            scorecard_class: The scorecard class containing the score
+            scorecard_class: The scorecard class or instance containing the score
+            scorecard_name: The name of the scorecard (as string)
             score_config: Score configuration dictionary from YAML
             fresh: Whether to pull fresh data (bypass cache)
+            use_yaml: Whether loading from local YAML files (enables version pushing)
             **kwargs: Additional parameters specific to trainer type
         """
         self.scorecard_class = scorecard_class
+        self.scorecard_name = scorecard_name
         self.score_config = score_config
         self.fresh = fresh
+        self.use_yaml = use_yaml
         self.extra_params = kwargs
         self.score_instance = None
 
@@ -95,8 +101,8 @@ class Trainer(ABC):
         try:
             logger.info(f"Starting training for score '{self.score_config.get('name', 'Unknown')}'")
             logger.info(f"Training type: {self.get_training_type()}")
-            if self.get_target():
-                logger.info(f"Target: {self.get_target()}")
+            if self.get_platform():
+                logger.info(f"Platform: {self.get_platform()}")
 
             # Step 1: Validate prerequisites
             logger.info("Validating prerequisites...")
@@ -127,11 +133,11 @@ class Trainer(ABC):
             return TrainingResult(
                 success=True,
                 training_type=self.get_training_type(),
-                target=self.get_target(),
+                platform=self.get_platform(),
                 metrics=metrics,
                 artifacts=artifacts,
                 metadata={
-                    'scorecard_name': self.scorecard_class.name,
+                    'scorecard_name': self.scorecard_name,
                     'score_name': self.score_config.get('name'),
                     'fresh': self.fresh
                 }
@@ -142,12 +148,12 @@ class Trainer(ABC):
             return TrainingResult(
                 success=False,
                 training_type=self.get_training_type(),
-                target=self.get_target(),
+                platform=self.get_platform(),
                 metrics={},
                 artifacts={},
                 error=str(e),
                 metadata={
-                    'scorecard_name': self.scorecard_class.name,
+                    'scorecard_name': self.scorecard_name,
                     'score_name': self.score_config.get('name'),
                     'fresh': self.fresh
                 }
@@ -180,13 +186,31 @@ class Trainer(ABC):
         # Add scorecard and score names to configuration
         # (required by many Score classes)
         config_with_names = self.score_config.copy()
-        config_with_names['scorecard_name'] = self.scorecard_class.name
+        config_with_names['scorecard_name'] = self.scorecard_name
         config_with_names['score_name'] = self.score_config.get('name', score_class_name)
 
         # Instantiate the Score
         score_instance = score_class(**config_with_names)
 
         return score_instance
+
+    def get_scorecard_key(self) -> str:
+        """
+        Get the filesystem-safe key for the scorecard.
+
+        Returns:
+            Scorecard key (from 'key' field or normalized name)
+        """
+        return get_scorecard_key(scorecard_name=self.scorecard_name)
+
+    def get_score_key(self) -> str:
+        """
+        Get the filesystem-safe key for the score.
+
+        Returns:
+            Score key (from 'key' field or normalized name)
+        """
+        return get_score_key(self.score_config)
 
     @abstractmethod
     def validate(self):
@@ -263,11 +287,11 @@ class Trainer(ABC):
         pass
 
     @abstractmethod
-    def get_target(self) -> Optional[str]:
+    def get_platform(self) -> Optional[str]:
         """
-        Return the target platform.
+        Return the training platform.
 
         Returns:
-            Target: 'local', 'sagemaker', etc., or None if not applicable
+            Platform: 'local', 'sagemaker', etc., or None if not applicable
         """
         pass
