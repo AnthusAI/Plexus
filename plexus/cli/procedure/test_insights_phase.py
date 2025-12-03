@@ -342,7 +342,8 @@ async def test_get_existing_experiment_nodes_with_insights(
 
     all_nodes = [root_node] + mock_hypothesis_nodes + [mock_insights_node]
 
-    with patch('plexus.cli.procedure.service.GraphNode.list_by_procedure', return_value=all_nodes):
+    with patch('plexus.cli.procedure.service.GraphNode.list_by_procedure', return_value=all_nodes), \
+         patch('plexus.dashboard.api.models.procedure.Procedure.get_by_id', return_value=Mock(id='test-procedure-id')):
         result = await procedure_service._get_existing_experiment_nodes('test-procedure-id')
 
         # Verify insights are included
@@ -372,7 +373,8 @@ async def test_get_existing_experiment_nodes_first_round(
     root_node.is_root = True
     root_node.parentNodeId = None  # Root nodes have no parent
 
-    with patch('plexus.cli.procedure.service.GraphNode.list_by_procedure', return_value=[root_node]):
+    with patch('plexus.cli.procedure.service.GraphNode.list_by_procedure', return_value=[root_node]), \
+         patch('plexus.dashboard.api.models.procedure.Procedure.get_by_id', return_value=Mock(id='test-procedure-id')):
         result = await procedure_service._get_existing_experiment_nodes('test-procedure-id')
 
         # Verify first round message
