@@ -5,18 +5,21 @@ This provides shared pipeline logic for both staging and production environments
 """
 
 import aws_cdk as cdk
+import os
+import boto3
 from aws_cdk import (
     Stack,
     pipelines as pipelines,
     aws_codebuild as codebuild,
     aws_ecr as ecr,
     aws_iam as iam,
-    SecretValue,
 )
 from constructs import Construct
 from stacks.scoring_worker_stack import ScoringWorkerStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
 from stacks.metrics_aggregation_stack import MetricsAggregationStack
+from stacks.command_worker_stack import CommandWorkerStack
+from stacks.code_deploy_stack import CodeDeployStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 
 
@@ -51,11 +54,27 @@ class BasePipelineStack(Stack):
         """
         super().__init__(scope, construct_id, **kwargs)
 
-        # Use GitHub token from Secrets Manager
-        source = pipelines.CodePipelineSource.git_hub(
+        # Fetch GitHub CodeConnection ARN from SSM Parameter Store at synth time
+        # This avoids storing the ARN in the repository
+        # Create the parameter with: aws ssm put-parameter --name /plexus/github-connection-arn --value "arn:aws:..." --type String
+        ssm = boto3.client('ssm', region_name=kwargs.get('env').region if kwargs.get('env') else 'us-west-2')
+        try:
+            response = ssm.get_parameter(Name='/plexus/github-connection-arn')
+            connection_arn = response['Parameter']['Value']
+        except Exception as e:
+            raise ValueError(
+                f"Failed to fetch GitHub connection ARN from SSM Parameter Store: {e}\n"
+                "Create it with: aws ssm put-parameter --name /plexus/github-connection-arn "
+                "--value 'arn:aws:codeconnections:us-west-2:ACCOUNT:connection/ID' --type String"
+            )
+
+        # Use CodeConnection for GitHub source (no automatic webhook triggers)
+        # Pipeline will only run when manually triggered (e.g., by GitHub Actions)
+        source = pipelines.CodePipelineSource.connection(
             f"{github_owner}/{github_repo}",
             branch,
-            authentication=SecretValue.secrets_manager("github-token")
+            connection_arn=connection_arn,
+            trigger_on_push=False  # Disable automatic triggers - GitHub Actions will trigger it
         )
 
         # Reference ECR repository (created in separate EcrRepositoriesStack)
@@ -88,7 +107,14 @@ class BasePipelineStack(Stack):
                 build_environment=codebuild.BuildEnvironment(
                     build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                     privileged=True,  # Required for Docker builds
-                )
+                ),
+                role_policy=[
+                    # Grant permission to read GitHub connection ARN from SSM
+                    iam.PolicyStatement(
+                        actions=["ssm:GetParameter"],
+                        resources=[f"arn:aws:ssm:{kwargs.get('env').region if kwargs.get('env') else 'us-west-2'}:{kwargs.get('env').account if kwargs.get('env') else '*'}:parameter/plexus/github-connection-arn"]
+                    )
+                ]
             ),
             docker_enabled_for_synth=True,  # Enable Docker for the synth step
         )
@@ -150,10 +176,57 @@ class BasePipelineStack(Stack):
             env=kwargs.get("env")
         )
 
-        # Add deployment stage with Docker build as a pre-step
+        # Create CodeDeploy step to deploy code to EC2 after infrastructure is deployed
+        deploy_to_ec2_step = pipelines.CodeBuildStep(
+            "DeployCodeToEC2",
+            input=source,
+            commands=[
+                # Create deployment bundle with code and deployment artifacts
+                "zip -r deployment.zip . -x '*.git*' -x '*node_modules*' -x '*.venv*' -x '*__pycache__*' -x 'infrastructure/cdk.out/*'",
+                "mkdir -p deployment_package",
+                "unzip -q deployment.zip -d deployment_package",
+                "cp -r infrastructure/deployment_artifacts/* deployment_package/",
+                "cd deployment_package && zip -r ../final_deployment.zip . && cd ..",
+                # Upload to S3 (using a consistent key that gets overwritten)
+                f"aws s3 cp final_deployment.zip s3://plexus-{environment}-code-deployments/latest.zip",
+                # Trigger CodeDeploy deployment
+                f"aws deploy create-deployment --application-name plexus-code-deploy-{environment}-app --deployment-group-name plexus-code-deploy-{environment}-group --s3-location bucket=plexus-{environment}-code-deployments,key=latest.zip,bundleType=zip --description 'Deployed from infrastructure pipeline'"
+            ],
+            build_environment=codebuild.BuildEnvironment(
+                build_image=codebuild.LinuxBuildImage.STANDARD_7_0
+            ),
+            role_policy_statements=[
+                # Grant permissions to trigger CodeDeploy
+                iam.PolicyStatement(
+                    actions=[
+                        "codedeploy:*"
+                    ],
+                    resources=["*"]
+                ),
+                # Grant permissions to upload to S3
+                iam.PolicyStatement(
+                    actions=[
+                        "s3:PutObject",
+                        "s3:GetObject"
+                    ],
+                    resources=[f"arn:aws:s3:::plexus-{environment}-code-deployments/*"]
+                ),
+                # Grant permissions to create S3 bucket if it doesn't exist
+                iam.PolicyStatement(
+                    actions=[
+                        "s3:CreateBucket",
+                        "s3:ListBucket"
+                    ],
+                    resources=[f"arn:aws:s3:::plexus-{environment}-code-deployments"]
+                )
+            ]
+        )
+
+        # Add deployment stage with Docker build as pre-step and EC2 deployment as post-step
         pipeline.add_stage(
             deployment_stage,
-            pre=[docker_build_step]  # Build Docker image before deploying
+            pre=[docker_build_step],  # Build Docker image before deploying infrastructure
+            post=[deploy_to_ec2_step]  # Deploy code to EC2 after infrastructure is deployed
         )
 
 
@@ -210,6 +283,25 @@ class DeploymentStage(cdk.Stage):
             "MetricsAggregation",
             environment=environment,
             stack_name=f"plexus-metrics-aggregation-{environment}",
+            env=kwargs.get("env")
+        )
+
+        # Deploy command worker stack (manages EC2 command worker configuration)
+        command_worker_stack = CommandWorkerStack(
+            self,
+            "CommandWorker",
+            environment=environment,
+            stack_name=f"plexus-command-worker-{environment}",
+            env=kwargs.get("env")
+        )
+
+        # Deploy CodeDeploy stack (manages code deployments to EC2)
+        self.code_deploy_stack = CodeDeployStack(
+            self,
+            "CodeDeploy",
+            environment=environment,
+            ec2_role=command_worker_stack.ec2_role,
+            stack_name=f"plexus-code-deploy-{environment}",
             env=kwargs.get("env")
         )
 
