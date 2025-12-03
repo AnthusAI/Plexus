@@ -54,19 +54,19 @@ const BeforeAfterGauges: React.FC<BeforeAfterGaugesProps> = ({
           showTicks={variant === 'detail'}
           backgroundColor={backgroundColor}
         />
-        <div 
+        <div
           className="absolute left-1/2 -translate-x-1/2 text-xs text-muted-foreground whitespace-nowrap"
           style={{
             bottom: variant === 'detail'
-              ? 'max(-30px, calc(-32px + 18%))'
+              ? 'max(-50px, calc(-52px + 18%))'
               : variant === 'bare'
-              ? 'max(-30px, calc(-38px + 24%))'
-              : 'max(-30px, calc(-38px + 24%))'
+              ? 'max(-50px, calc(-58px + 24%))'
+              : 'max(-50px, calc(-58px + 24%))'
           }}
         >
-          {before !== undefined ? `${before}%` : ''} 
-          {arrowCharacter} 
-          {after !== undefined ? `${after}%` : ''}
+          {before !== undefined ? `${Number(before).toFixed(1)}%` : ''}{' '}
+          {arrowCharacter}{' '}
+          {after !== undefined ? `${Number(after).toFixed(1)}%` : ''}
         </div>
       </div>
     </div>

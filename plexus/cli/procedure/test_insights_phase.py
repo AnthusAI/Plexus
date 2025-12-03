@@ -338,6 +338,7 @@ async def test_get_existing_experiment_nodes_with_insights(
     root_node = Mock(spec=GraphNode)
     root_node.id = "root-id"
     root_node.is_root = True
+    root_node.parentNodeId = None  # Root nodes have no parent
 
     all_nodes = [root_node] + mock_hypothesis_nodes + [mock_insights_node]
 
@@ -369,6 +370,7 @@ async def test_get_existing_experiment_nodes_first_round(
     root_node = Mock(spec=GraphNode)
     root_node.id = "root-id"
     root_node.is_root = True
+    root_node.parentNodeId = None  # Root nodes have no parent
 
     with patch('plexus.cli.procedure.service.GraphNode.list_by_procedure', return_value=[root_node]):
         result = await procedure_service._get_existing_experiment_nodes('test-procedure-id')

@@ -17,6 +17,9 @@ import { Badge } from "@/components/ui/badge"
 import { Timestamp } from "./ui/timestamp"
 import { toast } from "sonner"
 import { observeGraphNodeUpdates } from "@/utils/subscriptions"
+import NodeMetricsGauges from "./NodeMetricsGauges"
+import ReactMarkdown from 'react-markdown'
+import Link from 'next/link'
 
 const client = generateClient<Schema>()
 
@@ -24,9 +27,11 @@ type GraphNode = Schema['GraphNode']['type']
 
 interface GraphNodesListProps {
   procedureId: string
+  scorecardId?: string
+  scoreId?: string
 }
 
-const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
+const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId, scorecardId, scoreId }) => {
   const [nodes, setNodes] = useState<GraphNode[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -163,7 +168,7 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
   // Helper function to parse and render node metadata
   const renderNodeMetadata = (node: GraphNode) => {
     let parsedMetadata: any = {}
-    
+
     try {
       if (typeof node.metadata === 'string') {
         parsedMetadata = JSON.parse(node.metadata)
@@ -189,32 +194,104 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
       )
     }
 
-    // Extract code for the top metadata section
-    const { code, ...otherFields } = parsedMetadata
-
     // Helper function to format field names
     const formatFieldName = (key: string) => {
       return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
     }
 
+    // Helper function to check if field has content
+    const hasContent = (value: any) => {
+      return value !== null && value !== undefined && value !== ''
+    }
+
+    // Helper function to check if string is JSON
+    const tryParseJSON = (str: string): any | null => {
+      try {
+        return JSON.parse(str)
+      } catch {
+        return null
+      }
+    }
+
     // Helper function to render field value
-    const renderFieldValue = (value: any) => {
+    const renderFieldValue = (key: string, value: any, allMetadata: any) => {
       if (value === null || value === undefined) {
         return <span className="text-muted-foreground italic">Not set</span>
       }
-      
-      if (typeof value === 'string') {
-        return <span className="text-sm">{value}</span>
+
+      // Handle evaluation_id - link to evaluation page
+      if (key === 'evaluation_id' || key === 'evaluationId') {
+        return (
+          <Link href={`/lab/evaluations/${value}`} className="text-sm text-blue-600 hover:underline">
+            {value}
+          </Link>
+        )
       }
-      
+
+      // Handle score_version_id - link to score version page
+      if (key === 'score_version_id' || key === 'scoreVersionId' || key === 'version_id' || key === 'versionId') {
+        // First try to use props, then fall back to metadata
+        const contextScorecardId = scorecardId || allMetadata.scorecard_id || allMetadata.scorecardId
+        const contextScoreId = scoreId || allMetadata.score_id || allMetadata.scoreId
+
+        console.log('[GraphNodes] Version field detected:', {
+          key,
+          value,
+          propsScorecard: scorecardId,
+          propsScore: scoreId,
+          contextScorecardId,
+          contextScoreId,
+          allMetadataKeys: Object.keys(allMetadata)
+        })
+
+        if (contextScorecardId && contextScoreId) {
+          return (
+            <Link href={`/lab/scorecards/${contextScorecardId}/scores/${contextScoreId}/versions/${value}`} className="text-sm text-blue-600 hover:underline">
+              {value}
+            </Link>
+          )
+        }
+        // Fallback if we don't have all required IDs
+        console.warn('[GraphNodes] Missing IDs for version link:', { contextScorecardId, contextScoreId })
+        return <span className="text-sm font-mono text-amber-600">{value} (missing context IDs)</span>
+      }
+
+      if (typeof value === 'string') {
+        // Special handling for code_diff - always render as monospace
+        if (key === 'code_diff' || key === 'codeDiff') {
+          return (
+            <pre className="text-xs font-mono bg-muted p-3 rounded max-h-96 overflow-auto whitespace-pre">
+              {value}
+            </pre>
+          )
+        }
+
+        // Try to parse as JSON first
+        const jsonData = tryParseJSON(value)
+        if (jsonData !== null) {
+          return (
+            <pre className="text-xs font-mono bg-muted p-3 rounded max-h-64 overflow-y-auto">
+              {JSON.stringify(jsonData, null, 2)}
+            </pre>
+          )
+        }
+
+        // Otherwise render as Markdown
+        return (
+          <div className="text-sm prose prose-sm max-w-none dark:prose-invert">
+            <ReactMarkdown>{value}</ReactMarkdown>
+          </div>
+        )
+      }
+
       if (typeof value === 'number') {
         return <span className="text-sm font-medium">{value}</span>
       }
-      
+
       if (typeof value === 'boolean') {
         return <span className="text-sm">{value ? 'Yes' : 'No'}</span>
       }
-      
+
       // For objects/arrays, show as JSON
       return (
         <pre className="text-xs font-mono bg-muted p-2 rounded overflow-x-auto">
@@ -223,40 +300,98 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
       )
     }
 
-    // Helper function to check if field has content
-    const hasContent = (value: any) => {
-      return value !== null && value !== undefined && value !== ''
-    }
+    // Define short metadata fields (non-collapsible)
+    const shortMetadataFields = [
+      'evaluation_id', 'evaluationId',
+      'score_version_id', 'scoreVersionId', 'version_id',
+      'scorecard_id', 'scorecardId',
+      'score_id', 'scoreId',
+      'created_by', 'createdBy',
+    ]
+
+    // Define long-form content fields with ordering
+    const longFormFieldOrder = [
+      'problem_evidence', 'problemEvidence',
+      'hypothesis',
+      'proposed_solution', 'proposedSolution',
+      'expected_outcome', 'expectedOutcome',
+      'implementation_guidance', 'implementationGuidance',
+      'code',
+      'code_diff', 'codeDiff', // unified diff between score versions
+      'evaluation_summary', 'evaluationSummary', // always last
+    ]
+
+    // Separate fields into categories
+    const shortMetadata: [string, any][] = []
+    const longFormContent: [string, any][] = []
+    const otherFields: [string, any][] = []
+
+    Object.entries(parsedMetadata).forEach(([key, value]) => {
+      if (shortMetadataFields.includes(key)) {
+        shortMetadata.push([key, value])
+      } else if (longFormFieldOrder.includes(key)) {
+        longFormContent.push([key, value])
+      } else {
+        // Check if it's a long-form field by content length
+        if (typeof value === 'string' && value.length > 100) {
+          otherFields.push([key, value])
+        } else {
+          shortMetadata.push([key, value])
+        }
+      }
+    })
+
+    // Sort long-form content by the defined order
+    longFormContent.sort((a, b) => {
+      const indexA = longFormFieldOrder.indexOf(a[0])
+      const indexB = longFormFieldOrder.indexOf(b[0])
+      return indexA - indexB
+    })
 
     return (
-      <div className="space-y-2">
-        {/* Code section - collapsed by default */}
-        <details>
-          <summary className={`cursor-pointer p-2 text-sm font-medium hover:bg-muted rounded ${hasContent(code) ? 'text-foreground' : 'text-muted-foreground'}`}>
-            Code {!hasContent(code) && <span className="text-xs font-normal">(empty)</span>}
-          </summary>
-          <div className="px-2 pb-2">
-            {hasContent(code) ? (
-              <pre className="text-xs font-mono bg-muted p-3 rounded max-h-64 overflow-y-auto whitespace-pre-wrap">
-                {code}
-              </pre>
-            ) : (
-              <span className="text-xs text-muted-foreground italic">No code available</span>
-            )}
+      <div className="space-y-4">
+        {/* Top section - non-collapsible short metadata */}
+        {shortMetadata.length > 0 && (
+          <div className="space-y-1 text-sm">
+            {shortMetadata.map(([key, value]) => hasContent(value) && (
+              <div key={key} className="flex flex-col">
+                <span className="text-xs font-medium text-muted-foreground">{formatFieldName(key)}</span>
+                <div className="mt-0.5">{renderFieldValue(key, value, parsedMetadata)}</div>
+              </div>
+            ))}
           </div>
-        </details>
+        )}
 
-        {/* Other metadata fields - expanded by default */}
-        {Object.entries(otherFields).map(([key, value]) => (
-          <details key={key} open>
-            <summary className={`cursor-pointer p-2 text-sm font-medium hover:bg-muted rounded ${hasContent(value) ? 'text-foreground' : 'text-muted-foreground'}`}>
-              {formatFieldName(key)} {!hasContent(value) && <span className="text-xs font-normal">(empty)</span>}
-            </summary>
-            <div className="px-2 pb-2">
-              {renderFieldValue(value)}
-            </div>
-          </details>
-        ))}
+        {/* Bottom section - collapsible long-form content */}
+        {(longFormContent.length > 0 || otherFields.length > 0) && (
+          <div className="space-y-2">
+            {/* Ordered long-form fields */}
+            {longFormContent.map(([key, value]) => (
+              <details key={key} open={key !== 'code' && key !== 'code_diff' && key !== 'codeDiff' && key !== 'evaluation_summary' && key !== 'evaluationSummary'}>
+                <summary className={`cursor-pointer p-2 text-sm font-medium hover:bg-muted rounded ${hasContent(value) ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {formatFieldName(key)} {!hasContent(value) && <span className="text-xs font-normal">(empty)</span>}
+                </summary>
+                <div className="px-2 pb-2">
+                  {hasContent(value) ? renderFieldValue(key, value, parsedMetadata) : (
+                    <span className="text-xs text-muted-foreground italic">No content</span>
+                  )}
+                </div>
+              </details>
+            ))}
+
+            {/* Other long-form fields */}
+            {otherFields.map(([key, value]) => (
+              <details key={key} open>
+                <summary className={`cursor-pointer p-2 text-sm font-medium hover:bg-muted rounded ${hasContent(value) ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {formatFieldName(key)} {!hasContent(value) && <span className="text-xs font-normal">(empty)</span>}
+                </summary>
+                <div className="px-2 pb-2">
+                  {renderFieldValue(key, value, parsedMetadata)}
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -361,6 +496,14 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId }) => {
                   </DropdownMenuPrimitive.Content>
                 </DropdownMenuPrimitive.Portal>
               </DropdownMenuPrimitive.Root>
+            </div>
+
+            {/* Evaluation metrics gauges */}
+            <div className="flex justify-end mt-2">
+              <NodeMetricsGauges
+                node={node}
+                parentNode={node.parentNodeId ? nodeMap.get(node.parentNodeId) : null}
+              />
             </div>
           </CardHeader>
 

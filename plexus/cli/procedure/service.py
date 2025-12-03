@@ -577,10 +577,6 @@ class ProcedureService:
         try:
             import json
 
-            # Get procedure info to access score details
-            from plexus.dashboard.api.models.procedure import Procedure
-            procedure = Procedure.get_by_id(procedure_id, self.client)
-
             # Add note about guidelines at the start
             guidelines_note = """# Context for Hypothesis Generation
 
@@ -598,7 +594,7 @@ You can query the current guidelines using the `plexus_score_info` tool with the
             insights_nodes = []
 
             for node in all_nodes:
-                if node.is_root:
+                if node.parentNodeId is None:
                     continue
 
                 # Check node type from metadata
@@ -723,17 +719,18 @@ You can query the current guidelines using the `plexus_score_info` tool with the
     async def run_experiment(self, procedure_id: str, **options) -> Dict[str, Any]:
         """
         Run an procedure with the given ID.
-        
+
         This function executes an procedure with MCP tool support, allowing the experiment
         to provide AI models with access to Plexus MCP tools during execution.
-        
+
         Args:
             procedure_id: ID of the procedure to run
             **options: Optional parameters for procedure execution:
                 - max_iterations: Maximum number of iterations (int)
-                - timeout: Timeout in seconds (int) 
+                - timeout: Timeout in seconds (int)
                 - async_mode: Whether to run asynchronously (bool)
                 - dry_run: Whether to perform a dry run (bool)
+                - restart_from_root_node: Delete all non-root graph nodes before starting (bool)
                 - enable_mcp: Whether to enable MCP tools (bool, default True)
                 - mcp_tools: List of MCP tool categories to enable (list)
                 
@@ -772,6 +769,38 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                 }
             
             logger.info(f"Found experiment: {procedure_id} (Scorecard: {procedure_info.scorecard_name})")
+
+            # Handle restart from root node option
+            if options.get('restart_from_root_node'):
+                from .states import STATE_START
+                logger.info("=" * 80)
+                logger.info("RESTART FROM ROOT NODE REQUESTED")
+                logger.info("=" * 80)
+                logger.info(f"Procedure ID: {procedure_id}")
+                logger.info(f"Root Node ID: {procedure_info.procedure.rootNodeId}")
+
+                # Delete non-root nodes
+                deletion_success = await self._delete_non_root_nodes(procedure_id, procedure_info.procedure.rootNodeId)
+                if deletion_success:
+                    logger.info("✓ Node deletion completed successfully")
+                else:
+                    logger.error("✗ Node deletion encountered issues")
+
+                # Reset procedure state back to START
+                reset_success = self._reset_procedure_to_start(procedure_id, procedure_info.procedure.accountId)
+                if reset_success:
+                    logger.info("✓ State reset completed successfully")
+                else:
+                    logger.error("✗ State reset encountered issues")
+
+                # Update root node status back to START
+                if procedure_info.procedure.rootNodeId:
+                    self._update_node_status(procedure_info.procedure.rootNodeId, STATE_START)
+                    logger.info(f"✓ Root node status set to START")
+
+                logger.info("=" * 80)
+                logger.info("RESTART PREPARATION COMPLETE")
+                logger.info("=" * 80)
 
             # Determine current state and what phase to run
             from .states import (
@@ -1365,9 +1394,20 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                                 # Add test results to response
                                 result['test_phase'] = test_results
                             else:
-                                logger.error(f"Test phase failed: {test_results.get('error')}")
+                                error = test_results.get('error', '')
+                                logger.error(f"Test phase failed: {error}")
                                 result['test_phase'] = test_results
-                                # Stay in TEST state for retry
+
+                                # If no hypothesis nodes exist, transition back to HYPOTHESIS state for recovery
+                                if 'No hypothesis nodes found' in error:
+                                    logger.warning("No hypothesis nodes found - transitioning back to hypothesis state for recovery")
+                                    self._update_procedure_state(procedure_id, STATE_HYPOTHESIS, STATE_TEST)
+                                    if procedure_info.procedure.rootNodeId:
+                                        self._update_node_status(procedure_info.procedure.rootNodeId, STATE_HYPOTHESIS)
+                                    current_state = STATE_HYPOTHESIS
+                                else:
+                                    # Stay in TEST state for retry on other failures
+                                    pass
 
                         # Execute insights phase if we're in INSIGHTS state
                         if current_state == STATE_INSIGHTS:
@@ -2075,7 +2115,179 @@ Based on this data, you should prioritize examining error types with the highest
             import traceback
             traceback.print_exc()
             return False
-    
+
+    async def _delete_non_root_nodes(self, procedure_id: str, root_node_id: Optional[str]) -> bool:
+        """
+        Delete all graph nodes except the root node for a procedure.
+
+        This allows restarting hypothesis generation from scratch while keeping
+        the root node and procedure structure intact.
+
+        Args:
+            procedure_id: The procedure ID
+            root_node_id: The ID of the root node to preserve (if any)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info(f"Deleting all non-root graph nodes for procedure {procedure_id}")
+
+            # Query all nodes for this procedure
+            query = """
+            query ListGraphNodeByProcedureIdAndCreatedAt($procedureId: ID!) {
+                listGraphNodeByProcedureIdAndCreatedAt(procedureId: $procedureId) {
+                    items {
+                        id
+                    }
+                }
+            }
+            """
+
+            result = self.client.execute(query, {"procedureId": procedure_id})
+            nodes = result.get('listGraphNodeByProcedureIdAndCreatedAt', {}).get('items', [])
+
+            logger.info(f"Query result: Found {len(nodes)} total nodes for procedure {procedure_id}")
+            if nodes:
+                logger.info(f"Node IDs: {[node['id'] for node in nodes]}")
+
+            # Filter out the root node
+            nodes_to_delete = [node for node in nodes if node['id'] != root_node_id]
+
+            logger.info(f"Preserving root node: {root_node_id}")
+            logger.info(f"Will delete {len(nodes_to_delete)} non-root nodes")
+            if nodes_to_delete:
+                logger.info(f"Nodes to delete: {[node['id'] for node in nodes_to_delete]}")
+
+            # Delete each non-root node using GraphQL mutation directly
+            delete_mutation = """
+            mutation DeleteGraphNode($input: DeleteGraphNodeInput!) {
+                deleteGraphNode(input: $input) {
+                    id
+                }
+            }
+            """
+
+            deleted_count = 0
+            for node in nodes_to_delete:
+                try:
+                    delete_result = self.client.execute(delete_mutation, {
+                        'input': {'id': node['id']}
+                    })
+                    if delete_result.get('deleteGraphNode', {}).get('id') == node['id']:
+                        deleted_count += 1
+                        logger.info(f"✓ Deleted node {node['id']}")
+                    else:
+                        logger.warning(f"Failed to delete node {node['id']}: unexpected result")
+                except Exception as e:
+                    logger.error(f"Failed to delete node {node['id']}: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            logger.info(f"✓ Successfully deleted {deleted_count}/{len(nodes_to_delete)} non-root graph nodes for procedure {procedure_id}")
+            return deleted_count > 0
+
+        except Exception as e:
+            logger.error(f"Error deleting non-root nodes: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _reset_procedure_to_start(self, procedure_id: str, account_id: str) -> bool:
+        """
+        Reset a procedure's TaskStages back to START state.
+
+        This resets all TaskStages to PENDING so the procedure can restart from the beginning.
+
+        Args:
+            procedure_id: The procedure ID
+            account_id: The account ID
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from plexus.dashboard.api.models.task import Task
+            import json
+
+            logger.info(f"Resetting procedure {procedure_id} TaskStages to START state")
+
+            # Find the task for this procedure
+            query = """
+            query ListTaskByAccountIdAndUpdatedAt($accountId: String!, $limit: Int) {
+                listTaskByAccountIdAndUpdatedAt(accountId: $accountId, limit: $limit) {
+                    items {
+                        id
+                        target
+                        metadata
+                    }
+                }
+            }
+            """
+
+            result = self.client.execute(query, {"accountId": account_id, "limit": 1000})
+            tasks = result.get('listTaskByAccountIdAndUpdatedAt', {}).get('items', [])
+
+            # Find task for this procedure
+            task_id = None
+            for task_data in tasks:
+                try:
+                    metadata = json.loads(task_data.get('metadata', '{}')) if isinstance(task_data.get('metadata'), str) else task_data.get('metadata', {})
+                    if metadata.get('procedure_id') == procedure_id:
+                        task_id = task_data['id']
+                        break
+                except:
+                    continue
+
+            if not task_id:
+                logger.warning(f"No Task found for procedure {procedure_id} - skipping state reset")
+                return False
+
+            # Get task and reset its status
+            task = Task.get_by_id(task_id, self.client)
+            task.update(status='PENDING', errorMessage=None, errorDetails=None)
+
+            # Reset all TaskStages to PENDING
+            stages_query = """
+            query ListTaskStageByTaskId($taskId: ID!) {
+                listTaskStageByTaskId(taskId: $taskId) {
+                    items {
+                        id
+                    }
+                }
+            }
+            """
+
+            stages_result = self.client.execute(stages_query, {"taskId": task_id})
+            stages = stages_result.get('listTaskStageByTaskId', {}).get('items', [])
+
+            for stage in stages:
+                mutation = """
+                mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+                    updateTaskStage(input: $input) {
+                        id
+                        status
+                    }
+                }
+                """
+                self.client.execute(mutation, {
+                    "input": {
+                        "id": stage['id'],
+                        "status": "PENDING",
+                        "startedAt": None,
+                        "completedAt": None
+                    }
+                })
+
+            logger.info(f"✓ Reset {len(stages)} TaskStages to PENDING for procedure {procedure_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error resetting procedure state: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
     def _update_procedure_state(self, procedure_id: str, new_state: str, current_state: Optional[str] = None) -> bool:
         """
         Update the state of a procedure using state machine validation.
@@ -2637,7 +2849,26 @@ Based on this data, you should prioritize examining error types with the highest
             successful_eval_count = sum(1 for r in evaluation_results if r['success'])
             failed_eval_count = len(evaluation_results) - successful_eval_count
 
-            overall_success = failed_eval_count == 0
+            # Account for version creation results
+            successful_version_creation_count = 0
+            failed_version_creation_count = 0
+            if nodes_needing_versions and test_results:
+                successful_version_creation_count = sum(1 for r in test_results if r.get('success'))
+                failed_version_creation_count = sum(1 for r in test_results if not r.get('success'))
+
+            # If version creation failed for any nodes, report those failures
+            # In this case, nodes_successful counts successful version creations
+            if failed_version_creation_count > 0:
+                overall_success = False
+                total_nodes_successful = successful_version_creation_count
+                total_nodes_failed = failed_version_creation_count
+                message = f"ScoreVersion creation failed for {failed_version_creation_count} node(s). {successful_version_creation_count} succeeded in version creation."
+            else:
+                # All version creations succeeded, count evaluation results
+                overall_success = failed_eval_count == 0
+                total_nodes_successful = successful_eval_count
+                total_nodes_failed = failed_eval_count
+                message = f"Test phase complete: {len(nodes_needing_versions)} versions created, {len(nodes_to_evaluate)} evaluated ({successful_eval_count} successful, {failed_eval_count} failed)"
 
             total_nodes_processed = len(nodes_needing_versions) + len(nodes_needing_evaluation)
 
@@ -2646,12 +2877,11 @@ Based on this data, you should prioritize examining error types with the highest
                 "nodes_tested": total_nodes_processed,
                 "nodes_needing_versions": len(nodes_needing_versions),
                 "nodes_needing_evaluation": len(nodes_needing_evaluation),
-                "nodes_successful": successful_eval_count,
-                "nodes_failed": failed_eval_count,
+                "nodes_successful": total_nodes_successful,
+                "nodes_failed": total_nodes_failed,
                 "score_version_results": test_results,
                 "evaluation_results": evaluation_results,
-                "message": f"Test phase complete: {len(nodes_needing_versions)} versions created, "
-                          f"{len(nodes_to_evaluate)} evaluated ({successful_eval_count} successful, {failed_eval_count} failed)"
+                "message": message
             }
 
         except Exception as e:
@@ -2957,6 +3187,15 @@ Based on this data, you should prioritize examining error types with the highest
             metadata['evaluation_id'] = evaluation_id
             metadata['evaluation_summary'] = summary
 
+            # Extract code_diff as a first-class metadata field for better UI visibility
+            try:
+                summary_dict = json.loads(summary) if isinstance(summary, str) else summary
+                if isinstance(summary_dict, dict) and 'code_diff' in summary_dict and summary_dict['code_diff']:
+                    metadata['code_diff'] = summary_dict['code_diff']
+                    logger.info(f"✓ Extracted code_diff as first-class field for node {node_id}")
+            except Exception as e:
+                logger.warning(f"Could not extract code_diff from summary: {e}")
+
             # Update node
             node.update_content(metadata=metadata)
 
@@ -3077,6 +3316,7 @@ Based on this data, you should prioritize examining error types with the highest
 
             insights_node = GraphNode.create(
                 client=self.client,
+                accountId=experiment_context.get('account_id'),
                 procedureId=procedure_id,
                 parentNodeId=parent_node_id,
                 name=f"Insights Round {len(previous_insights_nodes) + 1}",

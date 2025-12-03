@@ -67,10 +67,14 @@ export interface ProcedureTaskData extends BaseTaskData {
   rootNodeId?: string
   createdAt: string
   updatedAt: string
+  scorecardId?: string
   scorecard?: {
+    id?: string
     name: string
   } | null
+  scoreId?: string
   score?: {
+    id?: string
     name: string
   } | null
   taskId?: string
@@ -454,7 +458,21 @@ export default function ProcedureTask({
           
           {/* Procedure Nodes section */}
           <div className="mt-6 bg-background rounded-lg p-4">
-            <GraphNodesList procedureId={procedure.id} />
+            <GraphNodesList
+              procedureId={procedure.id}
+              scorecardId={
+                parameterValues.scorecard_id as string ||
+                parameterValues.scorecardId as string ||
+                procedure.scorecardId ||
+                procedure.scorecard?.id
+              }
+              scoreId={
+                parameterValues.score_id as string ||
+                parameterValues.scoreId as string ||
+                procedure.scoreId ||
+                procedure.score?.id
+              }
+            />
           </div>
           
           {/* Procedure Conversation section */}

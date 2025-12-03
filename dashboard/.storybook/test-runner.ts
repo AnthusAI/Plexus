@@ -1,4 +1,5 @@
 import type { TestRunnerConfig } from '@storybook/test-runner';
+import type { Page } from '@playwright/test';
 
 const config: TestRunnerConfig = {
   setup() {
@@ -35,23 +36,26 @@ const config: TestRunnerConfig = {
       }
     }
   },
-  
+
+  async preRender(page: Page) {
+    // Inject StorybookTestRunnerError BEFORE the page renders using addInitScript
+    // This ensures it's available before ANY page JavaScript executes
+    await page.addInitScript(() => {
+      // Define error class immediately when page context is created
+      class StorybookTestRunnerError extends Error {
+        constructor(message: string) {
+          super(message);
+          this.name = 'StorybookTestRunnerError';
+        }
+      }
+      // Assign to window without checking to avoid any TDZ issues
+      (window as any).StorybookTestRunnerError = StorybookTestRunnerError;
+    });
+  },
+
   async preVisit(page) {
     // Ensure the page is ready before running tests
     await page.waitForLoadState('networkidle');
-    
-    // Inject StorybookTestRunnerError into the page context
-    // Define it directly without checking to avoid temporal dead zone errors
-    await page.addInitScript(() => {
-      if (typeof window !== 'undefined') {
-        (window as any).StorybookTestRunnerError = class StorybookTestRunnerError extends Error {
-          constructor(message: string) {
-            super(message);
-            this.name = 'StorybookTestRunnerError';
-          }
-        };
-      }
-    });
   },
   
   async postVisit(page) {
