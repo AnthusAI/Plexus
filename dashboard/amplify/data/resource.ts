@@ -974,7 +974,7 @@ const schema = a.schema({
             session: a.belongsTo('ChatSession', 'sessionId'),
             procedureId: a.string(),
             procedure: a.belongsTo('Procedure', 'procedureId'),
-            accountId: a.string(),
+            // accountId: a.string(),
             account: a.belongsTo('Account', 'accountId'),
             role: a.enum(['USER', 'ASSISTANT', 'SYSTEM', 'TOOL']),
             content: a.string().required(),
@@ -1014,8 +1014,8 @@ const schema = a.schema({
             idx("sessionId").sortKeys(["createdAt"]),
             idx("procedureId").sortKeys(["createdAt"]),
             idx("parentMessageId"),
-            idx("humanInteraction").sortKeys(["createdAt"]),
-            idx("accountId").sortKeys(["createdAt"])
+            idx("humanInteraction").sortKeys(["createdAt"])
+            // idx("accountId").sortKeys(["createdAt"])
         ]),
 });
 
