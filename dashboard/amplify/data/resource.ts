@@ -216,8 +216,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("scoreId").sortKeys(["createdAt"]),
-            idx("updatedAt")
+            idx("scoreId").sortKeys(["createdAt"])
         ]),
 
     Evaluation: a
@@ -338,7 +337,6 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("accountId").sortKeys(["createdAt"]),
-            idx("externalId"),
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["createdAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
@@ -517,8 +515,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId"),
-            idx("updatedAt")
+            idx("scoreId")
         ]),
 
     TaskStage: a
@@ -542,8 +539,7 @@ const schema = a.schema({
             // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
-            idx("taskId"),
-            idx("status")
+            idx("taskId")
         ]),
 
         
@@ -625,18 +621,17 @@ const schema = a.schema({
             reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
             reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
             updatedAt: a.datetime().required(),
-            taskId: a.string(), // Add foreign key for Task
-            task: a.belongsTo('Task', 'taskId'), // Add relationship to Task
+            taskId: a.string(),
+            task: a.belongsTo('Task', 'taskId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
-            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("reportConfigurationId").sortKeys(["createdAt"]),
-            idx("taskId") // Add index by taskId
+            idx("taskId")
         ]),
 
     ReportBlock: a
@@ -796,8 +791,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["name"]),
             idx("accountId").sortKeys(["key"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"]),
-            idx("key")
+            idx("scoreId").sortKeys(["updatedAt"])
         ]),
 
     DataSourceVersion: a
@@ -820,8 +814,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: DataSourceVersionIndexFields) => any) => [
-            idx("dataSourceId").sortKeys(["createdAt"]),
-            idx("updatedAt")
+            idx("dataSourceId").sortKeys(["createdAt"])
         ]),
 
     DataSet: a
