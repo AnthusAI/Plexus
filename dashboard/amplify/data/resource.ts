@@ -83,8 +83,8 @@ const schema = a.schema({
             procedures: a.hasMany('Procedure', 'accountId'),
             procedureTemplates: a.hasMany('ProcedureTemplate', 'accountId'),
             graphNodes: a.hasMany('GraphNode', 'accountId'),
-            chatSessions: a.hasMany('ChatSession', 'accountId'),
-            chatMessages: a.hasMany('ChatMessage', 'accountId'),
+            chatSessions: a.hasMany('ChatSession', 'accountId')
+            // chatMessages: a.hasMany('ChatMessage', 'accountId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
