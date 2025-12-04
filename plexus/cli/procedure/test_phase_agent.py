@@ -271,7 +271,7 @@ class TestPhaseAgent:
             # Build system prompt with documentation
             score_yaml_docs = context.get('score_yaml_format_docs', 'Documentation not available')
 
-            system_prompt = f"""You are a score configuration editor. Your task is to modify a YAML score configuration to implement a hypothesis.
+            system_prompt = f"""You are a score configuration editor. Your task is to make FOCUSED YAML edits to implement a hypothesis.
 
 CURRENT FILE TO EDIT:
 {yaml_path}
@@ -279,39 +279,60 @@ CURRENT FILE TO EDIT:
 HYPOTHESIS TO IMPLEMENT:
 {hypothesis_text}
 
-YOUR TASK:
-1. Use read_file to load the YAML content from {yaml_path}
-2. Identify the specific prompts, instructions, or logic that need to change
-3. Make FOCUSED edits using edit_file - change only what's necessary to implement the hypothesis
-4. When done, call stop_procedure with a summary of your changes
+## What You Can Change
 
-EDITING STRATEGY:
-- For prompt modifications: Use edit_file to replace specific prompt sections with improved versions
-- For adding new logic: Insert new YAML nodes or update existing classifier instructions
-- For threshold changes: Update specific numeric values or criteria
-- Keep edits minimal and targeted - don't rewrite the entire file
+You can ONLY edit the YAML score configuration. Specifically:
 
-EXAMPLE EDIT WORKFLOW:
+**✅ YOU CAN:**
+- Edit prompts (make clearer, add examples, adjust instructions)
+- Modify valid_classes lists (add/remove/rename classifier options)
+- Adjust node logic (add preprocessing, modify conditions)
+- Change thresholds or criteria in prompts
+
+**❌ YOU CANNOT:**
+- Add features that require new code
+- Change system architecture
+- Modify data sources or collection
+- Go outside YAML capabilities
+
+## Your Process
+
+1. read_file({yaml_path}) - See the current configuration
+2. Find the relevant section (which prompt or node needs editing)
+3. Make MINIMAL, TARGETED edits using edit_file
+4. Call stop_procedure("Brief summary of changes made")
+
+## Editing Strategy
+
+**For prompt improvements:**
+- Make prompts more specific and clear
+- Add concrete examples to illustrate criteria
+- Clarify edge cases or ambiguous situations
+
+**For classifier adjustments:**
+- Add/remove valid_classes options if hypothesis suggests it
+- Rename classes for clarity
+
+**For logic changes:**
+- Add preprocessing steps if needed
+- Modify decision flow between nodes
+- Adjust conditional logic in prompts
+
+## Critical Rules
+
+- Make SMALL, INCREMENTAL edits - don't rewrite everything
+- Use edit_file for each distinct change (old_content must match exactly)
+- Keep changes focused on the hypothesis - don't make unrelated improvements
+- Call stop_procedure when done - don't over-edit
+
+## Example Workflow
+
 1. read_file({yaml_path})
-2. Identify the relevant section (e.g., a prompt that needs to be more lenient)
-3. edit_file(path={yaml_path}, old_content="strict exact match prompt", new_content="fuzzy match prompt with tolerance")
-4. Repeat for other sections as needed
-5. stop_procedure("Updated program matching logic to use fuzzy matching")
+2. Identify target (e.g., "verification_check node prompt")
+3. edit_file(path={yaml_path}, old_content="[exact text from prompt]", new_content="[updated prompt with pharmacy requirement]")
+4. stop_procedure("Added pharmacy verification requirement to prompt")
 
-SCORE YAML REFERENCE (abbreviated - full docs available if needed):
-- Scores use LangGraph with nodes that have prompts
-- Each node has a 'prompt' field with instructions for the LLM
-- Classifiers have 'valid_classes' lists
-- You can modify prompts, add preprocessing steps, change thresholds
-
-CRITICAL RULES:
-- Make incremental edits - don't try to rewrite everything at once
-- Use edit_file for each distinct change
-- old_content must be an exact substring from the file
-- Call stop_procedure when all changes are complete
-- If the hypothesis is too vague or you're unsure, make your best interpretation and document it
-
-START NOW: Use read_file first to see the current YAML configuration."""
+START NOW: Use read_file to see the configuration, then make focused edits."""
 
             # Define tools
             @tool
@@ -696,7 +717,7 @@ START NOW: Use read_file first to see the current YAML configuration."""
 
     async def _update_node_metadata(self, node_id: str, score_version_id: str, parent_version_id: Optional[str] = None) -> bool:
         """
-        Update GraphNode metadata with scoreVersionId and parent_version_id.
+        Update GraphNode metadata with scoreVersionId, parent_version_id, and code_diff.
 
         Args:
             node_id: ID of GraphNode to update
@@ -709,6 +730,7 @@ START NOW: Use read_file first to see the current YAML configuration."""
         try:
             from plexus.dashboard.api.models.graph_node import GraphNode
             import json
+            import difflib
 
             # Get node
             node = GraphNode.get_by_id(node_id, self.client)
@@ -726,10 +748,66 @@ START NOW: Use read_file first to see the current YAML configuration."""
             if parent_version_id:
                 metadata['parent_version_id'] = parent_version_id
 
+            # Generate code diff if we have both parent and new version
+            if parent_version_id:
+                try:
+                    logger.info(f"Generating code diff between parent {parent_version_id} and new {score_version_id}")
+
+                    # Fetch parent version code
+                    parent_query = f"""
+                    query GetScoreVersionCode {{
+                        getScoreVersion(id: "{parent_version_id}") {{
+                            id
+                            configuration
+                        }}
+                    }}
+                    """
+                    parent_result = self.client.execute(parent_query)
+                    parent_code = parent_result.get('getScoreVersion', {}).get('configuration', '')
+
+                    # Fetch new version code
+                    new_query = f"""
+                    query GetScoreVersionCode {{
+                        getScoreVersion(id: "{score_version_id}") {{
+                            id
+                            configuration
+                        }}
+                    }}
+                    """
+                    new_result = self.client.execute(new_query)
+                    new_code = new_result.get('getScoreVersion', {}).get('configuration', '')
+
+                    if parent_code and new_code:
+                        # Generate unified diff
+                        parent_lines = parent_code.splitlines(keepends=True)
+                        new_lines = new_code.splitlines(keepends=True)
+
+                        diff = difflib.unified_diff(
+                            parent_lines,
+                            new_lines,
+                            fromfile=f'version_{parent_version_id[:8]}',
+                            tofile=f'version_{score_version_id[:8]}',
+                            lineterm=''
+                        )
+
+                        diff_text = ''.join(diff)
+
+                        if diff_text:
+                            metadata['code_diff'] = diff_text
+                            logger.info(f"✓ Generated code diff ({len(diff_text)} chars)")
+                        else:
+                            logger.warning("No differences found between versions")
+                    else:
+                        logger.warning(f"Could not fetch code for diff generation (parent: {bool(parent_code)}, new: {bool(new_code)})")
+
+                except Exception as diff_error:
+                    logger.error(f"Error generating code diff: {diff_error}", exc_info=True)
+                    # Continue even if diff generation fails - don't block the update
+
             # Update node
             node.update_content(metadata=metadata)
 
-            logger.info(f"✓ Updated node {node_id} with scoreVersionId: {score_version_id}, parent: {parent_version_id}")
+            logger.info(f"✓ Updated node {node_id} with scoreVersionId: {score_version_id}, parent: {parent_version_id}, code_diff: {'yes' if 'code_diff' in metadata else 'no'}")
             return True
 
         except Exception as e:

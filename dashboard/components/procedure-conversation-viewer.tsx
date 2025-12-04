@@ -21,7 +21,7 @@ export default function ProcedureConversationViewer({
   }
 
   return (
-    <div className="bg-background rounded-lg overflow-hidden h-[500px]">
+    <div className="bg-background rounded-lg overflow-hidden h-full">
       <ConversationViewer
         procedureId={procedureId}
         onSessionDelete={handleSessionDelete}

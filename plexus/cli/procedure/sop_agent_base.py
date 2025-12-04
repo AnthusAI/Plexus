@@ -960,7 +960,7 @@ Your response will become the next user message to guide the coding assistant.
             
             # Get all hypothesis nodes (non-root nodes)
             all_nodes = GraphNode.list_by_procedure(self.procedure_id, self.client)
-            hypothesis_nodes = [node for node in all_nodes if not node.is_root]
+            hypothesis_nodes = [node for node in all_nodes if node.parentNodeId is not None]
             
             if not hypothesis_nodes:
                 logger.info("No hypothesis nodes found, staying in hypothesis state")

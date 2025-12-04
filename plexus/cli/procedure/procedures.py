@@ -464,28 +464,33 @@ def pull(procedure_id: str, output: Optional[str]):
 @click.option('--timeout', type=int, help='Timeout in seconds')
 @click.option('--async-mode', is_flag=True, help='Run procedure asynchronously')
 @click.option('--dry-run', is_flag=True, help='Perform a dry run without actual execution')
+@click.option('--restart-from-root-node', is_flag=True, help='Delete all non-root graph nodes and restart from scratch')
 @click.option('--openai-api-key', help='OpenAI API key for AI-powered experiments (or set OPENAI_API_KEY env var)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def run(procedure_id: str, max_iterations: Optional[int], timeout: Optional[int], 
-        async_mode: bool, dry_run: bool, openai_api_key: Optional[str], output: str):
+def run(procedure_id: str, max_iterations: Optional[int], timeout: Optional[int],
+        async_mode: bool, dry_run: bool, restart_from_root_node: bool, openai_api_key: Optional[str], output: str):
     """Run an procedure with the given ID.
-    
+
     Executes the procedure using its configured YAML settings. The experiment
     will process its nodes according to the defined workflow and return results.
-    
+
     Examples:
         plexus procedure run abc123def456
         plexus procedure run abc123def456 --dry-run
         plexus procedure run abc123def456 --max-iterations 50 --timeout 300
         plexus procedure run abc123def456 --async-mode -o json
+        plexus procedure run abc123def456 --restart-from-root-node
     """
     client = create_client()
     if not client:
         console.print("[red]Error: Could not create API client[/red]")
         return
     
+    if restart_from_root_node:
+        console.print(f"[yellow]⚠ Restarting from root node - deleting all existing hypothesis nodes...[/yellow]")
+
     console.print(f"Running procedure {procedure_id} with task tracking...")
-    
+
     # Build options dictionary
     options = {}
     if max_iterations is not None:
@@ -496,7 +501,9 @@ def run(procedure_id: str, max_iterations: Optional[int], timeout: Optional[int]
         options['async_mode'] = async_mode
     if dry_run:
         options['dry_run'] = dry_run
-    
+    if restart_from_root_node:
+        options['restart_from_root_node'] = restart_from_root_node
+
     # Add AI options
     if openai_api_key:
         options['openai_api_key'] = openai_api_key

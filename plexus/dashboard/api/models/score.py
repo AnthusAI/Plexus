@@ -1017,9 +1017,8 @@ class Score(BaseModel):
                 'scoreId': self.id,
                 'configuration': (code_content or '').strip(),
                 'note': note or 'Updated via Score.create_version_from_code()',
-                # Mark as featured by default so the version is created as a candidate for champion
-                # (promotion will be explicitly set via updateScore below)
-                'isFeatured': True
+                # Do not mark as featured - these are test versions from procedures
+                'isFeatured': False
             }
             
             # Add guidelines if provided
