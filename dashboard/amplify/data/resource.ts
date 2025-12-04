@@ -989,6 +989,22 @@ const schema = a.schema({
             parentMessage: a.belongsTo('ChatMessage', 'parentMessageId'),
             childMessages: a.hasMany('ChatMessage', 'parentMessageId'),
             sequenceNumber: a.integer(), // Order within the session for proper conversation flow
+            humanInteraction: a.enum([
+                'INTERNAL',           // Agent-only, hidden from human UI
+                'CHAT',               // Human message in conversation
+                'CHAT_ASSISTANT',     // AI response in conversation
+                'NOTIFICATION',       // Non-blocking notification from procedure
+                'ALERT_INFO',         // System info alert
+                'ALERT_WARNING',      // System warning alert
+                'ALERT_ERROR',        // System error alert
+                'ALERT_CRITICAL',     // System critical alert
+                'PENDING_APPROVAL',   // Waiting for yes/no from human
+                'PENDING_INPUT',      // Waiting for free-form input
+                'PENDING_REVIEW',     // Waiting for human review
+                'RESPONSE',           // Human's response to pending request
+                'TIMED_OUT',          // Request expired without response
+                'CANCELLED'           // Request was cancelled
+            ]),
             createdAt: a.datetime().required(),
         })
         .authorization((allow) => [
@@ -999,7 +1015,8 @@ const schema = a.schema({
             idx("sessionId").sortKeys(["sequenceNumber"]),
             idx("sessionId").sortKeys(["createdAt"]),
             idx("procedureId").sortKeys(["createdAt"]),
-            idx("parentMessageId")
+            idx("parentMessageId"),
+            idx("humanInteraction").sortKeys(["createdAt"])
         ]),
 });
 
