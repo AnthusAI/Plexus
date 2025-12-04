@@ -339,7 +339,6 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("accountId").sortKeys(["createdAt"]),
-            idx("externalId"),
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["createdAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
@@ -517,8 +516,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId"),
-            idx("updatedAt")
+            idx("scoreId")
         ]),
 
     TaskStage: a
@@ -796,8 +794,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["name"]),
             idx("accountId").sortKeys(["key"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"]),
-            idx("key")
+            idx("scoreId").sortKeys(["updatedAt"])
         ]),
 
     DataSourceVersion: a
@@ -820,8 +817,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: DataSourceVersionIndexFields) => any) => [
-            idx("dataSourceId").sortKeys(["createdAt"]),
-            idx("updatedAt")
+            idx("dataSourceId").sortKeys(["createdAt"])
         ]),
 
     DataSet: a
