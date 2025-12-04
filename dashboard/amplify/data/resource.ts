@@ -83,8 +83,7 @@ const schema = a.schema({
             procedures: a.hasMany('Procedure', 'accountId'),
             procedureTemplates: a.hasMany('ProcedureTemplate', 'accountId'),
             graphNodes: a.hasMany('GraphNode', 'accountId'),
-            chatSessions: a.hasMany('ChatSession', 'accountId')
-            // chatMessages: a.hasMany('ChatMessage', 'accountId'),
+            chatSessions: a.hasMany('ChatSession', 'accountId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -339,6 +338,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("accountId").sortKeys(["createdAt"]),
+            idx("externalId"),
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["createdAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
@@ -370,6 +370,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["name", "value"]).name("byAccountNameAndValue"), // Search within identifier type
             idx("itemId").sortKeys(["position"]).name("byItemAndPosition"),  // Get all identifiers for an item ordered by position
             idx("itemId").sortKeys(["name"]).name("byItemAndName"), // Check for duplicates by item + name
+            idx("value").name("byValue"), // Global value lookup (if cross-account search needed)
         ]),
 
     ScoringJob: a
@@ -516,7 +517,8 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId")
+            idx("scoreId"),
+            idx("updatedAt")
         ]),
 
     TaskStage: a
@@ -794,7 +796,8 @@ const schema = a.schema({
             idx("accountId").sortKeys(["name"]),
             idx("accountId").sortKeys(["key"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"])
+            idx("scoreId").sortKeys(["updatedAt"]),
+            idx("key")
         ]),
 
     DataSourceVersion: a
@@ -817,7 +820,8 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: DataSourceVersionIndexFields) => any) => [
-            idx("dataSourceId").sortKeys(["createdAt"])
+            idx("dataSourceId").sortKeys(["createdAt"]),
+            idx("updatedAt")
         ]),
 
     DataSet: a
@@ -974,8 +978,6 @@ const schema = a.schema({
             session: a.belongsTo('ChatSession', 'sessionId'),
             procedureId: a.string(),
             procedure: a.belongsTo('Procedure', 'procedureId'),
-            // accountId: a.string(),
-            account: a.belongsTo('Account', 'accountId'),
             role: a.enum(['USER', 'ASSISTANT', 'SYSTEM', 'TOOL']),
             content: a.string().required(),
             metadata: a.json(),
@@ -987,22 +989,6 @@ const schema = a.schema({
             parentMessage: a.belongsTo('ChatMessage', 'parentMessageId'),
             childMessages: a.hasMany('ChatMessage', 'parentMessageId'),
             sequenceNumber: a.integer(), // Order within the session for proper conversation flow
-            humanInteraction: a.enum([
-                'INTERNAL',           // Agent-only, hidden from human UI
-                'CHAT',               // Human message in conversation
-                'CHAT_ASSISTANT',     // AI response in conversation
-                'NOTIFICATION',       // Non-blocking notification from procedure
-                'ALERT_INFO',         // System info alert
-                'ALERT_WARNING',      // System warning alert
-                'ALERT_ERROR',        // System error alert
-                'ALERT_CRITICAL',     // System critical alert
-                'PENDING_APPROVAL',   // Waiting for yes/no from human
-                'PENDING_INPUT',      // Waiting for free-form input
-                'PENDING_REVIEW',     // Waiting for human review
-                'RESPONSE',           // Human's response to pending request
-                'TIMED_OUT',          // Request expired without response
-                'CANCELLED'           // Request was cancelled
-            ]),
             createdAt: a.datetime().required(),
         })
         .authorization((allow) => [
@@ -1013,9 +999,7 @@ const schema = a.schema({
             idx("sessionId").sortKeys(["sequenceNumber"]),
             idx("sessionId").sortKeys(["createdAt"]),
             idx("procedureId").sortKeys(["createdAt"]),
-            idx("parentMessageId"),
-            idx("humanInteraction").sortKeys(["createdAt"])
-            // idx("accountId").sortKeys(["createdAt"])
+            idx("parentMessageId")
         ]),
 });
 
