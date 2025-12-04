@@ -47,9 +47,8 @@ type AggregatedMetricsIndexFields = "accountId" | "compositeKey" | "scorecardId"
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
+type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "rootNodeId" | "updatedAt" | "createdAt" | "category" | "version";
 type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
-type ProcedureTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -81,7 +80,6 @@ const schema = a.schema({
             dataSources: a.hasMany('DataSource', 'accountId'),
             dataSets: a.hasMany('DataSet', 'accountId'),
             procedures: a.hasMany('Procedure', 'accountId'),
-            procedureTemplates: a.hasMany('ProcedureTemplate', 'accountId'),
             graphNodes: a.hasMany('GraphNode', 'accountId'),
             chatSessions: a.hasMany('ChatSession', 'accountId'),
             chatMessages: a.hasMany('ChatMessage', 'accountId')
@@ -855,10 +853,17 @@ const schema = a.schema({
 
     Procedure: a
         .model({
+            name: a.string().required(),
+            description: a.string(),
             featured: a.boolean(),
-            templateId: a.string(),
-            template: a.belongsTo('ProcedureTemplate', 'templateId'),
-            code: a.string(), // YAML template code copied from template
+            isTemplate: a.boolean(), // True if this is a template, false if it's an instance
+            parentProcedureId: a.string(), // References template procedure if this is an instance
+            parentProcedure: a.belongsTo('Procedure', 'parentProcedureId'),
+            childProcedures: a.hasMany('Procedure', 'parentProcedureId'), // Instances created from this template
+            code: a.string(), // YAML template code (for templates) or copied code (for instances)
+            category: a.string(), // For templates: e.g., "hypothesis_generation", "beam_search"
+            version: a.string(), // For templates: version (e.g., "1.0", "2.1")
+            isDefault: a.boolean(), // For templates: whether this is the default for the category
             rootNodeId: a.id(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -882,8 +887,9 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
-            idx("templateId").sortKeys(["updatedAt"]),
-            idx("rootNodeId")
+            idx("parentProcedureId").sortKeys(["updatedAt"]),
+            idx("rootNodeId"),
+            idx("category").sortKeys(["version"]).name("byCategory")
         ]),
 
     GraphNode: a
@@ -910,28 +916,6 @@ const schema = a.schema({
             idx("accountId").sortKeys(["createdAt"]).name("byAccountAndCreatedAt"),
             idx("procedureId").sortKeys(["createdAt"]).name("nodesByProcedureCreatedAt"),
             idx("parentNodeId").name("nodesByParent")
-        ]),
-
-    ProcedureTemplate: a
-        .model({
-            name: a.string().required(),
-            description: a.string(),
-            template: a.string().required(), // The YAML template content
-            category: a.string(), // e.g., "hypothesis_generation", "beam_search"
-            version: a.string(), // Template version (e.g., "1.0", "2.1")
-            isDefault: a.boolean(), // Whether this is the default template for the category
-            accountId: a.string().required(),
-            account: a.belongsTo('Account', 'accountId'),
-            procedures: a.hasMany('Procedure', 'templateId'),
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"])
         ]),
 
     ChatSession: a
