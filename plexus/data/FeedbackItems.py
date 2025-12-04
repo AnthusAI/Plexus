@@ -32,10 +32,28 @@ logger = logging.getLogger(__name__)
 class FeedbackItems(DataCache):
     """
     Data cache that loads datasets from feedback items.
-    
+
     This class fetches feedback items for a given scorecard and score,
     analyzes the confusion matrix, and samples items from each matrix cell
     to create a balanced dataset for training/evaluation.
+
+    Confusion Matrix Sampling:
+    --------------------------
+    Items are grouped by (initial_value, final_value) pairs, forming confusion matrix cells:
+    - (No→No): AI predicted No, human kept No (agreement)
+    - (No→Yes): AI predicted No, human changed to Yes (false negative)
+    - (Yes→No): AI predicted Yes, human changed to No (false positive)
+    - (Yes→Yes): AI predicted Yes, human kept Yes (agreement)
+
+    Sampling behavior with limit_per_cell:
+    - Samples up to limit_per_cell items from EACH cell independently
+    - This creates balanced training across prediction patterns, not raw frequency
+    - Example: With limit_per_cell=50 and raw data [2,592 No→Yes, 315 No→No, 5 Yes→Yes]:
+      Result: 50 No→Yes + 50 No→No + 5 Yes→Yes = 105 items (52% Yes, 48% No final values)
+      Instead of raw 89% Yes, 11% No distribution
+
+    This balancing helps models learn from both agreements and corrections across
+    different prediction types, rather than being dominated by the most common pattern.
     """
     
     class Parameters(DataCache.Parameters):
@@ -49,6 +67,7 @@ class FeedbackItems(DataCache):
         initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
         final_value: Optional[str] = Field(None, description="Filter by corrected human value")
         feedback_id: Optional[str] = Field(None, description="Specific feedback item ID to create dataset for (if specified, only this item will be included)")
+        backfill_cells: Optional[bool] = Field(False, description="If True, backfill confusion matrix cells to limit_per_cell using older data outside the time window when cells have insufficient items")
         identifier_extractor: Optional[str] = Field(None, description="Optional client-specific identifier extractor class (e.g., 'CallCriteriaIdentifierExtractor')")
         column_mappings: Optional[Dict[str, str]] = Field(None, description="Optional mapping of original score names to new column names (e.g., {'Agent Misrepresentation': 'Agent Misrepresentation - With Confidence'})")
         cache_file: str = Field(default="feedback_items_cache.parquet", description="Cache file name")
@@ -316,11 +335,12 @@ class FeedbackItems(DataCache):
             'limit_per_cell': self.parameters.limit_per_cell,
             'initial_value': self.normalized_initial_value,
             'final_value': self.normalized_final_value,
-            'feedback_id': self.parameters.feedback_id
+            'feedback_id': self.parameters.feedback_id,
+            'backfill_cells': self.parameters.backfill_cells
         }
         params_str = json.dumps(params, sort_keys=True)
         params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
-        
+
         # If a specific feedback_id is provided, include it in the identifier
         if self.parameters.feedback_id:
             return f"feedback_items_{scorecard_id}_{score_id}_single_{self.parameters.feedback_id[:8]}_{params_hash}"
@@ -429,19 +449,34 @@ class FeedbackItems(DataCache):
             return pd.DataFrame()
         
         logger.info(f"Found {len(feedback_items)} feedback items")
-        
+
         # If a specific feedback_id was provided, skip sampling and use the single item
         if self.parameters.feedback_id:
             sampled_items = feedback_items
             logger.info(f"Using single feedback item {self.parameters.feedback_id} without sampling")
         else:
-            # Build confusion matrix and sample items
-            sampled_items = self._sample_items_from_confusion_matrix(feedback_items)
-            
+            # Build confusion matrix
+            matrix_cells = self._build_confusion_matrix(feedback_items)
+
+            # Backfill cells if enabled
+            if self.parameters.backfill_cells:
+                logger.info("Backfill enabled: filling sparse cells with older data")
+                matrix_cells = self._backfill_matrix_cells(matrix_cells, scorecard_id, score_id)
+
+            # Flatten matrix back to list for sampling
+            all_items = []
+            for cell_items in matrix_cells.values():
+                all_items.extend(cell_items)
+
+            logger.info(f"After backfill: {len(all_items)} total items")
+
+            # Sample from confusion matrix
+            sampled_items = self._sample_items_from_confusion_matrix(all_items)
+
             if not sampled_items:
                 logger.warning("No items after sampling")
                 return pd.DataFrame()
-            
+
             logger.info(f"Sampled {len(sampled_items)} items from confusion matrix")
         
         # Create dataset rows
@@ -718,27 +753,206 @@ class FeedbackItems(DataCache):
         
         return feedback_by_score
 
-    def _sample_items_from_confusion_matrix(self, feedback_items: List[FeedbackItem]) -> List[FeedbackItem]:
+    def _build_confusion_matrix(self, feedback_items: List[FeedbackItem]) -> Dict[Tuple[str, str], List[FeedbackItem]]:
         """
-        Sample items from each confusion matrix cell, prioritizing items with edit comments.
-        
+        Build confusion matrix by grouping items into cells based on (initial_value, final_value) pairs.
+
         Args:
-            feedback_items: All feedback items
-            
+            feedback_items: List of feedback items to group
+
         Returns:
-            Sampled items respecting limit_per_cell and overall limit
+            Dict mapping (initial_value, final_value) -> List[FeedbackItem]
         """
-        # Group items by confusion matrix cell (initial_value, final_value)
         matrix_cells = defaultdict(list)
-        
+
         for item in feedback_items:
             if item.initialAnswerValue is not None and item.finalAnswerValue is not None:
                 cell_key = (str(item.initialAnswerValue), str(item.finalAnswerValue))
                 matrix_cells[cell_key].append(item)
-        
-        logger.info(f"Found {len(matrix_cells)} confusion matrix cells")
+
+        logger.info(f"Built confusion matrix with {len(matrix_cells)} cells")
         for cell_key, cell_items in matrix_cells.items():
             logger.info(f"  Cell {cell_key}: {len(cell_items)} items")
+
+        return dict(matrix_cells)
+
+    async def _fetch_backfill_items_for_cell(
+        self,
+        scorecard_id: str,
+        score_id: str,
+        initial_value: str,
+        final_value: str,
+        before_date: datetime,
+        limit: int,
+        existing_ids: set
+    ) -> List[FeedbackItem]:
+        """
+        Fetch additional feedback items for a specific confusion matrix cell from before a given date.
+
+        Args:
+            scorecard_id: ID of the scorecard
+            score_id: ID of the score
+            initial_value: Initial answer value to filter by
+            final_value: Final answer value to filter by
+            before_date: Only fetch items edited before this date
+            limit: Maximum number of items to fetch
+            existing_ids: Set of feedback item IDs already in the dataset (to avoid duplicates)
+
+        Returns:
+            List of FeedbackItem objects for backfilling
+        """
+        logger.info(f"Backfilling cell ({initial_value}→{final_value}): fetching up to {limit} items before {before_date.isoformat()}")
+
+        # Use FeedbackService to find items with a very large lookback window
+        # We use days=3650 (10 years) instead of None to ensure we use the efficient GSI query
+        # which properly paginates and retrieves all items
+        all_items = await FeedbackService.find_feedback_items(
+            client=self.client,
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            account_id=self.account_id,
+            days=3650,  # 10 years - effectively "all time" using the efficient GSI query
+            initial_value=None,
+            final_value=None,
+            limit=None,
+            prioritize_edit_comments=False
+        )
+
+        # Filter items manually
+        backfill_items = []
+        for item in all_items:
+            # Skip if already in existing dataset
+            if item.id in existing_ids:
+                continue
+
+            # Filter by initial and final values (case-insensitive)
+            if self._normalize_item_value(item.initialAnswerValue) != self._normalize_value(initial_value):
+                continue
+            if self._normalize_item_value(item.finalAnswerValue) != self._normalize_value(final_value):
+                continue
+
+            # Filter by date
+            item_date = item.editedAt or item.createdAt
+            if item_date and item_date < before_date:
+                backfill_items.append(item)
+
+        # Sort by date descending (most recent first) and take up to limit
+        backfill_items.sort(key=lambda x: x.editedAt or x.createdAt, reverse=True)
+        backfill_items = backfill_items[:limit]
+
+        logger.info(f"Found {len(backfill_items)} backfill items for cell ({initial_value}→{final_value})")
+        return backfill_items
+
+    def _backfill_matrix_cells(
+        self,
+        matrix_cells: Dict[Tuple[str, str], List[FeedbackItem]],
+        scorecard_id: str,
+        score_id: str
+    ) -> Dict[Tuple[str, str], List[FeedbackItem]]:
+        """
+        Backfill confusion matrix cells to limit_per_cell using older data when cells have insufficient items.
+
+        For each cell with fewer than limit_per_cell items, this method fetches additional items
+        from before the time window, prioritizing more recent data, until reaching limit_per_cell.
+
+        Args:
+            matrix_cells: Dict mapping (initial, final) -> List[FeedbackItem]
+            scorecard_id: ID of the scorecard
+            score_id: ID of the score
+
+        Returns:
+            Updated matrix_cells dict with backfilled items
+        """
+        if not self.parameters.limit_per_cell:
+            logger.info("No limit_per_cell set, skipping backfill")
+            return matrix_cells
+
+        # Track all existing feedback item IDs to avoid duplicates
+        existing_ids = set()
+        for cell_items in matrix_cells.values():
+            for item in cell_items:
+                existing_ids.add(item.id)
+
+        logger.info(f"Backfilling matrix cells (current total: {len(existing_ids)} items)")
+
+        # Check each cell and backfill if needed
+        for cell_key, cell_items in matrix_cells.items():
+            initial_value, final_value = cell_key
+            current_count = len(cell_items)
+
+            if current_count >= self.parameters.limit_per_cell:
+                logger.info(f"Cell {cell_key} already at capacity ({current_count}/{self.parameters.limit_per_cell})")
+                continue
+
+            needed = self.parameters.limit_per_cell - current_count
+            logger.info(f"Cell {cell_key} needs {needed} more items ({current_count}/{self.parameters.limit_per_cell})")
+
+            # Find the oldest item in this cell to know where to start searching
+            if cell_items:
+                oldest_date = min(item.editedAt or item.createdAt for item in cell_items)
+            else:
+                # If somehow we have an empty cell, use current time as boundary
+                oldest_date = datetime.now(timezone.utc)
+
+            # Fetch backfill items
+            try:
+                # Try to get the current event loop
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If we're in a running loop, create a task
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(
+                            lambda: asyncio.run(self._fetch_backfill_items_for_cell(
+                                scorecard_id, score_id, initial_value, final_value,
+                                oldest_date, needed, existing_ids
+                            ))
+                        )
+                        backfill_items = future.result()
+                else:
+                    # If no running loop, use asyncio.run
+                    backfill_items = asyncio.run(self._fetch_backfill_items_for_cell(
+                        scorecard_id, score_id, initial_value, final_value,
+                        oldest_date, needed, existing_ids
+                    ))
+            except RuntimeError:
+                # Fallback: create new event loop
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    backfill_items = new_loop.run_until_complete(
+                        self._fetch_backfill_items_for_cell(
+                            scorecard_id, score_id, initial_value, final_value,
+                            oldest_date, needed, existing_ids
+                        )
+                    )
+                finally:
+                    new_loop.close()
+
+            # Add backfill items to the cell
+            if backfill_items:
+                matrix_cells[cell_key].extend(backfill_items)
+                for item in backfill_items:
+                    existing_ids.add(item.id)
+                logger.info(f"Added {len(backfill_items)} backfill items to cell {cell_key} (now {len(matrix_cells[cell_key])} total)")
+
+        total_items = sum(len(items) for items in matrix_cells.values())
+        logger.info(f"Backfill complete: {total_items} total items across {len(matrix_cells)} cells")
+
+        return matrix_cells
+
+    def _sample_items_from_confusion_matrix(self, feedback_items: List[FeedbackItem]) -> List[FeedbackItem]:
+        """
+        Sample items from each confusion matrix cell, prioritizing items with edit comments.
+
+        Args:
+            feedback_items: All feedback items
+
+        Returns:
+            Sampled items respecting limit_per_cell and overall limit
+        """
+        # Build confusion matrix
+        matrix_cells = self._build_confusion_matrix(feedback_items)
         
         # Sample from each cell with priority for edit comments
         sampled_items = []

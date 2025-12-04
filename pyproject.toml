@@ -49,7 +49,7 @@ dependencies = [
     "shap==0.45.1",
     "contractions==0.1.73",
     "langchain>=0.3.25",
-    "langchain-core>=0.3.70",
+    "langchain-core<0.3.79",
     "langchain-community>=0.3.24",
     "langgraph==0.6.7",
     "langchain-aws>=0.2.23",

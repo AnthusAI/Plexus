@@ -205,6 +205,7 @@ def register_procedure_node_tools(server, procedure_context: Optional[Dict[str, 
                 # Create the new node
                 new_node = GraphNode.create(
                     client=client,
+                    accountId=procedure.accountId,
                     procedureId=procedure_id,
                     parentNodeId=parent_node_id,
                     name=node_name,
