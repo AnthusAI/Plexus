@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { 
+import {
   MessageSquare,
   User,
   Bot,
@@ -24,7 +24,12 @@ import {
   PanelLeftClose,
   MoreHorizontal,
   Trash2,
-  ChevronRight
+  ChevronRight,
+  Bell,
+  Info,
+  AlertTriangle,
+  AlertCircle,
+  XCircle
 } from "lucide-react"
 import { Timestamp } from "@/components/ui/timestamp"
 import ReactMarkdown from 'react-markdown'
@@ -39,6 +44,7 @@ export interface ChatMessage {
   content: string
   role: 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL'
   messageType?: 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE'
+  humanInteraction?: 'INTERNAL' | 'CHAT' | 'CHAT_ASSISTANT' | 'NOTIFICATION' | 'ALERT_INFO' | 'ALERT_WARNING' | 'ALERT_ERROR' | 'ALERT_CRITICAL' | 'PENDING_APPROVAL' | 'PENDING_INPUT' | 'PENDING_REVIEW' | 'RESPONSE' | 'TIMED_OUT' | 'CANCELLED'
   toolName?: string
   toolParameters?: any
   toolResponse?: any
@@ -175,14 +181,31 @@ function CollapsibleText({
 }
 
 // Message type icons and colors
-const getMessageIcon = (role?: string, messageType?: string) => {
+const getMessageIcon = (role?: string, messageType?: string, humanInteraction?: string) => {
+  // Check humanInteraction first for special message types
+  if (humanInteraction === 'NOTIFICATION') {
+    return <Bell className="h-4 w-4 text-blue-500" />
+  }
+  if (humanInteraction === 'ALERT_INFO') {
+    return <Info className="h-4 w-4 text-blue-600" />
+  }
+  if (humanInteraction === 'ALERT_WARNING') {
+    return <AlertTriangle className="h-4 w-4 text-yellow-600" />
+  }
+  if (humanInteraction === 'ALERT_ERROR') {
+    return <AlertCircle className="h-4 w-4 text-red-600" />
+  }
+  if (humanInteraction === 'ALERT_CRITICAL') {
+    return <XCircle className="h-4 w-4 text-red-700" />
+  }
+
   if (messageType === 'TOOL_CALL') {
     return <Wrench className="h-4 w-4 text-blue-500" />
   }
   if (messageType === 'TOOL_RESPONSE') {
     return <Terminal className="h-4 w-4 text-green-600" />
   }
-  
+
   switch (role) {
     case 'SYSTEM':
       return <Settings className="h-4 w-4 text-purple-600" />
@@ -197,10 +220,17 @@ const getMessageIcon = (role?: string, messageType?: string) => {
   }
 }
 
-const getMessageTypeColor = (role?: string, messageType?: string) => {
+const getMessageTypeColor = (role?: string, messageType?: string, humanInteraction?: string) => {
+  // Check humanInteraction first for special message types
+  if (humanInteraction === 'NOTIFICATION') return 'bg-blue-100 text-blue-800'
+  if (humanInteraction === 'ALERT_INFO') return 'bg-blue-100 text-blue-800'
+  if (humanInteraction === 'ALERT_WARNING') return 'bg-yellow-100 text-yellow-800'
+  if (humanInteraction === 'ALERT_ERROR') return 'bg-red-100 text-red-800'
+  if (humanInteraction === 'ALERT_CRITICAL') return 'bg-red-200 text-red-900'
+
   if (messageType === 'TOOL_CALL') return 'bg-blue-100 text-blue-800'
   if (messageType === 'TOOL_RESPONSE') return 'bg-green-100 text-green-800'
-  
+
   switch (role) {
     case 'SYSTEM':
       return 'bg-purple-100 text-purple-800'
@@ -333,9 +363,10 @@ function ConversationViewer({
           }, {
             selectionSet: [
               'id',
-              'content', 
+              'content',
               'role',
               'messageType',
+              'humanInteraction',
               'toolName',
               'toolParameters',
               'toolResponse',
@@ -384,6 +415,7 @@ function ConversationViewer({
               content: msg.content || '',
               role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
               messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
+              humanInteraction: msg.humanInteraction,
               toolName: parsedToolName,
               toolParameters: parsedToolParameters,
               toolResponse: msg.toolResponse ? JSON.parse(msg.toolResponse) : undefined,
@@ -393,14 +425,46 @@ function ConversationViewer({
             }
           })
           
+          // Filter out INTERNAL messages that should not be shown to humans
+          // For backward compatibility: show messages where humanInteraction is not set (undefined/null)
+          // or where it's explicitly set to a visible type. Only hide INTERNAL tool calls/responses.
+          console.log(`[ConversationViewer] Before filter: ${formattedMessages.length} messages`)
+          if (formattedMessages.length > 0) {
+            console.log('[ConversationViewer] Sample messages:', formattedMessages.slice(0, 2).map(m => ({
+              id: m.id?.substring(0, 8),
+              role: m.role,
+              messageType: m.messageType,
+              humanInteraction: m.humanInteraction,
+              sessionId: m.sessionId?.substring(0, 8)
+            })))
+          }
+
+          const visibleMessages = formattedMessages.filter(msg => {
+            // If humanInteraction is not set (null/undefined), show it (backward compatibility)
+            if (!msg.humanInteraction) {
+              return true
+            }
+
+            // Hide INTERNAL messages only if they're tool-related
+            if (msg.humanInteraction === 'INTERNAL') {
+              const shouldShow = msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
+              return shouldShow
+            }
+
+            // Show all other humanInteraction types
+            return true
+          })
+
+          console.log(`[ConversationViewer] After filter: ${visibleMessages.length} visible messages`)
+
           // Sort all messages by sequence number and creation time
-          const sortedMessages = formattedMessages.sort((a, b) => {
+          const sortedMessages = visibleMessages.sort((a, b) => {
             if (a.sequenceNumber && b.sequenceNumber) {
               return a.sequenceNumber - b.sequenceNumber
             }
             return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           })
-          
+
           setInternalMessages(sortedMessages)
           
           // Update session message counts
@@ -534,9 +598,10 @@ function ConversationViewer({
           }, {
             selectionSet: [
               'id',
-              'content', 
+              'content',
               'role',
               'messageType',
+              'humanInteraction',
               'toolName',
               'toolParameters',
               'toolResponse',
@@ -587,6 +652,7 @@ function ConversationViewer({
               content: msg.content || '',
               role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
               messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
+              humanInteraction: msg.humanInteraction,
               toolName: parsedToolName,
               toolParameters: parsedToolParameters,
               toolResponse: msg.toolResponse ? JSON.parse(msg.toolResponse) : undefined,
@@ -596,14 +662,32 @@ function ConversationViewer({
             }
           })
           
+          // Filter out INTERNAL messages that should not be shown to humans
+          // For backward compatibility: show messages where humanInteraction is not set (undefined/null)
+          // or where it's explicitly set to a visible type. Only hide INTERNAL tool calls/responses.
+          const visibleMessages = formattedMessages.filter(msg => {
+            // If humanInteraction is not set, show it (backward compatibility)
+            if (!msg.humanInteraction) return true
+
+            // Hide INTERNAL messages only if they're tool-related
+            if (msg.humanInteraction === 'INTERNAL') {
+              // Keep INTERNAL messages that are regular chat (backward compat for old messages)
+              // Hide INTERNAL messages that are tool calls/responses
+              return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
+            }
+
+            // Show all other humanInteraction types
+            return true
+          })
+
           // Sort messages by sequence number and creation time
-          const sortedMessages = formattedMessages.sort((a, b) => {
+          const sortedMessages = visibleMessages.sort((a, b) => {
             if (a.sequenceNumber && b.sequenceNumber) {
               return a.sequenceNumber - b.sequenceNumber
             }
             return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           })
-          
+
           // Check if we have new messages compared to current state
           setInternalMessages(prevMessages => {
             console.log('Current state has', prevMessages.length, 'messages')
@@ -665,12 +749,18 @@ function ConversationViewer({
     const bTime = new Date(b.updatedAt || b.createdAt).getTime()
     return bTime - aTime
   })
-  
+
+  console.log(`[ConversationViewer] Total messages available: ${messages.length}`)
+  console.log(`[ConversationViewer] Selected session: ${selectedSessionId}`)
+  console.log(`[ConversationViewer] Sessions:`, sortedSessions.map(s => ({ id: s.id.substring(0, 8), messageCount: s.messageCount })))
+
   // Filter messages for selected session
-  const filteredMessages = selectedSessionId 
+  const filteredMessages = selectedSessionId
     ? messages.filter(msg => (msg as any).sessionId === selectedSessionId)
     : messages
-  
+
+  console.log(`[ConversationViewer] After session filter: ${filteredMessages.length} messages for session ${selectedSessionId?.substring(0, 8)}`)
+
   // Sort messages by sequence number or creation date
   const sortedMessages = [...filteredMessages].sort((a, b) => {
     if (a.sequenceNumber && b.sequenceNumber) {
@@ -678,6 +768,8 @@ function ConversationViewer({
     }
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   })
+
+  console.log(`[ConversationViewer] Final sorted messages to display: ${sortedMessages.length}`)
   
   // Get the current selected session
   const selectedSession = selectedSessionId ? sessions.find(s => s.id === selectedSessionId) : null
@@ -860,16 +952,21 @@ function ConversationViewer({
               {sortedMessages.map((message) => (
                 <div key={message.id} data-message-id={message.id} className="flex items-start gap-3">
                   <div className="flex-shrink-0 mt-1">
-                    {getMessageIcon(message.role, message.messageType)}
+                    {getMessageIcon(message.role, message.messageType, message.humanInteraction)}
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
-                      <Badge 
-                        variant="secondary" 
-                        className={`text-xs ${getMessageTypeColor(message.role, message.messageType)}`}
+                      <Badge
+                        variant="secondary"
+                        className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
                       >
-                        {message.messageType === 'TOOL_CALL' ? 'Tool Call' :
+                        {message.humanInteraction === 'NOTIFICATION' ? 'Notification' :
+                         message.humanInteraction === 'ALERT_INFO' ? 'Info' :
+                         message.humanInteraction === 'ALERT_WARNING' ? 'Warning' :
+                         message.humanInteraction === 'ALERT_ERROR' ? 'Error' :
+                         message.humanInteraction === 'ALERT_CRITICAL' ? 'Critical' :
+                         message.messageType === 'TOOL_CALL' ? 'Tool Call' :
                          message.messageType === 'TOOL_RESPONSE' ? 'Tool Response' :
                          message.role === 'SYSTEM' ? 'System' :
                          message.role === 'ASSISTANT' ? 'Assistant' :

@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Reference - Plexus Procedure DSL</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header .breadcrumb {
+            opacity: 0.9;
+        }
+
+        .header .breadcrumb a {
+            color: white;
+            text-decoration: none;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        h2 {
+            color: #667eea;
+            margin: 2rem 0 1rem 0;
+            font-size: 1.8rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+
+        h3 {
+            color: #764ba2;
+            margin: 1.5rem 0 0.5rem 0;
+            font-size: 1.3rem;
+        }
+
+        .function {
+            background: #f9f9f9;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .function h4 {
+            color: #667eea;
+            margin-bottom: 0.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 1.1rem;
+        }
+
+        .signature {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 0.75rem;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            margin: 0.5rem 0;
+            overflow-x: auto;
+        }
+
+        .params, .returns {
+            margin: 0.5rem 0;
+        }
+
+        .params strong, .returns strong {
+            color: #764ba2;
+        }
+
+        .param-list {
+            list-style: none;
+            padding-left: 1rem;
+        }
+
+        .param-list li {
+            margin: 0.25rem 0;
+        }
+
+        .param-name {
+            font-family: 'Courier New', monospace;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .toc {
+            background: #f9f9f9;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            position: sticky;
+            top: 2rem;
+        }
+
+        .toc h3 {
+            margin-top: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .toc li {
+            margin: 0.5rem 0;
+        }
+
+        .toc a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 2rem;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        .example {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 0.5rem 0;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #ddd;
+        }
+
+        .nav-links a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .toc {
+                position: static;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="breadcrumb">
+            <a href="index.html">Documentation</a> / API Reference
+        </div>
+        <h1>API Reference</h1>
+    </div>
+
+    <div class="container">
+        <div class="layout">
+            <div class="toc">
+                <h3>API Index</h3>
+                <ul>
+                    <li><a href="#procedure">Procedure</a></li>
+                    <li><a href="#agent">Agent</a></li>
+                    <li><a href="#human">Human</a></li>
+                    <li><a href="#system">System</a></li>
+                    <li><a href="#state">State</a></li>
+                    <li><a href="#stage">Stage</a></li>
+                    <li><a href="#tool">Tool</a></li>
+                    <li><a href="#session">Session</a></li>
+                    <li><a href="#control">Control</a></li>
+                    <li><a href="#graph">GraphNode</a></li>
+                    <li><a href="#utility">Utility</a></li>
+                </ul>
+            </div>
+
+            <div class="content">
+                <p>
+                    Complete reference for all Lua primitives available in Plexus Procedures.
+                    Each primitive is documented with its signature, parameters, return values,
+                    and usage examples.
+                </p>
+
+                <h2 id="procedure">Procedure Primitives</h2>
+                <p>Control and monitor other procedures.</p>
+
+                <div class="function">
+                    <h4>Procedure.run</h4>
+                    <div class="signature">result = Procedure.run(name, params)</div>
+                    <p>Invoke a procedure synchronously and wait for result.</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">name</span> (string) - Procedure name</li>
+                            <li><span class="param-name">params</span> (table) - Input parameters</li>
+                        </ul>
+                    </div>
+                    <div class="returns">
+                        <strong>Returns:</strong> Table containing procedure outputs
+                    </div>
+                    <div class="example">local research = Procedure.run("researcher", {
+  topic = "quantum computing"
+})
+Log.info("Findings: " .. research.findings)</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.spawn</h4>
+                    <div class="signature">handle = Procedure.spawn(name, params)</div>
+                    <p>Spawn a procedure asynchronously and return handle.</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">name</span> (string) - Procedure name</li>
+                            <li><span class="param-name">params</span> (table) - Input parameters</li>
+                        </ul>
+                    </div>
+                    <div class="returns">
+                        <strong>Returns:</strong> Handle for monitoring and waiting
+                    </div>
+                    <div class="example">local handle = Procedure.spawn("researcher", {
+  topic = "quantum computing"
+})
+-- Do other work
+local result = Procedure.wait(handle)</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.status</h4>
+                    <div class="signature">status = Procedure.status(handle)</div>
+                    <p>Get current status of an async procedure.</p>
+                    <div class="returns">
+                        <strong>Returns:</strong> Table with:
+                        <ul class="param-list">
+                            <li><span class="param-name">stage</span> - Current stage name</li>
+                            <li><span class="param-name">waiting_for_human</span> - Boolean</li>
+                            <li><span class="param-name">iterations</span> - Turn count</li>
+                            <li><span class="param-name">message</span> - Status message</li>
+                        </ul>
+                    </div>
+                    <div class="example">local status = Procedure.status(handle)
+if status.waiting_for_human then
+  notify_slack("Waiting for approval")
+end</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.wait</h4>
+                    <div class="signature">result = Procedure.wait(handle, options)</div>
+                    <p>Wait for async procedure to complete.</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">handle</span> - Procedure handle</li>
+                            <li><span class="param-name">options</span> (table, optional) - {timeout = seconds}</li>
+                        </ul>
+                    </div>
+                    <div class="returns">
+                        <strong>Returns:</strong> Procedure outputs or nil if timeout
+                    </div>
+                    <div class="example">local result = Procedure.wait(handle, {timeout = 300})
+if not result then
+  Log.warn("Timed out")
+end</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.is_complete</h4>
+                    <div class="signature">complete = Procedure.is_complete(handle)</div>
+                    <p>Check if procedure has completed.</p>
+                    <div class="returns"><strong>Returns:</strong> Boolean</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.result</h4>
+                    <div class="signature">result = Procedure.result(handle)</div>
+                    <p>Get result of completed procedure.</p>
+                    <div class="returns"><strong>Returns:</strong> Procedure outputs</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.wait_any</h4>
+                    <div class="signature">handle, result = Procedure.wait_any(handles)</div>
+                    <p>Wait for first procedure to complete.</p>
+                    <div class="returns">
+                        <strong>Returns:</strong> Handle and result of first completion
+                    </div>
+                    <div class="example">local first, result = Procedure.wait_any(handles)
+Log.info("First complete: " .. first)</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.wait_all</h4>
+                    <div class="signature">Procedure.wait_all(handles)</div>
+                    <p>Wait for all procedures to complete.</p>
+                    <div class="example">Procedure.wait_all(handles)
+-- All complete, collect results
+for _, h in ipairs(handles) do
+  process(Procedure.result(h))
+end</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.all_complete</h4>
+                    <div class="signature">complete = Procedure.all_complete(handles)</div>
+                    <p>Check if all procedures have completed.</p>
+                    <div class="returns"><strong>Returns:</strong> Boolean</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.inject</h4>
+                    <div class="signature">Procedure.inject(handle, message)</div>
+                    <p>Send guidance to running procedure.</p>
+                    <div class="example">Procedure.inject(handle, "Focus on recent papers")</div>
+                </div>
+
+                <div class="function">
+                    <h4>Procedure.cancel</h4>
+                    <div class="signature">Procedure.cancel(handle)</div>
+                    <p>Cancel a running procedure.</p>
+                </div>
+
+                <h2 id="agent">Agent Primitives</h2>
+                <p>Execute agent turns. Agent name determines primitive name (e.g., <code>worker</code> → <code>Worker.turn()</code>).</p>
+
+                <div class="function">
+                    <h4>Agent.turn</h4>
+                    <div class="signature">response = Agent.turn(options)</div>
+                    <p>Execute one agent turn.</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">options</span> (table, optional) - {inject = "message"}</li>
+                        </ul>
+                    </div>
+                    <div class="returns">
+                        <strong>Returns:</strong> Table with:
+                        <ul class="param-list">
+                            <li><span class="param-name">content</span> - Response text</li>
+                            <li><span class="param-name">tool_calls</span> - Array of tool calls</li>
+                        </ul>
+                    </div>
+                    <div class="example">-- Basic turn
+Worker.turn()
+
+-- With injection
+Worker.turn({inject = "Focus on security"})
+
+-- Capture response
+local response = Worker.turn()
+Log.info(response.content)</div>
+                </div>
+
+                <h2 id="human">Human Primitives</h2>
+                <p>Human-in-the-loop interaction.</p>
+
+                <div class="function">
+                    <h4>Human.approve</h4>
+                    <div class="signature">approved = Human.approve(options)</div>
+                    <p>Request yes/no approval (blocking).</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">message</span> (string) - Question to ask</li>
+                            <li><span class="param-name">context</span> (table) - Decision context</li>
+                            <li><span class="param-name">timeout</span> (number) - Seconds to wait</li>
+                            <li><span class="param-name">default</span> (boolean) - Return if timeout</li>
+                            <li><span class="param-name">on_timeout</span> (string) - "default", "error", "retry"</li>
+                        </ul>
+                    </div>
+                    <div class="returns"><strong>Returns:</strong> Boolean</div>
+                    <div class="example">local approved = Human.approve({
+  message = "Deploy to production?",
+  context = {version = "2.1.0"},
+  timeout = 3600,
+  default = false
+})</div>
+                </div>
+
+                <div class="function">
+                    <h4>Human.input</h4>
+                    <div class="signature">text = Human.input(options)</div>
+                    <p>Request text input (blocking).</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">message</span> (string) - Input prompt</li>
+                            <li><span class="param-name">placeholder</span> (string) - UI hint</li>
+                            <li><span class="param-name">timeout</span> (number) - Seconds to wait</li>
+                            <li><span class="param-name">default</span> (string) - Return if timeout</li>
+                        </ul>
+                    </div>
+                    <div class="returns"><strong>Returns:</strong> String or nil</div>
+                    <div class="example">local topic = Human.input({
+  message = "What topic to research?",
+  placeholder = "Enter topic..."
+})</div>
+                </div>
+
+                <div class="function">
+                    <h4>Human.review</h4>
+                    <div class="signature">review = Human.review(options)</div>
+                    <p>Request work product review (blocking).</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">message</span> (string) - Review request</li>
+                            <li><span class="param-name">artifact</span> (string) - Content to review</li>
+                            <li><span class="param-name">artifact_type</span> (string) - "document", "code", etc.</li>
+                            <li><span class="param-name">options</span> (array) - Decision options</li>
+                            <li><span class="param-name">timeout</span> (number) - Seconds to wait</li>
+                        </ul>
+                    </div>
+                    <div class="returns">
+                        <strong>Returns:</strong> Table with:
+                        <ul class="param-list">
+                            <li><span class="param-name">decision</span> - Selected option</li>
+                            <li><span class="param-name">edited_artifact</span> - Modified version</li>
+                            <li><span class="param-name">feedback</span> - Comments</li>
+                        </ul>
+                    </div>
+                    <div class="example">local review = Human.review({
+  message = "Review this report",
+  artifact = report,
+  artifact_type = "document",
+  options = {"approve", "edit", "reject"}
+})
+
+if review.decision == "edit" then
+  report = review.edited_artifact
+end</div>
+                </div>
+
+                <div class="function">
+                    <h4>Human.notify</h4>
+                    <div class="signature">Human.notify(options)</div>
+                    <p>Send notification (non-blocking).</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">message</span> (string) - Notification text</li>
+                            <li><span class="param-name">level</span> (string) - "info", "warning", "error"</li>
+                            <li><span class="param-name">context</span> (table) - Additional data</li>
+                        </ul>
+                    </div>
+                    <div class="example">Human.notify({
+  message = "Processing phase 2",
+  level = "info",
+  context = {progress = "40%"}
+})</div>
+                </div>
+
+                <div class="function">
+                    <h4>Human.escalate</h4>
+                    <div class="signature">Human.escalate(options)</div>
+                    <p>Escalate to human (blocking).</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">message</span> (string) - Escalation reason</li>
+                            <li><span class="param-name">context</span> (table) - Debug information</li>
+                        </ul>
+                    </div>
+                    <div class="example">if attempts > 3 then
+  Human.escalate({
+    message = "Unable to resolve automatically",
+    context = {attempts = attempts, error = err}
+  })
+end</div>
+                </div>
+
+                <h2 id="system">System Primitives</h2>
+                <p>System-level monitoring and alerts.</p>
+
+                <div class="function">
+                    <h4>System.alert</h4>
+                    <div class="signature">System.alert(options)</div>
+                    <p>Send system alert (non-blocking).</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">message</span> (string) - Alert text</li>
+                            <li><span class="param-name">level</span> (string) - "info", "warning", "error", "critical"</li>
+                            <li><span class="param-name">source</span> (string) - Component identifier</li>
+                            <li><span class="param-name">context</span> (table) - Alert data</li>
+                        </ul>
+                    </div>
+                    <div class="example">System.alert({
+  message = "Memory threshold exceeded",
+  level = "warning",
+  source = "batch_processor",
+  context = {memory_mb = 8500}
+})</div>
+                </div>
+
+                <h2 id="state">State Primitives</h2>
+                <p>Mutable state management.</p>
+
+                <div class="function">
+                    <h4>State.get</h4>
+                    <div class="signature">value = State.get(key, default)</div>
+                    <p>Get state value.</p>
+                    <div class="returns"><strong>Returns:</strong> Value or default</div>
+                    <div class="example">local count = State.get("count", 0)</div>
+                </div>
+
+                <div class="function">
+                    <h4>State.set</h4>
+                    <div class="signature">State.set(key, value)</div>
+                    <p>Set state value.</p>
+                    <div class="example">State.set("count", 10)
+State.set("config", {mode = "fast"})</div>
+                </div>
+
+                <div class="function">
+                    <h4>State.increment</h4>
+                    <div class="signature">State.increment(key, amount)</div>
+                    <p>Increment numeric value.</p>
+                    <div class="example">State.increment("count")  -- +1
+State.increment("count", 5)  -- +5</div>
+                </div>
+
+                <div class="function">
+                    <h4>State.append</h4>
+                    <div class="signature">State.append(key, value)</div>
+                    <p>Append to array.</p>
+                    <div class="example">State.set("items", {})
+State.append("items", "first")
+State.append("items", "second")</div>
+                </div>
+
+                <div class="function">
+                    <h4>State.all</h4>
+                    <div class="signature">all = State.all()</div>
+                    <p>Get all state as table.</p>
+                    <div class="returns"><strong>Returns:</strong> Table with all state</div>
+                </div>
+
+                <h2 id="stage">Stage Primitives</h2>
+                <p>Workflow stage management.</p>
+
+                <div class="function">
+                    <h4>Stage.set</h4>
+                    <div class="signature">Stage.set(name)</div>
+                    <p>Set current stage.</p>
+                    <div class="example">Stage.set("processing")</div>
+                </div>
+
+                <div class="function">
+                    <h4>Stage.current</h4>
+                    <div class="signature">name = Stage.current()</div>
+                    <p>Get current stage name.</p>
+                    <div class="returns"><strong>Returns:</strong> String</div>
+                </div>
+
+                <div class="function">
+                    <h4>Stage.is</h4>
+                    <div class="signature">match = Stage.is(name)</div>
+                    <p>Check if in specific stage.</p>
+                    <div class="returns"><strong>Returns:</strong> Boolean</div>
+                    <div class="example">if Stage.is("processing") then
+  -- do something
+end</div>
+                </div>
+
+                <div class="function">
+                    <h4>Stage.advance</h4>
+                    <div class="signature">Stage.advance(name)</div>
+                    <p>Advance to next stage.</p>
+                </div>
+
+                <div class="function">
+                    <h4>Stage.history</h4>
+                    <div class="signature">history = Stage.history()</div>
+                    <p>Get stage history.</p>
+                    <div class="returns">
+                        <strong>Returns:</strong> Array of {stage, timestamp}
+                    </div>
+                </div>
+
+                <h2 id="tool">Tool Primitives</h2>
+                <p>Tool call inspection.</p>
+
+                <div class="function">
+                    <h4>Tool.called</h4>
+                    <div class="signature">called = Tool.called(name, agent_name)</div>
+                    <p>Check if tool was called.</p>
+                    <div class="params">
+                        <strong>Parameters:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">name</span> (string) - Tool name</li>
+                            <li><span class="param-name">agent_name</span> (string, optional) - For multi-agent</li>
+                        </ul>
+                    </div>
+                    <div class="returns"><strong>Returns:</strong> Boolean</div>
+                    <div class="example">if Tool.called("done") then
+  return {result = "complete"}
+end</div>
+                </div>
+
+                <div class="function">
+                    <h4>Tool.last_result</h4>
+                    <div class="signature">result = Tool.last_result(name, agent_name)</div>
+                    <p>Get last result from tool.</p>
+                    <div class="returns"><strong>Returns:</strong> Tool result value</div>
+                    <div class="example">if Tool.called("search") then
+  local results = Tool.last_result("search")
+end</div>
+                </div>
+
+                <div class="function">
+                    <h4>Tool.last_call</h4>
+                    <div class="signature">call = Tool.last_call(name, agent_name)</div>
+                    <p>Get last tool call details.</p>
+                    <div class="returns">
+                        <strong>Returns:</strong> Table with name, arguments, result
+                    </div>
+                </div>
+
+                <h2 id="session">Session Primitives</h2>
+                <p>Message history management.</p>
+
+                <div class="function">
+                    <h4>Session.append</h4>
+                    <div class="signature">Session.append(message)</div>
+                    <p>Append message to history.</p>
+                    <div class="example">Session.append({
+  role = "user",
+  content = "Additional context"
+})</div>
+                </div>
+
+                <div class="function">
+                    <h4>Session.inject_system</h4>
+                    <div class="signature">Session.inject_system(text)</div>
+                    <p>Inject system message.</p>
+                </div>
+
+                <div class="function">
+                    <h4>Session.clear</h4>
+                    <div class="signature">Session.clear()</div>
+                    <p>Clear message history.</p>
+                </div>
+
+                <div class="function">
+                    <h4>Session.history</h4>
+                    <div class="signature">messages = Session.history()</div>
+                    <p>Get message history.</p>
+                    <div class="returns"><strong>Returns:</strong> Array of messages</div>
+                </div>
+
+                <div class="function">
+                    <h4>Session.load_from_node</h4>
+                    <div class="signature">Session.load_from_node(node)</div>
+                    <p>Load history from graph node.</p>
+                </div>
+
+                <div class="function">
+                    <h4>Session.save_to_node</h4>
+                    <div class="signature">Session.save_to_node(node)</div>
+                    <p>Save history to graph node.</p>
+                </div>
+
+                <h2 id="control">Control Primitives</h2>
+                <p>Flow control and status checking.</p>
+
+                <div class="function">
+                    <h4>Stop.requested</h4>
+                    <div class="signature">requested = Stop.requested()</div>
+                    <p>Check if stop requested.</p>
+                    <div class="returns"><strong>Returns:</strong> Boolean</div>
+                    <div class="example">if Stop.requested() then
+  Log.warn("Stop requested: " .. Stop.reason())
+  return {stopped = true}
+end</div>
+                </div>
+
+                <div class="function">
+                    <h4>Stop.reason</h4>
+                    <div class="signature">reason = Stop.reason()</div>
+                    <p>Get stop reason.</p>
+                    <div class="returns"><strong>Returns:</strong> String</div>
+                </div>
+
+                <div class="function">
+                    <h4>Iterations.current</h4>
+                    <div class="signature">count = Iterations.current()</div>
+                    <p>Get current iteration count.</p>
+                    <div class="returns"><strong>Returns:</strong> Number</div>
+                </div>
+
+                <div class="function">
+                    <h4>Iterations.exceeded</h4>
+                    <div class="signature">exceeded = Iterations.exceeded(max)</div>
+                    <p>Check if iterations exceeded limit.</p>
+                    <div class="returns"><strong>Returns:</strong> Boolean</div>
+                    <div class="example">repeat
+  Worker.turn()
+until Tool.called("done") or Iterations.exceeded(20)</div>
+                </div>
+
+                <h2 id="graph">GraphNode Primitives</h2>
+                <p>Graph structure navigation.</p>
+
+                <div class="function">
+                    <h4>GraphNode.root</h4>
+                    <div class="signature">node = GraphNode.root()</div>
+                    <p>Get root node.</p>
+                </div>
+
+                <div class="function">
+                    <h4>GraphNode.current</h4>
+                    <div class="signature">node = GraphNode.current()</div>
+                    <p>Get current node.</p>
+                </div>
+
+                <div class="function">
+                    <h4>GraphNode.create</h4>
+                    <div class="signature">node = GraphNode.create(options)</div>
+                    <p>Create new node.</p>
+                    <div class="example">local node = GraphNode.create({
+  name = "analysis_result",
+  metadata = {score = 85}
+})</div>
+                </div>
+
+                <div class="function">
+                    <h4>GraphNode.set_current</h4>
+                    <div class="signature">GraphNode.set_current(node)</div>
+                    <p>Set current node.</p>
+                </div>
+
+                <div class="function">
+                    <h4>node:children</h4>
+                    <div class="signature">children = node:children()</div>
+                    <p>Get child nodes.</p>
+                </div>
+
+                <div class="function">
+                    <h4>node:parent</h4>
+                    <div class="signature">parent = node:parent()</div>
+                    <p>Get parent node.</p>
+                </div>
+
+                <div class="function">
+                    <h4>node:metadata</h4>
+                    <div class="signature">data = node:metadata()</div>
+                    <p>Get node metadata.</p>
+                </div>
+
+                <div class="function">
+                    <h4>node:set_metadata</h4>
+                    <div class="signature">node:set_metadata(key, value)</div>
+                    <p>Set metadata field.</p>
+                </div>
+
+                <h2 id="utility">Utility Primitives</h2>
+                <p>Logging, file operations, and utilities.</p>
+
+                <div class="function">
+                    <h4>Log.debug / info / warn / error</h4>
+                    <div class="signature">Log.info(message, context)</div>
+                    <p>Log message at specified level.</p>
+                    <div class="example">Log.info("Processing item", {id = item_id})
+Log.error("Failed", {error = err})</div>
+                </div>
+
+                <div class="function">
+                    <h4>Sleep</h4>
+                    <div class="signature">Sleep(seconds)</div>
+                    <p>Sleep for specified duration.</p>
+                    <div class="example">Sleep(5)  -- Wait 5 seconds</div>
+                </div>
+
+                <div class="function">
+                    <h4>Json.encode / decode</h4>
+                    <div class="signature">string = Json.encode(table)</div>
+                    <div class="signature">table = Json.decode(string)</div>
+                    <p>JSON serialization.</p>
+                    <div class="example">local json = Json.encode({key = "value"})
+local data = Json.decode(json_string)</div>
+                </div>
+
+                <div class="function">
+                    <h4>File.read / write / exists</h4>
+                    <div class="signature">content = File.read(path)</div>
+                    <div class="signature">File.write(path, content)</div>
+                    <div class="signature">exists = File.exists(path)</div>
+                    <p>File system operations.</p>
+                    <div class="example">if File.exists("/path/to/file") then
+  local content = File.read("/path/to/file")
+  -- process content
+end</div>
+                </div>
+
+                <div class="function">
+                    <h4>Retry.with_backoff</h4>
+                    <div class="signature">result = Retry.with_backoff(fn, options)</div>
+                    <p>Retry operation with exponential backoff.</p>
+                    <div class="params">
+                        <strong>Options:</strong>
+                        <ul class="param-list">
+                            <li><span class="param-name">max_attempts</span> - Maximum retries</li>
+                            <li><span class="param-name">initial_delay</span> - Initial delay seconds</li>
+                            <li><span class="param-name">multiplier</span> - Backoff multiplier</li>
+                        </ul>
+                    </div>
+                    <div class="example">local result = Retry.with_backoff(function()
+  return risky_operation()
+end, {
+  max_attempts = 3,
+  initial_delay = 1.0,
+  multiplier = 2.0
+})</div>
+                </div>
+
+                <div class="nav-links">
+                    <a href="examples.html">← Examples & Patterns</a>
+                    <a href="index.html">Back to Documentation</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

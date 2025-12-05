@@ -47,26 +47,54 @@ def _validate_yaml_template(template_data):
     """Validate that a YAML template has required sections for procedures."""
     if not isinstance(template_data, dict):
         return False
-    
-    # Check for required top-level keys
-    required_keys = ['class', 'prompts']
-    for key in required_keys:
-        if key not in template_data:
-            logger.warning(f"Template missing required key: {key}")
+
+    # Detect procedure class
+    procedure_class = template_data.get('class', 'SOPAgent')
+
+    if procedure_class == 'LuaDSL':
+        # Validate Lua DSL structure
+        required_keys = ['name', 'version', 'agents', 'workflow']
+        for key in required_keys:
+            if key not in template_data:
+                logger.warning(f"Lua DSL template missing required key: {key}")
+                return False
+
+        # Validate agents is dict with at least one agent
+        agents = template_data.get('agents', {})
+        if not isinstance(agents, dict) or not agents:
+            logger.warning("Lua DSL template must have at least one agent in 'agents' section")
             return False
-    
-    # Check for required prompt sections
-    prompts = template_data.get('prompts', {})
-    required_prompts = ['worker_system_prompt', 'worker_user_prompt', 'manager_system_prompt']
-    for prompt_key in required_prompts:
-        if prompt_key not in prompts:
-            logger.warning(f"Template missing required prompt: {prompt_key}")
+
+        # Validate workflow is non-empty
+        workflow = template_data.get('workflow', '')
+        if not workflow or not workflow.strip():
+            logger.warning("Lua DSL template must have non-empty 'workflow' section")
             return False
-        if not prompts[prompt_key] or prompts[prompt_key].strip() == '':
-            logger.warning(f"Template has empty prompt: {prompt_key}")
-            return False
-    
-    return True
+
+        logger.info("Lua DSL validation passed")
+        return True
+
+    else:
+        # Validate SOP Agent structure (backward compatibility)
+        required_keys = ['class', 'prompts']
+        for key in required_keys:
+            if key not in template_data:
+                logger.warning(f"Template missing required key: {key}")
+                return False
+
+        # Check for required prompt sections
+        prompts = template_data.get('prompts', {})
+        required_prompts = ['worker_system_prompt', 'worker_user_prompt', 'manager_system_prompt']
+        for prompt_key in required_prompts:
+            if prompt_key not in prompts:
+                logger.warning(f"Template missing required prompt: {prompt_key}")
+                return False
+            if not prompts[prompt_key] or prompts[prompt_key].strip() == '':
+                logger.warning(f"Template has empty prompt: {prompt_key}")
+                return False
+
+        logger.info("SOP Agent validation passed")
+        return True
 
 # NO DEFAULT TEMPLATE - procedures must have YAML in database
 # Users MUST provide their own YAML via Procedure.code or ProcedureTemplate
@@ -126,8 +154,8 @@ class ProcedureService:
     def create_procedure(
         self,
         account_identifier: str,
-        scorecard_identifier: str,
-        score_identifier: str,
+        scorecard_identifier: Optional[str] = None,
+        score_identifier: Optional[str] = None,
         yaml_config: Optional[str] = None,
         featured: bool = False,
         initial_value: Optional[Dict[str, Any]] = None,
@@ -136,16 +164,18 @@ class ProcedureService:
         score_version_id: Optional[str] = None
     ) -> ProcedureCreationResult:
         """Create a new procedure with optional root node and initial version.
-        
+
         Args:
             account_identifier: Account ID, key, or name
-            scorecard_identifier: Scorecard ID, key, or name  
+            scorecard_identifier: Scorecard ID, key, or name
             score_identifier: Score ID, key, or name
             yaml_config: YAML configuration (uses default if None)
             featured: Whether to mark as featured
             initial_value: Initial computed value (defaults to {"initialized": True})
             create_root_node: Whether to create a root node (defaults to True for backward compatibility)
-            
+            template_id: Optional template/parent procedure ID (NOTE: stored as parentProcedureId in schema)
+            score_version_id: Optional score version ID
+
         Returns:
             ProcedureCreationResult with creation details
         """
@@ -159,25 +189,30 @@ class ProcedureService:
                     success=False,
                     message=f"Could not resolve account: {account_identifier}"
                 )
-                
-            scorecard_id = resolve_scorecard_identifier(self.client, scorecard_identifier)
-            if not scorecard_id:
-                return ProcedureCreationResult(
-                    procedure=None,
-                    root_node=None,
-                    success=False,
-                    message=f"Could not resolve scorecard: {scorecard_identifier}"
-                )
-                
-            # Resolve score identifier
-            score_id = self._resolve_score_identifier(scorecard_id, score_identifier)
-            if not score_id:
-                return ProcedureCreationResult(
-                    procedure=None,
-                    root_node=None,
-                    success=False,
-                    message=f"Could not resolve score: {score_identifier}"
-                )
+
+            # Resolve scorecard identifier (optional for standalone procedures)
+            scorecard_id = None
+            if scorecard_identifier:
+                scorecard_id = resolve_scorecard_identifier(self.client, scorecard_identifier)
+                if not scorecard_id:
+                    return ProcedureCreationResult(
+                        procedure=None,
+                        root_node=None,
+                        success=False,
+                        message=f"Could not resolve scorecard: {scorecard_identifier}"
+                    )
+
+            # Resolve score identifier (optional for standalone procedures)
+            score_id = None
+            if score_identifier and scorecard_id:
+                score_id = self._resolve_score_identifier(scorecard_id, score_identifier)
+                if not score_id:
+                    return ProcedureCreationResult(
+                        procedure=None,
+                        root_node=None,
+                        success=False,
+                        message=f"Could not resolve score: {score_identifier}"
+                    )
             
             # Get or create procedure template
             if template_id:
@@ -234,7 +269,9 @@ class ProcedureService:
                 accountId=account_id,
                 scorecardId=scorecard_id,
                 scoreId=score_id,
-                templateId=template.id,
+                parentProcedureId=template.id if template else None,  # Changed from templateId
+                isTemplate=False,  # Mark as instance, not template
+                code=yaml_config,  # Store YAML in procedure
                 featured=featured,
                 scoreVersionId=score_version_id
             )
@@ -482,10 +519,12 @@ class ProcedureService:
                 return procedure.code
             
             # SECOND: Get template if procedure has one
-            if hasattr(procedure, 'templateId') and procedure.templateId:
-                template = ProcedureTemplate.get_by_id(procedure.templateId, self.client)
+            # NOTE: templateId was renamed to parentProcedureId
+            parent_id = getattr(procedure, 'parentProcedureId', None) or getattr(procedure, 'templateId', None)
+            if parent_id:
+                template = ProcedureTemplate.get_by_id(parent_id, self.client)
                 if template:
-                    logger.info(f"Using YAML from ProcedureTemplate {procedure.templateId} for {procedure_id}")
+                    logger.info(f"Using YAML from parent template {parent_id} for {procedure_id}")
                     return template.get_template_content()
             
             # THIRD: Fallback to account default template
@@ -770,6 +809,50 @@ You can query the current guidelines using the `plexus_score_info` tool with the
             
             logger.info(f"Found experiment: {procedure_id} (Scorecard: {procedure_info.scorecard_name})")
 
+            # Check if this is a Lua DSL procedure and route accordingly
+            yaml_config = self.get_procedure_yaml(procedure_id)
+            if yaml_config:
+                import yaml as yaml_lib
+                try:
+                    config = yaml_lib.safe_load(yaml_config)
+                    procedure_class = config.get('class', 'SOPAgent') if isinstance(config, dict) else 'SOPAgent'
+
+                    if procedure_class == 'LuaDSL':
+                        logger.info(f"Routing procedure {procedure_id} to Lua DSL runtime")
+
+                        # Route to Lua DSL executor
+                        from .procedure_executor import execute_procedure
+                        from .mcp_transport import create_procedure_mcp_server
+
+                        # Get MCP server instance
+                        mcp_server = await create_procedure_mcp_server()
+
+                        # Build context with procedure info
+                        context = {
+                            'procedure_id': procedure_id,
+                            'scorecard_name': procedure_info.scorecard_name,
+                            'score_name': procedure_info.score_name,
+                            'scorecard_id': procedure_info.procedure.scorecardId,
+                            'score_id': procedure_info.procedure.scoreId,
+                        }
+
+                        # Execute with Lua DSL runtime
+                        result = await execute_procedure(
+                            procedure_id=procedure_id,
+                            yaml_config=yaml_config,
+                            client=self.client,
+                            mcp_server=mcp_server,
+                            context=context,
+                            **options
+                        )
+
+                        # Return result (skip all SOP agent logic)
+                        return result
+
+                except Exception as e:
+                    logger.warning(f"Error checking procedure class: {e}, falling back to SOP Agent")
+
+            # Continue with existing SOP Agent logic for non-LuaDSL procedures
             # Handle restart from root node option
             if options.get('restart_from_root_node'):
                 from .states import STATE_START

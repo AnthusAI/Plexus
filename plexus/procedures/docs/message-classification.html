@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Message Classification - Plexus Procedure DSL</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header .breadcrumb {
+            opacity: 0.9;
+        }
+
+        .header .breadcrumb a {
+            color: white;
+            text-decoration: none;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        h2 {
+            color: #667eea;
+            margin: 2rem 0 1rem 0;
+            font-size: 1.8rem;
+        }
+
+        h3 {
+            color: #764ba2;
+            margin: 1.5rem 0 0.5rem 0;
+            font-size: 1.3rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: #f5f5f5;
+        }
+
+        .msg-type {
+            background: #f9f9f9;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .msg-type h4 {
+            color: #667eea;
+            margin-bottom: 0.5rem;
+            font-family: 'Courier New', monospace;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-right: 0.5rem;
+            font-weight: 600;
+        }
+
+        .badge.blocking {
+            background: #f44336;
+            color: white;
+        }
+
+        .badge.non-blocking {
+            background: #4caf50;
+            color: white;
+        }
+
+        .badge.response {
+            background: #2196f3;
+            color: white;
+        }
+
+        .badge.hidden {
+            background: #9e9e9e;
+            color: white;
+        }
+
+        .badge.visible {
+            background: #ff9800;
+            color: white;
+        }
+
+        .example {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 0.5rem 0;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .flow-diagram {
+            background: #f9f9f9;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        ul {
+            margin: 1rem 0;
+            padding-left: 2rem;
+        }
+
+        li {
+            margin: 0.5rem 0;
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #ddd;
+        }
+
+        .nav-links a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="breadcrumb">
+            <a href="index.html">Documentation</a> / Message Classification
+        </div>
+        <h1>Message Classification System</h1>
+    </div>
+
+    <div class="container">
+        <div class="content">
+            <h2>Overview</h2>
+            <p>
+                Every message in the Plexus system has a <code>humanInteraction</code> classification
+                that determines its visibility and behavior. This unified system handles both
+                procedure internals (hidden from humans), human-AI chat (conversational), and
+                workflow notifications (visible to humans).
+            </p>
+
+            <h2>Classification Values</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Value</th>
+                        <th>Description</th>
+                        <th>Blocks?</th>
+                        <th>Response Expected?</th>
+                        <th>UI Visibility</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>INTERNAL</code></td>
+                        <td>Agent reasoning, tool calls</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Hidden</td>
+                    </tr>
+                    <tr>
+                        <td><code>CHAT</code></td>
+                        <td>Human message in conversation</td>
+                        <td>No</td>
+                        <td>Optional</td>
+                        <td>Visible</td>
+                    </tr>
+                    <tr>
+                        <td><code>CHAT_ASSISTANT</code></td>
+                        <td>AI response in conversation</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Visible</td>
+                    </tr>
+                    <tr>
+                        <td><code>NOTIFICATION</code></td>
+                        <td>Workflow progress update</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Visible</td>
+                    </tr>
+                    <tr>
+                        <td><code>ALERT_INFO</code></td>
+                        <td>System info alert</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Visible (monitoring)</td>
+                    </tr>
+                    <tr>
+                        <td><code>ALERT_WARNING</code></td>
+                        <td>System warning</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Visible (monitoring)</td>
+                    </tr>
+                    <tr>
+                        <td><code>ALERT_ERROR</code></td>
+                        <td>System error alert</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Visible (monitoring)</td>
+                    </tr>
+                    <tr>
+                        <td><code>ALERT_CRITICAL</code></td>
+                        <td>Critical system alert</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Visible (monitoring)</td>
+                    </tr>
+                    <tr>
+                        <td><code>PENDING_APPROVAL</code></td>
+                        <td>Waiting for yes/no</td>
+                        <td>Yes</td>
+                        <td>Yes</td>
+                        <td>Visible (action required)</td>
+                    </tr>
+                    <tr>
+                        <td><code>PENDING_INPUT</code></td>
+                        <td>Waiting for input</td>
+                        <td>Yes</td>
+                        <td>Yes</td>
+                        <td>Visible (action required)</td>
+                    </tr>
+                    <tr>
+                        <td><code>PENDING_REVIEW</code></td>
+                        <td>Waiting for review</td>
+                        <td>Yes</td>
+                        <td>Yes</td>
+                        <td>Visible (action required)</td>
+                    </tr>
+                    <tr>
+                        <td><code>RESPONSE</code></td>
+                        <td>Human's response to request</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Visible</td>
+                    </tr>
+                    <tr>
+                        <td><code>TIMED_OUT</code></td>
+                        <td>Request expired</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Visible</td>
+                    </tr>
+                    <tr>
+                        <td><code>CANCELLED</code></td>
+                        <td>Request cancelled</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Visible</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>Message Types in Detail</h2>
+
+            <div class="msg-type">
+                <h4>INTERNAL</h4>
+                <span class="badge non-blocking">Non-blocking</span>
+                <span class="badge hidden">Hidden from Human</span>
+                <p>Agent-only messages hidden from human UI. Used for agent reasoning, tool calls, and internal state updates.</p>
+                <div class="example">-- These create INTERNAL messages
+Worker.turn()  -- Agent reasoning
+Tool.call("search", {query = "quantum"})
+Log.debug("Processing step 3")</div>
+            </div>
+
+            <div class="msg-type">
+                <h4>CHAT / CHAT_ASSISTANT</h4>
+                <span class="badge non-blocking">Non-blocking</span>
+                <span class="badge visible">Visible</span>
+                <p>Human-AI conversational messages. Used in chatbot-style interactions.</p>
+                <div class="info-box">
+                    <strong>Usage:</strong> For non-procedural AI assistants (help bots, Q&A systems).
+                    Not typically used within procedure workflows.
+                </div>
+            </div>
+
+            <div class="msg-type">
+                <h4>NOTIFICATION</h4>
+                <span class="badge non-blocking">Non-blocking</span>
+                <span class="badge visible">Visible</span>
+                <p>Workflow progress updates sent to human without blocking execution.</p>
+                <div class="example">Human.notify({
+  message = "Processing phase 2 of 5",
+  level = "info",
+  context = {progress = "40%"}
+})</div>
+            </div>
+
+            <div class="msg-type">
+                <h4>ALERT_* (INFO, WARNING, ERROR, CRITICAL)</h4>
+                <span class="badge non-blocking">Non-blocking</span>
+                <span class="badge visible">Visible (Monitoring)</span>
+                <p>System-level alerts for monitoring, errors, and resource warnings.</p>
+                <div class="example">System.alert({
+  message = "Memory usage exceeded threshold",
+  level = "warning",
+  source = "batch_processor",
+  context = {memory_mb = 8500}
+})</div>
+            </div>
+
+            <div class="msg-type">
+                <h4>PENDING_APPROVAL</h4>
+                <span class="badge blocking">Blocking</span>
+                <span class="badge response">Response Expected</span>
+                <span class="badge visible">Visible</span>
+                <p>Request for yes/no approval. Blocks workflow until human responds.</p>
+                <div class="example">local approved = Human.approve({
+  message = "Deploy to production?",
+  timeout = 3600
+})</div>
+            </div>
+
+            <div class="msg-type">
+                <h4>PENDING_INPUT</h4>
+                <span class="badge blocking">Blocking</span>
+                <span class="badge response">Response Expected</span>
+                <span class="badge visible">Visible</span>
+                <p>Request for free-form text input. Blocks workflow until human responds.</p>
+                <div class="example">local topic = Human.input({
+  message = "What topic to research?",
+  placeholder = "Enter topic..."
+})</div>
+            </div>
+
+            <div class="msg-type">
+                <h4>PENDING_REVIEW</h4>
+                <span class="badge blocking">Blocking</span>
+                <span class="badge response">Response Expected</span>
+                <span class="badge visible">Visible</span>
+                <p>Request for work product review. Blocks workflow until human responds.</p>
+                <div class="example">local review = Human.review({
+  message = "Review this report",
+  artifact = report_text,
+  options = ["approve", "edit", "reject"]
+})</div>
+            </div>
+
+            <div class="msg-type">
+                <h4>RESPONSE</h4>
+                <span class="badge non-blocking">Non-blocking</span>
+                <span class="badge visible">Visible</span>
+                <p>Human's response to a pending request. Recorded in message history.</p>
+            </div>
+
+            <div class="msg-type">
+                <h4>TIMED_OUT</h4>
+                <span class="badge non-blocking">Non-blocking</span>
+                <span class="badge visible">Visible</span>
+                <p>Indicates a pending request expired without response.</p>
+            </div>
+
+            <div class="msg-type">
+                <h4>CANCELLED</h4>
+                <span class="badge non-blocking">Non-blocking</span>
+                <span class="badge visible">Visible</span>
+                <p>Indicates a pending request was explicitly cancelled.</p>
+            </div>
+
+            <h2>Usage Patterns</h2>
+
+            <h3>Procedure Workflow (Mixed Visibility)</h3>
+            <div class="flow-diagram">1. INTERNAL       Worker.turn() reasoning
+2. INTERNAL       Tool call: search(...)
+3. INTERNAL       Tool result: [...]
+4. NOTIFICATION   "Analysis complete"
+5. PENDING_APPROVAL  "Deploy to production?"
+6. RESPONSE       "Yes" (from human)
+7. NOTIFICATION   "Deploying..."
+8. NOTIFICATION   "Deployment complete"
+
+Human sees: 4, 5, 6, 7, 8
+System sees: all</div>
+
+            <h3>Chat Conversation (All Visible)</h3>
+            <div class="flow-diagram">1. CHAT           "How do I deploy?"
+2. CHAT_ASSISTANT "You can deploy using..."
+3. CHAT           "Can you deploy for me?"
+4. INTERNAL       (spawns deployment procedure)
+5. NOTIFICATION   "Starting deployment"
+6. CHAT_ASSISTANT "I've started the deployment"
+
+Human sees: 1, 2, 3, 5, 6
+System sees: all</div>
+
+            <h3>System Monitoring (Alert Stream)</h3>
+            <div class="flow-diagram">1. ALERT_INFO     "Batch processing started"
+2. ALERT_INFO     "Processing 1000 of 10000"
+3. ALERT_WARNING  "High memory usage detected"
+4. ALERT_WARNING  "Failure rate above threshold"
+5. ALERT_ERROR    "Database connection lost"
+6. ALERT_CRITICAL "Service unavailable"
+
+All visible in monitoring dashboard</div>
+
+            <h2>UI Filtering</h2>
+
+            <h3>Human Operator Dashboard</h3>
+            <p>Show only user-facing messages:</p>
+            <div class="example">SELECT * FROM chat_messages
+WHERE human_interaction IN (
+  'CHAT',
+  'CHAT_ASSISTANT',
+  'NOTIFICATION',
+  'ALERT_WARNING',
+  'ALERT_ERROR',
+  'ALERT_CRITICAL',
+  'PENDING_APPROVAL',
+  'PENDING_INPUT',
+  'PENDING_REVIEW',
+  'RESPONSE'
+)</div>
+
+            <h3>Developer Debugging</h3>
+            <p>Show all messages including internals:</p>
+            <div class="example">SELECT * FROM chat_messages
+-- No filter, see everything</div>
+
+            <h3>Monitoring Dashboard</h3>
+            <p>Show only system alerts:</p>
+            <div class="example">SELECT * FROM chat_messages
+WHERE human_interaction LIKE 'ALERT_%'
+ORDER BY created_at DESC</div>
+
+            <h3>Action Required</h3>
+            <p>Show only messages requiring human response:</p>
+            <div class="example">SELECT * FROM chat_messages
+WHERE human_interaction IN (
+  'PENDING_APPROVAL',
+  'PENDING_INPUT',
+  'PENDING_REVIEW'
+)
+AND status = 'pending'</div>
+
+            <h2>Design Principles</h2>
+
+            <ul>
+                <li><strong>Unified System:</strong> One classification covers all use cases</li>
+                <li><strong>Clear Semantics:</strong> Name indicates purpose and behavior</li>
+                <li><strong>UI-Friendly:</strong> Easy to filter for different views</li>
+                <li><strong>Blocking Explicit:</strong> Clear which messages block workflow</li>
+                <li><strong>Monitoring Integration:</strong> Alerts work for both procedures and external systems</li>
+            </ul>
+
+            <h2>Best Practices</h2>
+
+            <ul>
+                <li><strong>Use INTERNAL for agent work:</strong> Keep implementation details hidden</li>
+                <li><strong>Use NOTIFICATION for progress:</strong> Keep humans informed without blocking</li>
+                <li><strong>Use ALERT_* for system events:</strong> Resource warnings, errors, monitoring</li>
+                <li><strong>Use PENDING_* sparingly:</strong> Only block for critical decisions</li>
+                <li><strong>Use CHAT for conversations:</strong> Non-procedural AI assistants</li>
+            </ul>
+
+            <div class="nav-links">
+                <a href="index.html">← Back to Documentation</a>
+                <a href="api-reference.html">API Reference →</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
