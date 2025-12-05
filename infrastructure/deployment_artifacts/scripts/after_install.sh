@@ -8,4 +8,7 @@ pip install .
 echo "Restarting Plexus Command Worker..."
 sudo systemctl restart plexus-command-worker
 
+echo "Restarting FastAPI service..."
+sudo systemctl restart fastapi
+
 echo "Deployment completed successfully!" 

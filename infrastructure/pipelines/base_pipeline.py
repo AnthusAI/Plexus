@@ -176,57 +176,11 @@ class BasePipelineStack(Stack):
             env=kwargs.get("env")
         )
 
-        # Create CodeDeploy step to deploy code to EC2 after infrastructure is deployed
-        deploy_to_ec2_step = pipelines.CodeBuildStep(
-            "DeployCodeToEC2",
-            input=source,
-            commands=[
-                # Create deployment bundle with code and deployment artifacts
-                "zip -r deployment.zip . -x '*.git*' -x '*node_modules*' -x '*.venv*' -x '*__pycache__*' -x 'infrastructure/cdk.out/*'",
-                "mkdir -p deployment_package",
-                "unzip -q deployment.zip -d deployment_package",
-                "cp -r infrastructure/deployment_artifacts/* deployment_package/",
-                "cd deployment_package && zip -r ../final_deployment.zip . && cd ..",
-                # Upload to S3 (using a consistent key that gets overwritten)
-                f"aws s3 cp final_deployment.zip s3://plexus-{environment}-code-deployments/latest.zip",
-                # Trigger CodeDeploy deployment
-                f"aws deploy create-deployment --application-name plexus-code-deploy-{environment}-app --deployment-group-name plexus-code-deploy-{environment}-group --s3-location bucket=plexus-{environment}-code-deployments,key=latest.zip,bundleType=zip --description 'Deployed from infrastructure pipeline'"
-            ],
-            build_environment=codebuild.BuildEnvironment(
-                build_image=codebuild.LinuxBuildImage.STANDARD_7_0
-            ),
-            role_policy_statements=[
-                # Grant permissions to trigger CodeDeploy
-                iam.PolicyStatement(
-                    actions=[
-                        "codedeploy:*"
-                    ],
-                    resources=["*"]
-                ),
-                # Grant permissions to upload to S3
-                iam.PolicyStatement(
-                    actions=[
-                        "s3:PutObject",
-                        "s3:GetObject"
-                    ],
-                    resources=[f"arn:aws:s3:::plexus-{environment}-code-deployments/*"]
-                ),
-                # Grant permissions to create S3 bucket if it doesn't exist
-                iam.PolicyStatement(
-                    actions=[
-                        "s3:CreateBucket",
-                        "s3:ListBucket"
-                    ],
-                    resources=[f"arn:aws:s3:::plexus-{environment}-code-deployments"]
-                )
-            ]
-        )
-
-        # Add deployment stage with Docker build as pre-step and EC2 deployment as post-step
+        # Add deployment stage with Docker build as pre-step
+        # App deployment is now handled by separate app deployment pipeline
         pipeline.add_stage(
             deployment_stage,
-            pre=[docker_build_step],  # Build Docker image before deploying infrastructure
-            post=[deploy_to_ec2_step]  # Deploy code to EC2 after infrastructure is deployed
+            pre=[docker_build_step]  # Build Docker image before deploying infrastructure
         )
 
 
