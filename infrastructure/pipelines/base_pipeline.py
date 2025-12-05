@@ -219,17 +219,18 @@ class DeploymentStage(cdk.Stage):
         )
 
         # Deploy Lambda score processor stack (uses the same queues)
-        # Configuration is loaded from SSM Parameter Store by the stack
-        LambdaScoreProcessorStack(
-            self,
-            "LambdaScoreProcessor",
-            environment=environment,
-            ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
-            standard_request_queue=scoring_worker_stack.standard_request_queue,
-            response_queue_url=scoring_worker_stack.response_queue.queue_url,
-            stack_name=f"plexus-lambda-score-processor-{environment}",
-            env=kwargs.get("env")
-        )
+        # Only deploy in production - staging can't use Lambda due to reserved concurrency limits
+        if environment == "production":
+            LambdaScoreProcessorStack(
+                self,
+                "LambdaScoreProcessor",
+                environment=environment,
+                ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
+                standard_request_queue=scoring_worker_stack.standard_request_queue,
+                response_queue_url=scoring_worker_stack.response_queue.queue_url,
+                stack_name=f"plexus-lambda-score-processor-{environment}",
+                env=kwargs.get("env")
+            )
 
         # Deploy metrics aggregation stack (processes DynamoDB streams)
         # Only deploy in production - staging doesn't need metrics aggregation
