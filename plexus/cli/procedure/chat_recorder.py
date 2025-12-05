@@ -25,12 +25,13 @@ def truncate_for_log(content: str, max_length: int = 200) -> str:
 
 class ProcedureChatRecorder:
     """Records chat messages during procedure runs."""
-    
+
     def __init__(self, client: PlexusDashboardClient, procedure_id: str, node_id: Optional[str] = None):
         self.client = client
         self.procedure_id = procedure_id
         self.node_id = node_id
         self.session_id = None
+        self.account_id = None
         self.sequence_number = 0
         self._sequence_lock = None  # Will be initialized when needed
         self._state_data: Optional[Dict[str, Any]] = None  # Conversation state machine data
@@ -38,17 +39,15 @@ class ProcedureChatRecorder:
     async def start_session(self, context: Optional[Dict[str, Any]] = None) -> str:
         """Start a new chat session for the procedure run."""
         try:
-            # Create ChatSession record  
-            # Use default account if not provided in context
-            import os
-            default_account = os.environ.get('PLEXUS_ACCOUNT_KEY')
-            if not default_account:
-                raise ValueError("PLEXUS_ACCOUNT_KEY environment variable must be set")
-            
+            # Create ChatSession record
+            # Resolve account ID from environment (uses PLEXUS_ACCOUNT_KEY internally)
+            account_id = self.client._resolve_account_id()
+            if not account_id:
+                raise ValueError("Could not resolve account ID. Is PLEXUS_ACCOUNT_KEY set?")
+
             # Get the actual IDs that are being passed
             scorecard_id = context.get('scorecard_id') if context else None
             score_id = context.get('score_id') if context else None
-            account_id = context.get('account_id', default_account) if context else default_account
             
             session_data = {
                 'accountId': account_id,
@@ -95,7 +94,8 @@ class ProcedureChatRecorder:
             
             if chat_session_result and 'id' in chat_session_result:
                 self.session_id = chat_session_result['id']
-                logger.info(f"Chat session created: {self.session_id}")
+                self.account_id = account_id  # Store account_id for use in message recording
+                logger.info(f"Chat session created: {self.session_id} for account: {account_id}")
                 return self.session_id
             else:
                 logger.error(f"Failed to create session - unexpected result: {result}")
@@ -108,28 +108,29 @@ class ProcedureChatRecorder:
             return None
     
     async def record_message(
-        self, 
-        role: str, 
-        content: str, 
+        self,
+        role: str,
+        content: str,
         message_type: str = 'MESSAGE',
         tool_name: Optional[str] = None,
         tool_parameters: Optional[Dict[str, Any]] = None,
         tool_response: Optional[Dict[str, Any]] = None,
-        parent_message_id: Optional[str] = None
+        parent_message_id: Optional[str] = None,
+        human_interaction: Optional[str] = None
     ) -> str:
         """Record a chat message."""
         if not self.session_id:
             logger.warning("No active session - cannot record message")
             return None
-            
+
         try:
             self.sequence_number += 1
-            
+
             # Truncate content if it exceeds DynamoDB limits (400KB total item size)
             # Allow approximately 300KB for content to leave room for other fields
             MAX_CONTENT_SIZE = 300 * 1024  # 300KB in bytes
             original_content = content
-            
+
             if len(content.encode('utf-8')) > MAX_CONTENT_SIZE:
                 # Truncate content while preserving UTF-8 encoding
                 truncated_bytes = content.encode('utf-8')[:MAX_CONTENT_SIZE]
@@ -139,20 +140,37 @@ class ProcedureChatRecorder:
                 except UnicodeDecodeError:
                     # Try truncating a bit more to avoid broken UTF-8
                     content = truncated_bytes[:-10].decode('utf-8', errors='ignore')
-                
+
                 # Add truncation indicator
                 content += "\n\n... [Content truncated due to size limits]"
                 logger.warning(f"Truncated message content from {len(original_content)} to {len(content)} characters")
-            
+
+            # Set intelligent default for humanInteraction if not provided
+            if human_interaction is None:
+                if role == 'USER':
+                    human_interaction = 'CHAT'
+                elif role == 'ASSISTANT':
+                    human_interaction = 'CHAT_ASSISTANT'
+                elif message_type == 'TOOL_CALL' or message_type == 'TOOL_RESPONSE':
+                    human_interaction = 'INTERNAL'
+                else:
+                    # SYSTEM and other messages default to INTERNAL
+                    human_interaction = 'INTERNAL'
+
             message_data = {
                 'sessionId': self.session_id,
                 'procedureId': self.procedure_id,
                 'role': role,
                 'content': content,
                 'messageType': message_type,
-                'sequenceNumber': self.sequence_number
+                'sequenceNumber': self.sequence_number,
+                'humanInteraction': human_interaction
                 # Note: Omitting metadata field due to GraphQL validation issues
             }
+
+            # Add accountId if available
+            if self.account_id:
+                message_data['accountId'] = self.account_id
             
             # Add tool-specific fields if provided
             if tool_name:
@@ -169,9 +187,9 @@ class ProcedureChatRecorder:
             # Log message recording (reduced noise - just sequence and type)
             tool_info = f" | Tool: {tool_name}" if tool_name else ""
             logger.debug(f"📝 Recording message [{self.sequence_number}] {role}/{message_type}{tool_info}")
-            
+
             # NOTE: We record the FULL content in the database, only the log is truncated
-                
+
             # Execute GraphQL mutation to create message
             mutation = """
             mutation CreateChatMessage($input: CreateChatMessageInput!) {
@@ -182,7 +200,7 @@ class ProcedureChatRecorder:
                 }
             }
             """
-            
+
             result = self.client.execute(mutation, {'input': message_data})
             
             # Check for GraphQL errors first
@@ -270,36 +288,54 @@ class ProcedureChatRecorder:
         return message_id
     
     async def record_message_with_sequence(
-        self, 
-        role: str, 
-        content: str, 
+        self,
+        role: str,
+        content: str,
         message_type: str = 'MESSAGE',
         tool_name: Optional[str] = None,
         tool_parameters: Optional[Dict[str, Any]] = None,
         tool_response: Optional[Dict[str, Any]] = None,
         parent_message_id: Optional[str] = None,
-        sequence_number: Optional[int] = None
+        sequence_number: Optional[int] = None,
+        human_interaction: Optional[str] = None
     ) -> str:
         """Record a chat message with explicit sequence number."""
         if not self.session_id:
             logger.warning("No active session - cannot record message")
             return None
-            
+
         try:
             # Use provided sequence number or generate new one
             if sequence_number is None:
                 sequence_number = self._get_next_sequence_number()
-            
+
+            # Set intelligent default for humanInteraction if not provided
+            if human_interaction is None:
+                if role == 'USER':
+                    human_interaction = 'CHAT'
+                elif role == 'ASSISTANT':
+                    human_interaction = 'CHAT_ASSISTANT'
+                elif message_type == 'TOOL_CALL' or message_type == 'TOOL_RESPONSE':
+                    human_interaction = 'INTERNAL'
+                else:
+                    # SYSTEM and other messages default to INTERNAL
+                    human_interaction = 'INTERNAL'
+
             message_data = {
                 'sessionId': self.session_id,
                 'procedureId': self.procedure_id,
                 'role': role,
                 'content': content,
                 'messageType': message_type,
-                'sequenceNumber': sequence_number
+                'sequenceNumber': sequence_number,
+                'humanInteraction': human_interaction
                 # Note: Omitting metadata field due to GraphQL validation issues
             }
-            
+
+            # Add accountId if available
+            if self.account_id:
+                message_data['accountId'] = self.account_id
+
             # Add tool-specific fields if provided
             if tool_name:
                 message_data['toolName'] = tool_name

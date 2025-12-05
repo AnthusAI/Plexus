@@ -18,10 +18,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProcedureTemplate(BaseModel):
+    """
+    NOTE: This model now queries the Procedure table with isTemplate=true.
+    ProcedureTemplate table was removed to save CloudFormation resources.
+    Templates are now Procedures with isTemplate=true.
+    """
     id: str
     name: str
     description: Optional[str]
-    template: str  # The YAML template content
+    template: str  # The YAML template content (stored as 'code' in Procedure table)
     version: str  # Template version (e.g., "1.0", "2.1")
     isDefault: Optional[bool]  # Whether this is the default template
     category: Optional[str]  # e.g., "hypothesis_generation", "beam_search"
@@ -32,34 +37,38 @@ class ProcedureTemplate(BaseModel):
     
     @classmethod
     def fields(cls) -> str:
-        """Return GraphQL fields for this model."""
+        """Return GraphQL fields for this model (queries Procedure table)."""
         return """
         id
         name
         description
-        template
+        code
         version
         isDefault
         category
         accountId
         createdAt
         updatedAt
+        isTemplate
         """
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'ProcedureTemplate':
-        """Create a ProcedureTemplate instance from GraphQL response data."""
-        
+        """Create a ProcedureTemplate instance from GraphQL response data.
+
+        NOTE: 'code' field from Procedure table is mapped to 'template' field here.
+        """
+
         # Parse datetime fields
         created_at = datetime.fromisoformat(data['createdAt'].replace('Z', '+00:00'))
         updated_at = datetime.fromisoformat(data['updatedAt'].replace('Z', '+00:00'))
-        
+
         return cls(
             id=data['id'],
             name=data['name'],
             description=data.get('description'),
-            template=data['template'],
-            version=data['version'],
+            template=data.get('code', ''),  # 'code' field in Procedure maps to 'template' here
+            version=data.get('version', '1.0'),
             isDefault=data.get('isDefault'),
             category=data.get('category'),
             accountId=data['accountId'],
@@ -99,28 +108,29 @@ class ProcedureTemplate(BaseModel):
         
         input_data = {
             'name': name,
-            'template': template,
+            'code': template,  # 'template' parameter maps to 'code' field in Procedure
             'version': version,
-            'accountId': accountId
+            'accountId': accountId,
+            'isTemplate': True  # Mark this as a template
         }
-        
+
         if description is not None:
             input_data['description'] = description
         if isDefault is not None:
             input_data['isDefault'] = isDefault
         if category is not None:
             input_data['category'] = category
-            
+
         mutation = """
-        mutation CreateProcedureTemplate($input: CreateProcedureTemplateInput!) {
-            createProcedureTemplate(input: $input) {
+        mutation CreateProcedure($input: CreateProcedureInput!) {
+            createProcedure(input: $input) {
                 %s
             }
         }
         """ % cls.fields()
         
         result = client.execute(mutation, {'input': input_data})
-        return cls.from_dict(result['createProcedureTemplate'], client)
+        return cls.from_dict(result['createProcedure'], client)
     
     @classmethod
     def get_default_for_account(cls, account_id: str, client: '_BaseAPIClient', category: str = "hypothesis_generation") -> Optional['ProcedureTemplate']:
@@ -136,20 +146,23 @@ class ProcedureTemplate(BaseModel):
         """
         try:
             query = """
-            query ListProcedureTemplatesByAccount($accountId: String!) {
-                listProcedureTemplateByAccountIdAndUpdatedAt(accountId: $accountId) {
+            query ListProceduresByAccount($accountId: String!) {
+                listProcedureByAccountIdAndUpdatedAt(accountId: $accountId) {
                     items {
                         %s
                     }
                 }
             }
             """ % cls.fields()
-            
+
             result = client.execute(query, {
                 'accountId': account_id
             })
-            
-            items = result.get('listProcedureTemplateByAccountIdAndUpdatedAt', {}).get('items', [])
+
+            items = result.get('listProcedureByAccountIdAndUpdatedAt', {}).get('items', [])
+
+            # Filter for templates only (isTemplate=true)
+            items = [item for item in items if item.get('isTemplate') == True]
             
             # Find the default template for this category
             for item in items:
@@ -183,21 +196,24 @@ class ProcedureTemplate(BaseModel):
         """
         try:
             query = """
-            query ListProcedureTemplatesByAccount($accountId: String!, $limit: Int) {
-                listProcedureTemplateByAccountIdAndUpdatedAt(accountId: $accountId, limit: $limit) {
+            query ListProceduresByAccount($accountId: String!, $limit: Int) {
+                listProcedureByAccountIdAndUpdatedAt(accountId: $accountId, limit: $limit) {
                     items {
                         %s
                     }
                 }
             }
             """ % cls.fields()
-            
+
             result = client.execute(query, {
                 'accountId': account_id,
                 'limit': limit
             })
-            
-            items = result.get('listProcedureTemplateByAccountIdAndUpdatedAt', {}).get('items', [])
+
+            items = result.get('listProcedureByAccountIdAndUpdatedAt', {}).get('items', [])
+
+            # Filter for templates only (isTemplate=true)
+            items = [item for item in items if item.get('isTemplate') == True]
             return [cls.from_dict(item, client) for item in items]
             
         except Exception as e:
@@ -223,22 +239,22 @@ class ProcedureTemplate(BaseModel):
         
         input_data = {
             'id': self.id,
-            'template': template
+            'code': template  # 'template' parameter maps to 'code' field
         }
-        
+
         if version is not None:
             input_data['version'] = version
-        
+
         mutation = """
-        mutation UpdateProcedureTemplate($input: UpdateProcedureTemplateInput!) {
-            updateProcedureTemplate(input: $input) {
+        mutation UpdateProcedure($input: UpdateProcedureInput!) {
+            updateProcedure(input: $input) {
                 %s
             }
         }
         """ % self.fields()
-        
+
         result = self._client.execute(mutation, {'input': input_data})
-        return self.from_dict(result['updateProcedureTemplate'], self._client)
+        return self.from_dict(result['updateProcedure'], self._client)
 
 
 

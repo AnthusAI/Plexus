@@ -459,7 +459,8 @@ def pull(procedure_id: str, output: Optional[str]):
         console.print(f"[red]Error writing to {output}: {str(e)}[/red]")
 
 @procedure.command()
-@click.argument('procedure_id')
+@click.argument('procedure_id', required=False)
+@click.option('--yaml', '-y', 'yaml_file', help='YAML file to run (creates procedure if needed)')
 @click.option('--max-iterations', type=int, help='Maximum number of iterations')
 @click.option('--timeout', type=int, help='Timeout in seconds')
 @click.option('--async-mode', is_flag=True, help='Run procedure asynchronously')
@@ -467,25 +468,97 @@ def pull(procedure_id: str, output: Optional[str]):
 @click.option('--restart-from-root-node', is_flag=True, help='Delete all non-root graph nodes and restart from scratch')
 @click.option('--openai-api-key', help='OpenAI API key for AI-powered experiments (or set OPENAI_API_KEY env var)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def run(procedure_id: str, max_iterations: Optional[int], timeout: Optional[int],
+def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: Optional[int], timeout: Optional[int],
         async_mode: bool, dry_run: bool, restart_from_root_node: bool, openai_api_key: Optional[str], output: str):
-    """Run an procedure with the given ID.
+    """Run a procedure - either by ID or directly from a YAML file.
 
-    Executes the procedure using its configured YAML settings. The experiment
-    will process its nodes according to the defined workflow and return results.
+    You can run a procedure in two ways:
+    1. By ID: plexus procedure run <procedure-id>
+    2. From YAML: plexus procedure run --yaml workflow.yaml
+
+    Running from YAML is like executing a script - it creates the procedure
+    (if needed) and immediately runs it.
 
     Examples:
+        # Run from YAML file (recommended for Lua DSL workflows)
+        plexus procedure run --yaml my_workflow.yaml
+        plexus procedure run --yaml my_workflow.yaml --dry-run
+        plexus procedure run -y workflow.yaml --max-iterations 50
+
+        # Run by ID (for existing procedures)
         plexus procedure run abc123def456
-        plexus procedure run abc123def456 --dry-run
         plexus procedure run abc123def456 --max-iterations 50 --timeout 300
         plexus procedure run abc123def456 --async-mode -o json
         plexus procedure run abc123def456 --restart-from-root-node
     """
+    # Validate arguments
+    if not procedure_id and not yaml_file:
+        console.print("[red]Error: Either provide a procedure ID or use --yaml flag[/red]")
+        console.print("Examples:")
+        console.print("  plexus procedure run --yaml workflow.yaml")
+        console.print("  plexus procedure run <procedure-id>")
+        return
+
+    if procedure_id and yaml_file:
+        console.print("[red]Error: Cannot specify both procedure ID and --yaml flag[/red]")
+        console.print("Use one or the other:")
+        console.print("  plexus procedure run --yaml workflow.yaml")
+        console.print("  plexus procedure run <procedure-id>")
+        return
+
     client = create_client()
     if not client:
         console.print("[red]Error: Could not create API client[/red]")
         return
-    
+
+    # If running from YAML, create the procedure first
+    if yaml_file:
+        console.print(f"[cyan]Running procedure from YAML: {yaml_file}[/cyan]")
+
+        # Load YAML file
+        try:
+            with open(yaml_file, 'r') as f:
+                yaml_config = f.read()
+        except Exception as e:
+            console.print(f"[red]Error reading YAML file {yaml_file}: {str(e)}[/red]")
+            return
+
+        # Create the procedure
+        service = ProcedureService(client)
+
+        # Use default account
+        import os
+        account = os.environ.get('PLEXUS_ACCOUNT_KEY')
+        if not account:
+            console.print("[red]Error: PLEXUS_ACCOUNT_KEY environment variable must be set[/red]")
+            return
+
+        # Check if this is a Lua DSL procedure
+        import yaml as yaml_lib
+        try:
+            config = yaml_lib.safe_load(yaml_config)
+            is_lua_dsl = config.get('class') == 'LuaDSL'
+        except:
+            is_lua_dsl = False
+
+        console.print("Creating procedure from YAML...")
+        result = service.create_procedure(
+            account_identifier=account,
+            scorecard_identifier=None,  # Standalone procedure
+            score_identifier=None,
+            yaml_config=yaml_config,
+            featured=False,
+            create_root_node=not is_lua_dsl  # Don't create root node for Lua DSL
+        )
+
+        if not result.success:
+            console.print(f"[red]Error creating procedure: {result.message}[/red]")
+            return
+
+        procedure_id = result.procedure.id
+        console.print(f"[green]✓ Created procedure {procedure_id}[/green]")
+        console.print()
+
     if restart_from_root_node:
         console.print(f"[yellow]⚠ Restarting from root node - deleting all existing hypothesis nodes...[/yellow]")
 

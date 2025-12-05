@@ -24,8 +24,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Input } from "@/components/ui/input"
-import { ChatEvaluationCard } from "@/components/chat-evaluation-card"
+import { ChatInterface } from "@/components/chat-interface"
+import { ResizeHandle } from "@/components/ui/resize-handle"
 
 import BrandableLogo from './BrandableLogo'
 import { LogoVariant } from './logo-square'
@@ -57,14 +57,14 @@ const DashboardButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
 )
 DashboardButton.displayName = "DashboardButton"
 
-const MobileHeader = ({ 
-  toggleLeftSidebar, 
-  toggleRightSidebar, 
-  rightSidebarState 
-}: { 
+const MobileHeader = ({
+  toggleLeftSidebar,
+  toggleRightSidebar,
+  rightSidebarState
+}: {
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
-  rightSidebarState: 'collapsed' | 'normal' | 'expanded';
+  rightSidebarState: 'collapsed' | 'expanded';
 }) => (
   <div className="hidden max-lg:flex items-center justify-between p-0.5 px-2 bg-background min-h-[3rem] mobile-header">
     <DashboardButton
@@ -112,7 +112,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
   const [loadingRoute, setLoadingRoute] = useState<string | null>(null)
-  const { rightSidebarState, setRightSidebarState } = useSidebar()
+  const { rightSidebarState, setRightSidebarState, rightSidebarWidth } = useSidebar()
   const { theme, setTheme } = useTheme()
   const isDesktop = useMediaQuery("(min-width: 768px)")
   const isMobile = useMediaQuery("(max-width: 767px)")
@@ -160,34 +160,16 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }
 
   const toggleRightSidebar = () => {
-    console.log('Toggle Right Sidebar:', {
-      isMobile,
-      currentState: rightSidebarState,
-      willSetTo: rightSidebarState === 'collapsed' ? 'normal' : 'collapsed'
-    });
-
-    if (isMobile) {
-      // On mobile, just toggle between collapsed and normal
-      setRightSidebarState(prevState => {
-        const newState = prevState === 'collapsed' ? 'normal' : 'collapsed';
-        return newState;
-      });
-      
-      // Close left sidebar when opening chat on mobile
-      if (rightSidebarState === 'collapsed') {
-        setIsLeftSidebarOpen(false);
-      }
-    } else {
-      // Desktop behavior remains the same
-      setRightSidebarState((prevState) => {
-        const newState = prevState === 'collapsed' ? 'normal' : 
-                        prevState === 'normal' ? 'expanded' : 'collapsed';
-        console.log('Setting desktop right sidebar state:', {
-          from: prevState,
-          to: newState
-        });
-        return newState;
-      });
+    // Compute new state first
+    const newState = rightSidebarState === 'collapsed' ? 'expanded' : 'collapsed';
+    
+    // Update state using the computed value
+    setRightSidebarState(newState);
+    
+    // Close left sidebar when opening chat on mobile
+    // Use the computed newState instead of stale rightSidebarState
+    if (isMobile && newState === 'expanded') {
+      setIsLeftSidebarOpen(false);
     }
   }
 
@@ -470,8 +452,12 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }
 
   const RightSidebar = () => {
+    const { rightSidebarWidth, setRightSidebarWidth } = useSidebar()
+    const MIN_WIDTH = 300
+    const MAX_WIDTH = typeof window !== 'undefined' ? window.innerWidth * 0.5 : 800
+
     return (
-      <div className="flex flex-col h-full py-2 bg-frame">
+      <div className="flex flex-col h-full py-2 bg-frame relative">
         {rightSidebarState === 'collapsed' && (
           <div className="px-3 py-2">
             <TooltipProvider>
@@ -487,107 +473,40 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="left">
-                  Expand chat
+                  Expand chat feed
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
         )}
-        <div className="flex-grow overflow-hidden">
-          <div className="h-full flex flex-col">
-            <div className="flex-grow overflow-y-auto flex flex-col-reverse px-4">
-              {rightSidebarState !== 'collapsed' && (
-                <div className="space-y-4 mb-4">
-                  {[
-                    <ChatEvaluationCard
-                      key="exp1"
-                      evaluationId="Evaluation started"
-                      status="running"
-                      progress={42}
-                      accuracy={86.7}
-                      elapsedTime="00:02:15"
-                      estimatedTimeRemaining="00:03:05"
-                      scorecard="CS3 Services v2"
-                      score="Good Call"
-                    />,
-                    <div key="msg1" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      Okay, I started a new run:
-                    </div>,
-                    <div key="user1" className="flex items-start space-x-2 justify-end">
-                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                        Run that again with fresh data.
-                      </div>
-                      <Avatar className="h-8 w-8 mt-1">
-                        <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
-                      </Avatar>
-                    </div>,
-                    <ChatEvaluationCard
-                      key="exp2"
-                      evaluationId="Evaluation completed"
-                      status="completed"
-                      progress={100}
-                      accuracy={92}
-                      elapsedTime="00:05:12"
-                      estimatedTimeRemaining="00:00:00"
-                      scorecard="AW IB Sales"
-                      score="Pain Points"
-                    />,
-                    <div key="msg2" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      The best accuracy was from this version, two days ago, at 92%. That was using a fine-tuned model.
-                    </div>,
-                    <div key="user2" className="flex items-start space-x-2 justify-end">
-                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                        What's the best accuracy on Pain Points on AW IB Sales?
-                      </div>
-                      <Avatar className="h-8 w-8 mt-1">
-                        <AvatarFallback className="bg-background dark:bg-border">DN</AvatarFallback>
-                      </Avatar>
-                    </div>,
-                    <ChatEvaluationCard
-                      key="exp3"
-                      evaluationId="New evaluation"
-                      status="running"
-                      progress={87}
-                      accuracy={88.2}
-                      elapsedTime="00:04:35"
-                      estimatedTimeRemaining="00:00:40"
-                      scorecard="CS3 Services v2"
-                      score="Good Call"
-                    />,
-                    <div key="msg3" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      Certainly! I'm starting a new evaluation run for the "CS3 Services v2" scorecard on the "Good Call" score.
-                    </div>,
-                    <div key="user3" className="flex items-start space-x-2 justify-end">
-                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                        Start a new evaluation run on the "CS3 Services v2" scorecard for the "Good Call" score.
-                      </div>
-                      <Avatar className="h-8 w-8 mt-1">
-                        <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
-                      </Avatar>
-                    </div>,
-                  ].reverse()}
+
+        {rightSidebarState === 'expanded' && !isMobile && (
+          <ResizeHandle
+            onResize={setRightSidebarWidth}
+            minWidth={MIN_WIDTH}
+            maxWidth={MAX_WIDTH}
+          />
+        )}
+
+        {rightSidebarState === 'expanded' && (
+          <>
+            <div className="flex-grow overflow-hidden">
+              {selectedAccount ? (
+                <ChatInterface
+                  accountId={selectedAccount.id}
+                  showInput={true}
+                  showVoiceButtons={false}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <p className="text-muted-foreground">No account selected</p>
+                  </div>
                 </div>
               )}
             </div>
-          </div>
-        </div>
-        {rightSidebarState !== 'collapsed' && (
-          <div className="px-4 pt-4 pb-2 border-t border-border">
-            <form className="flex items-center">
-              <Input 
-                type="text" 
-                placeholder="Type a message..." 
-                className="flex-grow mr-2 bg-background" 
-              />
-              <DashboardButton type="submit" size="icon">
-                <Send className="h-4 w-4" />
-              </DashboardButton>
-            </form>
-          </div>
-        )}
-        <div className="px-3 pt-1 pb-2 flex justify-between items-center">
-          {rightSidebarState !== 'collapsed' && (
-            <div className="flex space-x-2">
+
+            <div className="px-3 pt-1 pb-2 flex justify-end items-center border-t border-border">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -595,51 +514,19 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 p-0 group"
+                      onClick={toggleRightSidebar}
                     >
-                      <Mic className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
+                      <PanelRight className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                     </DashboardButton>
                   </TooltipTrigger>
-                  <TooltipContent side="top">
-                    Dictate Message
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DashboardButton
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 p-0 group"
-                    >
-                      <Headphones className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
-                    </DashboardButton>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    Voice Mode
+                  <TooltipContent side="left">
+                    Collapse chat feed
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
-          )}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DashboardButton
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 p-0 ml-auto group"
-                  onClick={toggleRightSidebar}
-                >
-                  <PanelRight className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
-                </DashboardButton>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                {rightSidebarState === 'collapsed' ? "Expand chat" : "Collapse chat"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+          </>
+        )}
       </div>
     )
   }
@@ -690,15 +577,17 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           </div>
         </aside>
 
-        <main 
+        <main
           className={`flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0 ${isMobile ? 'mobile-main bg-background' : ''}
             ${isMobile ? 'ml-0 mr-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
-            ${!isMobile && rightSidebarState === 'collapsed' ? 'mr-14' : 
-              !isMobile && rightSidebarState === 'normal' ? 'mr-80' : 
-              !isMobile && rightSidebarState === 'expanded' ? 'mr-[40%]' : 'mr-0'}
             ${rightSidebarState !== 'collapsed' ? (isMobile ? 'pr-0' : 'pr-2') : 'pr-0'}
             ${isMobile ? 'p-0' : 'p-2'}
           `}
+          style={{
+            marginRight: isMobile
+              ? 0
+              : (rightSidebarState === 'collapsed' ? '3.5rem' : `${rightSidebarWidth}px`)
+          }}
         >
           <div className={`flex-1 flex flex-col bg-background min-h-0 overflow-visible relative ${isMobile ? 'mobile-compact' : 'rounded-lg'}`}>
             {/* Dashboard activation button - bottom center, height of 4 (1rem) */}
@@ -725,13 +614,15 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
         <aside
           className={`
-            ${isMobile ? 'fixed top-0 bottom-0 right-0 z-40 bg-background/80 backdrop-blur-sm mobile-hide-right-sidebar' : 
+            ${isMobile ? 'fixed top-0 bottom-0 right-0 z-40 bg-background/80 backdrop-blur-sm mobile-hide-right-sidebar' :
               'fixed top-0 bottom-0 right-0 h-full z-10'}
-            ${rightSidebarState === 'collapsed' ? (isMobile ? 'w-0' : 'w-14') :
-              rightSidebarState === 'normal' ? (isMobile ? 'w-0' : 'w-80') :
-              (isMobile ? 'w-0' : 'w-[40%]')}
             transition-all duration-300 ease-in-out overflow-hidden
           `}
+          style={{
+            width: isMobile
+              ? (rightSidebarState === 'collapsed' ? '0' : '100vw')
+              : (rightSidebarState === 'collapsed' ? '3.5rem' : `${rightSidebarWidth}px`)
+          }}
         >
           <div className={`
             ${isMobile ? 'h-full w-full bg-frame' : 'h-full'}

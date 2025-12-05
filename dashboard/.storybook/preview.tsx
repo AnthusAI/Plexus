@@ -25,6 +25,47 @@ const mockGenerateClient = () => ({
           }
         ]
       })
+    },
+    ChatMessage: {
+      list: async () => ({
+        data: [
+          {
+            id: 'msg-1',
+            content: 'This is a notification message from a procedure',
+            role: 'SYSTEM',
+            messageType: 'MESSAGE',
+            humanInteraction: 'NOTIFICATION',
+            accountId: 'mock-account-1',
+            procedureId: 'proc-123',
+            createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+          },
+          {
+            id: 'msg-2',
+            content: 'Warning: Low accuracy detected on score evaluation',
+            role: 'SYSTEM',
+            messageType: 'MESSAGE',
+            humanInteraction: 'ALERT_WARNING',
+            accountId: 'mock-account-1',
+            procedureId: 'proc-123',
+            createdAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+          },
+          {
+            id: 'msg-3',
+            content: 'Evaluation completed successfully for CS3 Services v2',
+            role: 'ASSISTANT',
+            messageType: 'MESSAGE',
+            humanInteraction: 'CHAT_ASSISTANT',
+            accountId: 'mock-account-1',
+            procedureId: 'proc-456',
+            createdAt: new Date(Date.now() - 1 * 60 * 1000).toISOString(),
+          },
+        ]
+      }),
+      onCreate: () => ({
+        subscribe: () => ({
+          unsubscribe: () => {}
+        })
+      })
     }
   }
 });

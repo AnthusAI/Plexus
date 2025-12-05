@@ -11,8 +11,9 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
 
-type ProcedureTemplate = Schema['ProcedureTemplate']['type']
-type CreateProcedureTemplateInput = Schema['ProcedureTemplate']['createType']
+// NOTE: ProcedureTemplate table was removed. Templates are now Procedures with isTemplate=true
+type ProcedureTemplate = Schema['Procedure']['type']
+type CreateProcedureTemplateInput = Schema['Procedure']['createType']
 
 const client = generateClient<Schema>()
 
@@ -101,11 +102,14 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
 
     try {
       setIsLoading(true)
-      const { data } = await (client.models.ProcedureTemplate.listProcedureTemplateByAccountIdAndUpdatedAt as any)({
+      const { data } = await (client.models.Procedure.listProcedureByAccountIdAndUpdatedAt as any)({
         accountId: selectedAccount.id,
-
       })
-      setTemplates(data)
+      // Filter for templates only (isTemplate=true) and map code -> template
+      const templateData = (data || [])
+        .filter((p: any) => p.isTemplate === true)
+        .map((p: any) => ({ ...p, template: p.code }))
+      setTemplates(templateData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load templates')
     } finally {
@@ -142,14 +146,15 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
       const input = {
         name: `${template.name} (Copy)`,
         description: template.description,
-        template: template.template,
+        code: (template as any).template || template.code, // Map template -> code
         version: template.version,
         category: template.category,
         isDefault: false,
+        isTemplate: true, // Mark as template
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await (client.models.ProcedureTemplate.create as any)(input as any)
+      const { data: newTemplate } = await (client.models.Procedure.create as any)(input as any)
 
       if (newTemplate) {
         loadTemplates()
@@ -172,14 +177,15 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
       const input = {
         name: 'New Template',
         description: 'A new experiment template',
-        template: DEFAULT_TEMPLATE_CONTENT,
+        code: DEFAULT_TEMPLATE_CONTENT, // Map template -> code
         version: '1.0',
         category: 'hypothesis_generation',
         isDefault: false,
+        isTemplate: true, // Mark as template
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await (client.models.ProcedureTemplate.create as any)(input as any)
+      const { data: newTemplate } = await (client.models.Procedure.create as any)(input as any)
 
       if (newTemplate) {
         await loadTemplates()
@@ -215,7 +221,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
 
   const handleDeleteTemplate = async (templateId: string) => {
     try {
-      await (client.models.ProcedureTemplate.delete as any)({ id: templateId })
+      await (client.models.Procedure.delete as any)({ id: templateId })
       setTemplates(prev => prev.filter(t => t.id !== templateId))
       if (selectedTemplateId === templateId) {
         setSelectedTemplateId(null)
@@ -231,17 +237,34 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
 
   const handleSaveTemplate = async (templateId: string, updates: Partial<TemplateTaskData>) => {
     try {
+      // Extract template field if present and map it to code
+      const { template, ...otherUpdates } = updates as any
+      
       const updateData: any = {
         id: templateId,
-        ...updates
+        ...otherUpdates
+      }
+      
+      // Map template field to code field for GraphQL schema
+      if (template !== undefined) {
+        updateData.code = template
       }
 
-      await (client.models.ProcedureTemplate.update as any)(updateData)
+      await (client.models.Procedure.update as any)(updateData)
       
-      // Update local state
-      setTemplates(prev => prev.map(t => 
-        t.id === templateId ? { ...t, ...updates } : t
-      ))
+      // Update local state - map code back to template for local state consistency
+      setTemplates(prev => prev.map(t => {
+        if (t.id === templateId) {
+          const updated = { ...t, ...otherUpdates }
+          // Map code back to template for local state (since templates use template field)
+          if (template !== undefined) {
+            (updated as any).template = template
+            updated.code = template
+          }
+          return updated
+        }
+        return t
+      }))
       
       setEditingTemplateId(null)
       toast.success('Template saved successfully')
@@ -257,7 +280,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
     title: template.name,
     name: template.name,
     description: template.description || undefined,
-    template: template.template,
+    template: (template as any).template || template.code || '',
     version: template.version || '1.0',
     category: template.category || undefined,
     isDefault: template.isDefault || false,

@@ -2,17 +2,17 @@ import type { Meta, StoryObj } from '@storybook/react'
 import ConversationViewer from '@/components/ui/conversation-viewer'
 import { fn } from '@storybook/test'
 
-const meta: Meta<typeof ConversationViewer> = {
-  title: 'Procedures/ConversationViewer',
+const meta = {
+  title: 'Chat/Views/Procedure Conversation',
   component: ConversationViewer,
   parameters: {
     layout: 'fullscreen',
   },
   tags: ['autodocs'],
-}
+} satisfies Meta<typeof ConversationViewer>
 
 export default meta
-type Story = StoryObj<typeof ConversationViewer>
+type Story = StoryObj<typeof meta>
 
 // Mock the GraphQL client for Storybook
 const mockGraphQLClient = {

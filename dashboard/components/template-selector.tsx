@@ -15,7 +15,8 @@ import { parseParametersFromYaml, hasParameters } from '@/lib/parameter-parser'
 const client = generateClient<Schema>()
 
 // Types
-type ProcedureTemplate = Schema['ProcedureTemplate']['type']
+// NOTE: ProcedureTemplate table was removed. Templates are now Procedures with isTemplate=true
+type ProcedureTemplate = Schema['Procedure']['type']
 
 interface TemplateSelectorProps {
   accountId: string
@@ -43,12 +44,12 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
     try {
       const result = await client.graphql({
         query: `
-          query ListProcedureTemplateByAccountIdAndUpdatedAt(
+          query ListProcedureByAccountIdAndUpdatedAt(
             $accountId: String!
             $sortDirection: ModelSortDirection
             $limit: Int
           ) {
-            listProcedureTemplateByAccountIdAndUpdatedAt(
+            listProcedureByAccountIdAndUpdatedAt(
               accountId: $accountId
               sortDirection: $sortDirection
               limit: $limit
@@ -57,7 +58,8 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
                 id
                 name
                 description
-                template
+                code
+                isTemplate
                 category
                 version
                 isDefault
@@ -75,8 +77,12 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
           limit: 100
         }
       })
-      
-      const templatesData = (result as any).data?.listProcedureTemplateByAccountIdAndUpdatedAt?.items || []
+
+      const allProcedures = (result as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || []
+      // Filter for templates only (isTemplate=true) and map code -> template
+      const templatesData = allProcedures
+        .filter((p: any) => p.isTemplate === true)
+        .map((p: any) => ({ ...p, template: p.code }))
       setTemplates(templatesData)
     } catch (error) {
       console.error('Error loading templates:', error)
@@ -88,7 +94,9 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
 
   const handleCreateProcedureFromTemplate = async (template: ProcedureTemplate) => {
     // Check if template has parameters
-    if (template.template && hasParameters(template.template)) {
+    // Note: We map code -> template when loading, but TypeScript doesn't know about it
+    const templateCode = (template as any).template || template.code || ''
+    if (templateCode && hasParameters(templateCode)) {
       // Show parameters dialog
       setSelectedTemplate(template)
       setShowParametersDialog(true)
@@ -226,7 +234,7 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
           }}
           title={`Configure ${selectedTemplate.name}`}
           description="Please provide the required parameters for this procedure template"
-          parameters={parseParametersFromYaml(selectedTemplate.template || '')}
+          parameters={parseParametersFromYaml((selectedTemplate as any).template || selectedTemplate.code || '')}
           onSubmit={handleParametersSubmit}
           submitLabel="Create Procedure"
         />
