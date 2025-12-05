@@ -21,6 +21,7 @@ import sys
 import logging
 
 from plexus.scores.nodes.LogicalClassifier import LogicalClassifier
+from plexus.scores.nodes.LuaRuntime import is_lua_available
 from plexus.scores.Score import Score
 from plexus.dashboard.api.models.score_result import ScoreResult
 
@@ -41,29 +42,31 @@ class MockGraphState(BaseModel):
 def valid_score_code():
     """Valid score function code for testing"""
     return '''
-def score(parameters, input_data):
-    """Simple classification based on text length"""
-    text_length = len(input_data.text)
+function score(parameters, input_data)
+    -- Simple classification based on text length
+    local text_length = string.len(input_data.text)
     
-    if text_length > 100:
+    local classification, explanation
+    if text_length > 100 then
         classification = "long"
-        explanation = f"Text is long with {text_length} characters"
-    elif text_length > 50:
-        classification = "medium" 
-        explanation = f"Text is medium with {text_length} characters"
-    else:
+        explanation = "Text is long with " .. text_length .. " characters"
+    elseif text_length > 50 then
+        classification = "medium"
+        explanation = "Text is medium with " .. text_length .. " characters"
+    else
         classification = "short"
-        explanation = f"Text is short with {text_length} characters"
+        explanation = "Text is short with " .. text_length .. " characters"
+    end
     
-    return Score.Result(
-        parameters=parameters,
-        value=classification,
-        explanation=explanation,
-        metadata={
-            "text_length": text_length,
-            "explanation": explanation
+    return {
+        value = classification,
+        explanation = explanation,
+        metadata = {
+            text_length = text_length,
+            explanation = explanation
         }
-    )
+    }
+end
 '''
 
 
@@ -71,20 +74,22 @@ def score(parameters, input_data):
 def logging_score_code():
     """Score function that uses logging features"""
     return '''
-def score(parameters, input_data):
-    """Score function that tests logging capabilities"""
+function score(parameters, input_data)
+    -- Score function that tests logging capabilities
     print("Using print function")
-    log("Using log function")
-    log_info("Using log_info function")
-    log_debug("Using log_debug function")
-    log_warning("Using log_warning function")
+    log.info("Using log function")
+    log.info("Using log_info function")
+    log.debug("Using log_debug function")
+    log.warning("Using log_warning function")
     
-    return Score.Result(
-        parameters=parameters,
-        value="logged",
-        explanation="Logging test completed",
-        metadata={"logged": True}
-    )
+    return {
+        value = "logged",
+        explanation = "Logging test completed",
+        metadata = {
+            logged = true
+        }
+    }
+end
 '''
 
 
@@ -92,20 +97,24 @@ def score(parameters, input_data):
 def none_returning_score_code():
     """Score function that returns None (continuation logic)"""
     return '''
-def score(parameters, input_data):
-    """Score function that returns None for continuation"""
-    log_info("Checking conditions for continuation")
+function score(parameters, input_data)
+    -- Score function that returns nil for continuation
+    log.info("Checking conditions for continuation")
     
-    # Simulate a condition that doesn't match
-    if "skip" in input_data.text.lower():
-        return None  # Continue to next node
+    -- Simulate a condition that doesn't match
+    if string.find(string.lower(input_data.text), "skip") then
+        return nil  -- Continue to next node
+    end
     
-    return Score.Result(
-        parameters=parameters,
-        value="processed",
-        explanation="Text was processed",
-        metadata={"processed": True, "explanation": "Text was processed"}
-    )
+    return {
+        value = "processed",
+        explanation = "Text was processed",
+        metadata = {
+            processed = true,
+            explanation = "Text was processed"
+        }
+    }
+end
 '''
 
 
@@ -113,9 +122,10 @@ def score(parameters, input_data):
 def error_score_code():
     """Score function that raises an error"""
     return '''
-def score(parameters, input_data):
-    """Score function that raises an error"""
-    raise ValueError("Intentional test error")
+function score(parameters, input_data)
+    -- Score function that raises an error
+    error("Intentional test error")
+end
 '''
 
 
@@ -129,6 +139,7 @@ def mock_parameters():
     }
 
 
+@pytest.mark.skipif(not is_lua_available(), reason="Lua runtime not available")
 class TestLogicalClassifierInstantiation:
     """Test LogicalClassifier instantiation and parameter validation"""
     
@@ -149,30 +160,32 @@ class TestLogicalClassifierInstantiation:
     def test_missing_score_function_error(self, mock_parameters):
         """Test error when code doesn't define a score function"""
         invalid_code = '''
-def other_function():
+function other_function()
     return "not a score function"
+end
 '''
         params = {
             **mock_parameters,
             'code': invalid_code
         }
         
-        with pytest.raises(ValueError, match="Code must define a 'score' function"):
+        with pytest.raises(ValueError, match="Lua code must define a 'score' function"):
             LogicalClassifier(**params)
     
     def test_invalid_code_syntax_error(self, mock_parameters):
         """Test error when code has syntax errors"""
         invalid_code = '''
-def score(parameters, input_data)
-    # Missing colon - syntax error
-    return None
+function score(parameters, input_data
+    -- Missing closing parenthesis - syntax error
+    return nil
+end
 '''
         params = {
             **mock_parameters,
             'code': invalid_code
         }
         
-        with pytest.raises(SyntaxError):
+        with pytest.raises(Exception):  # Lua syntax errors may come as different exception types
             LogicalClassifier(**params)
     
     def test_optional_conditions_parameter(self, valid_score_code, mock_parameters):
@@ -192,6 +205,7 @@ def score(parameters, input_data)
         assert classifier.parameters.conditions is not None
 
 
+@pytest.mark.skipif(not is_lua_available(), reason="Lua runtime not available")
 class TestScoreFunctionExecution:
     """Test the score function execution and result handling"""
     
@@ -290,6 +304,7 @@ class TestScoreFunctionExecution:
         assert result_state.explanation == "Text was processed"
 
 
+@pytest.mark.skipif(not is_lua_available(), reason="Lua runtime not available")
 class TestStateManagement:
     """Test state management and metadata processing"""
     
@@ -319,18 +334,18 @@ class TestStateManagement:
     def test_result_metadata_integration(self, mock_parameters):
         """Test that result metadata becomes part of state"""
         code_with_metadata = '''
-def score(parameters, input_data):
-    return Score.Result(
-        parameters=parameters,
-        value="test_value",
-        explanation="Test explanation", 
-        metadata={
-            "custom_field": "custom_value",
-            "numeric_field": 42,
-            "boolean_field": True,
-            "explanation": "This should be handled specially"
+function score(parameters, input_data)
+    return {
+        value = "test_value",
+        explanation = "Test explanation",
+        metadata = {
+            custom_field = "custom_value",
+            numeric_field = 42,
+            boolean_field = true,
+            explanation = "This should be handled specially"
         }
-    )
+    }
+end
 '''
         params = {
             **mock_parameters,
@@ -376,6 +391,7 @@ def score(parameters, input_data):
         assert isinstance(result_state, classifier.GraphState)
 
 
+@pytest.mark.skipif(not is_lua_available(), reason="Lua runtime not available")
 class TestLoggingFunctionality:
     """Test the logging capabilities of LogicalClassifier"""
     
@@ -402,21 +418,34 @@ class TestLoggingFunctionality:
     def test_logging_functions_availability(self, mock_parameters):
         """Test that all logging functions are available in the code namespace"""
         code_testing_logging = '''
-def score(parameters, input_data):
-    # Test that all logging functions are available
-    functions = ['print', 'log', 'log_info', 'log_debug', 'log_warning', 'log_error', 'logging']
-    available_functions = []
+function score(parameters, input_data)
+    -- Test that logging functions are available
+    local available_functions = {}
     
-    for func_name in functions:
-        if func_name in globals():
-            available_functions.append(func_name)
+    -- Test print function
+    if print then
+        table.insert(available_functions, "print")
+    end
     
-    return Score.Result(
-        parameters=parameters,
-        value="logging_test",
-        explanation="Logging functions tested",
-        metadata={"available_functions": available_functions}
-    )
+    -- Test log functions
+    if log and log.info then
+        table.insert(available_functions, "log.info")
+    end
+    if log and log.debug then
+        table.insert(available_functions, "log.debug")
+    end
+    if log and log.warning then
+        table.insert(available_functions, "log.warning")
+    end
+    
+    return {
+        value = "logging_test",
+        explanation = "Logging functions tested",
+        metadata = {
+            available_functions = available_functions
+        }
+    }
+end
 '''
         params = {
             **mock_parameters,
@@ -433,6 +462,7 @@ def score(parameters, input_data):
         assert result_state.available_functions == expected_functions
 
 
+@pytest.mark.skipif(not is_lua_available(), reason="Lua runtime not available")
 class TestErrorHandling:
     """Test error handling and edge cases"""
     
@@ -447,14 +477,16 @@ class TestErrorHandling:
         state = MockGraphState(text="Test", metadata={})
         score_node = classifier.get_score_node()
         
-        with pytest.raises(ValueError, match="Intentional test error"):
-            score_node(state)
+        # With error handling in place, errors should be caught and original state returned
+        result_state = score_node(state)
+        assert result_state == state  # Should return original state on error
     
     def test_invalid_score_result_type(self, mock_parameters):
         """Test handling of invalid return type from score function"""
         invalid_return_code = '''
-def score(parameters, input_data):
-    return "This is not a Score.Result object"
+function score(parameters, input_data)
+    return "This is not a valid result table"
+end
 '''
         params = {
             **mock_parameters,
@@ -465,9 +497,9 @@ def score(parameters, input_data):
         state = MockGraphState(text="Test", metadata={})
         score_node = classifier.get_score_node()
         
-        # This should raise an AttributeError when trying to access .value on a string
-        with pytest.raises(AttributeError):
-            score_node(state)
+        # This should also return original state due to error handling 
+        result_state = score_node(state)
+        assert result_state == state  # Should return original state on invalid return
     
     def test_empty_text_handling(self, valid_score_code, mock_parameters):
         """Test handling of empty text input"""
@@ -503,25 +535,27 @@ def score(parameters, input_data):
             score_node(state_dict)
 
 
+@pytest.mark.skipif(not is_lua_available(), reason="Lua runtime not available")
 class TestCodeNamespaceSecurityAndAvailability:
     """Test the security and availability of the code execution namespace"""
     
-    def test_score_class_availability(self, mock_parameters):
-        """Test that Score class is available in the code namespace"""
-        code_using_score = '''
-def score(parameters, input_data):
-    # Test that Score class is available
-    result = Score.Result(
-        parameters=parameters,
-        value="available",
-        explanation="Score class is available",
-        metadata={"score_available": True}
-    )
-    return result
+    def test_score_result_creation(self, mock_parameters):
+        """Test that score results can be created in Lua"""
+        code_creating_result = '''
+function score(parameters, input_data)
+    -- Test that we can create result tables
+    return {
+        value = "available",
+        explanation = "Result creation works",
+        metadata = {
+            score_available = true
+        }
+    }
+end
 '''
         params = {
             **mock_parameters,
-            'code': code_using_score
+            'code': code_creating_result
         }
         classifier = LogicalClassifier(**params)
         
@@ -535,25 +569,32 @@ def score(parameters, input_data):
     def test_restricted_module_access(self, mock_parameters):
         """Test that dangerous modules are not available by default"""
         code_testing_imports = '''
-def score(parameters, input_data):
-    # Test what modules are available
-    available_modules = []
-    restricted_modules = ['os', 'sys', 'subprocess', 'importlib']
+function score(parameters, input_data)
+    -- Test what potentially dangerous functions are available
+    local available_modules = {}
     
-    for module_name in restricted_modules:
-        try:
-            # Try to access the module from globals
-            if module_name in globals():
-                available_modules.append(module_name)
-        except:
-            pass
+    -- Test if dangerous Lua functions are restricted
+    if os then
+        table.insert(available_modules, "os")
+    end
+    if io then
+        table.insert(available_modules, "io")
+    end
+    if require then
+        table.insert(available_modules, "require")
+    end
+    if loadfile then
+        table.insert(available_modules, "loadfile")
+    end
     
-    return Score.Result(
-        parameters=parameters,
-        value="security_test",
-        explanation="Security test completed",
-        metadata={"available_restricted_modules": available_modules}
-    )
+    return {
+        value = "security_test",
+        explanation = "Security test completed",
+        metadata = {
+            available_restricted_modules = available_modules
+        }
+    }
+end
 '''
         params = {
             **mock_parameters,
@@ -571,25 +612,38 @@ def score(parameters, input_data):
     def test_safe_builtins_availability(self, mock_parameters):
         """Test that safe built-in functions are available"""
         code_testing_builtins = '''
-def score(parameters, input_data):
-    # Test safe built-ins
-    safe_functions = ['len', 'str', 'int', 'float', 'bool', 'list', 'dict', 'tuple']
-    available_functions = []
+function score(parameters, input_data)
+    -- Test safe Lua built-ins
+    local available_functions = {}
     
-    for func_name in safe_functions:
-        try:
-            func = eval(func_name)
-            if callable(func):
-                available_functions.append(func_name)
-        except:
-            pass
+    -- Test Lua standard library functions
+    if string then
+        table.insert(available_functions, "string")
+    end
+    if table then
+        table.insert(available_functions, "table")
+    end
+    if math then
+        table.insert(available_functions, "math")
+    end
+    if type then
+        table.insert(available_functions, "type")
+    end
+    if tostring then
+        table.insert(available_functions, "tostring")
+    end
+    if tonumber then
+        table.insert(available_functions, "tonumber")
+    end
     
-    return Score.Result(
-        parameters=parameters,
-        value="builtins_test",
-        explanation="Built-ins test completed",
-        metadata={"available_safe_functions": available_functions}
-    )
+    return {
+        value = "builtins_test",
+        explanation = "Built-ins test completed",
+        metadata = {
+            available_safe_functions = available_functions
+        }
+    }
+end
 '''
         params = {
             **mock_parameters,
@@ -601,64 +655,73 @@ def score(parameters, input_data):
         score_node = classifier.get_score_node()
         result_state = score_node(state)
         
-        # Safe built-ins should be available
-        expected_functions = ['len', 'str', 'int', 'float', 'bool', 'list', 'dict', 'tuple']
+        # Safe Lua built-ins should be available
+        expected_functions = ['string', 'table', 'math', 'type', 'tostring', 'tonumber']
         for func in expected_functions:
             assert func in result_state.available_safe_functions
 
 
+@pytest.mark.skipif(not is_lua_available(), reason="Lua runtime not available")
 class TestIntegration:
     """Integration tests combining multiple LogicalClassifier features"""
     
     def test_complex_scoring_workflow(self, mock_parameters):
         """Test a complex scoring scenario with multiple features"""
         complex_code = '''
-def score(parameters, input_data):
-    """Complex scoring that uses multiple features"""
-    text = input_data.text
-    metadata = input_data.metadata
+function score(parameters, input_data)
+    -- Complex scoring that uses multiple features
+    local text = input_data.text
+    local metadata = input_data.metadata or {}
     
-    # Log the processing
-    log_info(f"Processing text of length {len(text)}")
-    print(f"Metadata keys: {list(metadata.keys())}")
+    -- Log the processing
+    log.info("Processing text of length " .. string.len(text))
+    print("Processing complex scoring")
     
-    # Complex classification logic
-    word_count = len(text.split())
-    char_count = len(text)
-    has_numbers = any(char.isdigit() for char in text)
+    -- Complex classification logic
+    local word_count = 0
+    for word in string.gmatch(text, "%S+") do
+        word_count = word_count + 1
+    end
     
-    # Determine classification
-    if word_count > 50:
+    local char_count = string.len(text)
+    local has_numbers = string.find(text, "%d") ~= nil
+    
+    -- Determine classification
+    local classification, confidence
+    if word_count > 50 then
         classification = "verbose"
         confidence = 0.9
-    elif word_count > 20:
-        classification = "detailed"  
+    elseif word_count > 20 then
+        classification = "detailed"
         confidence = 0.8
-    elif word_count > 5:
+    elseif word_count > 5 then
         classification = "brief"
         confidence = 0.7
-    else:
+    else
         classification = "minimal"
         confidence = 0.6
+    end
     
-    # Adjust confidence based on additional factors
-    if has_numbers:
-        confidence += 0.1
+    -- Adjust confidence based on additional factors
+    if has_numbers then
+        confidence = confidence + 0.1
+    end
     
-    explanation = f"Text classified as {classification} based on {word_count} words and {char_count} characters"
+    local explanation = "Text classified as " .. classification .. " based on " .. 
+                       word_count .. " words and " .. char_count .. " characters"
     
-    return Score.Result(
-        parameters=parameters,
-        value=classification,
-        explanation=explanation,
-        metadata={
-            "word_count": word_count,
-            "char_count": char_count,
-            "has_numbers": has_numbers,
-            "confidence": confidence,
-            "explanation": explanation
+    return {
+        value = classification,
+        explanation = explanation,
+        metadata = {
+            word_count = word_count,
+            char_count = char_count,
+            has_numbers = has_numbers,
+            confidence = confidence,
+            explanation = explanation
         }
-    )
+    }
+end
 '''
         params = {
             **mock_parameters,
@@ -687,33 +750,37 @@ def score(parameters, input_data):
     def test_logging_integration_workflow(self, mock_logging, mock_parameters):
         """Test that logging works properly in complex workflow"""
         logging_workflow_code = '''
-def score(parameters, input_data):
-    """Score function with comprehensive logging"""
-    log_info("Starting classification process")
+function score(parameters, input_data)
+    -- Score function with comprehensive logging
+    log.info("Starting classification process")
     
-    text_length = len(input_data.text)
-    log_debug(f"Text length: {text_length}")
+    local text_length = string.len(input_data.text)
+    log.debug("Text length: " .. text_length)
     
-    if text_length == 0:
-        log_warning("Empty text received")
-        return Score.Result(
-            parameters=parameters,
-            value="empty",
-            explanation="Empty text classification",
-            metadata={"warning": "empty_text"}
-        )
+    if text_length == 0 then
+        log.warning("Empty text received")
+        return {
+            value = "empty",
+            explanation = "Empty text classification",
+            metadata = {
+                warning = "empty_text"
+            }
+        }
+    end
     
-    print(f"Processing non-empty text with {text_length} characters")
+    print("Processing non-empty text with " .. text_length .. " characters")
     
-    classification = "processed"
-    log_info(f"Classification completed: {classification}")
+    local classification = "processed"
+    log.info("Classification completed: " .. classification)
     
-    return Score.Result(
-        parameters=parameters,
-        value=classification,
-        explanation="Text successfully processed",
-        metadata={"processed": True}
-    )
+    return {
+        value = classification,
+        explanation = "Text successfully processed",
+        metadata = {
+            processed = true
+        }
+    }
+end
 '''
         params = {
             **mock_parameters,
