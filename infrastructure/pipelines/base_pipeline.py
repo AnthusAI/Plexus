@@ -252,37 +252,28 @@ class DeploymentStage(cdk.Stage):
                 stack_name=f"plexus-command-worker-{environment}",
                 env=kwargs.get("env")
             )
-
-            # Deploy CodeDeploy stack (manages code deployments to EC2)
-            self.code_deploy_stack = CodeDeployStack(
-                self,
-                "CodeDeploy",
-                environment=environment,
-                ec2_role=command_worker_stack.ec2_role,
-                stack_name=f"plexus-code-deploy-{environment}",
-                env=kwargs.get("env")
-            )
+            ec2_role = command_worker_stack.ec2_role
         else:
-            # For staging, deploy CodeDeploy without command worker
-            # Need to create a basic EC2 role for CodeDeploy
-            ec2_role = iam.Role(
+            # For staging, create a minimal EC2 role stack
+            from stacks.ec2_role_stack import EC2RoleStack
+            ec2_role_stack = EC2RoleStack(
                 self,
                 "EC2Role",
-                assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
-                managed_policies=[
-                    iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"),
-                    iam.ManagedPolicy.from_aws_managed_policy_name("AmazonS3ReadOnlyAccess")
-                ]
-            )
-
-            self.code_deploy_stack = CodeDeployStack(
-                self,
-                "CodeDeploy",
                 environment=environment,
-                ec2_role=ec2_role,
-                stack_name=f"plexus-code-deploy-{environment}",
+                stack_name=f"plexus-ec2-role-{environment}",
                 env=kwargs.get("env")
             )
+            ec2_role = ec2_role_stack.ec2_role
+
+        # Deploy CodeDeploy stack (manages code deployments to EC2)
+        self.code_deploy_stack = CodeDeployStack(
+            self,
+            "CodeDeploy",
+            environment=environment,
+            ec2_role=ec2_role,
+            stack_name=f"plexus-code-deploy-{environment}",
+            env=kwargs.get("env")
+        )
 
         # Future stacks will be added here:
         # MonitoringStack(
