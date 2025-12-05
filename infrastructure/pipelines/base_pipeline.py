@@ -232,32 +232,57 @@ class DeploymentStage(cdk.Stage):
         )
 
         # Deploy metrics aggregation stack (processes DynamoDB streams)
-        MetricsAggregationStack(
-            self,
-            "MetricsAggregation",
-            environment=environment,
-            stack_name=f"plexus-metrics-aggregation-{environment}",
-            env=kwargs.get("env")
-        )
+        # Only deploy in production - staging doesn't need metrics aggregation
+        if environment == "production":
+            MetricsAggregationStack(
+                self,
+                "MetricsAggregation",
+                environment=environment,
+                stack_name=f"plexus-metrics-aggregation-{environment}",
+                env=kwargs.get("env")
+            )
 
         # Deploy command worker stack (manages EC2 command worker configuration)
-        command_worker_stack = CommandWorkerStack(
-            self,
-            "CommandWorker",
-            environment=environment,
-            stack_name=f"plexus-command-worker-{environment}",
-            env=kwargs.get("env")
-        )
+        # Only deploy in production - staging doesn't need command worker
+        if environment == "production":
+            command_worker_stack = CommandWorkerStack(
+                self,
+                "CommandWorker",
+                environment=environment,
+                stack_name=f"plexus-command-worker-{environment}",
+                env=kwargs.get("env")
+            )
 
-        # Deploy CodeDeploy stack (manages code deployments to EC2)
-        self.code_deploy_stack = CodeDeployStack(
-            self,
-            "CodeDeploy",
-            environment=environment,
-            ec2_role=command_worker_stack.ec2_role,
-            stack_name=f"plexus-code-deploy-{environment}",
-            env=kwargs.get("env")
-        )
+            # Deploy CodeDeploy stack (manages code deployments to EC2)
+            self.code_deploy_stack = CodeDeployStack(
+                self,
+                "CodeDeploy",
+                environment=environment,
+                ec2_role=command_worker_stack.ec2_role,
+                stack_name=f"plexus-code-deploy-{environment}",
+                env=kwargs.get("env")
+            )
+        else:
+            # For staging, deploy CodeDeploy without command worker
+            # Need to create a basic EC2 role for CodeDeploy
+            ec2_role = iam.Role(
+                self,
+                "EC2Role",
+                assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+                managed_policies=[
+                    iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"),
+                    iam.ManagedPolicy.from_aws_managed_policy_name("AmazonS3ReadOnlyAccess")
+                ]
+            )
+
+            self.code_deploy_stack = CodeDeployStack(
+                self,
+                "CodeDeploy",
+                environment=environment,
+                ec2_role=ec2_role,
+                stack_name=f"plexus-code-deploy-{environment}",
+                env=kwargs.get("env")
+            )
 
         # Future stacks will be added here:
         # MonitoringStack(
