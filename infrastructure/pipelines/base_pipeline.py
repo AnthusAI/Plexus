@@ -19,7 +19,6 @@ from stacks.scoring_worker_stack import ScoringWorkerStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
 from stacks.metrics_aggregation_stack import MetricsAggregationStack
 from stacks.command_worker_stack import CommandWorkerStack
-from stacks.code_deploy_stack import CodeDeployStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 
 
@@ -246,35 +245,13 @@ class DeploymentStage(cdk.Stage):
         # Deploy command worker stack (manages EC2 command worker configuration)
         # Only deploy in production - staging doesn't need command worker
         if environment == "production":
-            command_worker_stack = CommandWorkerStack(
+            CommandWorkerStack(
                 self,
                 "CommandWorker",
                 environment=environment,
                 stack_name=f"plexus-command-worker-{environment}",
                 env=kwargs.get("env")
             )
-            ec2_role = command_worker_stack.ec2_role
-        else:
-            # For staging, create a minimal EC2 role stack
-            from stacks.ec2_role_stack import EC2RoleStack
-            ec2_role_stack = EC2RoleStack(
-                self,
-                "EC2Role",
-                environment=environment,
-                stack_name=f"plexus-ec2-role-{environment}",
-                env=kwargs.get("env")
-            )
-            ec2_role = ec2_role_stack.ec2_role
-
-        # Deploy CodeDeploy stack (manages code deployments to EC2)
-        self.code_deploy_stack = CodeDeployStack(
-            self,
-            "CodeDeploy",
-            environment=environment,
-            ec2_role=ec2_role,
-            stack_name=f"plexus-code-deploy-{environment}",
-            env=kwargs.get("env")
-        )
 
         # Future stacks will be added here:
         # MonitoringStack(

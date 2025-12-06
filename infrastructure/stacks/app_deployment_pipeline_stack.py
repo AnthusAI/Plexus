@@ -4,6 +4,8 @@ Stack for Plexus application deployment pipeline.
 This stack creates a CodePipeline that deploys Plexus application code to EC2 instances
 using CodeDeploy. Unlike the infrastructure pipeline's broken post-deploy step, this
 uses native CodeDeployServerDeployAction which properly waits for deployment completion.
+
+This stack is self-contained and creates its own CodeDeploy application and deployment group.
 """
 
 import boto3
@@ -28,6 +30,8 @@ class AppDeploymentPipelineStack(Stack):
     1. Sources code from GitHub via CodeConnection
     2. Builds deployment bundle (code + deployment_artifacts)
     3. Deploys to EC2 using CodeDeploy with proper waiting
+
+    This stack creates its own CodeDeploy resources for clean separation.
     """
 
     def __init__(
@@ -74,22 +78,56 @@ class AppDeploymentPipelineStack(Stack):
                 "--value 'arn:aws:codeconnections:us-west-2:ACCOUNT:connection/ID' --type String"
             )
 
-        # Reference existing CodeDeploy application and deployment group
-        # These are created by CodeDeployStack
-        codedeploy_app_name = get_resource_name("code-deploy", environment, "app")
-        codedeploy_group_name = get_resource_name("code-deploy", environment, "group")
-
-        codedeploy_app = codedeploy.ServerApplication.from_server_application_name(
+        # Create CodeDeploy service role
+        codedeploy_service_role = iam.Role(
             self,
-            "CodeDeployApp",
-            server_application_name=codedeploy_app_name
+            "CodeDeployServiceRole",
+            role_name=get_resource_name("app-deploy", environment, "codedeploy-role"),
+            assumed_by=iam.ServicePrincipal("codedeploy.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSCodeDeployRole")
+            ]
         )
 
-        codedeploy_group = codedeploy.ServerDeploymentGroup.from_server_deployment_group_attributes(
+        # Create EC2 instance role (or reference existing one)
+        # This role is attached to EC2 instances and allows them to pull from S3, run SSM commands, etc.
+        ec2_role = iam.Role(
+            self,
+            "EC2InstanceRole",
+            role_name=get_resource_name("app-deploy", environment, "ec2-role"),
+            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"),
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonS3ReadOnlyAccess"),
+                iam.ManagedPolicy.from_aws_managed_policy_name("AWSCodeDeployFullAccess")
+            ]
+        )
+
+        # Create CodeDeploy Application
+        codedeploy_app = codedeploy.ServerApplication(
+            self,
+            "CodeDeployApp",
+            application_name=get_resource_name("app-deploy", environment, "app")
+        )
+
+        # Create CodeDeploy Deployment Group
+        codedeploy_group = codedeploy.ServerDeploymentGroup(
             self,
             "CodeDeployGroup",
             application=codedeploy_app,
-            deployment_group_name=codedeploy_group_name
+            deployment_group_name=get_resource_name("app-deploy", environment, "group"),
+            install_agent=True,
+            ec2_instance_tags=codedeploy.InstanceTagSet({
+                "Environment": [environment]
+            }),
+            role=codedeploy_service_role,
+            deployment_config=codedeploy.ServerDeploymentConfig.ALL_AT_ONCE,
+            ignore_poll_alarms_failure=False,
+            auto_rollback=codedeploy.AutoRollbackConfig(
+                failed_deployment=True,
+                stopped_deployment=True,
+                deployment_in_alarm=False
+            )
         )
 
         # Create CodeBuild project to prepare deployment bundle
@@ -126,10 +164,15 @@ class AppDeploymentPipelineStack(Stack):
         source_output = codepipeline.Artifact("SourceOutput")
         build_output = codepipeline.Artifact("BuildOutput")
 
+        # Grant the deployment group's S3 bucket read access
+        # This is needed for CodeDeploy to retrieve artifacts
+        codedeploy_bucket_name = f"plexus-{environment}-code-deployments"
+
         pipeline = codepipeline.Pipeline(
             self,
             "Pipeline",
             pipeline_name=get_resource_name("app-deploy", environment, "pipeline"),
+            cross_account_keys=False,  # Disable KMS encryption to avoid permission issues
             stages=[
                 codepipeline.StageProps(
                     stage_name="Source",
@@ -169,27 +212,7 @@ class AppDeploymentPipelineStack(Stack):
             ]
         )
 
-        # Grant pipeline role permission to read GitHub connection ARN
-        pipeline.role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["ssm:GetParameter"],
-                resources=[f"arn:aws:ssm:{kwargs.get('env').region if kwargs.get('env') else 'us-west-2'}:{kwargs.get('env').account if kwargs.get('env') else '*'}:parameter/plexus/github-connection-arn"]
-            )
-        )
-
-        # Grant pipeline role permission to use CodeDeploy
-        pipeline.role.add_to_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "codedeploy:GetDeploymentConfig",
-                    "codedeploy:GetApplication",
-                    "codedeploy:GetDeploymentGroup",
-                    "codedeploy:GetDeployment",
-                    "codedeploy:CreateDeployment",
-                    "codedeploy:RegisterApplicationRevision"
-                ],
-                resources=["*"]
-            )
-        )
-
         self.pipeline = pipeline
+        self.codedeploy_app = codedeploy_app
+        self.codedeploy_group = codedeploy_group
+        self.ec2_role = ec2_role
