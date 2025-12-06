@@ -213,15 +213,26 @@ class HumanPrimitive:
 
         Args:
             options: Dict with:
-                - message: str - Notification message
+                - message: str - Notification message (required)
+                - content: str - Rich markdown content (optional, overrides message in UI)
+                - details: List[Dict] - Collapsible sections with title and content
                 - level: str - info, warning, error (default: info)
-                - context: Dict - Additional context
+                - context: Dict - Additional context (deprecated, use details instead)
 
         Example (Lua):
+            -- Simple notification
             Human.notify({
-                message = "Processing complete",
-                level = "info",
-                context = {items_processed = 100}
+                message = "Processing complete"
+            })
+
+            -- Rich notification with details
+            Human.notify({
+                message = "Phase 2 complete",
+                content = "**Status**: Phase 2 processing finished\\n\\nProcessed 150 items successfully",
+                details = {
+                    {title = "Statistics", content = "**Success**: 148\\n**Failed**: 2\\n**Duration**: 5 min"},
+                    {title = "Next Steps", content = "Starting phase 3 validation"}
+                }
             })
         """
         # Convert Lua table to dict if needed
@@ -230,18 +241,92 @@ class HumanPrimitive:
 
         opts = options or {}
         message = opts.get('message', 'Notification')
+        content = opts.get('content')  # Rich content overrides message in UI
+        details = opts.get('details', [])  # Collapsible sections
         level = opts.get('level', 'info')
-        context = opts.get('context', {})
+        context = opts.get('context', {})  # Legacy support
 
         logger.info(f"Human notification: [{level}] {message}")
+        if 'details' in opts:
+            raw_details = opts['details']
+            with open('/tmp/details_debug2.txt', 'a') as f:
+                f.write(f"\n=== Details Debug ===\n")
+                f.write(f"Type: {type(raw_details)}\n")
+                f.write(f"Repr: {repr(raw_details)}\n")
+                f.write(f"Is dict: {isinstance(raw_details, dict)}\n")
+                f.write(f"Has items: {hasattr(raw_details, 'items')}\n")
+                if hasattr(raw_details, '__len__'):
+                    f.write(f"Length: {len(raw_details)}\n")
+
+        # Build metadata structure
+        metadata = {}
+
+        # Use rich content if provided, otherwise use simple message
+        if content:
+            metadata['content'] = content
+
+        # Add collapsible sections if provided
+        if details:
+            # First convert the details Lua table to a list of dicts
+            details_list = []
+
+            # If details is a Lua table, it uses 1-based indexing
+            if hasattr(details, 'items') and not isinstance(details, (dict, list)):
+                # Lua array-like tables use 1-based indexing
+                if hasattr(details, '__len__'):
+                    for i in range(1, len(details) + 1):
+                        detail_table = details[i]
+                        # Convert each detail table to dict
+                        if hasattr(detail_table, 'items') and not isinstance(detail_table, dict):
+                            detail_dict = dict(detail_table.items())
+                            details_list.append(detail_dict)
+                        elif isinstance(detail_table, dict):
+                            details_list.append(detail_table)
+            elif isinstance(details, list):
+                details_list = details
+            else:
+                details_list = []
+
+            # Now build collapsible sections
+            collapsible_sections = []
+            for detail in details_list:
+                if isinstance(detail, dict) and 'title' in detail and 'content' in detail:
+                    collapsible_sections.append({
+                        'title': detail['title'],
+                        'content': detail['content']
+                    })
+
+            if collapsible_sections:
+                metadata['collapsibleSections'] = collapsible_sections
+                logger.info(f"Added {len(collapsible_sections)} collapsible sections to metadata")
+
+        # Legacy context support - add as collapsible section if no details provided
+        if context and not details:
+            import json
+            metadata['collapsibleSections'] = [{
+                'title': 'Context',
+                'content': json.dumps(context, indent=2)
+            }]
 
         # Queue message for async recording
-        self._message_queue.append({
+        message_data = {
             'role': 'SYSTEM',
-            'content': message,
+            'content': message,  # Fallback content for non-rich displays
             'message_type': 'MESSAGE',
             'human_interaction': 'NOTIFICATION'
-        })
+        }
+
+        # Add metadata if we have any
+        if metadata:
+            message_data['metadata'] = metadata
+            import json
+            with open('/tmp/metadata_queue.txt', 'a') as f:
+                f.write(f"\n=== Queueing Message ===\n")
+                f.write(f"Content: {message}\n")
+                f.write(f"Metadata keys: {list(metadata.keys())}\n")
+                f.write(f"Full metadata: {json.dumps(metadata, indent=2)}\n")
+
+        self._message_queue.append(message_data)
 
     def escalate(self, options: Optional[Dict[str, Any]] = None) -> None:
         """
@@ -303,7 +388,8 @@ class HumanPrimitive:
                     role=msg['role'],
                     content=msg['content'],
                     message_type=msg['message_type'],
-                    human_interaction=msg['human_interaction']
+                    human_interaction=msg['human_interaction'],
+                    metadata=msg.get('metadata')
                 )
                 logger.info(f"Human message recorded with ID: {message_id}")
             except Exception as e:
