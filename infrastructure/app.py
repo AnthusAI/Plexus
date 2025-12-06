@@ -3,7 +3,6 @@ import os
 import aws_cdk as cdk
 from stacks.ecr_repositories_stack import EcrRepositoriesStack
 from stacks.app_deployment_pipeline_stack import AppDeploymentPipelineStack
-from pipelines.staging_pipeline import StagingPipelineStack
 from pipelines.production_pipeline import ProductionPipelineStack
 
 app = cdk.App()
@@ -24,15 +23,8 @@ EcrRepositoriesStack(
     description="ECR repositories for Lambda container images (staging and production)"
 )
 
-# Create staging pipeline - watches staging branch
-StagingPipelineStack(
-    app,
-    "plexus-infrastructure-staging-pipeline",
-    env=env,
-    description="Pipeline for deploying Plexus infrastructure to staging"
-)
-
 # Create production pipeline - watches main branch
+# Note: Staging infrastructure pipeline removed - staging only uses app deployment pipeline
 ProductionPipelineStack(
     app,
     "plexus-infrastructure-production-pipeline",
