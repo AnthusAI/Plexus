@@ -148,14 +148,20 @@ class AppDeploymentPipelineStack(Stack):
                             # Copy deployment artifacts (appspec.yml and scripts) to root
                             "cp infrastructure/deployment_artifacts/appspec.yml .",
                             "cp -r infrastructure/deployment_artifacts/scripts .",
-                            # Create zip with everything except infrastructure directory and build artifacts
-                            "zip -r deployment.zip . -x '*.git*' -x '*node_modules*' -x '*.venv*' -x '*__pycache__*' -x 'infrastructure/*' -x 'mlruns/*'",
                             "echo 'Deployment bundle created successfully'"
                         ]
                     }
                 },
                 "artifacts": {
-                    "files": ["deployment.zip"]
+                    "files": ["**/*"],
+                    "exclude-paths": [
+                        ".git/**/*",
+                        "node_modules/**/*",
+                        ".venv/**/*",
+                        "__pycache__/**/*",
+                        "infrastructure/**/*",
+                        "mlruns/**/*"
+                    ]
                 }
             })
         )
