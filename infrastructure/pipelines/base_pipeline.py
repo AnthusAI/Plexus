@@ -209,18 +209,18 @@ class DeploymentStage(cdk.Stage):
         """
         super().__init__(scope, construct_id, **kwargs)
 
-        # Deploy scoring worker stack (creates SQS queues)
-        scoring_worker_stack = ScoringWorkerStack(
-            self,
-            "ScoringWorker",
-            environment=environment,
-            stack_name=f"plexus-scoring-worker-{environment}",
-            env=kwargs.get("env")
-        )
-
-        # Deploy Lambda score processor stack (uses the same queues)
+        # Deploy Lambda score processor stack (with SQS queues)
         # Only deploy in production - staging can't use Lambda due to reserved concurrency limits
         if environment == "production":
+            # Deploy scoring worker stack (creates SQS queues) - only for production
+            scoring_worker_stack = ScoringWorkerStack(
+                self,
+                "ScoringWorker",
+                environment=environment,
+                stack_name=f"plexus-scoring-worker-{environment}",
+                env=kwargs.get("env")
+            )
+
             LambdaScoreProcessorStack(
                 self,
                 "LambdaScoreProcessor",
