@@ -177,4 +177,19 @@ class AppDeploymentPipelineStack(Stack):
             )
         )
 
+        # Grant pipeline role permission to use CodeDeploy
+        pipeline.role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "codedeploy:GetDeploymentConfig",
+                    "codedeploy:GetApplication",
+                    "codedeploy:GetDeploymentGroup",
+                    "codedeploy:GetDeployment",
+                    "codedeploy:CreateDeployment",
+                    "codedeploy:RegisterApplicationRevision"
+                ],
+                resources=["*"]
+            )
+        )
+
         self.pipeline = pipeline
