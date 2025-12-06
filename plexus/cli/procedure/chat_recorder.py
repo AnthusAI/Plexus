@@ -116,7 +116,8 @@ class ProcedureChatRecorder:
         tool_parameters: Optional[Dict[str, Any]] = None,
         tool_response: Optional[Dict[str, Any]] = None,
         parent_message_id: Optional[str] = None,
-        human_interaction: Optional[str] = None
+        human_interaction: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """Record a chat message."""
         if not self.session_id:
@@ -165,13 +166,12 @@ class ProcedureChatRecorder:
                 'messageType': message_type,
                 'sequenceNumber': self.sequence_number,
                 'humanInteraction': human_interaction
-                # Note: Omitting metadata field due to GraphQL validation issues
             }
 
             # Add accountId if available
             if self.account_id:
                 message_data['accountId'] = self.account_id
-            
+
             # Add tool-specific fields if provided
             if tool_name:
                 message_data['toolName'] = tool_name
@@ -183,6 +183,11 @@ class ProcedureChatRecorder:
                 message_data['toolResponse'] = json.dumps(tool_response)
             if parent_message_id:
                 message_data['parentMessageId'] = parent_message_id
+
+            # Add metadata if provided (for rich message formatting)
+            if metadata:
+                import json
+                message_data['metadata'] = json.dumps(metadata)
             
             # Log message recording (reduced noise - just sequence and type)
             tool_info = f" | Tool: {tool_name}" if tool_name else ""

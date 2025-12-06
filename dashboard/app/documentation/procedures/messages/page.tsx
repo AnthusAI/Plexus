@@ -1,6 +1,7 @@
 import { Button as DocButton } from "@/components/ui/button"
 import Link from "next/link"
 import { Metadata } from "next"
+import { MessageExample, MessageExamples } from "@/components/documentation/message-examples"
 
 export const metadata: Metadata = {
   title: "Message Classification - Procedures - Plexus Documentation",
@@ -132,52 +133,50 @@ export default function ProceduresMessagesPage() {
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4">Usage Patterns</h2>
+          <h2 className="text-2xl font-semibold mb-4">Visual Examples</h2>
+          <p className="text-muted-foreground mb-6">
+            See how different message types appear in the actual chat feed interface:
+          </p>
 
-          <div className="space-y-6">
+          <div className="space-y-8">
             <div>
-              <h3 className="text-xl font-medium mb-2">Procedure Workflow (Mixed Visibility)</h3>
-              <pre className="bg-muted rounded-lg p-4 text-sm font-mono overflow-x-auto">
-{`1. INTERNAL          Worker.turn() reasoning
-2. INTERNAL          Tool call: search(...)
-3. INTERNAL          Tool result: [...]
-4. NOTIFICATION      "Analysis complete"
-5. PENDING_APPROVAL  "Deploy to production?"
-6. RESPONSE          "Yes" (from human)
-7. NOTIFICATION      "Deploying..."
-8. NOTIFICATION      "Deployment complete"
-
-Human sees: 4, 5, 6, 7, 8
-System sees: all`}
-              </pre>
+              <h3 className="text-xl font-medium mb-3">Procedure Workflow (Mixed Visibility)</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                A complete workflow showing notifications, warnings, approval requests, and responses.
+                Note: INTERNAL messages (tool calls, agent reasoning) are filtered out in the human UI.
+              </p>
+              <MessageExample
+                title="Optimization Workflow"
+                description="Human sees: notifications, alerts, approval requests, and responses"
+                messages={MessageExamples.completeWorkflow}
+                height="h-96"
+              />
             </div>
 
             <div>
-              <h3 className="text-xl font-medium mb-2">Chat Conversation (All Visible)</h3>
-              <pre className="bg-muted rounded-lg p-4 text-sm font-mono overflow-x-auto">
-{`1. CHAT              "How do I deploy?"
-2. CHAT_ASSISTANT    "You can deploy using..."
-3. CHAT              "Can you deploy for me?"
-4. INTERNAL          (spawns deployment procedure)
-5. NOTIFICATION      "Starting deployment"
-6. CHAT_ASSISTANT    "I've started the deployment"
-
-Human sees: 1, 2, 3, 5, 6
-System sees: all`}
-              </pre>
+              <h3 className="text-xl font-medium mb-3">Chat Conversation (All Visible)</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Natural back-and-forth conversation with the AI, including procedure-generated notifications.
+              </p>
+              <MessageExample
+                title="Chat with Procedure Integration"
+                description="CHAT messages from user, CHAT_ASSISTANT from AI, plus system NOTIFICATIONS"
+                messages={MessageExamples.chatConversation}
+                height="h-80"
+              />
             </div>
 
             <div>
-              <h3 className="text-xl font-medium mb-2">System Monitoring (Alert Stream)</h3>
-              <pre className="bg-muted rounded-lg p-4 text-sm font-mono overflow-x-auto">
-{`1. ALERT_INFO        "Batch processing started"
-2. ALERT_INFO        "Processing 1000 of 10000"
-3. ALERT_WARNING     "High memory usage detected"
-4. ALERT_ERROR       "Database connection lost"
-5. ALERT_CRITICAL    "Service unavailable"
-
-All visible in monitoring dashboard`}
-              </pre>
+              <h3 className="text-xl font-medium mb-3">System Monitoring (Alert Stream)</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Severity-based alerts from INFO through CRITICAL with visual color coding.
+              </p>
+              <MessageExample
+                title="Alert Severity Levels"
+                description="INFO (blue) → WARNING (yellow) → ERROR (red) → CRITICAL (dark red)"
+                messages={MessageExamples.alertLevels}
+                height="h-80"
+              />
             </div>
           </div>
         </section>

@@ -139,11 +139,12 @@ class AgentPrimitive:
             # Add AI response to conversation
             self._conversation.append(ai_response)
 
-            # Queue AI response for recording
+            # Queue AI response for recording (agent messages are INTERNAL)
             self._queue_recording({
                 'role': 'ASSISTANT',
                 'content': response_content,
-                'message_type': 'MESSAGE'
+                'message_type': 'MESSAGE',
+                'human_interaction': 'INTERNAL'
             })
 
             # Execute tool calls if present
@@ -187,16 +188,18 @@ class AgentPrimitive:
             HumanMessage(content=self.initial_message)
         ]
 
-        # Queue initial messages for recording
+        # Queue initial messages for recording (all agent messages are INTERNAL)
         self._queue_recording({
             'role': 'SYSTEM',
             'content': self.system_prompt,
-            'message_type': 'MESSAGE'
+            'message_type': 'MESSAGE',
+            'human_interaction': 'INTERNAL'
         })
         self._queue_recording({
             'role': 'USER',
             'content': self.initial_message,
-            'message_type': 'MESSAGE'
+            'message_type': 'MESSAGE',
+            'human_interaction': 'INTERNAL'
         })
 
         self._initialized = True
@@ -268,14 +271,15 @@ class AgentPrimitive:
             # Record tool call in ToolPrimitive
             self.tool_primitive.record_call(tool_name, tool_args, tool_result)
 
-            # Queue tool call for recording
+            # Queue tool call for recording (tool calls are INTERNAL)
             self._queue_recording({
                 'role': 'TOOL',
                 'content': str(tool_result),
                 'message_type': 'TOOL_RESPONSE',
                 'tool_name': tool_name,
                 'tool_parameters': tool_args,
-                'tool_response': {'result': tool_result}
+                'tool_response': {'result': tool_result},
+                'human_interaction': 'INTERNAL'
             })
 
             # Check if this is a stop request

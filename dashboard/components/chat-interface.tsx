@@ -199,28 +199,65 @@ export function ChatInterface({
           'toolName',
           'procedureId',
           'accountId',
-          'createdAt'
+          'createdAt',
+          'metadata'
         ]
       })
 
       if (response.data) {
-        const formattedMessages = response.data.map((msg: any) => ({
-          id: msg.id,
-          content: msg.content || '',
-          role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
-          messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE' | undefined,
-          humanInteraction: msg.humanInteraction,
-          toolName: msg.toolName,
-          procedureId: msg.procedureId,
-          createdAt: msg.createdAt,
-        }))
+        console.log('[ChatInterface] Raw response data:', response.data)
 
-        // Filter out INTERNAL messages
-        const visibleMessages = formattedMessages.filter((msg: ChatMessage) => {
-          if (!msg.humanInteraction) return true
-          if (msg.humanInteraction === 'INTERNAL') {
-            return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
+        const formattedMessages = response.data.map((msg: any) => {
+          // Parse metadata if it's a JSON string
+          let parsedMetadata = msg.metadata
+          if (typeof msg.metadata === 'string') {
+            try {
+              parsedMetadata = JSON.parse(msg.metadata)
+
+              // Fix escaped newlines in content and collapsible sections
+              if (parsedMetadata?.content) {
+                parsedMetadata.content = parsedMetadata.content.replace(/\\n/g, '\n')
+              }
+              if (parsedMetadata?.collapsibleSections) {
+                parsedMetadata.collapsibleSections = parsedMetadata.collapsibleSections.map((section: any) => ({
+                  ...section,
+                  content: section.content?.replace(/\\n/g, '\n') || section.content
+                }))
+              }
+            } catch (e) {
+              console.error('[ChatInterface] Failed to parse metadata:', e)
+              parsedMetadata = null
+            }
           }
+
+          console.log('[ChatInterface] Processing message:', {
+            id: msg.id,
+            content: msg.content,
+            metadata: parsedMetadata,
+            humanInteraction: msg.humanInteraction
+          })
+
+          return {
+            id: msg.id,
+            content: msg.content || '',
+            role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
+            messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE' | undefined,
+            humanInteraction: msg.humanInteraction,
+            toolName: msg.toolName,
+            procedureId: msg.procedureId,
+            createdAt: msg.createdAt,
+            metadata: parsedMetadata,
+          }
+        })
+
+        // Filter: Only show messages intended for human viewing
+        // Hide all INTERNAL messages (agent reasoning, tool calls, etc.)
+        const visibleMessages = formattedMessages.filter((msg: ChatMessage) => {
+          // If humanInteraction is explicitly set to INTERNAL, hide it
+          if (msg.humanInteraction === 'INTERNAL') {
+            return false
+          }
+          // Show all other messages (CHAT, NOTIFICATION, PENDING_*, ALERT_*, etc.)
           return true
         })
 
@@ -229,7 +266,7 @@ export function ChatInterface({
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         })
 
-        console.log('[ChatInterface] Loaded messages:', sortedMessages.length)
+        console.log('[ChatInterface] Loaded messages:', sortedMessages.length, sortedMessages)
         setMessages(sortedMessages)
       }
     } catch (err) {

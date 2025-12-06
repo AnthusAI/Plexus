@@ -1,6 +1,7 @@
 import { Button as DocButton } from "@/components/ui/button"
 import Link from "next/link"
 import { Metadata } from "next"
+import { MessageExample, MessageExamples } from "@/components/documentation/message-examples"
 
 export const metadata: Metadata = {
   title: "Human-in-the-Loop - Procedures - Plexus Documentation",
@@ -52,6 +53,14 @@ else
   Log.info("Deployment cancelled")
 end`}</code>
               </pre>
+
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground mb-2">How it appears in the chat feed:</p>
+                <MessageExample
+                  messages={MessageExamples.simpleApproval}
+                  height="h-64"
+                />
+              </div>
             </div>
 
             <div className="border rounded-lg p-4">
@@ -68,6 +77,14 @@ if topic then
   Procedure.run("researcher", {topic = topic})
 end`}</code>
               </pre>
+
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground mb-2">How it appears in the chat feed:</p>
+                <MessageExample
+                  messages={MessageExamples.inputRequest}
+                  height="h-80"
+                />
+              </div>
             </div>
 
             <div className="border rounded-lg p-4">
@@ -90,6 +107,14 @@ else
   Log.warn("Report rejected")
 end`}</code>
               </pre>
+
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground mb-2">How it appears in the chat feed:</p>
+                <MessageExample
+                  messages={MessageExamples.reviewRequest}
+                  height="h-80"
+                />
+              </div>
             </div>
 
             <div className="border rounded-lg p-4">
@@ -107,6 +132,14 @@ end`}</code>
 
 -- Execution continues immediately`}</code>
               </pre>
+
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground mb-2">How progress notifications appear:</p>
+                <MessageExample
+                  messages={MessageExamples.progressUpdates}
+                  height="h-72"
+                />
+              </div>
             </div>
 
             <div className="border rounded-lg p-4">
@@ -123,6 +156,14 @@ end`}</code>
   }
 })`}</code>
               </pre>
+
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground mb-2">Alert severity levels:</p>
+                <MessageExample
+                  messages={MessageExamples.alertLevels}
+                  height="h-80"
+                />
+              </div>
             </div>
           </div>
         </section>
@@ -246,7 +287,21 @@ workflow: |
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4">Complete Example</h2>
+          <h2 className="text-2xl font-semibold mb-4">Complete Workflow Example</h2>
+
+          <div className="mb-6">
+            <p className="text-muted-foreground mb-4">
+              Here's how a complete workflow with Human.approve(), notifications, and alerts appears in the chat feed:
+            </p>
+            <MessageExample
+              title="Complete HITL Workflow"
+              description="Shows mixed message types: notifications, warnings, approval requests, and responses"
+              messages={MessageExamples.completeWorkflow}
+              height="h-96"
+            />
+          </div>
+
+          <h3 className="text-xl font-semibold mb-4 mt-8">Full Procedure Code</h3>
           <pre className="bg-muted rounded-lg overflow-x-auto">
             <div className="code-container p-4">
               <code>{`name: content_pipeline

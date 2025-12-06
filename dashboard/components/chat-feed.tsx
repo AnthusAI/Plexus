@@ -214,33 +214,56 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
           'toolName',
           'procedureId',
           'accountId',
-          'createdAt'
+          'createdAt',
+          'metadata'
         ]
       })
 
       if (response.data) {
-        const formattedMessages = response.data.map((msg: any) => ({
-          id: msg.id,
-          content: msg.content || '',
-          role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
-          messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE' | undefined,
-          humanInteraction: msg.humanInteraction,
-          toolName: msg.toolName,
-          procedureId: msg.procedureId,
-          createdAt: msg.createdAt,
-        }))
+        const formattedMessages = response.data.map((msg: any) => {
+          // Parse metadata if it's a JSON string
+          let parsedMetadata = msg.metadata
+          if (typeof msg.metadata === 'string') {
+            try {
+              parsedMetadata = JSON.parse(msg.metadata)
 
-        // Filter out INTERNAL messages
-        const visibleMessages = formattedMessages.filter((msg: ChatMessage) => {
-          // If humanInteraction is not set, show it (backward compatibility)
-          if (!msg.humanInteraction) return true
-
-          // Hide INTERNAL messages only if they're tool-related
-          if (msg.humanInteraction === 'INTERNAL') {
-            return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
+              // Fix escaped newlines in content and collapsible sections
+              if (parsedMetadata?.content) {
+                parsedMetadata.content = parsedMetadata.content.replace(/\\n/g, '\n')
+              }
+              if (parsedMetadata?.collapsibleSections) {
+                parsedMetadata.collapsibleSections = parsedMetadata.collapsibleSections.map((section: any) => ({
+                  ...section,
+                  content: section.content?.replace(/\\n/g, '\n') || section.content
+                }))
+              }
+            } catch (e) {
+              console.error('[ChatFeed] Failed to parse metadata:', e)
+              parsedMetadata = null
+            }
           }
 
-          // Show all other humanInteraction types
+          return {
+            id: msg.id,
+            content: msg.content || '',
+            role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
+            messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE' | undefined,
+            humanInteraction: msg.humanInteraction,
+            toolName: msg.toolName,
+            procedureId: msg.procedureId,
+            createdAt: msg.createdAt,
+            metadata: parsedMetadata,
+          }
+        })
+
+        // Filter: Only show messages intended for human viewing
+        // Hide all INTERNAL messages (agent reasoning, tool calls, etc.)
+        const visibleMessages = formattedMessages.filter((msg: ChatMessage) => {
+          // If humanInteraction is explicitly set to INTERNAL, hide it
+          if (msg.humanInteraction === 'INTERNAL') {
+            return false
+          }
+          // Show all other messages (CHAT, NOTIFICATION, PENDING_*, ALERT_*, etc.)
           return true
         })
 
