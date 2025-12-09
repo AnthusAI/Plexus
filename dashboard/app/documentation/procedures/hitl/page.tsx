@@ -1,7 +1,8 @@
 import { Button as DocButton } from "@/components/ui/button"
 import Link from "next/link"
 import { Metadata } from "next"
-import { MessageExample, MessageExamples } from "@/components/documentation/message-examples"
+import { MessageExample } from "@/components/documentation/message-examples"
+import { MessageExampleData as MessageExamples } from "@/components/documentation/message-example-data"
 
 export const metadata: Metadata = {
   title: "Human-in-the-Loop - Procedures - Plexus Documentation",
