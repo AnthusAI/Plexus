@@ -47,7 +47,7 @@ type AggregatedMetricsIndexFields = "accountId" | "compositeKey" | "scorecardId"
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "rootNodeId" | "updatedAt" | "createdAt" | "category" | "version";
+type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "rootNodeId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
 type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
@@ -865,6 +865,9 @@ const schema = a.schema({
             version: a.string(), // For templates: version (e.g., "1.0", "2.1")
             isDefault: a.boolean(), // For templates: whether this is the default for the category
             rootNodeId: a.id(),
+            status: a.string(), // Execution status: PENDING, RUNNING, WAITING_FOR_HUMAN, COMPLETE, ERROR
+            waitingOnMessageId: a.string(), // ID of PENDING_* message blocking execution
+            metadata: a.json(), // Checkpoints, state, and lua_state for idempotent execution
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             accountId: a.string().required(),
@@ -889,7 +892,8 @@ const schema = a.schema({
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("parentProcedureId").sortKeys(["updatedAt"]),
             idx("rootNodeId"),
-            idx("category").sortKeys(["version"]).name("byCategory")
+            idx("category").sortKeys(["version"]).name("byCategory"),
+            idx("status").sortKeys(["updatedAt"]).name("byStatus")
         ]),
 
     GraphNode: a
