@@ -58,6 +58,7 @@ dependencies = [
     "langchain-google-vertexai>=1.0.6",
     "langchain-anthropic>=0.3.10",
     "langgraph-checkpoint-postgres==2.0.9",
+    "lupa==2.6",
     "openpyxl==3.1.5",
     "rapidfuzz==3.9.4",
     "datasets",
