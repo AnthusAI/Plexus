@@ -1240,14 +1240,19 @@ class FeedbackItems(DataCache):
                     logger.warning(f"Could not parse cached item metadata for item_id={feedback_item.item.id}: {e}")
                     # Continue without the cached metadata
         
-        # Parse other_data if it's a JSON string (fix the root cause)
-        if 'other_data' in metadata and isinstance(metadata['other_data'], str):
-            try:
-                metadata['other_data'] = json.loads(metadata['other_data'])
-                logger.info(f"Parsed other_data from JSON string to dict for item_id={feedback_item.item.id}")
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Could not parse other_data JSON string for item_id={feedback_item.item.id}: {e}")
-                # Keep as string if parsing fails
+        # Parse JSON string fields in metadata (fix the root cause)
+        # Common fields that might be JSON strings: other_data, schools, etc.
+        json_fields = ['other_data', 'schools']  # Add other fields as needed
+        for field in json_fields:
+            if field in metadata and isinstance(metadata[field], str):
+                value = metadata[field].strip()
+                if value and value[0] in ('[', '{'):  # Looks like JSON
+                    try:
+                        metadata[field] = json.loads(value)
+                        logger.info(f"Parsed {field} from JSON string for item_id={feedback_item.item.id}")
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.warning(f"Could not parse {field} JSON string for item_id={feedback_item.item.id}: {e}")
+                        # Keep as string if parsing fails
 
         # Check for non-serializable objects before attempting JSON serialization
         try:
