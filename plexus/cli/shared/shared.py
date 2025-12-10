@@ -49,6 +49,58 @@ def get_score_yaml_path(scorecard_name: str, score_name: str) -> Path:
     # Create the YAML file path
     return scorecard_dir / f"{sanitize_path_name(score_name)}.yaml"
 
+def get_score_guidelines_path(scorecard_name: str, score_name: str) -> Path:
+    """Compute the guidelines markdown file path for a score based on scorecard and score names.
+
+    This function follows the convention:
+    ./scorecards/[scorecard_name]/guidelines/[score_name].md
+
+    where both scorecard_name and score_name are sanitized for use in file paths.
+
+    Args:
+        scorecard_name: The name of the scorecard
+        score_name: The name of the score
+
+    Returns:
+        A Path object pointing to the guidelines file location
+
+    Example:
+        >>> get_score_guidelines_path("My Scorecard", "Call Quality Score")
+        Path('scorecards/my_scorecard/guidelines/call_quality_score.md')
+    """
+    # Create the scorecards directory if it doesn't exist
+    # Allow override via environment variable for Lambda compatibility
+    scorecards_base = os.environ.get('SCORECARD_CACHE_DIR', 'scorecards')
+    scorecards_dir = Path(scorecards_base)
+
+    # Handle case where 'scorecards' exists as a file instead of directory
+    if scorecards_dir.exists() and not scorecards_dir.is_dir():
+        # Remove the file if it exists
+        scorecards_dir.unlink()
+
+    scorecards_dir.mkdir(exist_ok=True)
+
+    # Create sanitized directory names
+    scorecard_dir = scorecards_dir / sanitize_path_name(scorecard_name)
+
+    # Handle case where scorecard dir exists as a file instead of directory
+    if scorecard_dir.exists() and not scorecard_dir.is_dir():
+        scorecard_dir.unlink()
+
+    scorecard_dir.mkdir(exist_ok=True)
+
+    # Create guidelines subdirectory
+    guidelines_dir = scorecard_dir / "guidelines"
+
+    # Handle case where guidelines dir exists as a file instead of directory
+    if guidelines_dir.exists() and not guidelines_dir.is_dir():
+        guidelines_dir.unlink()
+
+    guidelines_dir.mkdir(exist_ok=True)
+
+    # Create the guidelines markdown file path
+    return guidelines_dir / f"{sanitize_path_name(score_name)}.md"
+
 def sanitize_path_name(name: str) -> str:
     """
     Sanitize a string to be safe for use as a path name while preserving readability.
