@@ -767,41 +767,120 @@ score.add_command(optimize)
 
 @score.command()
 @click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
-@click.option('--score', required=True, help='Score to pull (accepts ID, name, key, or external ID)')
+@click.option('--score', required=False, help='Score to pull (accepts ID, name, key, or external ID). If not specified, pulls all scores in the scorecard.')
 @click.option('--use-cache', is_flag=True, help='Use cached file if available (default: always fetch fresh from API)')
 @click.option('--verbose', is_flag=True, help='Show detailed progress and caching information')
-def pull(scorecard: str, score: str, use_cache: bool = False, verbose: bool = False):
-    """Pull a score's current champion version as a YAML file."""
+def pull(scorecard: str, score: Optional[str] = None, use_cache: bool = False, verbose: bool = False):
+    """Pull score(s) current champion version as YAML file(s).
+
+    If --score is provided, pulls that specific score.
+    If --score is not provided, pulls all scores from the scorecard.
+    """
     try:
         client = create_client()
-        
-        # Show welcome message
-        console.print(f"[bold]Pulling score '{score}' from scorecard '{scorecard}'...[/bold]")
-        if use_cache:
-            console.print("[blue]Using cached version if available (--use-cache flag is set)[/blue]")
-        
-        # Fetch and cache the score configuration
-        config, yaml_path, from_cache = fetch_and_cache_single_score(
-            client=client,
-            scorecard_identifier=scorecard,
-            score_identifier=score,
-            use_cache=use_cache,
-            verbose=verbose
-        )
-        
-        # Display success message with the same format as the original implementation
-        if from_cache:
-            console.print(f"[green]Loaded score configuration from cache: {yaml_path}[/green]")
+
+        # If a specific score is provided, use the single score logic
+        if score:
+            # Show welcome message
+            console.print(f"[bold]Pulling score '{score}' from scorecard '{scorecard}'...[/bold]")
+            if use_cache:
+                console.print("[blue]Using cached version if available (--use-cache flag is set)[/blue]")
+
+            # Fetch and cache the score configuration
+            config, yaml_path, from_cache = fetch_and_cache_single_score(
+                client=client,
+                scorecard_identifier=scorecard,
+                score_identifier=score,
+                use_cache=use_cache,
+                verbose=verbose
+            )
+
+            # Display success message with the same format as the original implementation
+            if from_cache:
+                console.print(f"[green]Loaded score configuration from cache: {yaml_path}[/green]")
+            else:
+                # Extract some details for display
+                score_name = config.get('name', 'Unknown')
+                score_id = config.get('id', 'Unknown')
+                version_id = config.get('version', 'Unknown')
+
+                console.print(f"[green]Found score: {score_name} (ID: {score_id})[/green]")
+                console.print(f"[green]Champion version ID: {version_id}[/green]")
+                console.print(f"[green]Saved score configuration to: {yaml_path}[/green]")
         else:
-            # Extract some details for display
-            score_name = config.get('name', 'Unknown')
-            score_id = config.get('id', 'Unknown')
-            version_id = config.get('version', 'Unknown')
-            
-            console.print(f"[green]Found score: {score_name} (ID: {score_id})[/green]")
-            console.print(f"[green]Champion version ID: {version_id}[/green]")
-            console.print(f"[green]Saved score configuration to: {yaml_path}[/green]")
-            
+            # Pull all scores from the scorecard
+            from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
+
+            console.print(f"[bold]Pulling all scores from scorecard '{scorecard}'...[/bold]")
+            if use_cache:
+                console.print("[blue]Using cached versions if available (--use-cache flag is set)[/blue]")
+
+            # Fetch the scorecard structure to get all scores
+            scorecard_data = fetch_scorecard_structure(client, scorecard)
+            if not scorecard_data:
+                console.print(f"[red]Could not fetch scorecard: {scorecard}[/red]")
+                return
+
+            scorecard_name = scorecard_data.get('name', 'Unknown')
+            console.print(f"[bold cyan]Scorecard: {scorecard_name}[/bold cyan]")
+
+            # Collect all scores from all sections
+            all_scores = []
+            for section in scorecard_data.get('sections', {}).get('items', []):
+                for score_item in section.get('scores', {}).get('items', []):
+                    all_scores.append({
+                        'id': score_item.get('id'),
+                        'name': score_item.get('name'),
+                        'section': section.get('name')
+                    })
+
+            if not all_scores:
+                console.print("[yellow]No scores found in this scorecard.[/yellow]")
+                return
+
+            console.print(f"[blue]Found {len(all_scores)} score(s) to pull[/blue]\n")
+
+            # Pull each score
+            success_count = 0
+            error_count = 0
+
+            for idx, score_info in enumerate(all_scores, 1):
+                score_name = score_info['name']
+                score_id = score_info['id']
+                section_name = score_info['section']
+
+                console.print(f"[cyan][{idx}/{len(all_scores)}][/cyan] Pulling '{score_name}' (section: {section_name})...")
+
+                try:
+                    config, yaml_path, from_cache = fetch_and_cache_single_score(
+                        client=client,
+                        scorecard_identifier=scorecard,
+                        score_identifier=score_id,
+                        use_cache=use_cache,
+                        verbose=verbose
+                    )
+
+                    if from_cache:
+                        console.print(f"  [green]✓ Loaded from cache: {yaml_path}[/green]")
+                    else:
+                        version_id = config.get('version', 'Unknown')
+                        console.print(f"  [green]✓ Saved to: {yaml_path}[/green]")
+                        console.print(f"  [dim]Champion version: {version_id}[/dim]")
+
+                    success_count += 1
+
+                except Exception as e:
+                    console.print(f"  [red]✗ Error: {str(e)}[/red]")
+                    error_count += 1
+
+                console.print()  # Empty line for readability
+
+            # Summary
+            console.print("[bold]Summary:[/bold]")
+            console.print(f"  [green]Successfully pulled: {success_count}[/green]")
+            if error_count > 0:
+                console.print(f"  [red]Errors: {error_count}[/red]")
+
     except ValueError as e:
         # Handle expected errors with user-friendly messages
         console.print(f"[red]{str(e)}[/red]")
