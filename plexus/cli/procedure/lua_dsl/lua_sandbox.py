@@ -126,6 +126,29 @@ class LuaSandbox:
         # Just log what's available - no need to explicitly set
         logger.debug(f"Safe Lua functions available: {', '.join(safe_functions)}")
 
+        # Add safe subset of os module (only date function for timestamps)
+        from datetime import datetime
+        def safe_date(format_str=None):
+            """Safe implementation of os.date() for timestamp generation."""
+            now = datetime.utcnow()
+            if format_str is None:
+                # Return default format like Lua's os.date()
+                return now.strftime("%a %b %d %H:%M:%S %Y")
+            elif format_str == "%Y-%m-%dT%H:%M:%SZ":
+                # ISO 8601 format
+                return now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            else:
+                # Support Python strftime formats
+                try:
+                    return now.strftime(format_str)
+                except:
+                    return now.strftime("%a %b %d %H:%M:%S %Y")
+
+        # Create safe os table with only date function
+        safe_os = self.lua.table(date=safe_date)
+        self.lua.globals()['os'] = safe_os
+        logger.debug("Added safe os.date() function")
+
     def inject_primitive(self, name: str, primitive_obj: Any):
         """
         Inject a Python primitive object into Lua globals.

@@ -50,8 +50,17 @@ export interface ChatMessage {
   /** Tool name (for TOOL_CALL/TOOL_RESPONSE messages) */
   toolName?: string
 
+  /** Associated account ID */
+  accountId?: string
+
+  /** Associated session ID */
+  sessionId?: string
+
   /** Associated procedure ID */
   procedureId?: string
+
+  /** Parent message ID (for threading and responses) */
+  parentMessageId?: string
 
   /** ISO 8601 timestamp */
   createdAt: string
@@ -76,16 +85,33 @@ interface ChatFeedViewProps {
   isLoading?: boolean
   error?: string | null
   className?: string
+  onHitlSubmit?: (message: ChatMessage, data: Record<string, any>) => Promise<void>
+  submittedMessages?: Set<string>
+  submittingMessages?: Set<string>
 }
 
 // Presentational component for Storybook
-export function ChatFeedView({ messages, isLoading = false, error = null, className = '' }: ChatFeedViewProps) {
+export function ChatFeedView({
+  messages,
+  isLoading = false,
+  error = null,
+  className = '',
+  onHitlSubmit,
+  submittedMessages = new Set(),
+  submittingMessages = new Set()
+}: ChatFeedViewProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    console.log('[ChatFeedView] Auto-scroll triggered, messages count:', messages.length)
+    if (messagesEndRef.current) {
+      console.log('[ChatFeedView] Scrolling to bottom...')
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    } else {
+      console.log('[ChatFeedView] messagesEndRef.current is null')
+    }
   }, [messages])
 
   if (isLoading) {
@@ -144,6 +170,20 @@ export function ChatFeedView({ messages, isLoading = false, error = null, classN
                   </Badge>
                 )}
 
+                {/* Show submission status for PENDING messages */}
+                {message.humanInteraction?.startsWith('PENDING_') && submittedMessages.has(message.id) && (
+                  <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                    ✓ Response submitted
+                  </Badge>
+                )}
+
+                {message.humanInteraction?.startsWith('PENDING_') && submittingMessages.has(message.id) && (
+                  <Badge variant="outline" className="text-xs text-blue-600 border-blue-600">
+                    <Spinner size="sm" className="mr-1" />
+                    Submitting...
+                  </Badge>
+                )}
+
                 <Timestamp time={message.createdAt} variant="relative" className="text-xs text-muted-foreground" />
               </div>
 
@@ -155,9 +195,29 @@ export function ChatFeedView({ messages, isLoading = false, error = null, classN
                   <InteractiveMessage
                     metadata={message.metadata as InteractiveMessageMetadata}
                     onSubmit={async (data) => {
-                      console.log('Interactive message response:', data)
-                      // TODO: Handle submission (send to backend)
+                      console.log('[ChatFeedView] InteractiveMessage onSubmit called with data:', data)
+                      const messageId = message.id
+                      console.log('[ChatFeedView] Message ID:', messageId)
+                      console.log('[ChatFeedView] Submitted messages:', Array.from(submittedMessages))
+                      console.log('[ChatFeedView] Submitting messages:', Array.from(submittingMessages))
+
+                      // Prevent double-submit
+                      if (submittedMessages.has(messageId) || submittingMessages.has(messageId)) {
+                        console.log('[ChatFeedView] Double-submit prevented')
+                        return
+                      }
+
+                      // Call the parent handler
+                      console.log('[ChatFeedView] onHitlSubmit exists:', !!onHitlSubmit)
+                      if (onHitlSubmit) {
+                        console.log('[ChatFeedView] Calling onHitlSubmit...')
+                        await onHitlSubmit(message, data)
+                        console.log('[ChatFeedView] onHitlSubmit completed')
+                      } else {
+                        console.error('[ChatFeedView] onHitlSubmit is undefined!')
+                      }
                     }}
+                    disabled={submittedMessages.has(message.id) || submittingMessages.has(message.id)}
                   />
                 ) : message.metadata ? (
                   /* Rich content messages (with collapsible sections but no buttons) */
@@ -190,6 +250,89 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [submittedMessages, setSubmittedMessages] = useState<Set<string>>(new Set())
+  const [submittingMessages, setSubmittingMessages] = useState<Set<string>>(new Set())
+
+  // Build response content based on message type
+  const buildResponseContent = (
+    requestType: string | undefined,
+    submissionData: Record<string, any>,
+    pendingMetadata: any
+  ): Record<string, any> => {
+    const responded_at = new Date().toISOString()
+
+    switch (requestType) {
+      case 'PENDING_APPROVAL':
+        return {
+          approved: submissionData.action === 'approve' || submissionData.action === 'Approve',
+          responded_at
+        }
+
+      case 'PENDING_INPUT':
+        return {
+          input: submissionData.input || submissionData.action || '',
+          responded_at
+        }
+
+      case 'PENDING_REVIEW':
+        return {
+          decision: submissionData.action, // Button label clicked
+          feedback: submissionData.feedback || submissionData.input || '',
+          edited_artifact: submissionData.edited_artifact || null,
+          responded_at
+        }
+
+      default:
+        return { action: submissionData.action, responded_at }
+    }
+  }
+
+  // Handle HITL response submission
+  const handleHitlResponse = async (
+    pendingMessage: ChatMessage,
+    submissionData: Record<string, any>
+  ) => {
+    console.log('[ChatFeed] handleHitlResponse called')
+    console.log('[ChatFeed] Pending message:', pendingMessage.id)
+    console.log('[ChatFeed] Submission data:', submissionData)
+
+    // Validate required fields
+    if (!pendingMessage.sessionId) {
+      throw new Error('Session ID is required for HITL response')
+    }
+
+    // Build response content based on message type
+    const responseContent = buildResponseContent(
+      pendingMessage.humanInteraction,
+      submissionData,
+      pendingMessage.metadata
+    )
+    console.log('[ChatFeed] Response content:', responseContent)
+
+    // Create RESPONSE message
+    console.log('[ChatFeed] Creating RESPONSE message...')
+    const messageData = {
+      accountId: pendingMessage.accountId,
+      sessionId: pendingMessage.sessionId,
+      procedureId: pendingMessage.procedureId,
+      parentMessageId: pendingMessage.id,
+      role: 'USER',
+      humanInteraction: 'RESPONSE',
+      content: JSON.stringify(responseContent),
+      createdAt: new Date().toISOString(),
+      metadata: JSON.stringify({
+        callback_id: pendingMessage.metadata?.callback_id, // Pass through for Lambda Durable mode
+        response_type: pendingMessage.humanInteraction?.replace('PENDING_', '').toLowerCase(),
+        original_request: pendingMessage.id,
+        submitted_at: new Date().toISOString()
+      })
+    }
+    // @ts-ignore - Amplify generates complex union types that TypeScript can't fully infer
+    const result: any = await client.models.ChatMessage.create(messageData as any)
+    console.log('[ChatFeed] RESPONSE message created:', result)
+
+    // Real-time subscription will trigger reload
+  }
 
   // Load messages for account
   const loadMessages = async () => {
@@ -214,6 +357,7 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
           'toolName',
           'procedureId',
           'accountId',
+          'parentMessageId',
           'createdAt',
           'metadata'
         ]
@@ -251,6 +395,7 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
             humanInteraction: msg.humanInteraction,
             toolName: msg.toolName,
             procedureId: msg.procedureId,
+            parentMessageId: msg.parentMessageId,
             createdAt: msg.createdAt,
             metadata: parsedMetadata,
           }
@@ -321,6 +466,36 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
     }
   }, [accountId])
 
+  // Wrapped HITL handler with state management
+  const handleHitlSubmit = async (message: ChatMessage, data: Record<string, any>) => {
+    console.log('[ChatFeed] handleHitlSubmit called')
+    console.log('[ChatFeed] Message:', message.id)
+    console.log('[ChatFeed] Data:', data)
+
+    const messageId = message.id
+
+    // Mark as submitting
+    console.log('[ChatFeed] Marking as submitting:', messageId)
+    setSubmittingMessages(prev => new Set(prev).add(messageId))
+
+    try {
+      console.log('[ChatFeed] Calling handleHitlResponse...')
+      await handleHitlResponse(message, data)
+      console.log('[ChatFeed] handleHitlResponse completed, marking as submitted')
+      setSubmittedMessages(prev => new Set(prev).add(messageId))
+    } catch (error) {
+      console.error('[ChatFeed] Failed to submit response:', error)
+      // TODO: Add error state and display to user
+    } finally {
+      console.log('[ChatFeed] Removing from submitting set')
+      setSubmittingMessages(prev => {
+        const next = new Set(prev)
+        next.delete(messageId)
+        return next
+      })
+    }
+  }
+
   // Render using the presentational component
   return (
     <ChatFeedView
@@ -328,6 +503,9 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
       isLoading={isLoading}
       error={error}
       className={className}
+      onHitlSubmit={handleHitlSubmit}
+      submittedMessages={submittedMessages}
+      submittingMessages={submittingMessages}
     />
   )
 }

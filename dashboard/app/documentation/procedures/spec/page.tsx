@@ -21,56 +21,48 @@ export default function ProceduresSpecPage() {
           <div className="flex items-start gap-4">
             <FileText className="h-8 w-8 text-primary mt-1" />
             <div className="flex-1">
-              <h2 className="text-2xl font-semibold mb-2">AGENTS.md</h2>
+              <h2 className="text-2xl font-semibold mb-2">Documentation Files</h2>
               <p className="text-muted-foreground mb-4">
-                The complete technical specification is available in <code>AGENTS.md</code> at{" "}
-                <code className="text-sm bg-background px-2 py-1 rounded">/plexus/procedures/AGENTS.md</code>
+                The Procedure DSL documentation is maintained in the codebase at{" "}
+                <code className="text-sm bg-background px-2 py-1 rounded">/plexus/procedures/</code>
               </p>
-              <p className="text-muted-foreground mb-4">
-                This comprehensive 45KB document covers every aspect of the Procedure DSL including:
-              </p>
-              <ul className="list-disc pl-6 space-y-1 text-muted-foreground mb-4">
-                <li>Complete document structure and YAML schema</li>
-                <li>All primitives and API reference</li>
-                <li>Human-in-the-Loop patterns</li>
-                <li>Message classification system</li>
-                <li>Real-world examples</li>
-                <li>Best practices and migration guides</li>
-              </ul>
-            </div>
-          </div>
-        </section>
 
-        <section>
-          <h2 className="text-2xl font-semibold mb-4">HTML Documentation</h2>
-          <p className="text-muted-foreground mb-4">
-            Comprehensive HTML documentation is also available at{" "}
-            <code className="text-sm bg-muted px-2 py-1 rounded">/plexus/procedures/docs/</code>
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div className="border rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-2">index.html</h3>
-              <p className="text-sm text-muted-foreground">Landing page with overview and navigation</p>
-            </div>
-            <div className="border rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-2">getting-started.html</h3>
-              <p className="text-sm text-muted-foreground">Step-by-step tutorial and examples</p>
-            </div>
-            <div className="border rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-2">hitl-guide.html</h3>
-              <p className="text-sm text-muted-foreground">Human-in-the-Loop patterns and primitives</p>
-            </div>
-            <div className="border rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-2">examples.html</h3>
-              <p className="text-sm text-muted-foreground">8 complete real-world examples</p>
-            </div>
-            <div className="border rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-2">api-reference.html</h3>
-              <p className="text-sm text-muted-foreground">Complete API with all primitives</p>
-            </div>
-            <div className="border rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-2">message-classification.html</h3>
-              <p className="text-sm text-muted-foreground">Message types and visibility system</p>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-medium mb-1">DSL_SPECIFICATION.md</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Complete technical specification (~65KB) covering every aspect of the DSL:
+                  </p>
+                  <ul className="list-disc pl-6 space-y-1 text-sm text-muted-foreground">
+                    <li>Complete document structure and YAML schema</li>
+                    <li>All primitives and API reference</li>
+                    <li>Human-in-the-Loop patterns and execution contexts</li>
+                    <li>Message classification system</li>
+                    <li>Idempotent execution model</li>
+                    <li>Real-world examples with full code</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-medium mb-1">AGENTS.md</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Quick reference guide (~3KB) with common patterns and a pointer to the full spec.
+                    Optimized for AI coding agents to load efficiently.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-medium mb-1">Working Examples</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Live, tested procedure examples:
+                  </p>
+                  <ul className="list-disc pl-6 space-y-1 text-sm text-muted-foreground">
+                    <li><code>limerick_writer.yaml</code> - Basic single-agent loop</li>
+                    <li><code>creative_writer.yaml</code> - Multi-agent sequential pipeline</li>
+                    <li><code>README.md</code> - Example documentation and usage</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </section>

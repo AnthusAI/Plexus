@@ -11,11 +11,13 @@ Orchestrates:
 
 import logging
 import asyncio
+import time
 from typing import Dict, Any, Optional, List
 
 from .yaml_parser import ProcedureYAMLParser, ProcedureConfigError
 from .lua_sandbox import LuaSandbox, LuaSandboxError
 from .output_validator import OutputValidator, OutputValidationError
+from .execution_context import LocalExecutionContext, ProcedureWaitingForHuman, GraphQLServiceAdapter
 from .primitives import (
     StatePrimitive,
     IterationsPrimitive,
@@ -26,6 +28,14 @@ from .primitives import (
     HumanPrimitive,
     SystemPrimitive
 )
+from .primitives.step import StepPrimitive, CheckpointPrimitive
+from .primitives.log import LogPrimitive
+from .primitives.session import SessionPrimitive
+from .primitives.stage import StagePrimitive
+from .primitives.json import JsonPrimitive
+from .primitives.retry import RetryPrimitive
+from .primitives.file import FilePrimitive
+from .primitives.procedure import ProcedurePrimitive
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +79,9 @@ class LuaDSLRuntime:
         self.lua_sandbox: Optional[LuaSandbox] = None
         self.output_validator: Optional[OutputValidator] = None
 
+        # Execution context
+        self.execution_context: Optional[LocalExecutionContext] = None
+
         # Primitives (shared across all agents)
         self.state_primitive: Optional[StatePrimitive] = None
         self.iterations_primitive: Optional[IterationsPrimitive] = None
@@ -77,6 +90,8 @@ class LuaDSLRuntime:
         self.graph_primitive: Optional[GraphNodePrimitive] = None
         self.human_primitive: Optional[HumanPrimitive] = None
         self.system_primitive: Optional[SystemPrimitive] = None
+        self.step_primitive: Optional[StepPrimitive] = None
+        self.checkpoint_primitive: Optional[CheckpointPrimitive] = None
 
         # Agent primitives (one per agent)
         self.agents: Dict[str, AgentPrimitive] = {}
@@ -144,23 +159,52 @@ class LuaDSLRuntime:
             else:
                 logger.warning("Failed to create chat session - continuing without recording")
 
-            # 7. Initialize HITL primitives (require chat_recorder)
-            logger.info("Step 7: Initializing HITL primitives")
-            hitl_config = self.config.get('hitl', {})
-            self.human_primitive = HumanPrimitive(chat_recorder, hitl_config)
-            self.system_primitive = SystemPrimitive(chat_recorder)
-            logger.debug("HITL primitives initialized")
+            # 7. Create execution context
+            logger.info("Step 7: Creating execution context")
+            # Wrap PlexusDashboardClient with adapter to provide query/mutate interface
+            graphql_adapter = GraphQLServiceAdapter(self.client)
+            self.execution_context = LocalExecutionContext(
+                procedure_id=self.procedure_id,
+                session_id=session_id,
+                graphql_service=graphql_adapter,
+                chat_recorder=chat_recorder
+            )
+            logger.debug("LocalExecutionContext created")
 
-            # 8. Setup agents with LLMs and tools
-            logger.info("Step 8: Setting up agents")
+            # 8. Initialize HITL and checkpoint primitives (require execution_context)
+            logger.info("Step 8: Initializing HITL and checkpoint primitives")
+            hitl_config = self.config.get('hitl', {})
+            self.human_primitive = HumanPrimitive(chat_recorder, self.execution_context, hitl_config)
+            self.system_primitive = SystemPrimitive(chat_recorder)
+            self.step_primitive = StepPrimitive(self.execution_context)
+            self.checkpoint_primitive = CheckpointPrimitive(self.execution_context)
+            self.log_primitive = LogPrimitive(procedure_id=self.procedure_id)
+            self.session_primitive = SessionPrimitive(chat_recorder, self.execution_context, self.lua_sandbox)
+            declared_stages = self.config.get('stages', [])
+            self.stage_primitive = StagePrimitive(declared_stages=declared_stages, lua_sandbox=self.lua_sandbox)
+            self.json_primitive = JsonPrimitive(lua_sandbox=self.lua_sandbox)
+            self.retry_primitive = RetryPrimitive()
+            self.file_primitive = FilePrimitive()
+            self.procedure_primitive = ProcedurePrimitive(
+                client=self.client,
+                account_id=self.account_id,
+                parent_procedure_id=self.procedure_id,
+                mcp_server=self.mcp_server,
+                openai_api_key=self.openai_api_key,
+                lua_sandbox=self.lua_sandbox
+            )
+            logger.debug("HITL and checkpoint primitives initialized")
+
+            # 9. Setup agents with LLMs and tools
+            logger.info("Step 9: Setting up agents")
             await self._setup_agents(context or {}, chat_recorder)
 
-            # 9. Inject primitives into Lua
-            logger.info("Step 9: Injecting primitives into Lua environment")
+            # 10. Inject primitives into Lua
+            logger.info("Step 10: Injecting primitives into Lua environment")
             self._inject_primitives()
 
-            # 10. Execute workflow
-            logger.info("Step 10: Executing Lua workflow")
+            # 11. Execute workflow (may raise ProcedureWaitingForHuman)
+            logger.info("Step 11: Executing Lua workflow")
             workflow_result = self._execute_workflow()
 
             # 11. Validate workflow output
@@ -185,6 +229,8 @@ class LuaDSLRuntime:
                 await self.human_primitive.flush_recordings()
             if self.system_primitive:
                 await self.system_primitive.flush_recordings()
+            if self.session_primitive:
+                await self.session_primitive.save()
 
             # 13. End chat session
             if chat_recorder and chat_recorder.session_id:
@@ -212,6 +258,31 @@ class LuaDSLRuntime:
                 'session_id': session_id if chat_recorder else None
             }
 
+        except ProcedureWaitingForHuman as e:
+            logger.info(f"Procedure waiting for human: {e}")
+
+            # Flush recordings before exiting
+            for agent_primitive in self.agents.values():
+                await agent_primitive.flush_recordings()
+            if self.human_primitive:
+                await self.human_primitive.flush_recordings()
+            if self.system_primitive:
+                await self.system_primitive.flush_recordings()
+            if self.session_primitive:
+                await self.session_primitive.save()
+
+            # Note: Procedure status already updated by LocalExecutionContext
+            # Chat session stays active for resume
+
+            return {
+                'success': False,
+                'status': 'WAITING_FOR_HUMAN',
+                'procedure_id': self.procedure_id,
+                'pending_message_id': e.pending_message_id,
+                'message': str(e),
+                'session_id': session_id if chat_recorder else None
+            }
+
         except ProcedureConfigError as e:
             logger.error(f"Configuration error: {e}")
             # Flush recordings even on error
@@ -229,6 +300,11 @@ class LuaDSLRuntime:
             if self.system_primitive:
                 try:
                     await self.system_primitive.flush_recordings()
+                except:
+                    pass
+            if self.session_primitive:
+                try:
+                    await self.session_primitive.save()
                 except:
                     pass
             if chat_recorder and chat_recorder.session_id:
@@ -262,6 +338,11 @@ class LuaDSLRuntime:
                     await self.system_primitive.flush_recordings()
                 except:
                     pass
+            if self.session_primitive:
+                try:
+                    await self.session_primitive.save()
+                except:
+                    pass
             if chat_recorder and chat_recorder.session_id:
                 try:
                     await chat_recorder.end_session(status='COMPLETED')
@@ -291,6 +372,11 @@ class LuaDSLRuntime:
             if self.system_primitive:
                 try:
                     await self.system_primitive.flush_recordings()
+                except:
+                    pass
+            if self.session_primitive:
+                try:
+                    await self.session_primitive.save()
                 except:
                     pass
             if chat_recorder and chat_recorder.session_id:
@@ -423,12 +509,27 @@ class LuaDSLRuntime:
 
     def _inject_primitives(self):
         """Inject all primitives into Lua global scope."""
+        # Inject params with default values
+        if 'params' in self.config:
+            params_config = self.config['params']
+            param_values = {}
+            for param_name, param_def in params_config.items():
+                if 'default' in param_def:
+                    param_values[param_name] = param_def['default']
+            self.lua_sandbox.set_global("params", param_values)
+            logger.debug(f"Injected params: {param_values}")
+
         # Inject shared primitives
         self.lua_sandbox.inject_primitive("State", self.state_primitive)
         self.lua_sandbox.inject_primitive("Iterations", self.iterations_primitive)
         self.lua_sandbox.inject_primitive("Stop", self.stop_primitive)
         self.lua_sandbox.inject_primitive("Tool", self.tool_primitive)
         self.lua_sandbox.inject_primitive("GraphNode", self.graph_primitive)
+
+        # Inject checkpoint primitives
+        self.lua_sandbox.inject_primitive("Step", self.step_primitive)
+        self.lua_sandbox.inject_primitive("Checkpoint", self.checkpoint_primitive)
+        logger.debug("Step and Checkpoint primitives injected")
 
         # Debug HITL primitives
         logger.info(f"Injecting Human primitive: {self.human_primitive}")
@@ -437,6 +538,48 @@ class LuaDSLRuntime:
 
         logger.info(f"Injecting System primitive: {self.system_primitive}")
         self.lua_sandbox.inject_primitive("System", self.system_primitive)
+
+        logger.info(f"Injecting Log primitive: {self.log_primitive}")
+        self.lua_sandbox.inject_primitive("Log", self.log_primitive)
+
+        logger.info(f"Injecting Session primitive: {self.session_primitive}")
+        self.lua_sandbox.inject_primitive("Session", self.session_primitive)
+
+        logger.info(f"Injecting Stage primitive: {self.stage_primitive}")
+        # Create wrapper to map 'is' (reserved keyword in Python) to 'is_current'
+        class StageWrapper:
+            def __init__(self, stage_primitive):
+                self._stage = stage_primitive
+
+            def __getattr__(self, name):
+                if name == 'is':
+                    return self._stage.is_current
+                return getattr(self._stage, name)
+
+        stage_wrapper = StageWrapper(self.stage_primitive)
+        self.lua_sandbox.inject_primitive("Stage", stage_wrapper)
+
+        logger.info(f"Injecting Json primitive: {self.json_primitive}")
+        self.lua_sandbox.inject_primitive("Json", self.json_primitive)
+
+        logger.info(f"Injecting Retry primitive: {self.retry_primitive}")
+        self.lua_sandbox.inject_primitive("Retry", self.retry_primitive)
+
+        logger.info(f"Injecting File primitive: {self.file_primitive}")
+        self.lua_sandbox.inject_primitive("File", self.file_primitive)
+
+        logger.info(f"Injecting Procedure primitive: {self.procedure_primitive}")
+        self.lua_sandbox.inject_primitive("Procedure", self.procedure_primitive)
+
+        # Inject Sleep function
+        def sleep_wrapper(seconds):
+            """Sleep for specified number of seconds."""
+            logger.info(f"Sleep({seconds}) - pausing execution")
+            time.sleep(seconds)
+            logger.info(f"Sleep({seconds}) - resuming execution")
+
+        self.lua_sandbox.set_global("Sleep", sleep_wrapper)
+        logger.info("Injected Sleep function")
 
         # Inject agent primitives (capitalized names)
         for agent_name, agent_primitive in self.agents.items():

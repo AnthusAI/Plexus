@@ -90,17 +90,21 @@ until Tool.called("done")
 
 ```
 plexus/procedures/
-├── README.md                    # This file
+├── README.md                    # This file - working examples
+├── AGENTS.md                    # Quick reference (token-efficient for AI agents)
+├── DSL_SPECIFICATION.md         # Complete technical specification
+├── EXAMPLE_OUTPUT.md            # Actual execution output
 ├── limerick_writer.yaml         # Basic agent loop example
-├── docs/                        # Generated documentation
-│   ├── index.html
-│   ├── getting-started.html
-│   ├── api-reference.html
-│   ├── examples.html
-│   ├── hitl-guide.html
-│   └── message-classification.html
-└── AGENTS.md                    # Agent system documentation
+└── creative_writer.yaml         # Multi-agent collaboration example
 ```
+
+## Documentation Guide
+
+**For quick reference:** Read `AGENTS.md` - Concise overview with common patterns (~3KB)
+
+**For comprehensive details:** Read `DSL_SPECIFICATION.md` - Complete spec with all features (~65KB)
+
+**For working code:** See the `.yaml` files in this directory - Tested, working examples
 
 ## Adding New Examples
 
@@ -114,11 +118,3 @@ When adding new working examples:
    - Expected behavior
 3. Ensure the example includes appropriate HITL messaging
 4. Test that it runs successfully before committing
-
-## Documentation
-
-See `docs/` directory for comprehensive HTML documentation on:
-- Getting started with procedures
-- API reference
-- HITL guide
-- Message classification system

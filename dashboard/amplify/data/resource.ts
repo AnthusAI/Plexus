@@ -974,6 +974,7 @@ const schema = a.schema({
                 'PENDING_APPROVAL',   // Waiting for yes/no from human
                 'PENDING_INPUT',      // Waiting for free-form input
                 'PENDING_REVIEW',     // Waiting for human review
+                'PENDING_ESCALATION', // Escalated to human, blocks indefinitely
                 'RESPONSE',           // Human's response to pending request
                 'TIMED_OUT',          // Request expired without response
                 'CANCELLED'           // Request was cancelled

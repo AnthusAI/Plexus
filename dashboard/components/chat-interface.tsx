@@ -24,6 +24,11 @@ export interface ChatInterfaceViewProps {
   onVoiceMode?: () => void
   placeholder?: string
 
+  // HITL props
+  onHitlSubmit?: (message: ChatMessage, data: Record<string, any>) => Promise<void>
+  submittedMessages?: Set<string>
+  submittingMessages?: Set<string>
+
   // Feature flags
   showInput?: boolean
   showVoiceButtons?: boolean
@@ -43,6 +48,9 @@ export function ChatInterfaceView({
   onVoiceInput,
   onVoiceMode,
   placeholder = 'Type a message...',
+  onHitlSubmit,
+  submittedMessages = new Set(),
+  submittingMessages = new Set(),
   showInput = true,
   showVoiceButtons = true,
   disabled = false,
@@ -76,6 +84,9 @@ export function ChatInterfaceView({
           messages={messages}
           isLoading={isLoading}
           error={error}
+          onHitlSubmit={onHitlSubmit}
+          submittedMessages={submittedMessages}
+          submittingMessages={submittingMessages}
         />
       </div>
 
@@ -175,14 +186,14 @@ export function ChatInterface({
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [submittedMessages, setSubmittedMessages] = useState<Set<string>>(new Set())
+  const [submittingMessages, setSubmittingMessages] = useState<Set<string>>(new Set())
 
   // Load messages for account
   const loadMessages = async () => {
     try {
       setIsLoading(true)
       setError(null)
-
-      console.log('[ChatInterface] Loading messages for account:', accountId)
 
       // Use the accountId GSI for efficient querying
       const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByAccountIdAndCreatedAt as any)({
@@ -197,16 +208,16 @@ export function ChatInterface({
           'messageType',
           'humanInteraction',
           'toolName',
-          'procedureId',
           'accountId',
+          'sessionId',
+          'procedureId',
+          'parentMessageId',
           'createdAt',
           'metadata'
         ]
       })
 
       if (response.data) {
-        console.log('[ChatInterface] Raw response data:', response.data)
-
         const formattedMessages = response.data.map((msg: any) => {
           // Parse metadata if it's a JSON string
           let parsedMetadata = msg.metadata
@@ -225,17 +236,10 @@ export function ChatInterface({
                 }))
               }
             } catch (e) {
-              console.error('[ChatInterface] Failed to parse metadata:', e)
+              // Failed to parse metadata, leave as null
               parsedMetadata = null
             }
           }
-
-          console.log('[ChatInterface] Processing message:', {
-            id: msg.id,
-            content: msg.content,
-            metadata: parsedMetadata,
-            humanInteraction: msg.humanInteraction
-          })
 
           return {
             id: msg.id,
@@ -244,7 +248,10 @@ export function ChatInterface({
             messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE' | undefined,
             humanInteraction: msg.humanInteraction,
             toolName: msg.toolName,
+            accountId: msg.accountId,
+            sessionId: msg.sessionId,
             procedureId: msg.procedureId,
+            parentMessageId: msg.parentMessageId,
             createdAt: msg.createdAt,
             metadata: parsedMetadata,
           }
@@ -266,11 +273,9 @@ export function ChatInterface({
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         })
 
-        console.log('[ChatInterface] Loaded messages:', sortedMessages.length, sortedMessages)
         setMessages(sortedMessages)
       }
     } catch (err) {
-      console.error('[ChatInterface] Error loading messages:', err)
       setError(err instanceof Error ? err.message : 'Failed to load messages')
     } finally {
       setIsLoading(false)
@@ -288,36 +293,135 @@ export function ChatInterface({
   useEffect(() => {
     if (!accountId) return
 
-    console.log('[ChatInterface] Setting up real-time subscription')
-
     let subscription: { unsubscribe: () => void } | null = null
 
     try {
       // @ts-ignore - Amplify Gen2 subscription type complexity
       subscription = client.models.ChatMessage.onCreate().subscribe({
         next: () => {
-          console.log('[ChatInterface] New message notification received')
           loadMessages()
         },
-        error: (err: any) => {
-          console.error('[ChatInterface] Subscription error:', err)
+        error: () => {
+          // Subscription error - will retry automatically
         }
       })
     } catch (error) {
-      console.error('[ChatInterface] Failed to set up subscription:', error)
+      // Failed to set up subscription - will use polling fallback
     }
 
     return () => {
       if (subscription) {
-        console.log('[ChatInterface] Unsubscribing from messages')
         subscription.unsubscribe()
       }
     }
   }, [accountId])
 
+  // Build response content based on message type
+  const buildResponseContent = (
+    requestType: string | undefined,
+    submissionData: Record<string, any>,
+    pendingMetadata: any
+  ): Record<string, any> => {
+    const responded_at = new Date().toISOString()
+
+    switch (requestType) {
+      case 'PENDING_APPROVAL':
+        return {
+          approved: submissionData.action === 'approve' || submissionData.action === 'Approve',
+          responded_at
+        }
+
+      case 'PENDING_INPUT':
+        return {
+          input: submissionData.input || submissionData.action || '',
+          responded_at
+        }
+
+      case 'PENDING_REVIEW':
+        return {
+          decision: submissionData.action, // Button label clicked
+          feedback: submissionData.feedback || submissionData.input || '',
+          edited_artifact: submissionData.edited_artifact || null,
+          responded_at
+        }
+
+      default:
+        return { action: submissionData.action, responded_at }
+    }
+  }
+
+  // Handle HITL response submission
+  const handleHitlResponse = async (
+    pendingMessage: ChatMessage,
+    submissionData: Record<string, any>
+  ) => {
+    // Validate required fields
+    if (!pendingMessage.sessionId) {
+      throw new Error('Session ID is required for HITL response')
+    }
+
+    // Build response content based on message type
+    const responseContent = buildResponseContent(
+      pendingMessage.humanInteraction,
+      submissionData,
+      pendingMessage.metadata
+    )
+
+    // Create RESPONSE message
+    const result = await client.models.ChatMessage.create({
+      accountId: pendingMessage.accountId,
+      sessionId: pendingMessage.sessionId,
+      procedureId: pendingMessage.procedureId,
+      parentMessageId: pendingMessage.id,
+      role: 'USER',
+      humanInteraction: 'RESPONSE',
+      content: JSON.stringify(responseContent),
+      createdAt: new Date().toISOString(),
+      metadata: JSON.stringify({
+        callback_id: pendingMessage.metadata?.callback_id, // Pass through for Lambda Durable mode
+        response_type: pendingMessage.humanInteraction?.replace('PENDING_', '').toLowerCase(),
+        original_request: pendingMessage.id,
+        submitted_at: new Date().toISOString()
+      })
+    }, {
+      selectionSet: ['id', 'parentMessageId', 'role', 'humanInteraction', 'content', 'createdAt']
+    })
+
+    // Check for errors
+    if (result.errors && result.errors.length > 0) {
+      throw new Error(`Failed to create RESPONSE: ${JSON.stringify(result.errors)}`)
+    }
+
+    if (!result.data) {
+      throw new Error('Failed to create RESPONSE: no data returned')
+    }
+
+    // Real-time subscription will trigger reload
+  }
+
+  // Wrapped HITL handler with state management
+  const handleHitlSubmit = async (message: ChatMessage, data: Record<string, any>) => {
+    const messageId = message.id
+
+    // Mark as submitting
+    setSubmittingMessages(prev => new Set(prev).add(messageId))
+
+    try {
+      await handleHitlResponse(message, data)
+      setSubmittedMessages(prev => new Set(prev).add(messageId))
+    } catch (error) {
+      // TODO: Add error state and display to user
+    } finally {
+      setSubmittingMessages(prev => {
+        const next = new Set(prev)
+        next.delete(messageId)
+        return next
+      })
+    }
+  }
+
   // Handle sending a new message (placeholder - not yet implemented on backend)
   const handleSendMessage = async (message: string) => {
-    console.log('[ChatInterface] Send message:', message)
     // TODO: Implement message sending via GraphQL mutation
     // For now, this is just a placeholder
   }
@@ -332,6 +436,9 @@ export function ChatInterface({
       onVoiceInput={onVoiceInput}
       onVoiceMode={onVoiceMode}
       placeholder={placeholder}
+      onHitlSubmit={handleHitlSubmit}
+      submittedMessages={submittedMessages}
+      submittingMessages={submittingMessages}
       showInput={showInput}
       showVoiceButtons={showVoiceButtons}
     />
