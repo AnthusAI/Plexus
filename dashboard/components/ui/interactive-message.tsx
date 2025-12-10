@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Spinner } from "@/components/ui/spinner"
 import { RichMessageContent, type CollapsibleSection } from './rich-message-content'
+import { ArtifactEditor } from './artifact-editor'
 
 /**
  * Message Button
@@ -83,6 +85,18 @@ export interface InteractiveMessageMetadata {
    * Required for PENDING_INPUT messages, at least 1 field expected
    */
   inputs?: InputField[]
+
+  /**
+   * Artifact to be reviewed (PENDING_REVIEW only)
+   * Can be any structured data (JSON object, array, etc.)
+   */
+  artifact?: any
+
+  /**
+   * Type identifier for the artifact (PENDING_REVIEW only)
+   * Examples: 'score_promotion', 'document', 'configuration'
+   */
+  artifact_type?: string
 }
 
 interface InteractiveMessageProps {
@@ -108,23 +122,28 @@ export function InteractiveMessage({
 }: InteractiveMessageProps) {
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [editedArtifact, setEditedArtifact] = useState<any>(null)
 
   const handleInputChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
   const handleButtonClick = async (buttonValue: string) => {
-    if (!onSubmit || isSubmitting || disabled) return
+    if (!onSubmit || isSubmitting || disabled) {
+      return
+    }
 
     setIsSubmitting(true)
     try {
-      // Combine form data with button value
-      await onSubmit({
+      // Combine form data with button value and edited artifact
+      const submissionData = {
         ...formData,
-        action: buttonValue
-      })
+        action: buttonValue,
+        edited_artifact: editedArtifact // Include edited artifact if present
+      }
+      await onSubmit(submissionData)
     } catch (error) {
-      console.error('Error submitting interactive message:', error)
+      console.error('[InteractiveMessage] Error submitting:', error)
     } finally {
       setIsSubmitting(false)
     }
@@ -183,10 +202,26 @@ export function InteractiveMessage({
         </div>
       )}
 
+      {/* Artifact Editor (for REVIEW messages) */}
+      {metadata.artifact && (
+        <ArtifactEditor
+          artifact={metadata.artifact}
+          artifactType={metadata.artifact_type || 'generic'}
+          onChange={setEditedArtifact}
+          disabled={disabled || isSubmitting}
+        />
+      )}
+
       {/* Action Buttons */}
       {hasButtons && (
         <div className="flex gap-2 flex-wrap">
-          {metadata.buttons!.map((button, index) => (
+          {isSubmitting && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner size="sm" />
+              <span>Submitting response...</span>
+            </div>
+          )}
+          {!isSubmitting && metadata.buttons!.map((button, index) => (
             <Button
               key={`${button.value}-${index}`}
               variant={button.variant || 'default'}

@@ -5,12 +5,149 @@ Provides:
 - GraphNode.create(content, metadata) - Create a new node
 - GraphNode.root() - Get root node (if exists)
 - GraphNode.current() - Get current working node
+- GraphNode.get(node_id) - Get node by ID
+
+Node methods (on returned node objects):
+- node:children() - Get child nodes
+- node:parent() - Get parent node
+- node:score() - Get node score
+- node:metadata() - Get node metadata
+- node:set_metadata(key, value) - Set metadata field
 """
 
 import logging
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class NodeWrapper:
+    """
+    Wrapper for GraphNode database objects that provides Lua-callable methods.
+
+    This class wraps the GraphNode database model and exposes its methods
+    in a way that's accessible from Lua.
+    """
+
+    def __init__(self, node, client):
+        """
+        Initialize node wrapper.
+
+        Args:
+            node: GraphNode database model instance
+            client: PlexusDashboardClient for queries
+        """
+        self.node = node
+        self.client = client
+        self.id = node.id
+        self.status = getattr(node, 'status', 'UNKNOWN')
+
+    def children(self):
+        """
+        Get child nodes.
+
+        Returns:
+            List of child node wrappers
+
+        Example (Lua):
+            local children = node:children()
+            for i, child in ipairs(children) do
+                Log.info("Child: " .. child.id)
+            end
+        """
+        try:
+            from plexus.dashboard.api.models.graph_node import GraphNode
+
+            children_nodes = GraphNode.get_children(self.node.id, self.client)
+            return [NodeWrapper(child, self.client) for child in children_nodes]
+        except Exception as e:
+            logger.error(f"Error getting children for node {self.id}: {e}")
+            return []
+
+    def parent(self):
+        """
+        Get parent node.
+
+        Returns:
+            Parent node wrapper or None
+
+        Example (Lua):
+            local parent = node:parent()
+            if parent then
+                Log.info("Parent: " .. parent.id)
+            end
+        """
+        try:
+            from plexus.dashboard.api.models.graph_node import GraphNode
+
+            if not self.node.parentNodeId:
+                return None
+
+            parent_node = GraphNode.get_by_id(self.node.parentNodeId, self.client)
+            return NodeWrapper(parent_node, self.client)
+        except Exception as e:
+            logger.error(f"Error getting parent for node {self.id}: {e}")
+            return None
+
+    def score(self):
+        """
+        Get node score.
+
+        Returns:
+            Node score value or None
+
+        Example (Lua):
+            local score = node:score()
+            if score then
+                Log.info("Score: " .. score)
+            end
+        """
+        return getattr(self.node, 'score', None)
+
+    def metadata(self):
+        """
+        Get node metadata.
+
+        Returns:
+            Metadata dict
+
+        Example (Lua):
+            local meta = node:metadata()
+            Log.info("Type: " .. (meta.type or "unknown"))
+        """
+        return getattr(self.node, 'metadata', {}) or {}
+
+    def set_metadata(self, key: str, value: Any):
+        """
+        Set a metadata field.
+
+        Args:
+            key: Metadata key
+            value: Value to set
+
+        Returns:
+            True if successful
+
+        Example (Lua):
+            node:set_metadata("status", "completed")
+            node:set_metadata("score", 0.95)
+        """
+        try:
+            metadata = getattr(self.node, 'metadata', {}) or {}
+            metadata[key] = value
+
+            self.node.update_content(
+                status=self.node.status,
+                metadata=metadata
+            )
+            logger.info(f"Updated metadata for node {self.id}: {key} = {value}")
+            return True
+        except Exception as e:
+            logger.error(f"Error setting metadata for node {self.id}: {e}")
+            return False
+
+    def __repr__(self):
+        return f"NodeWrapper(id={self.id}, status={self.status})"
 
 
 class GraphNodePrimitive:
@@ -36,7 +173,7 @@ class GraphNodePrimitive:
         self._current_node = None
         logger.debug(f"GraphNodePrimitive initialized for procedure {procedure_id}")
 
-    def create(self, content: str, metadata: Optional[Dict[str, Any]] = None, parent_node_id: Optional[str] = None) -> Dict[str, Any]:
+    def create(self, content: str, metadata: Optional[Dict[str, Any]] = None, parent_node_id: Optional[str] = None):
         """
         Create a new graph node.
 
@@ -46,11 +183,16 @@ class GraphNodePrimitive:
             parent_node_id: Optional parent node ID (None for root)
 
         Returns:
-            Dict with node info: {id, content, metadata}
+            NodeWrapper with methods: children(), parent(), score(), metadata(), set_metadata()
 
         Example (Lua):
             local node = GraphNode.create("My limerick here", {type = "poem"})
             Log.info("Created node: " .. node.id)
+
+            -- Node methods available:
+            local children = node:children()
+            local parent = node:parent()
+            node:set_metadata("status", "reviewed")
         """
         try:
             from plexus.dashboard.api.models.graph_node import GraphNode
@@ -91,30 +233,25 @@ class GraphNodePrimitive:
             # Set as current node
             self._current_node = node
 
-            return {
-                'id': node.id,
-                'content': content,
-                'metadata': node_metadata,
-                'parent_id': parent_node_id
-            }
+            # Return NodeWrapper with all node methods
+            return NodeWrapper(node, self.client)
 
         except Exception as e:
             logger.error(f"Error creating graph node: {e}", exc_info=True)
-            return {
-                'error': str(e)
-            }
+            return None
 
-    def root(self) -> Optional[Dict[str, Any]]:
+    def root(self):
         """
         Get the root node for this procedure (if exists).
 
         Returns:
-            Dict with node info or None if no root node exists
+            NodeWrapper or None if no root node exists
 
         Example (Lua):
             local root = GraphNode.root()
             if root then
                 Log.info("Root node exists: " .. root.id)
+                local children = root:children()  -- Node methods available
             end
         """
         try:
@@ -127,38 +264,31 @@ class GraphNodePrimitive:
                 logger.debug("No root node exists")
                 return None
 
-            return {
-                'id': root_node.id,
-                'status': getattr(root_node, 'status', 'UNKNOWN'),
-                'metadata': getattr(root_node, 'metadata', {})
-            }
+            return NodeWrapper(root_node, self.client)
 
         except Exception as e:
             logger.error(f"Error getting root node: {e}")
             return None
 
-    def current(self) -> Optional[Dict[str, Any]]:
+    def current(self):
         """
         Get the current working node.
 
         Returns:
-            Dict with node info or None if no current node set
+            NodeWrapper or None if no current node set
 
         Example (Lua):
             local node = GraphNode.current()
             if node then
                 Log.info("Current node: " .. node.id)
+                node:set_metadata("visited", true)  -- Node methods available
             end
         """
         if not self._current_node:
             logger.debug("No current node set")
             return None
 
-        return {
-            'id': self._current_node.id,
-            'status': getattr(self._current_node, 'status', 'UNKNOWN'),
-            'metadata': getattr(self._current_node, 'metadata', {})
-        }
+        return NodeWrapper(self._current_node, self.client)
 
     def set_current(self, node_id: str) -> bool:
         """

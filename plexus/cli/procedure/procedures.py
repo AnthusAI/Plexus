@@ -15,6 +15,7 @@ Uses the shared ProcedureService for consistent behavior.
 import click
 import json
 import yaml
+import time
 from typing import Optional
 from rich.console import Console
 from rich.table import Table
@@ -654,10 +655,10 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
 @click.option('--output', '-o', help='Output file path (default: experiment-template.yaml)')
 def template(output: Optional[str]):
     """Generate a template YAML configuration for procedures.
-    
+
     DEPRECATED: Users should manage procedure templates via the dashboard or API.
     See example-procedure-prompts.yaml in the project root for reference.
-    
+
     Examples:
         plexus procedure template
         plexus procedure template --output my-template.yaml
@@ -668,6 +669,170 @@ def template(output: Optional[str]):
     console.print("  2. Store YAML directly in Procedure.code field")
     console.print("\nSee example-procedure-prompts.yaml for reference.")
     return
+
+
+@procedure.command()
+@click.argument('procedure_id')
+def resume(procedure_id: str):
+    """Resume a procedure that is waiting for human response.
+
+    This command is idempotent - safe to call anytime. If the procedure is:
+    - WAITING_FOR_HUMAN with a response: Continues execution
+    - WAITING_FOR_HUMAN without a response: No-op (still waiting)
+    - Already COMPLETE or ERROR: No-op
+    - RUNNING: No-op
+
+    Examples:
+        plexus procedure resume proc-123abc
+    """
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    from plexus.cli.procedure.resume_service import resume_procedure
+
+    console.print(f"Checking procedure {procedure_id}...")
+
+    try:
+        result = resume_procedure(client, procedure_id)
+
+        if result['resumed']:
+            console.print(f"[green]✓ Procedure resumed successfully[/green]")
+            console.print(f"Status: {result.get('status', 'RUNNING')}")
+            if result.get('message'):
+                console.print(f"Message: {result['message']}")
+        else:
+            console.print(f"[yellow]• No action taken[/yellow]")
+            console.print(f"Reason: {result.get('reason', 'Unknown')}")
+            console.print(f"Status: {result.get('status', 'Unknown')}")
+
+    except Exception as e:
+        console.print(f"[red]Error resuming procedure: {e}[/red]")
+        import traceback
+        console.print(traceback.format_exc())
+
+
+@procedure.command()
+def resume_all():
+    """Resume all procedures that are waiting for human response.
+
+    Scans all procedures with status WAITING_FOR_HUMAN and resumes those
+    that have received responses. This is idempotent and safe to call repeatedly.
+
+    Examples:
+        plexus procedure resume-all
+    """
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    from plexus.cli.procedure.resume_service import resume_all_pending
+
+    console.print("Scanning for procedures waiting for human response...")
+
+    try:
+        result = resume_all_pending(client)
+
+        console.print(f"\n[green]✓ Scan complete[/green]")
+        console.print(f"Found: {result['found']} procedures waiting")
+        console.print(f"Resumed: {result['resumed']} procedures")
+
+        if result['resumed'] > 0:
+            console.print("\nResumed procedures:")
+            for proc_id in result.get('resumed_ids', []):
+                console.print(f"  • {proc_id}")
+
+    except Exception as e:
+        console.print(f"[red]Error resuming procedures: {e}[/red]")
+        import traceback
+        console.print(traceback.format_exc())
+
+
+@procedure.command()
+@click.option('--interval', default=5, help='Polling interval in seconds')
+def watch(interval: int):
+    """Watch for HITL responses and auto-resume procedures.
+
+    Continuously polls for procedures waiting for human responses and
+    automatically resumes them when responses are received. Useful during
+    development and testing to avoid manual resume commands.
+
+    Press Ctrl+C to stop watching.
+
+    Examples:
+        plexus procedure watch                  # Poll every 5 seconds (default)
+        plexus procedure watch --interval 10    # Poll every 10 seconds
+    """
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    from plexus.cli.procedure.resume_service import resume_all_pending
+
+    console.print(f"[cyan]Watching for HITL responses every {interval}s...[/cyan]")
+    console.print("[dim]Press Ctrl+C to stop[/dim]\n")
+
+    try:
+        while True:
+            result = resume_all_pending(client)
+
+            if result['resumed'] > 0:
+                console.print(f"[green]✓ Resumed {result['resumed']} procedure(s)[/green]")
+                for proc_id in result.get('resumed_ids', []):
+                    console.print(f"  • {proc_id}")
+            elif result['found'] > 0:
+                console.print(f"[dim]• {result['found']} procedure(s) still waiting...[/dim]")
+
+            time.sleep(interval)
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped watching.[/yellow]")
+
+
+@procedure.command()
+@click.argument('procedure_id')
+@click.option('--after', '-a', help='Clear checkpoints after this step name')
+def reset(procedure_id: str, after: Optional[str]):
+    """Reset procedure checkpoints for testing.
+
+    Clears checkpoints to allow re-execution. Useful for testing and development.
+
+    Without --after: Clears ALL checkpoints (procedure restarts from beginning)
+    With --after: Clears checkpoint and all subsequent ones (partial reset)
+
+    Examples:
+        plexus procedure reset proc-123abc
+        plexus procedure reset proc-123abc --after "evaluate_candidate_1"
+    """
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    from plexus.cli.procedure.reset_service import reset_checkpoints
+
+    if after:
+        console.print(f"Clearing checkpoints after '{after}' for procedure {procedure_id}...")
+    else:
+        console.print(f"[yellow]⚠️  Clearing ALL checkpoints for procedure {procedure_id}...[/yellow]")
+
+    try:
+        result = reset_checkpoints(client, procedure_id, after_step=after)
+
+        console.print(f"[green]✓ Checkpoints cleared[/green]")
+        console.print(f"Cleared: {result['cleared_count']} checkpoints")
+        console.print(f"Remaining: {result['remaining_count']} checkpoints")
+
+        console.print(f"\n[blue]→ Run 'plexus procedure run {procedure_id}' to re-execute[/blue]")
+
+    except Exception as e:
+        console.print(f"[red]Error resetting checkpoints: {e}[/red]")
+        import traceback
+        console.print(traceback.format_exc())
+
 
 # Add to CLI
 if __name__ == "__main__":

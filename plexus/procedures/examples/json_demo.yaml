@@ -1,0 +1,153 @@
+name: json_demo
+version: 1.0.0
+description: Demonstration of Json primitive for JSON encoding/decoding
+
+class: LuaDSL
+
+params:
+  user_name:
+    type: string
+    required: false
+    default: "Alice"
+
+outputs:
+  status:
+    type: string
+    required: true
+  operations_completed:
+    type: number
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+workflow: |
+  Log.info("JSON encoding/decoding demonstration")
+
+  local ops_count = 0
+
+  -- Test 1: Encode simple object
+  Log.info("Test 1: Encoding simple object")
+  local user = {
+    name = params.user_name,
+    age = 30,
+    active = true,
+    email = "alice@example.com"
+  }
+
+  local user_json = Json.encode(user)
+  Log.info("Encoded user object", {
+    json = user_json,
+    length = #user_json
+  })
+  ops_count = ops_count + 1
+
+  -- Test 2: Decode JSON string
+  Log.info("Test 2: Decoding JSON string")
+  local json_str = '{"name": "Bob", "age": 25, "active": false}'
+  local decoded = Json.decode(json_str)
+  Log.info("Decoded JSON", {
+    name = decoded.name,
+    age = decoded.age,
+    active = decoded.active
+  })
+  ops_count = ops_count + 1
+
+  -- Test 3: Encode array
+  Log.info("Test 3: Encoding array")
+  local scores = {85, 92, 78, 95, 88}
+  local scores_json = Json.encode(scores)
+  Log.info("Encoded scores array", {
+    json = scores_json,
+    count = #scores
+  })
+  ops_count = ops_count + 1
+
+  -- Test 4: Decode array
+  Log.info("Test 4: Decoding array")
+  local array_json = '[10, 20, 30, 40, 50]'
+  local numbers = Json.decode(array_json)
+  Log.info("Decoded array", {
+    first = numbers[1],
+    last = numbers[5],
+    count = #numbers
+  })
+  ops_count = ops_count + 1
+
+  -- Test 5: Encode nested structure
+  Log.info("Test 5: Encoding nested structure")
+  local project = {
+    name = "Plexus",
+    version = "1.0.0",
+    team = {
+      lead = "Alice",
+      members = {"Bob", "Carol", "Dave"}
+    },
+    metrics = {
+      stars = 150,
+      forks = 32,
+      issues = 8
+    }
+  }
+
+  local project_json = Json.encode(project)
+  Log.info("Encoded nested structure", {
+    json = project_json:sub(1, 100) .. "...",
+    total_length = #project_json
+  })
+  ops_count = ops_count + 1
+
+  -- Test 6: Decode nested structure
+  Log.info("Test 6: Decoding nested structure")
+  local complex_json = [[
+  {
+    "product": "Widget",
+    "price": 29.99,
+    "tags": ["electronics", "gadget"],
+    "specs": {
+      "weight": 0.5,
+      "dimensions": [10, 5, 2]
+    }
+  }
+  ]]
+
+  local product = Json.decode(complex_json)
+  Log.info("Decoded nested structure", {
+    product = product.product,
+    price = product.price,
+    first_tag = product.tags[1],
+    weight = product.specs.weight,
+    width = product.specs.dimensions[1]
+  })
+  ops_count = ops_count + 1
+
+  -- Test 7: Round-trip encoding/decoding
+  Log.info("Test 7: Round-trip test")
+  local original = {
+    id = 12345,
+    message = "Hello, World!",
+    values = {1, 2, 3, 4, 5}
+  }
+
+  -- Encode then decode
+  local encoded = Json.encode(original)
+  local round_trip = Json.decode(encoded)
+
+  Log.info("Round-trip result", {
+    original_id = original.id,
+    decoded_id = round_trip.id,
+    match = (original.id == round_trip.id)
+  })
+  ops_count = ops_count + 1
+
+  Log.info("JSON demonstration complete", {
+    total_operations = ops_count
+  })
+
+  return {
+    status = "success",
+    operations_completed = ops_count
+  }

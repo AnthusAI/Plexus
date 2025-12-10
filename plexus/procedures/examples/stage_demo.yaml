@@ -1,0 +1,131 @@
+name: stage_demo
+version: 1.0.0
+description: Demonstration of Stage primitive for workflow progress tracking
+
+class: LuaDSL
+
+params:
+  phases:
+    type: number
+    required: false
+    default: 3
+
+outputs:
+  status:
+    type: string
+    required: true
+  stages_completed:
+    type: number
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+stages:
+  - initialization
+  - phase1
+  - phase2
+  - phase3
+  - completion
+
+workflow: |
+  Log.info("Stage tracking demonstration", {
+    total_phases = params.phases
+  })
+
+  -- Test Stage.current() before setting
+  local current = Stage.current()
+  Log.info("Initial stage", {stage = current or "none"})
+
+  -- Test Stage.set() - move to first stage
+  Stage.set("initialization")
+  Log.info("Set stage to initialization")
+
+  -- Test Stage.current()
+  current = Stage.current()
+  Log.info("Current stage", {stage = current})
+
+  -- Test Stage.is()
+  if Stage.is("initialization") then
+    Log.info("Confirmed in initialization stage")
+  end
+
+  Sleep(1)
+
+  -- Test Stage.advance() - move through phases
+  Log.info("Starting phase progression")
+
+  for phase = 1, params.phases do
+    -- Advance to next stage
+    local next_stage = Stage.advance()
+    Log.info("Advanced to next stage", {
+      phase = phase,
+      stage = next_stage
+    })
+
+    -- Verify stage with Stage.is()
+    local expected = "phase" .. phase
+    if Stage.is(expected) then
+      Log.info("Confirmed in expected stage", {expected = expected})
+    else
+      Log.error("Stage mismatch!", {
+        expected = expected,
+        actual = Stage.current()
+      })
+    end
+
+    -- Simulate work in this phase
+    Log.info("Processing phase", {
+      phase = phase,
+      stage = Stage.current()
+    })
+    Sleep(1)
+  end
+
+  -- Move to completion stage
+  Stage.advance()
+  Log.info("Moved to completion stage", {
+    stage = Stage.current()
+  })
+
+  -- Test Stage.history() - retrieve all transitions
+  local history = Stage.history()
+  local transition_count = #history
+
+  Log.info("Stage transition history", {
+    transition_count = transition_count
+  })
+
+  -- Log each transition
+  for i, transition in ipairs(history) do
+    Log.debug("Stage transition", {
+      index = i,
+      from = transition.from_stage or "none",
+      to = transition.to_stage,
+      timestamp = transition.timestamp
+    })
+  end
+
+  -- Test Stage.count()
+  local count = Stage.count()
+  Log.info("Transition count from Stage.count()", {count = count})
+
+  -- Verify we're in final stage
+  if Stage.is("completion") then
+    Log.info("Successfully reached completion stage")
+  else
+    Log.warn("Unexpected final stage", {stage = Stage.current()})
+  end
+
+  Log.info("Stage tracking demonstration complete", {
+    final_stage = Stage.current(),
+    total_transitions = transition_count
+  })
+
+  return {
+    status = "success",
+    stages_completed = transition_count
+  }

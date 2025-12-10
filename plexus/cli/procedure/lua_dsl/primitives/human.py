@@ -30,19 +30,47 @@ class HumanPrimitive:
     All blocking methods support timeouts and defaults.
     """
 
-    def __init__(self, chat_recorder, hitl_config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        chat_recorder,
+        execution_context,
+        hitl_config: Optional[Dict[str, Any]] = None
+    ):
         """
         Initialize Human primitive.
 
         Args:
             chat_recorder: ProcedureChatRecorder for recording messages
+            execution_context: ExecutionContext for blocking HITL operations
             hitl_config: Optional HITL declarations from YAML
         """
         self.chat_recorder = chat_recorder
+        self.execution_context = execution_context
         self.hitl_config = hitl_config or {}
         self._pending_requests: Dict[str, Dict[str, Any]] = {}
         self._message_queue: List[Dict[str, Any]] = []
         logger.debug("HumanPrimitive initialized")
+
+    def _convert_lua_to_python(self, obj: Any) -> Any:
+        """Recursively convert Lua tables to Python dicts."""
+        if obj is None:
+            return None
+        # Check if it's a Lua table (has .items() but not a dict)
+        if hasattr(obj, 'items') and not isinstance(obj, dict):
+            # Convert Lua table to dict
+            result = {}
+            for key, value in obj.items():
+                result[key] = self._convert_lua_to_python(value)
+            return result
+        elif isinstance(obj, dict):
+            # Recursively convert nested dicts
+            return {k: self._convert_lua_to_python(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            # Recursively convert lists
+            return [self._convert_lua_to_python(item) for item in obj]
+        else:
+            # Primitive type, return as-is
+            return obj
 
     def approve(self, options: Optional[Dict[str, Any]] = None) -> bool:
         """
@@ -71,11 +99,8 @@ class HumanPrimitive:
                 deploy()
             end
         """
-        # Convert Lua table to dict if needed
-        if options and hasattr(options, 'items') and not isinstance(options, dict):
-            options = dict(options.items())
-
-        opts = options or {}
+        # Convert Lua tables to Python dicts recursively
+        opts = self._convert_lua_to_python(options) or {}
 
         # Check for config reference
         config_key = opts.get('config_key')
@@ -92,16 +117,17 @@ class HumanPrimitive:
 
         logger.info(f"Human approval requested: {message[:50]}...")
 
-        # NOTE: This is a SYNCHRONOUS placeholder implementation
-        # Full implementation requires:
-        # 1. Create PENDING_APPROVAL message via chat_recorder
-        # 2. Suspend Lua coroutine
-        # 3. Wait for RESPONSE message (async)
-        # 4. Resume coroutine with response value
-        #
-        # For now, we'll return the default to allow testing
-        logger.warning("HITL blocking not yet implemented - returning default value")
-        return default
+        # Delegate to execution context
+        response = self.execution_context.wait_for_human(
+            request_type='approval',
+            message=message,
+            timeout_seconds=timeout,
+            default_value=default,
+            options=None,
+            metadata=context
+        )
+
+        return response.value
 
     def input(self, options: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
@@ -149,9 +175,17 @@ class HumanPrimitive:
 
         logger.info(f"Human input requested: {message[:50]}...")
 
-        # Placeholder implementation
-        logger.warning("HITL blocking not yet implemented - returning default value")
-        return default
+        # Delegate to execution context
+        response = self.execution_context.wait_for_human(
+            request_type='input',
+            message=message,
+            timeout_seconds=timeout,
+            default_value=default,
+            options=None,
+            metadata={'placeholder': placeholder}
+        )
+
+        return response.value
 
     def review(self, options: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
@@ -200,12 +234,41 @@ class HumanPrimitive:
         message = opts.get('message', 'Review requested')
         artifact = opts.get('artifact')
         options_list = opts.get('options', ['approve', 'reject'])
+        artifact_type = opts.get('artifact_type', 'artifact')
+        timeout = opts.get('timeout')
 
         logger.info(f"Human review requested: {message[:50]}...")
 
-        # Placeholder implementation
-        logger.warning("HITL blocking not yet implemented - returning default")
-        return {'decision': 'approve', 'edited_artifact': artifact, 'feedback': ''}
+        # Convert artifact from Lua table to Python dict
+        artifact_python = self._convert_lua_to_python(artifact) if artifact is not None else None
+
+        # Convert options list to format expected by spec: [{label, type}, ...]
+        formatted_options = []
+        for opt in options_list:
+            # If already a dict with label/type, use as-is
+            if isinstance(opt, dict) and 'label' in opt:
+                formatted_options.append(opt)
+            # Otherwise treat as string label, default to "action" type
+            else:
+                formatted_options.append({
+                    'label': str(opt).title(),
+                    'type': 'action'
+                })
+
+        # Delegate to execution context
+        response = self.execution_context.wait_for_human(
+            request_type='review',
+            message=message,
+            timeout_seconds=timeout,
+            default_value={'decision': 'reject', 'edited_artifact': artifact_python, 'feedback': ''},
+            options=formatted_options,
+            metadata={
+                'artifact': artifact_python,
+                'artifact_type': artifact_type
+            }
+        )
+
+        return response.value
 
     def notify(self, options: Optional[Dict[str, Any]] = None) -> None:
         """
@@ -247,16 +310,6 @@ class HumanPrimitive:
         context = opts.get('context', {})  # Legacy support
 
         logger.info(f"Human notification: [{level}] {message}")
-        if 'details' in opts:
-            raw_details = opts['details']
-            with open('/tmp/details_debug2.txt', 'a') as f:
-                f.write(f"\n=== Details Debug ===\n")
-                f.write(f"Type: {type(raw_details)}\n")
-                f.write(f"Repr: {repr(raw_details)}\n")
-                f.write(f"Is dict: {isinstance(raw_details, dict)}\n")
-                f.write(f"Has items: {hasattr(raw_details, 'items')}\n")
-                if hasattr(raw_details, '__len__'):
-                    f.write(f"Length: {len(raw_details)}\n")
 
         # Build metadata structure
         metadata = {}
@@ -319,12 +372,6 @@ class HumanPrimitive:
         # Add metadata if we have any
         if metadata:
             message_data['metadata'] = metadata
-            import json
-            with open('/tmp/metadata_queue.txt', 'a') as f:
-                f.write(f"\n=== Queueing Message ===\n")
-                f.write(f"Content: {message}\n")
-                f.write(f"Metadata keys: {list(metadata.keys())}\n")
-                f.write(f"Full metadata: {json.dumps(metadata, indent=2)}\n")
 
         self._message_queue.append(message_data)
 
@@ -333,32 +380,64 @@ class HumanPrimitive:
         Escalate to human (BLOCKING).
 
         Stops workflow execution until human resolves the issue.
+        Unlike approve/input/review, escalate has NO timeout - it blocks
+        indefinitely until a human manually resumes the procedure.
 
         Args:
             options: Dict with:
                 - message: str - Escalation message
                 - context: Dict - Error context
+                - severity: str - Severity level (info/warning/error/critical)
+                - config_key: str - Reference to hitl: declaration
+
+        Returns:
+            None - Execution resumes when human resolves
 
         Example (Lua):
             if attempts > 3 then
                 Human.escalate({
                     message = "Cannot resolve automatically",
-                    context = {attempts = attempts, error = last_error}
+                    context = {attempts = attempts, error = last_error},
+                    severity = "error"
                 })
+                -- Workflow continues here after human resolves
             end
         """
-        # Convert Lua table to dict if needed
-        if options and hasattr(options, 'items') and not isinstance(options, dict):
-            options = dict(options.items())
+        # Convert Lua tables to Python dicts recursively
+        opts = self._convert_lua_to_python(options) or {}
 
-        opts = options or {}
+        # Check for config reference
+        config_key = opts.get('config_key')
+        if config_key and config_key in self.hitl_config:
+            # Merge config with runtime options (runtime wins)
+            config_opts = self.hitl_config[config_key].copy()
+            config_opts.update(opts)
+            opts = config_opts
+
         message = opts.get('message', 'Escalation required')
         context = opts.get('context', {})
+        severity = opts.get('severity', 'error')
 
-        logger.warning(f"Human escalation: {message}")
+        logger.warning(f"Human escalation: {message[:50]}... (severity: {severity})")
 
-        # Placeholder - this should block like approve/input/review
-        logger.warning("HITL escalate not yet fully implemented")
+        # Prepare metadata with severity and context
+        metadata = {
+            'severity': severity,
+            'context': context
+        }
+
+        # Delegate to execution context
+        # No timeout, no default - blocks until human resolves
+        self.execution_context.wait_for_human(
+            request_type='escalation',
+            message=message,
+            timeout_seconds=None,  # No timeout - wait indefinitely
+            default_value=None,     # No default - human must resolve
+            options=None,
+            metadata=metadata
+        )
+
+        logger.info("Human escalation resolved - resuming workflow")
 
     async def flush_recordings(self) -> None:
         """
