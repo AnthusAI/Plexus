@@ -19,6 +19,7 @@ from stacks.scoring_worker_stack import ScoringWorkerStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
 from stacks.metrics_aggregation_stack import MetricsAggregationStack
 from stacks.command_worker_stack import CommandWorkerStack
+from stacks.ml_training_stack import MLTrainingStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 
 
@@ -207,6 +208,16 @@ class DeploymentStage(cdk.Stage):
             **kwargs: Additional stage properties
         """
         super().__init__(scope, construct_id, **kwargs)
+
+        # Deploy ML Training infrastructure (S3 buckets + IAM roles)
+        # Deployed to both staging and production
+        ml_training_stack = MLTrainingStack(
+            self,
+            "MLTraining",
+            environment=environment,
+            stack_name=f"plexus-ml-training-{environment}",
+            env=kwargs.get("env")
+        )
 
         # Deploy Lambda score processor stack (with SQS queues)
         # Only deploy in production - staging can't use Lambda due to reserved concurrency limits
