@@ -144,7 +144,10 @@ async def test_tactus_with_plexus_adapters(mock_plexus_client, simple_lua_config
 
     # Verify execution succeeded
     assert result is not None
-    assert result['success'] is True
+    if not result.get('success'):
+        print(f"\n❌ Test failed with error: {result.get('error', 'No error message')}")
+        print(f"Full result: {result}")
+    assert result['success'] is True, f"Execution failed: {result.get('error', 'Unknown error')}"
     assert result['procedure_id'] == 'test-proc-123'
     assert 'result' in result
     assert result['result']['success'] is True
@@ -202,7 +205,10 @@ end)
         openai_api_key=None
     )
 
-    assert result['success'] is True
+    if not result.get('success'):
+        print(f"\n❌ Test failed with error: {result.get('error', 'No error message')}")
+        print(f"Full result: {result}")
+    assert result['success'] is True, f"Execution failed: {result.get('error', 'Unknown error')}"
     assert result['result']['count'] == 3
 
     # Verify final state is in the result
@@ -258,7 +264,10 @@ end)
         openai_api_key=None
     )
 
-    assert result['success'] is True
+    if not result.get('success'):
+        print(f"\n❌ Test failed with error: {result.get('error', 'No error message')}")
+        print(f"Full result: {result}")
+    assert result['success'] is True, f"Execution failed: {result.get('error', 'Unknown error')}"
     assert result['result']['checkpoint_exists'] is True
 
     # Verify checkpoint was saved to GraphQL
