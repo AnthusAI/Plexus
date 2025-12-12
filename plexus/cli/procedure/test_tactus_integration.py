@@ -94,14 +94,6 @@ output("message", {
     description = "Test result message"
 })
 
--- Agents (minimal, not actually used in this test)
-agent("worker", {
-    provider = "openai",
-    system_prompt = "Test worker",
-    initial_message = "Starting test",
-    tools = {}
-})
-
 -- Procedure
 procedure(function()
     -- Simple test workflow
@@ -177,13 +169,6 @@ output("count", {
     required = true
 })
 
-agent("worker", {
-    provider = "openai",
-    system_prompt = "Test",
-    initial_message = "Test",
-    tools = {}
-})
-
 procedure(function()
     State.set("count", 0)
     State.increment("count")
@@ -227,13 +212,6 @@ async def test_tactus_checkpoint_persistence(mock_plexus_client):
 output("checkpoint_exists", {
     type = "boolean",
     required = true
-})
-
-agent("worker", {
-    provider = "openai",
-    system_prompt = "Test",
-    initial_message = "Test",
-    tools = {}
 })
 
 procedure(function()
