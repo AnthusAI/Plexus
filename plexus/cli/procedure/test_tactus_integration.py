@@ -82,10 +82,6 @@ def mock_plexus_client():
 def simple_lua_config():
     """Simple test Lua DSL configuration."""
     return """
-name("integration_test")
-version("1.0.0")
-description("Integration test for Tactus with Plexus adapters")
-
 -- Outputs
 output("success", {
     type = "boolean",
@@ -173,10 +169,6 @@ async def test_tactus_state_persistence(mock_plexus_client):
     """Test that state changes are persisted via PlexusStorageAdapter."""
 
     lua_config = """
-name("state_test")
-version("1.0.0")
-description("State persistence test")
-
 output("count", {
     type = "number",
     required = true
@@ -226,10 +218,6 @@ async def test_tactus_checkpoint_persistence(mock_plexus_client):
     """Test that checkpoints are persisted via PlexusStorageAdapter."""
 
     lua_config = """
-name("checkpoint_test")
-version("1.0.0")
-description("Checkpoint persistence test")
-
 output("checkpoint_exists", {
     type = "boolean",
     required = true
