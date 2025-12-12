@@ -153,11 +153,11 @@ jobs:
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             INFRA_PIPELINE="plexus-infrastructure-production-pipeline"
-            APP_PIPELINE="plexus-app-deployment-production-pipeline"
+            APP_PIPELINE="plexus-app-deploy-production-pipeline"
             ENVIRONMENT="production"
           elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
             INFRA_PIPELINE=""
-            APP_PIPELINE="plexus-app-deployment-staging-pipeline"
+            APP_PIPELINE="plexus-app-deploy-staging-pipeline"
             ENVIRONMENT="staging"
           fi
 
