@@ -78,17 +78,21 @@ threshold: 0.5
     @patch('plexus.cli.shared.score_config_fetching.direct_memoized_resolve_score_identifier')
     @patch('plexus.cli.shared.score_config_fetching.fetch_scorecard_structure')
     @patch('plexus.cli.shared.score_config_fetching.get_score_yaml_path')
-    def test_fetch_and_cache_happy_path(self, mock_get_path, mock_fetch_structure, 
-                                        mock_resolve_score, mock_resolve_scorecard):
+    @patch('plexus.cli.shared.score_config_fetching.get_score_guidelines_path')
+    def test_fetch_and_cache_happy_path(self, mock_get_guidelines_path, mock_get_path,
+                                        mock_fetch_structure, mock_resolve_score,
+                                        mock_resolve_scorecard):
         """Test the happy path for fetch_and_cache_single_score."""
         # Set up mocks
         mock_resolve_scorecard.return_value = self.scorecard_id
         mock_resolve_score.return_value = self.score_id
         mock_fetch_structure.return_value = self.scorecard_data
-        
-        # Set up temp file path
+
+        # Set up temp file paths
         temp_file = Path(self.temp_dir.name) / "test-score.yaml"
+        temp_guidelines_file = Path(self.temp_dir.name) / "test-score.md"
         mock_get_path.return_value = temp_file
+        mock_get_guidelines_path.return_value = temp_guidelines_file
         
         # Configure mock for version query
         self.mock_session.execute.return_value = {
@@ -102,16 +106,17 @@ threshold: 0.5
         }
         
         # Call the function
-        result, path, from_cache = fetch_and_cache_single_score(
+        result, path, guidelines_path, from_cache = fetch_and_cache_single_score(
             self.mock_client,
             self.scorecard_identifier,
             self.score_identifier,
             use_cache=False,
             verbose=True
         )
-        
+
         # Verify results
         self.assertEqual(path, temp_file)
+        self.assertEqual(guidelines_path, temp_guidelines_file)
         self.assertFalse(from_cache)
         self.assertIsInstance(result, dict)
         self.assertEqual(result.get('name'), "Test Score")
@@ -127,41 +132,48 @@ threshold: 0.5
         mock_resolve_score.assert_called_once_with(self.mock_client, self.scorecard_id, self.score_identifier)
         mock_fetch_structure.assert_called_once_with(self.mock_client, self.scorecard_id)
         mock_get_path.assert_called_once()
-        
-        # Verify file was written
+        mock_get_guidelines_path.assert_called_once()
+
+        # Verify files were written
         self.assertTrue(temp_file.exists())
+        self.assertTrue(temp_guidelines_file.exists())
         
     @patch('plexus.cli.shared.score_config_fetching.direct_memoized_resolve_scorecard_identifier')
     @patch('plexus.cli.shared.score_config_fetching.direct_memoized_resolve_score_identifier')
     @patch('plexus.cli.shared.score_config_fetching.fetch_scorecard_structure')
     @patch('plexus.cli.shared.score_config_fetching.get_score_yaml_path')
-    def test_fetch_and_cache_from_cache(self, mock_get_path, mock_fetch_structure, 
-                                       mock_resolve_score, mock_resolve_scorecard):
+    @patch('plexus.cli.shared.score_config_fetching.get_score_guidelines_path')
+    def test_fetch_and_cache_from_cache(self, mock_get_guidelines_path, mock_get_path,
+                                       mock_fetch_structure, mock_resolve_score,
+                                       mock_resolve_scorecard):
         """Test loading from cache when use_cache=True."""
         # Set up mocks
         mock_resolve_scorecard.return_value = self.scorecard_id
         mock_resolve_score.return_value = self.score_id
         mock_fetch_structure.return_value = self.scorecard_data
-        
-        # Set up temp file path and create cache file
+
+        # Set up temp file paths and create cache file
         temp_file = Path(self.temp_dir.name) / "test-score.yaml"
+        temp_guidelines_file = Path(self.temp_dir.name) / "test-score.md"
         mock_get_path.return_value = temp_file
+        mock_get_guidelines_path.return_value = temp_guidelines_file
         
         # Write test data to cache file
         with open(temp_file, 'w') as f:
             f.write(self.yaml_content)
         
         # Call the function with use_cache=True
-        result, path, from_cache = fetch_and_cache_single_score(
+        result, path, guidelines_path, from_cache = fetch_and_cache_single_score(
             self.mock_client,
             self.scorecard_identifier,
             self.score_identifier,
             use_cache=True,
             verbose=True
         )
-        
+
         # Verify results
         self.assertEqual(path, temp_file)
+        self.assertEqual(guidelines_path, temp_guidelines_file)
         self.assertTrue(from_cache)
         self.assertIsInstance(result, dict)
         self.assertEqual(result.get('name'), "Test Score")
