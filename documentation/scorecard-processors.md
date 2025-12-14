@@ -237,21 +237,140 @@ processors:
 
 ### RelevantWindowsTranscriptFilter
 
-Filters transcript to relevant windows based on specific criteria.
+Extracts relevant sections of transcript based on keyword matching, keeping configurable context windows around matches. This is ideal for focusing training, evaluation, or prediction on conversation segments related to specific topics.
 
-**Use Case**: Focus analysis on specific conversation segments.
+**Use Case**: Extract topic-specific conversation segments (e.g., all mentions of family members, product names, compliance terms) with surrounding context for analysis.
 
-**Configuration**:
+**How It Works**:
+1. Splits transcript into sentences (by newline)
+2. Identifies sentences matching keywords (exact or fuzzy)
+3. Includes context sentences before and after matches
+4. Joins sections with "..." for omitted parts
+
+**Configuration - Simple Keyword Matching**:
 ```yaml
 processors:
   - class: RelevantWindowsTranscriptFilter
     parameters:
-      # Parameters depend on implementation
+      keywords: ["child", "children", "dependent", "son", "daughter"]
+      prev_count: 1  # Include 1 sentence before match
+      next_count: 1  # Include 1 sentence after match
 ```
 
-**Parameters**: Varies based on implementation (consult source code or team)
+**Configuration - Fuzzy Keyword Matching**:
+```yaml
+processors:
+  - class: RelevantWindowsTranscriptFilter
+    parameters:
+      keywords: ["child", "children", "dependent"]
+      fuzzy_match: true
+      fuzzy_threshold: 80  # 0-100, higher = stricter matching
+      prev_count: 1
+      next_count: 1
+```
 
-**Note**: This processor has specific implementation details that may vary by use case.
+**Configuration - Legacy Classifier Mode**:
+```yaml
+processors:
+  - class: RelevantWindowsTranscriptFilter
+    parameters:
+      classifier: !KeywordClassifier
+        keywords: ["child", "children"]
+      prev_count: 1
+      next_count: 1
+```
+
+**Parameters**:
+
+**Keyword Mode** (recommended):
+- `keywords` (required): List of keywords/phrases to match
+- `fuzzy_match` (optional): Enable fuzzy matching with RapidFuzz (default: false)
+- `fuzzy_threshold` (optional): Similarity threshold 0-100 for fuzzy matching (default: 80)
+- `case_sensitive` (optional): Whether matching is case-sensitive (default: false)
+- `prev_count` (optional): Number of sentences to include before match (default: 1)
+- `next_count` (optional): Number of sentences to include after match (default: 1)
+
+**Legacy Classifier Mode**:
+- `classifier` (required): A Score classifier that returns True/False for relevance
+- `prev_count` (optional): Number of sentences before (default: 1)
+- `next_count` (optional): Number of sentences after (default: 1)
+
+**Example Transformation**:
+
+**Input**:
+```
+Agent: How can I help you today?
+Customer: I need to update my insurance.
+Agent: What changes would you like?
+Customer: I need to add my daughter to the policy.
+Agent: Great, I can help with that.
+Customer: Can you explain the dependent coverage?
+Agent: Of course, let me explain.
+```
+
+**Configuration**:
+```yaml
+keywords: ["daughter", "dependent"]
+prev_count: 1
+next_count: 1
+```
+
+**Output**:
+```
+...
+Agent: What changes would you like?
+Customer: I need to add my daughter to the policy.
+Agent: Great, I can help with that.
+Customer: Can you explain the dependent coverage?
+Agent: Of course, let me explain.
+```
+
+**Fuzzy Matching Benefits**:
+- Handles plurals automatically: "child" matches "children" (100%)
+- Catches spelling variants: "dependant" matches "dependent" (89%)
+- Adjustable strictness via `fuzzy_threshold`
+
+**Important**: Fuzzy matching is NOT semantic matching. It won't catch synonyms like "child" → "kid" or "son". You must list all semantic variants explicitly in your keywords list.
+
+**Common Use Cases**:
+
+1. **Family Member Detection**:
+```yaml
+keywords: ["child", "children", "son", "daughter", "kid", "kids", "dependent", "dependents"]
+fuzzy_match: true
+fuzzy_threshold: 80
+```
+
+2. **Product Mention Extraction**:
+```yaml
+keywords: ["iPhone", "MacBook", "iPad", "AirPods"]
+case_sensitive: false
+prev_count: 2
+next_count: 2
+```
+
+3. **Compliance Keyword Monitoring**:
+```yaml
+keywords: ["unauthorized", "consent", "permission", "approve", "authorized"]
+fuzzy_match: true
+fuzzy_threshold: 85
+prev_count: 1
+next_count: 1
+```
+
+**Tips**:
+- **Expand keywords with LLM during development**: Use ChatGPT/Claude to generate semantic variants and synonyms for your keyword list (e.g., "child" → also include "kid", "son", "daughter", "minor", "juvenile", "niece", "nephew"). This shifts semantic matching from runtime to development time.
+- Start with `fuzzy_match: false` for precise control
+- Enable fuzzy matching to handle plurals and spelling variants automatically
+- Use `fuzzy_threshold: 90+` for strict fuzzy matching
+- Use `fuzzy_threshold: 70-80` for lenient fuzzy matching
+- Increase `prev_count` and `next_count` for more context
+- Use `case_sensitive: true` for brand names or acronyms
+
+**Performance Notes**:
+- Fuzzy matching is slower than exact matching (uses RapidFuzz scoring)
+- Processing time scales with: number of keywords × number of sentences
+- For large keyword lists (100+), consider performance impact
 
 ---
 
