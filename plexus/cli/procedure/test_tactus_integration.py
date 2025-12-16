@@ -82,20 +82,21 @@ def mock_plexus_client():
 def simple_lua_config():
     """Simple test Lua DSL configuration."""
     return """
--- Outputs
-output("success", {
-    type = "boolean",
-    required = true,
-    description = "Whether the test completed successfully"
-})
-output("message", {
-    type = "string",
-    required = true,
-    description = "Test result message"
-})
-
--- Procedure
-procedure(function()
+-- Procedure with outputs declared inline
+procedure({
+    outputs = {
+        success = {
+            type = "boolean",
+            required = true,
+            description = "Whether the test completed successfully"
+        },
+        message = {
+            type = "string",
+            required = true,
+            description = "Test result message"
+        }
+    }
+}, function()
     -- Simple test workflow
     Log.info("Starting integration test")
 
@@ -164,12 +165,14 @@ async def test_tactus_state_persistence(mock_plexus_client):
     """Test that state changes are persisted via PlexusStorageAdapter."""
 
     lua_config = """
-output("count", {
-    type = "number",
-    required = true
-})
-
-procedure(function()
+procedure({
+    outputs = {
+        count = {
+            type = "number",
+            required = true
+        }
+    }
+}, function()
     State.set("count", 0)
     State.increment("count")
     State.increment("count")
@@ -209,12 +212,14 @@ async def test_tactus_checkpoint_persistence(mock_plexus_client):
     """Test that checkpoints are persisted via PlexusStorageAdapter."""
 
     lua_config = """
-output("checkpoint_exists", {
-    type = "boolean",
-    required = true
-})
-
-procedure(function()
+procedure({
+    outputs = {
+        checkpoint_exists = {
+            type = "boolean",
+            required = true
+        }
+    }
+}, function()
     -- Save a checkpoint using Step.run
     local step_result = Step.run("step1", function()
         return {status = "completed", data = "test_data"}
