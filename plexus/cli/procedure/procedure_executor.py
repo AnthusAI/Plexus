@@ -41,7 +41,8 @@ async def execute_procedure(
         is_lua_dsl = (
             code_stripped.startswith('--') or  # Lua comment
             'name(' in code_stripped or  # Lua DSL declaration
-            'procedure(function' in code_stripped or  # Lua DSL procedure
+            'procedure(function' in code_stripped or  # Old Lua DSL procedure syntax
+            'procedure({' in code_stripped or  # New Lua DSL procedure syntax
             'agent(' in code_stripped  # Lua DSL agent
         )
 

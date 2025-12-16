@@ -19,13 +19,15 @@ interface FeedbackEvaluationOptions {
   scorecardName: string
   scoreName: string
   days: number
+  versionId?: string
 }
 
 export function FeedbackEvaluationDialog({ action, isOpen, onClose, onDispatch, initialOptions }: TaskDialogProps & { initialOptions?: Partial<FeedbackEvaluationOptions> }) {
   const [options, setOptions] = useState<FeedbackEvaluationOptions>({
     scorecardName: initialOptions?.scorecardName || 'termlifev1',
     scoreName: initialOptions?.scoreName || 'Assumptive Close',
-    days: initialOptions?.days || 7
+    days: initialOptions?.days || 7,
+    versionId: initialOptions?.versionId
   })
 
   const handleDispatch = () => {
@@ -80,6 +82,22 @@ export function FeedbackEvaluationDialog({ action, isOpen, onClose, onDispatch, 
               tabIndex={-1}
             />
           </div>
+
+          {options.versionId && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="versionId" className="text-right">
+                Version ID
+              </Label>
+              <Input
+                id="versionId"
+                value={options.versionId}
+                className="col-span-3 font-mono bg-background border-0"
+                readOnly
+                disabled
+                tabIndex={-1}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="days" className="text-right">
