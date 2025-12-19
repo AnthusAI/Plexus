@@ -134,13 +134,6 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
             getProcedure(id: $id) {
               id
               featured
-              templateId
-              template {
-                id
-                name
-                category
-                description
-              }
               code
               rootNodeId
               createdAt

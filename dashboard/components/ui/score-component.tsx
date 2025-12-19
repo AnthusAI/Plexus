@@ -1002,7 +1002,7 @@ const DetailContent = React.memo(({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-3">
-                    {selectedVersion.id !== championVersionId && onPromoteToChampion && (
+                    {selectedVersion && (
                       <ShadcnDropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -1015,11 +1015,15 @@ const DetailContent = React.memo(({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => onPromoteToChampion(selectedVersion.id)}>
-                            <Crown className="mr-2 h-4 w-4" />
-                            Promote to Champion
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
+                          {selectedVersion.id !== championVersionId && onPromoteToChampion && (
+                            <>
+                              <DropdownMenuItem onClick={() => onPromoteToChampion(selectedVersion.id)}>
+                                <Crown className="mr-2 h-4 w-4" />
+                                Promote to Champion
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
                           <DropdownMenuItem onClick={() => handleEvaluateAccuracyForVersion(selectedVersion.id)}>
                             <FlaskConical className="mr-2 h-4 w-4" />
                             Evaluate Accuracy
@@ -1449,14 +1453,15 @@ const DetailContent = React.memo(({
           onClose={() => setIsEvaluationDialogOpen(false)}
           onDispatch={async (command, target) => {
             // Add version parameter to the command if this is for a specific version
-            const finalCommand = evaluationAction.versionId 
+            const finalCommand = evaluationAction.versionId
               ? `${command} --version ${evaluationAction.versionId}`
               : command;
             await handleEvaluationDispatch(finalCommand, target);
           }}
           initialOptions={{
             scorecardName: scorecardName || '',
-            scoreName: score.name || ''
+            scoreName: score.name || '',
+            versionId: evaluationAction.versionId
           }}
         />
       )}
@@ -1475,14 +1480,15 @@ const DetailContent = React.memo(({
           onClose={() => setIsFeedbackDialogOpen(false)}
           onDispatch={async (command, target) => {
             // Add version parameter to the command if this is for a specific version
-            const finalCommand = feedbackAction.versionId 
+            const finalCommand = feedbackAction.versionId
               ? `${command} --version ${feedbackAction.versionId}`
               : command;
             await handleFeedbackDispatch(finalCommand, target);
           }}
           initialOptions={{
             scorecardName: scorecardName || '',
-            scoreName: score.name || ''
+            scoreName: score.name || '',
+            versionId: feedbackAction.versionId
           }}
         />
       )}

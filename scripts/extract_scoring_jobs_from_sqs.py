@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
 Script to read SQS messages containing scoring job IDs and generate a CSV report.
+Optionally delete messages that match a specific external ID.
 
 This script:
-1. Reads all messages from an SQS queue (without deleting them)
+1. Reads all messages from an SQS queue (without deleting them by default)
 2. Extracts the scoring_job_id from each message
 3. Queries the database to get the external_id, scorecard_id, and score_id for each scoring job (in parallel)
 4. Generates a CSV with results (optionally deduplicated by any column)
+5. Optionally deletes messages matching a specific external_id (with confirmation)
 
 Performance:
 - Uses parallel processing (default: 20 workers) for database lookups
@@ -14,20 +16,26 @@ Performance:
 - Adjust max_workers parameter based on your system capabilities
 
 Usage:
-    python scripts/extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers] [--dedupe COLUMN]
+    python scripts/extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers] [--dedupe COLUMN] [--delete-by-external-id EXTERNAL_ID] [--dry-run]
 
 Examples:
     # Basic usage - all scoring jobs without deduplication (default)
     python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue
-    
+
     # Specify output file
     python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue output.csv
-    
+
     # Use 50 parallel workers for maximum speed on a powerful machine
     python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue output.csv 50
-    
+
     # Deduplicate by external_id (one result per external_id)
     python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue output.csv 20 --dedupe external_id
+
+    # Dry-run: See what messages would be deleted without actually deleting
+    python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue --delete-by-external-id 295667063 --dry-run
+
+    # Delete messages matching external_id 295667063 (with confirmation prompt)
+    python scripts/extract_scoring_jobs_from_sqs.py https://sqs.us-east-1.amazonaws.com/123456789/my-queue --delete-by-external-id 295667063
 """
 
 import os
@@ -61,7 +69,8 @@ except ImportError as e:
 class ScoringJobExtractor:
     """Extracts scoring job information from SQS queue and generates CSV report."""
 
-    def __init__(self, queue_url: str, max_workers: int = 20, dedupe_column: str = None):
+    def __init__(self, queue_url: str, max_workers: int = 20, dedupe_column: str = None,
+                 delete_external_id: str = None, dry_run: bool = False):
         """
         Initialize the extractor.
 
@@ -69,10 +78,14 @@ class ScoringJobExtractor:
             queue_url: The SQS queue URL to read messages from
             max_workers: Maximum number of parallel workers for database lookups
             dedupe_column: Column name to deduplicate on (None = no deduplication)
+            delete_external_id: External ID to match for deletion (None = no deletion)
+            dry_run: If True, show what would be deleted without actually deleting
         """
         self.queue_url = queue_url
         self.max_workers = max_workers
         self.dedupe_column = dedupe_column
+        self.delete_external_id = delete_external_id
+        self.dry_run = dry_run
         self.sqs_client = boto3.client('sqs')
         self.dashboard_client = PlexusDashboardClient()
 
@@ -80,6 +93,10 @@ class ScoringJobExtractor:
         self.results: List[Dict[str, str]] = []
         self.seen_values: Set[str] = set()  # Track seen values for deduplication
         self.results_lock = Lock()  # Thread-safe access to results
+
+        # Storage for messages to delete
+        self.messages_to_delete: List[Dict] = []
+        self.messages_to_delete_lock = Lock()  # Thread-safe access to deletion list
 
     def extract_external_id_from_item_id(self, item_id: str) -> str:
         """
@@ -101,14 +118,15 @@ class ScoringJobExtractor:
             return parts[-1]
         return ""
 
-    def read_sqs_messages(self) -> List[Dict]:
+    def read_sqs_messages(self) -> List[tuple]:
         """
         Read all messages from the SQS queue without deleting them.
 
         Uses long polling to efficiently retrieve messages.
 
         Returns:
-            List of message bodies as dictionaries
+            List of tuples (message_object, parsed_body) where message_object contains
+            ReceiptHandle needed for deletion
         """
         logger.info(f"Reading messages from SQS queue: {self.queue_url}")
 
@@ -133,24 +151,25 @@ class ScoringJobExtractor:
                     empty_receives += 1
                     logger.debug(f"Empty receive {empty_receives}/{max_empty_receives}")
                     continue
-                
+
                 # Reset empty counter when we get messages
                 empty_receives = 0
 
                 messages_received += len(messages)
                 logger.info(f"Received {len(messages)} messages (total: {messages_received})")
 
-                # Parse message bodies
+                # Parse message bodies and store with full message object
                 for message in messages:
                     try:
                         body = json.loads(message['Body'])
-                        all_messages.append(body)
+                        all_messages.append((message, body))
                     except json.JSONDecodeError as e:
                         logger.error(f"Failed to parse message body: {e}")
                         logger.error(f"Message body: {message.get('Body', 'N/A')}")
 
-                # Note: We intentionally do NOT delete messages
+                # Note: We intentionally do NOT delete messages here
                 # They will become visible again after the visibility timeout
+                # Deletion happens later if --delete-by-external-id is specified
 
             except Exception as e:
                 logger.error(f"Error reading from SQS: {e}")
@@ -197,26 +216,151 @@ class ScoringJobExtractor:
                 'score_id': 'ERROR'
             }
 
-    def process_single_message(self, message: Dict, message_num: int) -> Dict[str, str]:
+    def should_delete_message(self, external_id: str) -> bool:
+        """
+        Check if a message should be deleted based on external ID.
+
+        Args:
+            external_id: The external ID extracted from the scoring job
+
+        Returns:
+            True if the message matches the deletion criteria, False otherwise
+        """
+        if not self.delete_external_id:
+            return False
+        return external_id == self.delete_external_id
+
+    def confirm_deletion(self) -> bool:
+        """
+        Prompt user to confirm deletion of messages.
+
+        Shows the count of messages to delete and a sample of the first 5.
+
+        Returns:
+            True if user confirms deletion, False otherwise
+        """
+        count = len(self.messages_to_delete)
+        if count == 0:
+            return False
+
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info(f"DELETION CONFIRMATION")
+        logger.info("=" * 80)
+        logger.info(f"Found {count} message(s) matching external_id: {self.delete_external_id}")
+        logger.info("")
+        logger.info("The following messages will be deleted:")
+
+        # Show first 5 messages as sample
+        sample_size = min(5, count)
+        for msg_data in self.messages_to_delete[:sample_size]:
+            result = msg_data['result']
+            logger.info(f"  - scoring_job_id={result['scoring_job_id']}, external_id={result['external_id']}")
+
+        if count > sample_size:
+            logger.info(f"  ... and {count - sample_size} more")
+
+        logger.info("")
+        try:
+            response = input(f"Delete {count} message(s)? (yes/no): ").strip().lower()
+            return response in ['yes', 'y']
+        except (EOFError, KeyboardInterrupt):
+            logger.info("\nDeletion cancelled by user")
+            return False
+
+    def delete_messages_batch(self) -> Dict[str, int]:
+        """
+        Delete messages in batches using SQS batch delete API.
+
+        Returns:
+            Dictionary with 'success' and 'failed' counts
+        """
+        total = len(self.messages_to_delete)
+        success_count = 0
+        failed_count = 0
+
+        logger.info("")
+        logger.info("Deleting messages...")
+
+        # Process in batches of 10 (SQS limit)
+        for i in range(0, total, 10):
+            batch = self.messages_to_delete[i:i + 10]
+
+            # Prepare batch delete entries
+            entries = []
+            for j, msg_data in enumerate(batch):
+                entries.append({
+                    'Id': str(i + j),
+                    'ReceiptHandle': msg_data['message']['ReceiptHandle']
+                })
+
+            try:
+                response = self.sqs_client.delete_message_batch(
+                    QueueUrl=self.queue_url,
+                    Entries=entries
+                )
+
+                # Count successes
+                successful = response.get('Successful', [])
+                success_count += len(successful)
+
+                # Log failures
+                failed = response.get('Failed', [])
+                failed_count += len(failed)
+
+                for failure in failed:
+                    idx = int(failure['Id'])
+                    msg_data = self.messages_to_delete[idx]
+                    result = msg_data['result']
+                    logger.error(f"Failed to delete message: scoring_job_id={result['scoring_job_id']}, "
+                               f"external_id={result['external_id']}, "
+                               f"reason={failure.get('Message', 'Unknown')}")
+
+            except Exception as e:
+                logger.error(f"Error deleting batch: {e}")
+                failed_count += len(batch)
+
+        logger.info(f"Successfully deleted: {success_count}")
+        if failed_count > 0:
+            logger.error(f"Failed to delete: {failed_count}")
+
+        return {
+            'success': success_count,
+            'failed': failed_count
+        }
+
+    def process_single_message(self, message_tuple: tuple, message_num: int) -> Dict[str, str]:
         """
         Process a single message (for parallel execution).
 
         Args:
-            message: Message body from SQS
+            message_tuple: Tuple of (message_object, message_body) from SQS
             message_num: Message number for logging
 
         Returns:
             Result dictionary or None if message should be skipped
         """
         try:
-            scoring_job_id = message.get('scoring_job_id')
+            message_obj, message_body = message_tuple
+            scoring_job_id = message_body.get('scoring_job_id')
 
             if not scoring_job_id:
-                logger.warning(f"Message {message_num} missing 'scoring_job_id' field: {message}")
+                logger.warning(f"Message {message_num} missing 'scoring_job_id' field: {message_body}")
                 return None
 
             # Look up the scoring job
             result = self.lookup_scoring_job(scoring_job_id)
+
+            # Check if this message should be marked for deletion
+            if result and self.should_delete_message(result['external_id']):
+                with self.messages_to_delete_lock:
+                    self.messages_to_delete.append({
+                        'message': message_obj,
+                        'result': result
+                    })
+                    logger.debug(f"Marked for deletion: scoring_job_id={result['scoring_job_id']}, "
+                               f"external_id={result['external_id']}")
+
             return result
 
         except Exception as e:
@@ -282,6 +426,10 @@ class ScoringJobExtractor:
         result_label = f"unique by {self.dedupe_column}" if self.dedupe_column else "results"
         logger.info(f"Completed processing. Found {len(self.results)} {result_label}")
 
+        # Log deletion statistics if deletion is enabled
+        if self.delete_external_id:
+            logger.info(f"Messages marked for deletion: {len(self.messages_to_delete)}")
+
     def write_csv(self, output_file: str) -> None:
         """
         Write results to a CSV file.
@@ -327,6 +475,14 @@ class ScoringJobExtractor:
             logger.info(f"Deduplication: enabled (column: {self.dedupe_column})")
         else:
             logger.info(f"Deduplication: disabled")
+        if self.delete_external_id:
+            logger.info(f"Deletion mode: enabled (external_id: {self.delete_external_id})")
+            if self.dry_run:
+                logger.info(f"Dry-run: enabled (no messages will be deleted)")
+            else:
+                logger.info(f"Dry-run: disabled (messages will be deleted after confirmation)")
+        else:
+            logger.info(f"Deletion mode: disabled")
         logger.info("")
 
         # Step 1: Read messages from SQS
@@ -346,6 +502,34 @@ class ScoringJobExtractor:
         # Step 3: Write CSV
         self.write_csv(output_file)
 
+        # Step 4: Handle deletion if enabled
+        deletion_stats = None
+        if self.delete_external_id and len(self.messages_to_delete) > 0:
+            if self.dry_run:
+                # Dry run mode - show what would be deleted
+                logger.info("")
+                logger.info("=" * 80)
+                logger.info("DRY RUN MODE")
+                logger.info("=" * 80)
+                logger.info(f"Would delete {len(self.messages_to_delete)} message(s) matching external_id: {self.delete_external_id}")
+                logger.info("")
+                logger.info("Sample messages that would be deleted:")
+                sample_size = min(5, len(self.messages_to_delete))
+                for msg_data in self.messages_to_delete[:sample_size]:
+                    result = msg_data['result']
+                    logger.info(f"  - scoring_job_id={result['scoring_job_id']}, external_id={result['external_id']}")
+                if len(self.messages_to_delete) > sample_size:
+                    logger.info(f"  ... and {len(self.messages_to_delete) - sample_size} more")
+                logger.info("")
+                logger.info("No messages were deleted (dry-run mode).")
+                logger.info("=" * 80)
+            else:
+                # Real deletion - confirm and delete
+                if self.confirm_deletion():
+                    deletion_stats = self.delete_messages_batch()
+                else:
+                    logger.info("Deletion cancelled by user.")
+
         logger.info("")
         logger.info("=" * 80)
         logger.info("Summary:")
@@ -356,6 +540,17 @@ class ScoringJobExtractor:
             result_label = "Total results"
         logger.info(f"  {result_label}: {len(self.results)}")
         logger.info(f"  Output file: {output_file}")
+        if self.delete_external_id:
+            logger.info(f"  Deletion target: external_id={self.delete_external_id}")
+            logger.info(f"  Messages matched for deletion: {len(self.messages_to_delete)}")
+            if deletion_stats:
+                logger.info(f"  Successfully deleted: {deletion_stats['success']}")
+                if deletion_stats['failed'] > 0:
+                    logger.info(f"  Failed to delete: {deletion_stats['failed']}")
+            elif self.dry_run:
+                logger.info(f"  Deletion status: DRY RUN (no messages deleted)")
+            else:
+                logger.info(f"  Deletion status: Cancelled or no matches")
         logger.info("=" * 80)
 
 
@@ -363,13 +558,15 @@ def main():
     """Main entry point for the script."""
     # Check command line arguments
     if len(sys.argv) < 2:
-        print("Usage: python extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers] [--dedupe COLUMN]")
+        print("Usage: python extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers] [--dedupe COLUMN] [--delete-by-external-id EXTERNAL_ID] [--dry-run]")
         print("")
         print("Arguments:")
-        print("  SQS_QUEUE_URL   - The SQS queue URL to read from")
-        print("  output_file.csv - (Optional) Output CSV filename")
-        print("  max_workers     - (Optional) Number of parallel workers (default: 20)")
-        print("  --dedupe COLUMN - (Optional) Deduplicate results by specified column")
+        print("  SQS_QUEUE_URL              - The SQS queue URL to read from")
+        print("  output_file.csv            - (Optional) Output CSV filename")
+        print("  max_workers                - (Optional) Number of parallel workers (default: 20)")
+        print("  --dedupe COLUMN            - (Optional) Deduplicate results by specified column")
+        print("  --delete-by-external-id ID - (Optional) Delete messages matching this external_id")
+        print("  --dry-run                  - (Optional) Show what would be deleted without deleting")
         print("")
         print("Available columns for deduplication:")
         print("  - scoring_job_id")
@@ -400,29 +597,41 @@ def main():
         print("    20 \\")
         print("    --dedupe external_id")
         print("")
-        print("  # Deduplicate by score_id")
+        print("  # Dry-run: See what would be deleted")
         print("  python extract_scoring_jobs_from_sqs.py \\")
         print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue \\")
-        print("    my_output.csv \\")
-        print("    20 \\")
-        print("    --dedupe score_id")
+        print("    --delete-by-external-id 295667063 \\")
+        print("    --dry-run")
+        print("")
+        print("  # Delete messages matching external_id 295667063")
+        print("  python extract_scoring_jobs_from_sqs.py \\")
+        print("    https://sqs.us-east-1.amazonaws.com/123456789/my-queue \\")
+        print("    --delete-by-external-id 295667063")
         sys.exit(1)
 
     # Parse arguments
     queue_url = sys.argv[1]
-    
-    # Check for --dedupe flag and its argument
+
+    # Check for optional flags
     dedupe_column = None
+    delete_external_id = None
+    dry_run = False
     filtered_argv = []
     i = 0
     while i < len(sys.argv):
         if sys.argv[i] == '--dedupe' and i + 1 < len(sys.argv):
             dedupe_column = sys.argv[i + 1]
             i += 2  # Skip both --dedupe and the column name
+        elif sys.argv[i] == '--delete-by-external-id' and i + 1 < len(sys.argv):
+            delete_external_id = sys.argv[i + 1]
+            i += 2  # Skip both --delete-by-external-id and the external_id value
+        elif sys.argv[i] == '--dry-run':
+            dry_run = True
+            i += 1
         else:
             filtered_argv.append(sys.argv[i])
             i += 1
-    
+
     output_file = filtered_argv[2] if len(filtered_argv) > 2 else None
     max_workers = int(filtered_argv[3]) if len(filtered_argv) > 3 else 20
 
@@ -431,6 +640,11 @@ def main():
     if dedupe_column and dedupe_column not in valid_columns:
         logger.error(f"Invalid dedupe column: {dedupe_column}")
         logger.error(f"Valid columns are: {', '.join(valid_columns)}")
+        sys.exit(1)
+
+    # Validate dry_run is only used with delete_external_id
+    if dry_run and not delete_external_id:
+        logger.error("--dry-run can only be used with --delete-by-external-id")
         sys.exit(1)
 
     # Validate environment variables
@@ -444,7 +658,13 @@ def main():
 
     # Run the extractor
     try:
-        extractor = ScoringJobExtractor(queue_url, max_workers=max_workers, dedupe_column=dedupe_column)
+        extractor = ScoringJobExtractor(
+            queue_url,
+            max_workers=max_workers,
+            dedupe_column=dedupe_column,
+            delete_external_id=delete_external_id,
+            dry_run=dry_run
+        )
         extractor.run(output_file)
     except Exception as e:
         logger.error(f"Fatal error: {e}")

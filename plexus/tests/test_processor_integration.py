@@ -253,15 +253,169 @@ class TestProcessorIntegration(unittest.TestCase):
     def test_processor_handles_whitespace_text(self):
         """Test processor handling of whitespace-only text"""
         text = "   \n\t  "
-        
+
         processors_config = [
             {'class': 'FilterCustomerOnlyProcessor'}
         ]
-        
+
         result = Score.apply_processors_to_text(text, processors_config)
-        
+
         # Should handle gracefully
         self.assertIsInstance(result, str)
+
+    def test_remove_speaker_identifiers_various_formats(self):
+        """Test RemoveSpeakerIdentifiersTranscriptFilter with various speaker label formats"""
+        # Test various speaker label formats
+        test_cases = [
+            ("Agent: Hello", "Hello"),
+            ("Customer: Hi", "Hi"),
+            ("Speaker1: Test", "Test"),
+            ("Rep: Good morning", "Good morning"),
+            ("User123: Message here", "Message here"),
+            ("AGENT: Uppercase", "Uppercase"),
+        ]
+
+        processors_config = [
+            {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+        ]
+
+        for input_text, expected_content in test_cases:
+            result = Score.apply_processors_to_text(input_text, processors_config)
+            # Should remove the speaker label
+            self.assertNotIn(":", result)
+            # Should preserve the content
+            self.assertIn(expected_content.strip(), result)
+
+    def test_remove_stop_words_preserves_meaning(self):
+        """Test RemoveStopWordsTranscriptFilter preserves important words"""
+        text = "I am very happy with the excellent service provided"
+
+        processors_config = [
+            {'class': 'RemoveStopWordsTranscriptFilter'}
+        ]
+
+        result = Score.apply_processors_to_text(text, processors_config)
+
+        # Important content words should be preserved
+        self.assertIn("happy", result)
+        self.assertIn("excellent", result)
+        self.assertIn("service", result)
+        self.assertIn("provided", result)
+
+        # Common stop words should be removed
+        self.assertNotIn(" I ", result)
+        self.assertNotIn(" am ", result)
+        self.assertNotIn(" the ", result)
+
+    def test_expand_contractions_comprehensive(self):
+        """Test ExpandContractionsProcessor with various contractions"""
+        text = "I don't think it's working. Won't you help? They're here. I'll try."
+
+        processors_config = [
+            {'class': 'ExpandContractionsProcessor'}
+        ]
+
+        result = Score.apply_processors_to_text(text, processors_config)
+
+        # Contractions should be expanded
+        self.assertIn("do not", result)
+        self.assertIn("it is", result)
+        self.assertIn("Will not", result)  # Won't at start of sentence gets capitalized
+        self.assertIn("I will", result)
+
+        # Original contractions should not be present
+        self.assertNotIn("don't", result)
+        self.assertNotIn("it's", result)
+        self.assertNotIn("Won't", result)
+        self.assertNotIn("I'll", result)
+
+    def test_processor_chain_order_matters(self):
+        """Test that processor order affects output correctly"""
+        text = "Agent: I don't understand. Customer: It's not working."
+
+        # Order 1: Filter customer, then expand contractions
+        config1 = [
+            {'class': 'FilterCustomerOnlyProcessor'},
+            {'class': 'ExpandContractionsProcessor'}
+        ]
+        result1 = Score.apply_processors_to_text(text, config1)
+
+        # Order 2: Expand contractions, then filter customer
+        config2 = [
+            {'class': 'ExpandContractionsProcessor'},
+            {'class': 'FilterCustomerOnlyProcessor'}
+        ]
+        result2 = Score.apply_processors_to_text(text, config2)
+
+        # Both should have customer speech with expanded contractions
+        self.assertIn("not working", result1)
+        self.assertIn("not working", result2)
+
+        # Neither should have agent speech
+        self.assertNotIn("understand", result1)
+        self.assertNotIn("understand", result2)
+
+    def test_remove_speaker_identifiers_multiline(self):
+        """Test RemoveSpeakerIdentifiersTranscriptFilter with multiline text"""
+        text = """Agent: Hello, how can I help you?
+Customer: I need assistance with my account.
+Agent: Sure, let me check that for you.
+Customer: Thank you."""
+
+        processors_config = [
+            {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+        ]
+
+        result = Score.apply_processors_to_text(text, processors_config)
+
+        # Speaker labels should be removed
+        self.assertNotIn("Agent:", result)
+        self.assertNotIn("Customer:", result)
+
+        # Content should be preserved
+        self.assertIn("Hello", result)
+        self.assertIn("assistance", result)
+        self.assertIn("check", result)
+        self.assertIn("Thank you", result)
+
+    def test_filter_customer_only_with_no_customer(self):
+        """Test FilterCustomerOnlyProcessor when there's no customer speech"""
+        text = "Agent: Hello. Agent: Anyone there? Agent: Goodbye."
+
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'}
+        ]
+
+        result = Score.apply_processors_to_text(text, processors_config)
+
+        # Result should be empty or minimal since there's no customer speech
+        self.assertNotIn("Hello", result)
+        self.assertNotIn("Anyone there", result)
+        self.assertNotIn("Goodbye", result)
+
+    def test_processor_with_very_long_text(self):
+        """Test processors handle very long text"""
+        # Create long text with many speaker turns
+        long_text = ""
+        for i in range(100):
+            long_text += f"Agent: Message {i} from agent. "
+            long_text += f"Customer: Message {i} from customer. "
+
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'},
+            {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+        ]
+
+        result = Score.apply_processors_to_text(long_text, processors_config)
+
+        # Should handle long text without errors
+        self.assertIsInstance(result, str)
+        # Should contain customer messages
+        self.assertIn("from customer", result)
+        # Should not contain agent messages
+        self.assertNotIn("from agent", result)
+        # Should not have speaker labels
+        self.assertNotIn("Customer:", result)
 
 
 if __name__ == '__main__':

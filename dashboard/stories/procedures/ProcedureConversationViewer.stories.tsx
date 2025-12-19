@@ -1,17 +1,17 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import ProcedureConversationViewer from '@/components/procedure-conversation-viewer'
 
-const meta: Meta<typeof ProcedureConversationViewer> = {
-  title: 'Procedures/ProcedureConversationViewer',
+const meta = {
+  title: 'Chat/Views/Procedure Wrapper',
   component: ProcedureConversationViewer,
   parameters: {
     layout: 'padded',
   },
   tags: ['autodocs'],
-}
+} satisfies Meta<typeof ProcedureConversationViewer>
 
 export default meta
-type Story = StoryObj<typeof ProcedureConversationViewer>
+type Story = StoryObj<typeof meta>
 
 export const Default: Story = {
   args: {

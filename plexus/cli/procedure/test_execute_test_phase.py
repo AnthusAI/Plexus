@@ -249,14 +249,13 @@ class TestExecuteTestPhase(unittest.IsolatedAsyncioTestCase):
                 experiment_context=self.experiment_context
             )
 
-        # Verify: Should succeed overall (1 node evaluated successfully)
-        # The implementation considers it a success if all evaluations succeed,
-        # even if some version creations failed
-        self.assertTrue(result['success'])
+        # Verify: Should fail overall because version creation failed for one node
+        # The implementation considers it a failure if any version creations fail
+        self.assertFalse(result['success'])
         self.assertEqual(result['nodes_tested'], 2)
-        self.assertEqual(result['nodes_successful'], 1)  # 1 node successfully evaluated
-        self.assertEqual(result['nodes_failed'], 0)  # 0 evaluations failed (1 never got a version to evaluate)
-        self.assertIn('Test phase complete', result['message'])
+        self.assertEqual(result['nodes_successful'], 1)  # 1 node successfully created version
+        self.assertEqual(result['nodes_failed'], 1)  # 1 node failed version creation
+        self.assertIn('ScoreVersion creation failed', result['message'])
 
         # Verify that version creation was attempted for both nodes
         self.assertEqual(len(result['score_version_results']), 2)

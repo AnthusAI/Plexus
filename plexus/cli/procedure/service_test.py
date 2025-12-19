@@ -107,7 +107,9 @@ prompts:
             accountId='account-123',
             scorecardId='scorecard-456',
             scoreId='score-789',
-            templateId='template-123',
+            parentProcedureId='template-123',  # Changed from templateId
+            isTemplate=False,  # Mark as instance
+            code=self.valid_yaml_config,  # Include YAML code
             featured=True,
             scoreVersionId=None
         )
@@ -390,7 +392,7 @@ prompts:
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
         # Now prioritizes Procedure.code field
         self.mock_procedure.code = self.valid_yaml_config
-        self.mock_procedure.templateId = 'template-123'
+        self.mock_procedure.parentProcedureId = 'template-123'  # Changed from templateId
         
         result = self.service.get_procedure_yaml('exp-123')
         
@@ -402,7 +404,7 @@ prompts:
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
         # No code field and no template
         self.mock_procedure.code = None
-        self.mock_procedure.templateId = None
+        self.mock_procedure.parentProcedureId = None  # Changed from templateId
         
         result = self.service.get_procedure_yaml('exp-123')
         
@@ -415,7 +417,7 @@ prompts:
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
         # No code field, but has template
         self.mock_procedure.code = None
-        self.mock_procedure.templateId = 'template-123'
+        self.mock_procedure.parentProcedureId = 'template-123'  # Changed from templateId
         
         # Mock template
         mock_template = Mock()

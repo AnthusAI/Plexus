@@ -36,12 +36,16 @@ const config: StorybookConfig = {
       };
     }
     
-    // Use NormalModuleReplacementPlugin to replace AccountContext imports with mock
+    // Use NormalModuleReplacementPlugin to replace imports with mocks
     config.plugins = config.plugins || [];
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(
         /.*\/app\/contexts\/AccountContext/,
         path.resolve(currentDir, '../__mocks__/AccountContext.ts')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /aws-amplify\/data$/,
+        path.resolve(currentDir, '../__mocks__/aws-amplify-data.ts')
       )
     );
     
