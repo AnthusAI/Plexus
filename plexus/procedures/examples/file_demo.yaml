@@ -1,0 +1,163 @@
+name: file_demo
+version: 1.0.0
+description: Demonstration of File primitive for file I/O operations
+
+class: LuaDSL
+
+params:
+  output_dir:
+    type: string
+    required: false
+    default: "/tmp/plexus_file_demo"
+
+outputs:
+  status:
+    type: string
+    required: true
+  operations_completed:
+    type: number
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+workflow: |
+  Log.info("File I/O demonstration", {
+    output_dir = params.output_dir
+  })
+
+  local ops_count = 0
+
+  -- Test 1: Write a simple text file
+  Log.info("Test 1: Writing text file")
+  local test_file = params.output_dir .. "/test.txt"
+  local content = "Hello from Plexus!\nThis is a test file."
+
+  File.write(test_file, content)
+  Log.info("Wrote text file", {
+    path = test_file,
+    length = #content
+  })
+  ops_count = ops_count + 1
+
+  -- Test 2: Read the file back
+  Log.info("Test 2: Reading text file")
+  local read_content = File.read(test_file)
+  Log.info("Read text file", {
+    path = test_file,
+    length = #read_content,
+    matches = (content == read_content)
+  })
+  ops_count = ops_count + 1
+
+  -- Test 3: Check file exists
+  Log.info("Test 3: Checking file existence")
+  local exists = File.exists(test_file)
+  Log.info("File existence check", {
+    path = test_file,
+    exists = exists
+  })
+  ops_count = ops_count + 1
+
+  -- Test 4: Get file size
+  Log.info("Test 4: Getting file size")
+  local size = File.size(test_file)
+  Log.info("File size", {
+    path = test_file,
+    bytes = size
+  })
+  ops_count = ops_count + 1
+
+  -- Test 5: Write JSON data
+  Log.info("Test 5: Writing JSON file")
+  local data = {
+    name = "Plexus",
+    version = "1.0.0",
+    features = {"DSL", "HITL", "Agents"},
+    metrics = {
+      primitives = 15,
+      tests_passed = 5
+    }
+  }
+
+  local json_file = params.output_dir .. "/data.json"
+  local json_str = Json.encode(data)
+  File.write(json_file, json_str)
+
+  Log.info("Wrote JSON file", {
+    path = json_file,
+    size = #json_str
+  })
+  ops_count = ops_count + 1
+
+  -- Test 6: Read and parse JSON
+  Log.info("Test 6: Reading and parsing JSON")
+  local json_content = File.read(json_file)
+  local parsed = Json.decode(json_content)
+
+  Log.info("Parsed JSON data", {
+    name = parsed.name,
+    version = parsed.version,
+    primitive_count = parsed.metrics.primitives,
+    first_feature = parsed.features[1]
+  })
+  ops_count = ops_count + 1
+
+  -- Test 7: Check non-existent file
+  Log.info("Test 7: Checking non-existent file")
+  local missing_file = params.output_dir .. "/missing.txt"
+  local missing_exists = File.exists(missing_file)
+
+  Log.info("Non-existent file check", {
+    path = missing_file,
+    exists = missing_exists
+  })
+  ops_count = ops_count + 1
+
+  -- Test 8: Write multiple files with data pipeline
+  Log.info("Test 8: Data pipeline - multiple files")
+
+  -- Stage 1: Generate data
+  local users = {
+    {id = 1, name = "Alice", role = "admin"},
+    {id = 2, name = "Bob", role = "user"},
+    {id = 3, name = "Carol", role = "user"}
+  }
+
+  -- Stage 2: Write users.json
+  local users_file = params.output_dir .. "/users.json"
+  File.write(users_file, Json.encode(users))
+  Log.info("Wrote users.json", {
+    count = #users,
+    size = File.size(users_file)
+  })
+
+  -- Stage 3: Process and write summary
+  local summary = {
+    total_users = #users,
+    admin_count = 1,
+    user_count = 2,
+    generated_at = "2024-12-09"
+  }
+
+  local summary_file = params.output_dir .. "/summary.json"
+  File.write(summary_file, Json.encode(summary))
+  Log.info("Wrote summary.json", {
+    total = summary.total_users,
+    size = File.size(summary_file)
+  })
+
+  ops_count = ops_count + 1
+
+  Log.info("File I/O demonstration complete", {
+    operations = ops_count,
+    files_created = 4
+  })
+
+  return {
+    status = "success",
+    operations_completed = ops_count
+  }

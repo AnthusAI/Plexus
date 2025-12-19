@@ -2,6 +2,9 @@
 *.egg-info/
 build/
 .coverage
+htmlcov/
+coverage_*/
+.pytest_cache/
 mlruns/
 /reports/
 .DS_Store
@@ -23,3 +26,10 @@ infrastructure/scorecards/
 fine-tuning/dataset/
 dashboard/public/brands
 /models/
+
+# Root-level config files (in case recreated)
+/babel.config.js
+/jest.config.ts
+/tsconfig.json
+/package.json
+/package-lock.json

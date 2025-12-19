@@ -38,10 +38,10 @@ def get_sagemaker_endpoint_name(
     deployment_type: str = 'serverless'
 ) -> str:
     """
-    Generate a standardized SageMaker endpoint name.
+    Generate stable SageMaker endpoint name (doesn't change with model updates).
 
-    The endpoint name is deterministic and stable - it doesn't change when
-    the model is updated. This enables endpoint discovery without database lookups.
+    Pattern: plexus-{scorecard_key}-{score_key}-{deployment_type}
+    Example: plexus-call-quality-compliance-check-serverless
 
     Args:
         scorecard_key: Normalized scorecard key (filesystem-safe)
@@ -49,11 +49,7 @@ def get_sagemaker_endpoint_name(
         deployment_type: Deployment type ('serverless' or 'realtime')
 
     Returns:
-        Endpoint name following convention: plexus-{scorecard_key}-{score_key}-{deployment_type}
-
-    Example:
-        >>> get_sagemaker_endpoint_name('selectquote-hcs', 'compliance-check')
-        'plexus-selectquote-hcs-compliance-check-serverless'
+        Stable endpoint name for resource discovery
     """
     return f"plexus-{scorecard_key}-{score_key}-{deployment_type}"
 
@@ -64,11 +60,10 @@ def get_sagemaker_model_name(
     model_s3_uri: str
 ) -> str:
     """
-    Generate a versioned SageMaker model name.
+    Generate versioned SageMaker model name (includes hash of model S3 URI).
 
-    The model name includes a hash of the S3 URI to ensure uniqueness when
-    models are updated. This allows CDK to detect changes and update the
-    endpoint configuration.
+    Pattern: plexus-{scorecard_key}-{score_key}-{hash[:8]}
+    Example: plexus-call-quality-compliance-check-a1b2c3d4
 
     Args:
         scorecard_key: Normalized scorecard key (filesystem-safe)
@@ -76,15 +71,10 @@ def get_sagemaker_model_name(
         model_s3_uri: S3 URI to model.tar.gz
 
     Returns:
-        Model name following convention: plexus-{scorecard_key}-{score_key}-model-{hash}
-
-    Example:
-        >>> get_sagemaker_model_name('selectquote-hcs', 'compliance-check',
-        ...                          's3://bucket/models/selectquote-hcs/compliance-check/model.tar.gz')
-        'plexus-selectquote-hcs-compliance-check-model-abc123ef'
+        Versioned model name (changes when model S3 URI changes)
     """
-    model_hash = hashlib.md5(model_s3_uri.encode()).hexdigest()[:8]
-    return f"plexus-{scorecard_key}-{score_key}-model-{model_hash}"
+    uri_hash = hashlib.sha256(model_s3_uri.encode()).hexdigest()[:8]
+    return f"plexus-{scorecard_key}-{score_key}-{uri_hash}"
 
 
 def get_sagemaker_endpoint_config_name(
@@ -93,10 +83,10 @@ def get_sagemaker_endpoint_config_name(
     model_s3_uri: str
 ) -> str:
     """
-    Generate a versioned SageMaker endpoint configuration name.
+    Generate versioned SageMaker endpoint config name (includes hash of model S3 URI).
 
-    The config name includes a hash of the S3 URI to match the model version.
-    This ensures the endpoint config is updated when the model changes.
+    Pattern: plexus-{scorecard_key}-{score_key}-config-{hash[:8]}
+    Example: plexus-call-quality-compliance-check-config-a1b2c3d4
 
     Args:
         scorecard_key: Normalized scorecard key (filesystem-safe)
@@ -104,12 +94,7 @@ def get_sagemaker_endpoint_config_name(
         model_s3_uri: S3 URI to model.tar.gz
 
     Returns:
-        Endpoint config name following convention: plexus-{scorecard_key}-{score_key}-config-{hash}
-
-    Example:
-        >>> get_sagemaker_endpoint_config_name('selectquote-hcs', 'compliance-check',
-        ...                                     's3://bucket/models/selectquote-hcs/compliance-check/model.tar.gz')
-        'plexus-selectquote-hcs-compliance-check-config-abc123ef'
+        Versioned endpoint config name (changes when model S3 URI changes)
     """
-    model_hash = hashlib.md5(model_s3_uri.encode()).hexdigest()[:8]
-    return f"plexus-{scorecard_key}-{score_key}-config-{model_hash}"
+    uri_hash = hashlib.sha256(model_s3_uri.encode()).hexdigest()[:8]
+    return f"plexus-{scorecard_key}-{score_key}-config-{uri_hash}"

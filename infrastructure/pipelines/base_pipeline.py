@@ -19,7 +19,6 @@ from stacks.scoring_worker_stack import ScoringWorkerStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
 from stacks.metrics_aggregation_stack import MetricsAggregationStack
 from stacks.command_worker_stack import CommandWorkerStack
-from stacks.code_deploy_stack import CodeDeployStack
 from stacks.ml_training_stack import MLTrainingStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 
@@ -177,57 +176,11 @@ class BasePipelineStack(Stack):
             env=kwargs.get("env")
         )
 
-        # Create CodeDeploy step to deploy code to EC2 after infrastructure is deployed
-        deploy_to_ec2_step = pipelines.CodeBuildStep(
-            "DeployCodeToEC2",
-            input=source,
-            commands=[
-                # Create deployment bundle with code and deployment artifacts
-                "zip -r deployment.zip . -x '*.git*' -x '*node_modules*' -x '*.venv*' -x '*__pycache__*' -x 'infrastructure/cdk.out/*'",
-                "mkdir -p deployment_package",
-                "unzip -q deployment.zip -d deployment_package",
-                "cp -r infrastructure/deployment_artifacts/* deployment_package/",
-                "cd deployment_package && zip -r ../final_deployment.zip . && cd ..",
-                # Upload to S3 (using a consistent key that gets overwritten)
-                f"aws s3 cp final_deployment.zip s3://plexus-{environment}-code-deployments/latest.zip",
-                # Trigger CodeDeploy deployment
-                f"aws deploy create-deployment --application-name plexus-code-deploy-{environment}-app --deployment-group-name plexus-code-deploy-{environment}-group --s3-location bucket=plexus-{environment}-code-deployments,key=latest.zip,bundleType=zip --description 'Deployed from infrastructure pipeline'"
-            ],
-            build_environment=codebuild.BuildEnvironment(
-                build_image=codebuild.LinuxBuildImage.STANDARD_7_0
-            ),
-            role_policy_statements=[
-                # Grant permissions to trigger CodeDeploy
-                iam.PolicyStatement(
-                    actions=[
-                        "codedeploy:*"
-                    ],
-                    resources=["*"]
-                ),
-                # Grant permissions to upload to S3
-                iam.PolicyStatement(
-                    actions=[
-                        "s3:PutObject",
-                        "s3:GetObject"
-                    ],
-                    resources=[f"arn:aws:s3:::plexus-{environment}-code-deployments/*"]
-                ),
-                # Grant permissions to create S3 bucket if it doesn't exist
-                iam.PolicyStatement(
-                    actions=[
-                        "s3:CreateBucket",
-                        "s3:ListBucket"
-                    ],
-                    resources=[f"arn:aws:s3:::plexus-{environment}-code-deployments"]
-                )
-            ]
-        )
-
-        # Add deployment stage with Docker build as pre-step and EC2 deployment as post-step
+        # Add deployment stage with Docker build as pre-step
+        # App deployment is now handled by separate app deployment pipeline
         pipeline.add_stage(
             deployment_stage,
-            pre=[docker_build_step],  # Build Docker image before deploying infrastructure
-            post=[deploy_to_ec2_step]  # Deploy code to EC2 after infrastructure is deployed
+            pre=[docker_build_step]  # Build Docker image before deploying infrastructure
         )
 
 
@@ -256,64 +209,60 @@ class DeploymentStage(cdk.Stage):
         """
         super().__init__(scope, construct_id, **kwargs)
 
-        # Deploy scoring worker stack (creates SQS queues)
-        scoring_worker_stack = ScoringWorkerStack(
-            self,
-            "ScoringWorker",
-            environment=environment,
-            stack_name=f"plexus-scoring-worker-{environment}",
-            env=kwargs.get("env")
-        )
-
-        # Deploy Lambda score processor stack (uses the same queues)
-        # Configuration is loaded from SSM Parameter Store by the stack
-        LambdaScoreProcessorStack(
-            self,
-            "LambdaScoreProcessor",
-            environment=environment,
-            ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
-            standard_request_queue=scoring_worker_stack.standard_request_queue,
-            response_queue_url=scoring_worker_stack.response_queue.queue_url,
-            stack_name=f"plexus-lambda-score-processor-{environment}",
-            env=kwargs.get("env")
-        )
-
-        # Deploy metrics aggregation stack (processes DynamoDB streams)
-        MetricsAggregationStack(
-            self,
-            "MetricsAggregation",
-            environment=environment,
-            stack_name=f"plexus-metrics-aggregation-{environment}",
-            env=kwargs.get("env")
-        )
-
-        # Deploy command worker stack (manages EC2 command worker configuration)
-        command_worker_stack = CommandWorkerStack(
-            self,
-            "CommandWorker",
-            environment=environment,
-            stack_name=f"plexus-command-worker-{environment}",
-            env=kwargs.get("env")
-        )
-
-        # Deploy CodeDeploy stack (manages code deployments to EC2)
-        self.code_deploy_stack = CodeDeployStack(
-            self,
-            "CodeDeploy",
-            environment=environment,
-            ec2_role=command_worker_stack.ec2_role,
-            stack_name=f"plexus-code-deploy-{environment}",
-            env=kwargs.get("env")
-        )
-
-        # Deploy ML Training stack (S3 bucket and IAM roles for model training)
-        MLTrainingStack(
+        # Deploy ML Training infrastructure (S3 buckets + IAM roles)
+        # Deployed to both staging and production
+        ml_training_stack = MLTrainingStack(
             self,
             "MLTraining",
             environment=environment,
             stack_name=f"plexus-ml-training-{environment}",
             env=kwargs.get("env")
         )
+
+        # Deploy Lambda score processor stack (with SQS queues)
+        # Only deploy in production - staging can't use Lambda due to reserved concurrency limits
+        if environment == "production":
+            # Deploy scoring worker stack (creates SQS queues) - only for production
+            scoring_worker_stack = ScoringWorkerStack(
+                self,
+                "ScoringWorker",
+                environment=environment,
+                stack_name=f"plexus-scoring-worker-{environment}",
+                env=kwargs.get("env")
+            )
+
+            LambdaScoreProcessorStack(
+                self,
+                "LambdaScoreProcessor",
+                environment=environment,
+                ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
+                standard_request_queue=scoring_worker_stack.standard_request_queue,
+                response_queue_url=scoring_worker_stack.response_queue.queue_url,
+                stack_name=f"plexus-lambda-score-processor-{environment}",
+                env=kwargs.get("env")
+            )
+
+        # Deploy metrics aggregation stack (processes DynamoDB streams)
+        # Only deploy in production - staging doesn't need metrics aggregation
+        if environment == "production":
+            MetricsAggregationStack(
+                self,
+                "MetricsAggregation",
+                environment=environment,
+                stack_name=f"plexus-metrics-aggregation-{environment}",
+                env=kwargs.get("env")
+            )
+
+        # Deploy command worker stack (manages EC2 command worker configuration)
+        # Only deploy in production - staging doesn't need command worker
+        if environment == "production":
+            CommandWorkerStack(
+                self,
+                "CommandWorker",
+                environment=environment,
+                stack_name=f"plexus-command-worker-{environment}",
+                env=kwargs.get("env")
+            )
 
         # Future stacks will be added here:
         # MonitoringStack(

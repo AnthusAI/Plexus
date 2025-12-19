@@ -112,7 +112,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
               items {
                 id
                 featured
-                templateId
                 code
                 rootNodeId
                 createdAt
@@ -273,6 +272,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         }
       })
     } catch (err) {
+      console.error('Error loading procedures:', err)
       setError(err instanceof Error ? err.message : 'Failed to load procedures')
     } finally {
       setIsLoading(false)
@@ -399,11 +399,9 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         return
       }
       
-      // Since procedures don't have names, we'll need to create a description
-      // that indicates it's a duplicate. For now, let's just duplicate it as-is
+      // Create a duplicate
       const { data: newProcedure } = await (client.models.Procedure.create as any)({
         featured: procedure.featured || false,
-        templateId: procedure.templateId || null,
         code: procedure.code || null, // Copy the code if it exists
         rootNodeId: null, // Will be set after creating nodes
         scorecardId: procedure.scorecardId,
@@ -530,28 +528,28 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     return task
   }
 
-  const handleCreateProcedureFromTemplate = async (template: Schema['ProcedureTemplate']['type'], parameters?: Record<string, any>) => {
+  const handleCreateProcedureFromTemplate = async (template: Schema['Procedure']['type'], parameters?: Record<string, any>) => {
     if (!selectedAccount?.id) {
       toast.error('No account selected')
       return
     }
 
     try {
-      console.log('Creating procedure from template:', { 
-        templateId: template.id, 
+      console.log('Creating procedure from template:', {
+        parentProcedureId: template.id,
         templateName: template.name,
-        templateCode: template.template?.substring(0, 100) + '...',
+        templateCode: template.code?.substring(0, 100) + '...',
         parameters
       })
-      
+
       // Process template YAML to inject parameter values
-      let processedCode = template.template || ''
-      
-      if (parameters && template.template) {
+      let processedCode = template.code || ''
+
+      if (parameters && template.code) {
         // Parse the YAML to find the parameters section
         const yaml = require('yaml')
         try {
-          const parsed = yaml.parse(template.template)
+          const parsed = yaml.parse(template.code)
           
           // If there's a parameters section, add values to it
           if (parsed.parameters && Array.isArray(parsed.parameters)) {
@@ -571,7 +569,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       // Create procedure with template reference and processed code
       const createInput = {
         featured: false,
-        templateId: template.id,
         code: processedCode,
         rootNodeId: null, // Will be set when nodes are created
         scorecardId: parameters?.scorecard_id || selectedScorecard || null,
@@ -588,7 +585,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             createProcedure(input: $input) {
               id
               featured
-              templateId
               code
               rootNodeId
               scorecardId

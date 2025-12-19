@@ -6,7 +6,7 @@ This stack provisions resources needed for ML model training:
 - IAM roles and policies for SageMaker training jobs
 - Lifecycle policies for artifact retention
 
-The bucket name follows the pattern: plexus-{environment}-training
+The bucket name follows the pattern: plexus-ml-{environment}-training
 For local development, use environment='development'
 """
 
@@ -19,6 +19,7 @@ from aws_cdk import (
     aws_iam as iam,
 )
 from constructs import Construct
+from .shared.naming import get_resource_name
 
 
 class MLTrainingStack(Stack):
@@ -76,7 +77,7 @@ class MLTrainingStack(Stack):
         Returns:
             S3 Bucket construct
         """
-        bucket_name = f"plexus-{self.environment_name}-training"
+        bucket_name = get_resource_name("ml", self.environment_name, "training")
 
         # For development, use shorter retention and easier cleanup
         # For production, use longer retention and stricter policies
@@ -159,7 +160,7 @@ class MLTrainingStack(Stack):
         Returns:
             S3 Bucket construct
         """
-        bucket_name = f"plexus-{self.environment_name}-inference"
+        bucket_name = get_resource_name("ml", self.environment_name, "inference")
 
         # For development, use shorter retention and easier cleanup
         # For production, use longer retention and stricter policies
@@ -303,7 +304,7 @@ class MLTrainingStack(Stack):
             "TrainingBucketName",
             value=self.training_bucket.bucket_name,
             description="S3 bucket for training data and model artifacts",
-            export_name=f"plexus-{self.environment_name}-training-bucket-name"
+            export_name=get_resource_name("ml", self.environment_name, "training-bucket-name")
         )
 
         CfnOutput(
@@ -311,7 +312,7 @@ class MLTrainingStack(Stack):
             "TrainingBucketArn",
             value=self.training_bucket.bucket_arn,
             description="ARN of the training bucket",
-            export_name=f"plexus-{self.environment_name}-training-bucket-arn"
+            export_name=get_resource_name("ml", self.environment_name, "training-bucket-arn")
         )
 
         CfnOutput(
@@ -319,7 +320,7 @@ class MLTrainingStack(Stack):
             "InferenceBucketName",
             value=self.inference_bucket.bucket_name,
             description="S3 bucket for production inference models",
-            export_name=f"plexus-{self.environment_name}-inference-bucket-name"
+            export_name=get_resource_name("ml", self.environment_name, "inference-bucket-name")
         )
 
         CfnOutput(
@@ -327,7 +328,7 @@ class MLTrainingStack(Stack):
             "InferenceBucketArn",
             value=self.inference_bucket.bucket_arn,
             description="ARN of the inference bucket",
-            export_name=f"plexus-{self.environment_name}-inference-bucket-arn"
+            export_name=get_resource_name("ml", self.environment_name, "inference-bucket-arn")
         )
 
         CfnOutput(
@@ -335,7 +336,7 @@ class MLTrainingStack(Stack):
             "SageMakerTrainingRoleArn",
             value=self.sagemaker_training_role.role_arn,
             description="IAM role for SageMaker training jobs",
-            export_name=f"plexus-{self.environment_name}-sagemaker-training-role-arn"
+            export_name=get_resource_name("ml", self.environment_name, "sagemaker-training-role-arn")
         )
 
         CfnOutput(
@@ -343,5 +344,5 @@ class MLTrainingStack(Stack):
             "SageMakerInferenceRoleArn",
             value=self.sagemaker_inference_role.role_arn,
             description="Shared IAM role for SageMaker inference endpoints",
-            export_name=f"plexus-{self.environment_name}-sagemaker-inference-role-arn"
+            export_name=get_resource_name("ml", self.environment_name, "sagemaker-inference-role-arn")
         )
