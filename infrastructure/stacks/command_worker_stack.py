@@ -126,7 +126,7 @@ class CommandWorkerStack(Stack):
                 "WorkingDirectory": {
                     "type": "String",
                     "description": "Absolute path to the working directory for the service.",
-                    "default": "/home/ec2-user/projects/Plexus"
+                    "default": "/home/ec2-user/projects/Call-Criteria-Python"
                 },
                 "PlexusExecutable": {
                     "type": "String",
