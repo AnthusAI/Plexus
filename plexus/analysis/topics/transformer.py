@@ -16,8 +16,9 @@ from tqdm.asyncio import tqdm
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, ValidationError
-from langchain.output_parsers.retry import RetryWithErrorOutputParser
-from langchain.globals import set_llm_cache
+# Import retry parser - use OutputFixingParser as RetryWithErrorOutputParser is deprecated
+from langchain.output_parsers import OutputFixingParser
+from langchain_core.globals import set_llm_cache
 from langchain_community.cache import SQLiteCache
 
 # Load environment variables from .env file
@@ -1180,7 +1181,7 @@ async def _process_itemize_transcript_async(
                         # Create a proper prompt value for retry parser
                         from langchain_core.prompt_values import StringPromptValue
                         prompt_value = StringPromptValue(text=formatted_prompt)
-                        parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt_value)
+                        parsed_items = retry_parser.parse_with_prompt(response_text, prompt_value)
                         logger.debug("Retry parser succeeded")
                         success = True
                 
@@ -1190,7 +1191,7 @@ async def _process_itemize_transcript_async(
                 # Create a proper prompt value for retry parser
                 from langchain_core.prompt_values import StringPromptValue
                 prompt_value = StringPromptValue(text=formatted_prompt)
-                parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt_value)
+                parsed_items = retry_parser.parse_with_prompt(response_text, prompt_value)
                 logger.debug("Retry parser succeeded")
                 success = True
             
@@ -1520,10 +1521,9 @@ async def _transform_transcripts_itemize_async(
         logging.error(f"Unsupported provider: {provider}. Use 'ollama' or 'openai'.")
         raise ValueError(f"Unsupported provider: {provider}. Use 'ollama' or 'openai'.")
 
-    retry_parser = RetryWithErrorOutputParser.from_llm(
+    retry_parser = OutputFixingParser.from_llm(
         parser=parser,
-        llm=llm,
-        max_retries=max_retries
+        llm=llm
     )
 
     # Use the template from configuration

@@ -768,18 +768,20 @@ class TopicAnalysis(BaseReportBlock):
                             topics_list = []
                             valid_topic_count = 0
                             noise_topic_count = 0
-                            
-                            for _, row in topic_info.iterrows():
+
+                            # Use range-based iteration with iloc to ensure correct positional indexing
+                            for row_position in range(len(topic_info)):
+                                row = topic_info.iloc[row_position]
                                 topic_id = row.get('Topic', -1)
                                 if topic_id != -1:  # Skip the -1 topic which is usually "noise"
                                     valid_topic_count += 1
                                     # Get TWO types of keywords:
                                     # 1. Fine-tuned keywords (from representation model / LLM)
                                     # 2. Raw c-TF-IDF keywords (statistical, pre-LLM)
-                                    
+
                                     keywords_fine_tuned = []  # LLM-refined, semantic keywords
                                     keywords_raw = []  # Raw statistical c-TF-IDF keywords
-                                    
+
                                     # Get fine-tuned keywords (after LLM representation)
                                     if before_topics_data and str(topic_id) in before_topics_data:
                                         before_topic = before_topics_data[str(topic_id)]
@@ -795,27 +797,21 @@ class TopicAnalysis(BaseReportBlock):
                                         except Exception as e:
                                             self._log(f"🔍 KEYWORDS_DEBUG: Failed to extract fine-tuned keywords for topic {topic_id}: {e}")
                                             keywords_fine_tuned = []
-                                    
+
                                     # Get raw c-TF-IDF keywords (before LLM representation)
                                     # These come directly from the c-TF-IDF matrix
+                                    # The c-TF-IDF matrix rows correspond to topic_info DataFrame rows by POSITION (not index)
                                     try:
                                         if hasattr(topic_model, 'c_tf_idf_') and hasattr(topic_model, 'vectorizer_model'):
-                                            # Find the index for this topic in the c-TF-IDF matrix
-                                            topic_idx = None
-                                            for idx, row_topic_id in enumerate(topic_info['Topic']):
-                                                if row_topic_id == topic_id:
-                                                    topic_idx = idx
-                                                    break
-                                            
-                                            if topic_idx is not None:
-                                                feature_names = topic_model.vectorizer_model.get_feature_names_out()
-                                                c_tf_idf_row = topic_model.c_tf_idf_[topic_idx].toarray().flatten()
-                                                # Get top keywords by c-TF-IDF score
-                                                top_indices = c_tf_idf_row.argsort()[-8:][::-1]  # Top 8
-                                                keywords_raw = [feature_names[i] for i in top_indices if c_tf_idf_row[i] > 0]
-                                                self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} extracted {len(keywords_raw)} raw c-TF-IDF keywords: {keywords_raw[:5]}")
+                                            # Use the row position (not DataFrame index) to access the c-TF-IDF matrix
+                                            feature_names = topic_model.vectorizer_model.get_feature_names_out()
+                                            c_tf_idf_row = topic_model.c_tf_idf_[row_position].toarray().flatten()
+                                            # Get top keywords by c-TF-IDF score
+                                            top_indices = c_tf_idf_row.argsort()[-8:][::-1]  # Top 8
+                                            keywords_raw = [feature_names[i] for i in top_indices if c_tf_idf_row[i] > 0]
+                                            self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} at position {row_position} extracted {len(keywords_raw)} raw c-TF-IDF keywords: {keywords_raw[:5]}")
                                     except Exception as e:
-                                        self._log(f"🔍 KEYWORDS_DEBUG: Failed to extract raw keywords for topic {topic_id}: {e}")
+                                        self._log(f"🔍 KEYWORDS_DEBUG: Failed to extract raw keywords for topic {topic_id} at position {row_position}: {e}")
                                         keywords_raw = []
                                     
                                     # For backward compatibility, use fine-tuned as default "keywords"
@@ -1373,8 +1369,11 @@ class TopicAnalysis(BaseReportBlock):
 
         # Add block metadata for frontend display
         final_output_data["block_title"] = self.config.get("name", self.DEFAULT_NAME)
-        
+
         # Add task-enhanced summary if task was provided
+        # Get topic count from final output data (may be 0 if analysis failed)
+        topic_count = len(final_output_data.get("topics", []))
+
         if self.task_config and final_output_data.get("final_summary"):
             summary_msg = f"Task-based topic analysis completed successfully with {topic_count} topics identified and final summary generated."
             final_output_data["summary"] = summary_msg

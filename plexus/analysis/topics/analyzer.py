@@ -44,7 +44,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import LLMChain
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import ChatOpenAI
-from langchain.globals import set_llm_cache
+from langchain_core.globals import set_llm_cache
 from langchain_community.cache import SQLiteCache
 
 # Initialize LLM cache for representation model (fine-tuning) - same cache as transformer
@@ -634,48 +634,86 @@ def analyze_topics(
         
         logger.info(f"📋 Total stop words loaded: {len(stop_words)} from {', '.join(loaded_languages)}")
         
+        # Separate regex patterns from literal stop words
+        regex_patterns = []
+        literal_stop_words = []
+
         if custom_stop_words:
-            # Normalize custom stop words to lowercase
-            custom_stop_words = [word.lower() for word in custom_stop_words]
-            stop_words.update(custom_stop_words)
-            logger.info(f"   • Added {len(custom_stop_words)} custom stop words")
+            for word in custom_stop_words:
+                # Check if this looks like a regex pattern
+                # We consider it a regex if it contains regex special characters
+                if re.search(r'[\^\$\.\*\+\?\{\}\[\]\(\)\|\\]', word):
+                    try:
+                        # Validate the regex pattern
+                        re.compile(word)
+                        regex_patterns.append(word)
+                        logger.info(f"   • Added regex pattern: {word}")
+                    except re.error as e:
+                        logger.warning(f"   • Invalid regex pattern '{word}': {e}, treating as literal")
+                        literal_stop_words.append(word.lower())
+                else:
+                    # Treat as literal word
+                    literal_stop_words.append(word.lower())
+
+            # Add literal stop words to the set
+            stop_words.update(literal_stop_words)
+            logger.info(f"   • Added {len(literal_stop_words)} custom literal stop words")
+            logger.info(f"   • Added {len(regex_patterns)} custom regex patterns")
         
         # Create a custom analyzer that filters out n-grams containing stop words
         
         def custom_analyzer(text):
             """
             Custom analyzer that creates n-grams but filters out any n-gram
-            that contains a stop word.
-            
+            that contains a stop word or matches a regex pattern.
+
             This ensures that phrases like "customer called to" are excluded
             if "customer", "called", or "to" are in the stop words list.
+            It also filters out tokens matching regex patterns (e.g., ^\d+$ for numbers).
             """
             # Lowercase and tokenize
             text = text.lower()
             tokens = text.split()
-            
+
             # Generate n-grams based on n_gram_range
             min_n, max_n = n_gram_range
             ngrams = []
-            
+
             for n in range(min_n, max_n + 1):
                 for i in range(len(tokens) - n + 1):
                     ngram_tokens = tokens[i:i+n]
-                    
-                    # Check if any token in this n-gram is a stop word
+
+                    # Check if any token in this n-gram is a stop word (literal match)
                     contains_stop_word = any(token in stop_words for token in ngram_tokens)
-                    
-                    if not contains_stop_word:
+
+                    # Check if any token matches a regex pattern
+                    matches_regex = False
+                    if regex_patterns:
+                        for token in ngram_tokens:
+                            for pattern in regex_patterns:
+                                if re.fullmatch(pattern, token):
+                                    matches_regex = True
+                                    break
+                            if matches_regex:
+                                break
+
+                    if not contains_stop_word and not matches_regex:
                         # Join tokens with space to create n-gram
                         ngram = ' '.join(ngram_tokens)
                         ngrams.append(ngram)
-            
+
             return ngrams
         
         # Log a sample to verify the analyzer works
-        sample_text = "the customer called to request"
-        sample_ngrams = custom_analyzer(sample_text)
-        logger.info(f"   • Sample analyzer output for '{sample_text}': {sample_ngrams}")
+        if regex_patterns:
+            sample_text = "the customer called 123 to request"
+            sample_ngrams = custom_analyzer(sample_text)
+            logger.info(f"   • Sample analyzer output for '{sample_text}': {sample_ngrams}")
+            logger.info(f"   • (Should filter stop words and regex patterns like numbers)")
+        else:
+            sample_text = "the customer called to request"
+            sample_ngrams = custom_analyzer(sample_text)
+            logger.info(f"   • Sample analyzer output for '{sample_text}': {sample_ngrams}")
         
         vectorizer_model = CountVectorizer(
             analyzer=custom_analyzer,
