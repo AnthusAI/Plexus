@@ -97,7 +97,7 @@ nodes:
         mock_edit_yaml.assert_called_once()
         mock_validate.assert_called_once()
         mock_push.assert_called_once()
-        mock_update_metadata.assert_called_once_with('node-123', 'new-version-123')
+        mock_update_metadata.assert_called_once_with('node-123', 'new-version-123', 'baseline-version-456')
 
     @patch('plexus.cli.procedure.test_phase_agent.TestPhaseAgent._pull_score_yaml')
     async def test_execute_pull_failure(self, mock_pull_yaml):
@@ -354,7 +354,7 @@ nodes:
 
                 # Should fail validation
                 self.assertFalse(result['success'])
-                self.assertIn('Prediction error', result['error'])
+                self.assertIn('One or more predictions failed', result['error'])
         finally:
             os.unlink(yaml_path)
 
