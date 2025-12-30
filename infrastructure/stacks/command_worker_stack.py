@@ -136,7 +136,7 @@ class CommandWorkerStack(Stack):
                 "Environment": {
                     "type": "String",
                     "description": "Environment variables for the service.",
-                    "default": "PYTHONPATH=/home/ec2-user/projects/Plexus"
+                    "default": "PYTHONPATH=/home/ec2-user/projects/Call-Criteria-Python"
                 }
             },
             "mainSteps": [
