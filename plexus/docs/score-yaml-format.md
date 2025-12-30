@@ -181,20 +181,42 @@ In this configuration:
 
 ## Node Types
 
-Common node types:
-- `Classifier`: Generic classifier with configurable valid classes
-- `YesOrNoClassifier`: Binary classifier (legacy)
-- `MultiClassClassifier`: Supports multiple classes (legacy)
+### Recommended Node Types
+
+**ALWAYS use these modern node types:**
+- `Classifier`: Generic classifier with configurable valid classes - **USE THIS for all LLM-based classification**
 - `Extractor`: Extracts specific information from text
 - `BeforeAfterSlicer`: Segments text based on a quote
 - `LogicalClassifier`: Applies custom code-based logic
 - `LogicalNode`: Execute arbitrary Python code and return custom output values
 - `FuzzyMatchClassifier`: Fuzzy string matching with classification output
 
+### Legacy Node Types (DO NOT USE)
+
+**⚠️ DEPRECATED - Do not use these in new or updated scores:**
+- `YesOrNoClassifier`: Binary classifier (LEGACY - use `Classifier` with `valid_classes: ["Yes", "No"]` instead)
+- `MultiClassClassifier`: Multi-class classifier (LEGACY - use `Classifier` with appropriate `valid_classes` instead)
+
+**Why deprecated?** `YesOrNoClassifier` is simply a degenerate case of `MultiClassClassifier` where the number of valid classes is 2, creating unnecessary code duplication. Both have been replaced by the modern `Classifier` class which handles any number of valid classes.
+
+### Classifier Usage
+
+**ALWAYS use `Classifier` for LLM-based classification:**
+
 ```yaml
-- name: my_classifier
+# Binary classification (replaces YesOrNoClassifier)
+- name: binary_classifier
   class: Classifier
-  valid_classes: ["Yes", "No", "Maybe"]
+  valid_classes: ["Yes", "No"]
+  system_message: |
+    # System prompt here
+  user_message: |
+    # User prompt here
+
+# Multi-class classification (replaces MultiClassClassifier)
+- name: multi_classifier
+  class: Classifier
+  valid_classes: ["High", "Medium", "Low", "None"]
   system_message: |
     # System prompt here
   user_message: |
@@ -612,7 +634,7 @@ When enabled:
 1. **Node Independence**: Each node must be self-contained with all necessary information in its prompts - nodes only know what you explicitly pass to them via outputs from previous nodes
 2. **Conditions Structure**: When using conditions, always nest output within each condition block - never place output and conditions at the same indentation level
 3. **Avoid Post-Hoc Rationalization**: Never ask for answer values first and then explanations. Always capture reasoning before determining final answers, preferably using `LogicalClassifier` for consistent answer/explanation pairs
-4. Use modern `Classifier` over legacy classifier types
+4. **Use Modern Classifier**: ALWAYS use `Classifier` with `valid_classes` for all LLM-based classification. NEVER use legacy `YesOrNoClassifier` or `MultiClassClassifier` types
 5. Structure graphs to handle early termination with conditions
 6. Use descriptive node names and field mappings
 7. Leverage slicers for complex transcript analysis
