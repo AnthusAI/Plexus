@@ -20,13 +20,12 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain.agents import AgentExecutor
 from langchain.agents.format_scratchpad import format_log_to_str
 from langchain.agents.output_parsers import ReActSingleInputOutputParser
-
 from langchain.memory import SimpleMemory
+from langchain.tools.render import render_text_description
 from langchain_openai import AzureChatOpenAI
 from langchain_openai import ChatOpenAI
-from langchain.tools.render import render_text_description
 
-# from langchain.globals import set_debug
+# from langchain_core.globals import set_debug
 # set_debug(True)
 
 class SchoolInfo(BaseModel):
