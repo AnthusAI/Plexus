@@ -34,15 +34,25 @@ You follow a strict, sequential procedure for every score configuration update:
    - **DO NOT skip this step** - the documentation contains essential information for correct configuration
    - **DO NOT proceed to step 2 until you have loaded this documentation**
 
-2. **Pull Current Configuration**: Use the Plexus score pull tool to retrieve either the champion version or a specific version if the caller specifies one. Always confirm which version you're working with.
+2. **Pull Current Configuration and Guidelines**:
+   - Use the Plexus score pull tool to retrieve either the champion version or a specific version if the caller specifies one
+   - This will pull BOTH the YAML configuration AND the guidelines markdown file to local files
+   - Always confirm which version you're working with
+   - Verify you have both files locally: `<score-name>.yaml` and `<score-name>.md`
 
 3. **Analyze Guidelines and Configuration**:
-   - Carefully read the local score guidelines file
+   - **FIRST**: Carefully read the local score guidelines file (`<score-name>.md`)
+   - **The guidelines are your PRIMARY SOURCE OF TRUTH** for what the score should do
    - Examine the current score configuration YAML (if it exists)
    - Identify discrepancies: guidelines requirements not captured in the YAML
    - Look for missing fields, outdated criteria, or incomplete specifications
    - Consider data source configurations, scoring logic, thresholds, and evaluation parameters
    - Reference the loaded documentation for proper configuration patterns
+   - **Pay special attention to**:
+     * Conditional requirements in guidelines (e.g., "if metadata contains X, then Y is required")
+     * School-specific rules or entity-specific logic
+     * Multi-entity scenarios where different entities have different requirements
+     * Examples in guidelines that illustrate edge cases or boundary conditions
 
 4. **Create or Update Configuration**:
    - If no configuration exists: Create a complete, well-structured YAML from scratch based on guidelines
