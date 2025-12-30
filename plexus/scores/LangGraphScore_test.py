@@ -2269,14 +2269,14 @@ async def test_debug_mode_langchain_integration():
     
     # Test debug mode enabled - should call set_debug(True) and set_verbose(True)
     with patch.dict(os.environ, {'LANGCHAIN_DEBUG': 'true'}), \
-         patch('langchain.globals.set_debug') as mock_set_debug, \
-         patch('langchain.globals.set_verbose') as mock_set_verbose:
+         patch('langchain_core.globals.set_debug') as mock_set_debug, \
+         patch('langchain_core.globals.set_verbose') as mock_set_verbose:
         
         # Simply test the debug mode detection logic
         debug_mode = os.getenv('LANGCHAIN_DEBUG', '').lower() in ['true', '1', 'yes']
         if debug_mode:
             # Simulate what the module does
-            from langchain.globals import set_debug, set_verbose
+            from langchain_core.globals import set_debug, set_verbose
             set_debug(True)
             set_verbose(True)
         
@@ -2284,15 +2284,15 @@ async def test_debug_mode_langchain_integration():
         mock_set_debug.assert_called_with(True)
         mock_set_verbose.assert_called_with(True)
     
-    # Test debug mode disabled - should call set_debug(False) and set_verbose(False)  
+    # Test debug mode disabled - should call set_debug(False) and set_verbose(False)
     with patch.dict(os.environ, {'LANGCHAIN_DEBUG': 'false'}), \
-         patch('langchain.globals.set_debug') as mock_set_debug, \
-         patch('langchain.globals.set_verbose') as mock_set_verbose:
+         patch('langchain_core.globals.set_debug') as mock_set_debug, \
+         patch('langchain_core.globals.set_verbose') as mock_set_verbose:
         
         debug_mode = os.getenv('LANGCHAIN_DEBUG', '').lower() in ['true', '1', 'yes']
         if not debug_mode:
             # Simulate what the module does
-            from langchain.globals import set_debug, set_verbose
+            from langchain_core.globals import set_debug, set_verbose
             set_debug(False)
             set_verbose(False)
         
