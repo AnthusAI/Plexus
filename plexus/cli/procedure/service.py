@@ -2637,7 +2637,10 @@ Based on this data, you should prioritize examining error types with the highest
             successful_eval_count = sum(1 for r in evaluation_results if r['success'])
             failed_eval_count = len(evaluation_results) - successful_eval_count
 
-            overall_success = failed_eval_count == 0
+            # Overall success requires both version creation and evaluation to succeed
+            failed_version_count = len([r for r in test_results if not r.get('success')])
+            successful_version_count = len([r for r in test_results if r.get('success')])
+            overall_success = (failed_eval_count == 0) and (failed_version_count == 0)
 
             total_nodes_processed = len(nodes_needing_versions) + len(nodes_needing_evaluation)
 
@@ -2650,7 +2653,7 @@ Based on this data, you should prioritize examining error types with the highest
                 "nodes_failed": failed_eval_count,
                 "score_version_results": test_results,
                 "evaluation_results": evaluation_results,
-                "message": f"Test phase complete: {len(nodes_needing_versions)} versions created, "
+                "message": f"Test phase complete: {successful_version_count} versions created, "
                           f"{len(nodes_to_evaluate)} evaluated ({successful_eval_count} successful, {failed_eval_count} failed)"
             }
 

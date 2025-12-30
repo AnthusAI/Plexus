@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 import os
 
-from plexus.cli.analyze.analysis import analyze, feedback, topics, test_ollama, PromptAnalyzer, analyze_score_feedback
+from plexus.cli.analyze.analysis import analyze, feedback, topics, test_ollama, PromptAnalyzer, analyze_score_feedback, PromptAnalysisResult
 
 
 @pytest.fixture
@@ -542,33 +542,35 @@ class TestPromptAnalyzer:
     def test_prompt_analyzer_analyze_feedback(self):
         """Test PromptAnalyzer analyze_feedback method"""
         mock_llm = Mock()
-        mock_llm.predict.return_value = '{"common_mistakes": "test", "missing_criteria": "test", "prompt_suggestion": "test"}'
-        
+        mock_response = Mock()
+        mock_response.content = '{"common_mistakes": "test", "missing_criteria": "test", "prompt_suggestion": "test"}'
+        mock_llm.invoke.return_value = mock_response
+
         analyzer = PromptAnalyzer(mock_llm)
-        
-        # Mock the output parser
+
+        # Mock the output parser to return a Pydantic model
         analyzer.output_parser = Mock()
         analyzer.output_parser.get_format_instructions.return_value = "Format instructions"
-        analyzer.output_parser.parse.return_value = {
-            "common_mistakes": "Inconsistent scoring",
-            "missing_criteria": "Emotional tone",
-            "prompt_suggestion": "Add emotion detection"
-        }
-        
+        analyzer.output_parser.parse.return_value = PromptAnalysisResult(
+            common_mistakes="Inconsistent scoring",
+            missing_criteria="Emotional tone",
+            prompt_suggestion="Add emotion detection"
+        )
+
         # Mock the prompt template
         analyzer.prompt = Mock()
         analyzer.prompt.format.return_value = "Formatted prompt"
-        
+
         examples = [
             {"transcript": "Good service", "score": 8, "feedback": "Should be higher"},
             {"transcript": "Poor service", "score": 7, "feedback": "Should be lower"}
         ]
-        
+
         result = analyzer.analyze_feedback("Current prompt", examples)
-        
-        assert result["common_mistakes"] == "Inconsistent scoring"
-        assert result["missing_criteria"] == "Emotional tone"
-        assert result["prompt_suggestion"] == "Add emotion detection"
+
+        assert result.common_mistakes == "Inconsistent scoring"
+        assert result.missing_criteria == "Emotional tone"
+        assert result.prompt_suggestion == "Add emotion detection"
 
 
 class TestAnalyzeScoreFeedback:
@@ -578,28 +580,28 @@ class TestAnalyzeScoreFeedback:
         """Test the analyze_score_feedback function"""
         # Create a proper mock DataFrame with pandas-like behavior
         mock_score_data = MagicMock(spec=pd.DataFrame)
-        
+
         # Mock the pandas operations that the function uses
         mock_filtered_data = MagicMock()
         mock_score_data.__getitem__.return_value.notna.return_value = mock_filtered_data
         mock_score_data.__getitem__ = Mock(return_value=Mock(notna=Mock(return_value=mock_filtered_data)))
-        
+
         # Mock the indexing operation for filtered data
         mock_filtered_data.__len__ = Mock(return_value=5)  # Return 5 records
         mock_score_data.__getitem__.return_value = mock_filtered_data
-        
+
         mock_prompt_analyzer = Mock()
-        mock_prompt_analyzer.analyze_feedback.return_value = {
-            "common_mistakes": "Test mistakes",
-            "missing_criteria": "Test criteria",
-            "prompt_suggestion": "Test suggestion"
-        }
-        
+        mock_prompt_analyzer.analyze_feedback.return_value = PromptAnalysisResult(
+            common_mistakes="Test mistakes",
+            missing_criteria="Test criteria",
+            prompt_suggestion="Test suggestion"
+        )
+
         # Mock the pandas operations used in the function
         with patch('plexus.cli.analyze.analysis.logging'):
             # This should not raise an exception
             analyze_score_feedback(mock_score_data, mock_prompt_analyzer, "Test prompt")
-            
+
             # Verify the function attempts to access the Comments column
             mock_score_data.__getitem__.assert_called()
 

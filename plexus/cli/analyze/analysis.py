@@ -5,7 +5,8 @@ from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.output_parsers import ResponseSchema, StructuredOutputParser
+from langchain_core.output_parsers import PydanticOutputParser
+from pydantic import BaseModel, Field
 from pyairtable import Api
 from pyairtable.formulas import match
 import dotenv
@@ -445,6 +446,12 @@ def test_ollama(
         logging.error(f"Error testing {provider}: {e}")
         return
 
+class PromptAnalysisResult(BaseModel):
+    """Structured output for prompt analysis results."""
+    common_mistakes: str = Field(description="Common patterns of mistakes identified in the scoring")
+    missing_criteria: str = Field(description="Important criteria that seem to be missing from the current prompt")
+    prompt_suggestion: str = Field(description="Specific suggestions for improving the prompt, including new or modified criteria")
+
 class PromptAnalyzer:
     def __init__(self, llm):
         self.llm = llm
@@ -452,15 +459,7 @@ class PromptAnalyzer:
         self.prompt = self._create_prompt()
 
     def _create_output_parser(self):
-        schemas = [
-            ResponseSchema(name="common_mistakes", 
-                         description="Common patterns of mistakes identified in the scoring"),
-            ResponseSchema(name="missing_criteria", 
-                         description="Important criteria that seem to be missing from the current prompt"),
-            ResponseSchema(name="prompt_suggestion", 
-                         description="Specific suggestions for improving the prompt, including new or modified criteria")
-        ]
-        return StructuredOutputParser.from_response_schemas(schemas)
+        return PydanticOutputParser(pydantic_object=PromptAnalysisResult)
 
     def _create_prompt(self):
         template = """Analyze these scoring examples and suggest improvements for the scoring prompt:
@@ -489,16 +488,21 @@ Based on these examples, please provide:
             f"Feedback: {ex['feedback']}"
             for i, ex in enumerate(examples)
         ])
-        
+
         prompt_value = self.prompt.format(
             current_prompt=current_prompt,
             examples=examples_text,
             format_instructions=format_instructions
         )
         logging.info(f"current prompt: {current_prompt}")
-        
-        response = self.llm.predict(prompt_value)
-        return self.output_parser.parse(response)
+
+        response = self.llm.invoke(prompt_value)
+        # Extract content from AIMessage if needed
+        if hasattr(response, 'content'):
+            response_text = response.content
+        else:
+            response_text = response
+        return self.output_parser.parse(response_text)
 
 def analyze_score_feedback(score_data: pd.DataFrame, prompt_analyzer: PromptAnalyzer, current_prompt: str):
     """
@@ -526,8 +530,8 @@ def analyze_score_feedback(score_data: pd.DataFrame, prompt_analyzer: PromptAnal
 
     logging.info("\nPrompt Analysis Results:")
     logging.info("\nCommon Mistakes Identified:")
-    logging.info(analysis['common_mistakes'])
+    logging.info(analysis.common_mistakes)
     logging.info("\nMissing Criteria:")
-    logging.info(analysis['missing_criteria'])
+    logging.info(analysis.missing_criteria)
     logging.info("\nPrompt Improvement Suggestion:")
-    logging.info(analysis['prompt_suggestion'])
+    logging.info(analysis.prompt_suggestion)
