@@ -29,6 +29,7 @@ echo ""
 # Include table ARNs if they exist in .env
 SECRET_VALUE=$(cat <<EOF
 {
+  "environment": "${ENVIRONMENT}",
   "account-key": "${PLEXUS_ACCOUNT_KEY}",
   "api-key": "${PLEXUS_API_KEY}",
   "api-url": "${PLEXUS_API_URL}",

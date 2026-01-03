@@ -192,6 +192,7 @@ async def test_get_existing_experiment_nodes_includes_insights_context(
 
     # Mock the Procedure.get_by_id call
     mock_procedure = Mock()
+    mock_procedure.id = procedure_id
     mock_procedure.scoreId = "test-score-id"
     mock_procedure.scorecardId = "test-scorecard-id"
 
@@ -228,6 +229,7 @@ async def test_insights_context_ordering(
 
     # Mock the Procedure.get_by_id call
     mock_procedure = Mock()
+    mock_procedure.id = procedure_id
     mock_procedure.scoreId = "test-score-id"
     mock_procedure.scorecardId = "test-scorecard-id"
 
@@ -296,6 +298,7 @@ async def test_multiple_insights_rounds_ordering(procedure_service):
 
     # Mock the Procedure.get_by_id call
     mock_procedure = Mock()
+    mock_procedure.id = 'test-proc-id'
     mock_procedure.scoreId = "test-score-id"
     mock_procedure.scorecardId = "test-scorecard-id"
 

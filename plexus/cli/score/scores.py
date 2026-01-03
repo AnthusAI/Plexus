@@ -24,7 +24,7 @@ import datetime
 import requests
 from gql import gql
 from plexus.cli.shared.file_editor import FileEditor
-from plexus.cli.shared import sanitize_path_name, get_score_yaml_path
+from plexus.cli.shared import sanitize_path_name, get_score_yaml_path, get_score_guidelines_path
 from plexus.cli.shared.memoized_resolvers import (
     memoized_resolve_scorecard_identifier,
     memoized_resolve_score_identifier,
@@ -767,41 +767,124 @@ score.add_command(optimize)
 
 @score.command()
 @click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
-@click.option('--score', required=True, help='Score to pull (accepts ID, name, key, or external ID)')
+@click.option('--score', required=False, help='Score to pull (accepts ID, name, key, or external ID). If not specified, pulls all scores in the scorecard.')
 @click.option('--use-cache', is_flag=True, help='Use cached file if available (default: always fetch fresh from API)')
 @click.option('--verbose', is_flag=True, help='Show detailed progress and caching information')
-def pull(scorecard: str, score: str, use_cache: bool = False, verbose: bool = False):
-    """Pull a score's current champion version as a YAML file."""
+def pull(scorecard: str, score: Optional[str] = None, use_cache: bool = False, verbose: bool = False):
+    """Pull score(s) current champion version as YAML file(s).
+
+    If --score is provided, pulls that specific score.
+    If --score is not provided, pulls all scores from the scorecard.
+    """
     try:
         client = create_client()
-        
-        # Show welcome message
-        console.print(f"[bold]Pulling score '{score}' from scorecard '{scorecard}'...[/bold]")
-        if use_cache:
-            console.print("[blue]Using cached version if available (--use-cache flag is set)[/blue]")
-        
-        # Fetch and cache the score configuration
-        config, yaml_path, from_cache = fetch_and_cache_single_score(
-            client=client,
-            scorecard_identifier=scorecard,
-            score_identifier=score,
-            use_cache=use_cache,
-            verbose=verbose
-        )
-        
-        # Display success message with the same format as the original implementation
-        if from_cache:
-            console.print(f"[green]Loaded score configuration from cache: {yaml_path}[/green]")
+
+        # If a specific score is provided, use the single score logic
+        if score:
+            # Show welcome message
+            console.print(f"[bold]Pulling score '{score}' from scorecard '{scorecard}'...[/bold]")
+            if use_cache:
+                console.print("[blue]Using cached version if available (--use-cache flag is set)[/blue]")
+
+            # Fetch and cache the score configuration and guidelines
+            config, yaml_path, guidelines_path, from_cache = fetch_and_cache_single_score(
+                client=client,
+                scorecard_identifier=scorecard,
+                score_identifier=score,
+                use_cache=use_cache,
+                verbose=verbose
+            )
+
+            # Display success message with the same format as the original implementation
+            if from_cache:
+                console.print(f"[green]Loaded score configuration from cache: {yaml_path}[/green]")
+                console.print(f"[green]Loaded score guidelines from cache: {guidelines_path}[/green]")
+            else:
+                # Extract some details for display
+                score_name = config.get('name', 'Unknown')
+                score_id = config.get('id', 'Unknown')
+                version_id = config.get('version', 'Unknown')
+
+                console.print(f"[green]Found score: {score_name} (ID: {score_id})[/green]")
+                console.print(f"[green]Champion version ID: {version_id}[/green]")
+                console.print(f"[green]Saved score configuration to: {yaml_path}[/green]")
+                console.print(f"[green]Saved score guidelines to: {guidelines_path}[/green]")
         else:
-            # Extract some details for display
-            score_name = config.get('name', 'Unknown')
-            score_id = config.get('id', 'Unknown')
-            version_id = config.get('version', 'Unknown')
-            
-            console.print(f"[green]Found score: {score_name} (ID: {score_id})[/green]")
-            console.print(f"[green]Champion version ID: {version_id}[/green]")
-            console.print(f"[green]Saved score configuration to: {yaml_path}[/green]")
-            
+            # Pull all scores from the scorecard
+            from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
+
+            console.print(f"[bold]Pulling all scores from scorecard '{scorecard}'...[/bold]")
+            if use_cache:
+                console.print("[blue]Using cached versions if available (--use-cache flag is set)[/blue]")
+
+            # Fetch the scorecard structure to get all scores
+            scorecard_data = fetch_scorecard_structure(client, scorecard)
+            if not scorecard_data:
+                console.print(f"[red]Could not fetch scorecard: {scorecard}[/red]")
+                return
+
+            scorecard_name = scorecard_data.get('name', 'Unknown')
+            console.print(f"[bold cyan]Scorecard: {scorecard_name}[/bold cyan]")
+
+            # Collect all scores from all sections
+            all_scores = []
+            for section in scorecard_data.get('sections', {}).get('items', []):
+                for score_item in section.get('scores', {}).get('items', []):
+                    all_scores.append({
+                        'id': score_item.get('id'),
+                        'name': score_item.get('name'),
+                        'section': section.get('name')
+                    })
+
+            if not all_scores:
+                console.print("[yellow]No scores found in this scorecard.[/yellow]")
+                return
+
+            console.print(f"[blue]Found {len(all_scores)} score(s) to pull[/blue]\n")
+
+            # Pull each score
+            success_count = 0
+            error_count = 0
+
+            for idx, score_info in enumerate(all_scores, 1):
+                score_name = score_info['name']
+                score_id = score_info['id']
+                section_name = score_info['section']
+
+                console.print(f"[cyan][{idx}/{len(all_scores)}][/cyan] Pulling '{score_name}' (section: {section_name})...")
+
+                try:
+                    config, yaml_path, guidelines_path, from_cache = fetch_and_cache_single_score(
+                        client=client,
+                        scorecard_identifier=scorecard,
+                        score_identifier=score_id,
+                        use_cache=use_cache,
+                        verbose=verbose
+                    )
+
+                    if from_cache:
+                        console.print(f"  [green]✓ Loaded from cache: {yaml_path}[/green]")
+                        console.print(f"  [green]✓ Guidelines: {guidelines_path}[/green]")
+                    else:
+                        version_id = config.get('version', 'Unknown')
+                        console.print(f"  [green]✓ Saved to: {yaml_path}[/green]")
+                        console.print(f"  [green]✓ Guidelines: {guidelines_path}[/green]")
+                        console.print(f"  [dim]Champion version: {version_id}[/dim]")
+
+                    success_count += 1
+
+                except Exception as e:
+                    console.print(f"  [red]✗ Error: {str(e)}[/red]")
+                    error_count += 1
+
+                console.print()  # Empty line for readability
+
+            # Summary
+            console.print("[bold]Summary:[/bold]")
+            console.print(f"  [green]Successfully pulled: {success_count}[/green]")
+            if error_count > 0:
+                console.print(f"  [red]Errors: {error_count}[/red]")
+
     except ValueError as e:
         # Handle expected errors with user-friendly messages
         console.print(f"[red]{str(e)}[/red]")
@@ -870,16 +953,30 @@ def push(scorecard: str, score: str, note: str):
         console.print(f"[red]Error fetching scorecard details: {e}[/red]")
         return
     
-    # Get the local YAML file path using the utility function
+    # Get the local file paths using the utility functions
     yaml_path = get_score_yaml_path(scorecard_name, score_name)
-    
+    guidelines_path = get_score_guidelines_path(scorecard_name, score_name)
+
     if not os.path.exists(yaml_path):
         console.print(f"[red]YAML file not found: {yaml_path}[/red]")
         return
-    
+
     # Read the YAML file
     with open(yaml_path, 'r') as f:
         yaml_content = f.read()
+
+    # Read the guidelines file if it exists
+    guidelines_content = None
+    if os.path.exists(guidelines_path):
+        with open(guidelines_path, 'r') as f:
+            guidelines_content = f.read()
+
+        # Strip placeholder text if present
+        if guidelines_content and guidelines_content.strip() == "*No guidelines specified for this score.*":
+            guidelines_content = ""
+    else:
+        # If guidelines file doesn't exist, use empty string
+        guidelines_content = ""
     
     # Extract version information from the YAML
     version_match = re.search(r'^version:\s*["\']?([^"\'\n]+)["\']?', yaml_content, re.MULTILINE)
@@ -931,45 +1028,68 @@ def push(scorecard: str, score: str, note: str):
     # Create a normalized version for comparison only
     normalized_yaml_content = re.sub(r'\n\n+', '\n', cleaned_yaml_content)
     
-    # Get the current version from the API to compare
+    # Get the current version from the API to compare (including guidelines)
     if current_version_id:
         query = f"""
         query GetScoreVersion {{
             getScoreVersion(id: "{current_version_id}") {{
                 configuration
+                guidelines
             }}
         }}
         """
         with client as session:
             result = session.execute(gql(query))
         cloud_yaml = result.get('getScoreVersion', {}).get('configuration', '')
-        
+        cloud_guidelines = result.get('getScoreVersion', {}).get('guidelines', '')
+
         # Clean the cloud YAML content for comparison
         cleaned_cloud_yaml = re.sub(
-            r'^version:\s*["\']?[^"\'\n]+["\']?(\s*parent:\s*["\']?[^"\'\n]+["\']?)?', 
-            '', 
-            cloud_yaml, 
+            r'^version:\s*["\']?[^"\'\n]+["\']?(\s*parent:\s*["\']?[^"\'\n]+["\']?)?',
+            '',
+            cloud_yaml,
             flags=re.MULTILINE
         )
         cleaned_cloud_yaml = re.sub(
-            r'^parent:\s*["\']?[^"\'\n]+["\']?', 
-            '', 
-            cleaned_cloud_yaml, 
+            r'^parent:\s*["\']?[^"\'\n]+["\']?',
+            '',
+            cleaned_cloud_yaml,
             flags=re.MULTILINE
         )
-        
+
         # Trim only leading/trailing whitespace but preserve internal formatting
         cleaned_cloud_yaml = cleaned_cloud_yaml.strip()
-        
+        cleaned_cloud_guidelines = cloud_guidelines.strip() if cloud_guidelines else ""
+
         # Create normalized versions for comparison only
         normalized_cloud_yaml = re.sub(r'\n\n+', '\n', cleaned_cloud_yaml)
-        
-        # Compare the normalized YAML content with the cloud version
-        if normalized_yaml_content.strip() == normalized_cloud_yaml.strip():
-            console.print("[yellow]No changes detected in the YAML configuration. Skipping push.[/yellow]")
+        normalized_cloud_guidelines = cleaned_cloud_guidelines
+
+        # Compare both code and guidelines independently
+        code_changed = normalized_yaml_content.strip() != normalized_cloud_yaml.strip()
+        local_guidelines = (guidelines_content or "").strip()
+        guidelines_changed = local_guidelines != normalized_cloud_guidelines
+
+        # If the local guidelines file doesn't exist or is placeholder, preserve champion's guidelines
+        # unless the file was intentionally cleared (empty but exists)
+        if not os.path.exists(guidelines_path) and not guidelines_changed:
+            # File doesn't exist, use champion's guidelines
+            guidelines_content = cloud_guidelines
+
+        # If neither changed, skip push
+        if not code_changed and not guidelines_changed:
+            console.print("[yellow]No changes detected in code or guidelines. Skipping push.[/yellow]")
             return
         else:
-            console.print("[blue]Changes detected in the YAML configuration. Creating new version.[/blue]")
+            # Report what changed
+            changes = []
+            if code_changed:
+                changes.append("code")
+            if guidelines_changed:
+                changes.append("guidelines")
+            console.print(f"[blue]Changes detected: {' and '.join(changes)}. Creating new version.[/blue]")
+    else:
+        console.print("[blue]Creating initial version.[/blue]")
     
     # Create a new version with the cleaned configuration
     mutation = """
@@ -999,11 +1119,15 @@ def push(scorecard: str, score: str, note: str):
                 'isFeatured': False
             }
         }
-        
+
+        # Include guidelines if provided
+        if guidelines_content and guidelines_content.strip():
+            mutation_input['input']['guidelines'] = guidelines_content.strip()
+
         # Only include parentVersionId if it has a value
         if parent_version_id:
             mutation_input['input']['parentVersionId'] = parent_version_id
-        
+
         with client as session:
             result = session.execute(gql(mutation), mutation_input)
         
