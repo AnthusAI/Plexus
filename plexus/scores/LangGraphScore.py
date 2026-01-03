@@ -966,24 +966,27 @@ class LangGraphScore(Score, LangChainUser):
 
             # Add fields from output mappings
             if hasattr(instance.parameters, 'output') and instance.parameters.output is not None:
+                from typing import Any
                 for alias, original in instance.parameters.output.items():
-                    base_annotations[alias] = Optional[str]
-                    
+                    base_annotations[alias] = Optional[Any]
+
             # Check for edge configuration with output mappings
             if hasattr(instance.parameters, 'edge') and instance.parameters.edge is not None:
+                from typing import Any
                 edge_config = instance.parameters.edge
                 if isinstance(edge_config, dict) and 'output' in edge_config:
                     for alias, original in edge_config['output'].items():
-                        base_annotations[alias] = Optional[str]
+                        base_annotations[alias] = Optional[Any]
 
             # Check for conditions configuration with output mappings
             if hasattr(instance.parameters, 'conditions') and instance.parameters.conditions is not None:
+                from typing import Any
                 conditions = instance.parameters.conditions
                 if isinstance(conditions, list):
                     for condition in conditions:
                         if isinstance(condition, dict) and 'output' in condition:
                             for alias, original in condition['output'].items():
-                                base_annotations[alias] = Optional[str]
+                                base_annotations[alias] = Optional[Any]
 
             # Add fields from LogicalNode output_mapping with proper types
             if hasattr(instance.parameters, 'output_mapping') and instance.parameters.output_mapping is not None:
@@ -993,23 +996,25 @@ class LangGraphScore(Score, LangChainUser):
 
         # Also check the graph configuration directly from the YAML
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
+            from typing import Any
             for node_config in self.parameters.graph:
                 # Check for edge output mappings
                 if 'edge' in node_config and isinstance(node_config['edge'], dict) and 'output' in node_config['edge']:
                     for alias, original in node_config['edge']['output'].items():
-                        base_annotations[alias] = Optional[str]
-                
+                        base_annotations[alias] = Optional[Any]
+
                 # Check for conditions output mappings
                 if 'conditions' in node_config and isinstance(node_config['conditions'], list):
                     for condition in node_config['conditions']:
                         if isinstance(condition, dict) and 'output' in condition:
                             for alias, original in condition['output'].items():
-                                base_annotations[alias] = Optional[str]
+                                base_annotations[alias] = Optional[Any]
 
         # Handle output aliases from main parameters
         if hasattr(self.parameters, 'output') and self.parameters.output is not None:
+            from typing import Any
             for alias, original in self.parameters.output.items():
-                base_annotations[alias] = Optional[str]
+                base_annotations[alias] = Optional[Any]
 
         # Create new class with updated configuration
         class CombinedGraphState(self.GraphState):

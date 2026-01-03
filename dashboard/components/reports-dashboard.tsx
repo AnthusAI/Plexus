@@ -17,6 +17,7 @@ import {
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useParams, usePathname } from 'next/navigation'
 import { getClient } from '@/utils/amplify-client'
+import { useAccount } from '@/app/contexts/AccountContext'
 import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { getValueFromLazyLoader } from '@/utils/data-operations'
@@ -52,20 +53,6 @@ type ReportDisplayData = {
   } | null;
   task?: Task | null;
 };
-
-const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
-
-// GraphQL query to list accounts
-const LIST_ACCOUNTS = `
-  query ListAccounts($filter: ModelAccountFilterInput) {
-    listAccounts(filter: $filter) {
-      items {
-        id
-        key
-      }
-    }
-  }
-`
 
 // GraphQL query to list reports by account and update timestamp
 // Includes nested task and reportConfiguration data
@@ -399,15 +386,6 @@ const SUBSCRIBE_ON_UPDATE_REPORT_BLOCK = `
   }
 `;
 
-interface ListAccountResponse {
-  listAccounts: {
-    items: Array<{
-      id: string;
-      key: string;
-    }>;
-  };
-}
-
 interface ListReportsResponse {
   listReportByAccountIdAndUpdatedAt: {
     items: Report[];
@@ -517,8 +495,9 @@ export default function ReportsDashboard({
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams()
-  const [accountId, setAccountId] = useState<string | null>(null)
+  const { selectedAccount, isLoadingAccounts } = useAccount()
   const [reports, setReports] = useState<ReportDisplayData[]>([])
+  const accountId = selectedAccount?.id || null
   const [selectedReportId, setSelectedReportId] = useState<string | null>(initialSelectedReportId)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -561,32 +540,22 @@ export default function ReportsDashboard({
     });
   }, []);
 
-  // Fetch account ID
+  // Handle account loading state
   useEffect(() => {
-    const fetchAccountId = async () => {
-      try {
-        const accountResponse = await getClient().graphql<ListAccountResponse>({
-          query: LIST_ACCOUNTS,
-          variables: {
-            filter: { key: { eq: ACCOUNT_KEY } }
-          }
-        })
-
-        if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
-          const id = accountResponse.data.listAccounts.items[0].id
-          setAccountId(id)
-        } else {
-          setError('No account found')
-          setIsLoading(false)
-        }
-      } catch (err: any) {
-        console.error('Error fetching account:', err)
-        setError(`Error fetching account: ${err.message}`)
-        setIsLoading(false)
-      }
+    // Wait for accounts to finish loading
+    if (isLoadingAccounts) {
+      return;
     }
-    fetchAccountId()
-  }, [])
+
+    // If accounts have finished loading but there's no selected account, set error
+    if (!selectedAccount) {
+      setError('No account found');
+      setIsLoading(false);
+    } else {
+      // Clear any previous errors when account is available
+      setError(null);
+    }
+  }, [isLoadingAccounts, selectedAccount]);
 
   // Fetch Reports Data
   const fetchReports = useCallback(async (currentAccountId: string, currentNextToken: string | null, reportConfigId?: string | null) => {

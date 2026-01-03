@@ -20,8 +20,9 @@ import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher } f
 const client = generateClient<Schema>()
 
 // Types
-type ProcedureTemplate = Schema['ProcedureTemplate']['type']
-type CreateProcedureTemplateInput = Schema['ProcedureTemplate']['createType']
+// NOTE: ProcedureTemplate table was removed. Templates are now Procedures with isTemplate=true
+type ProcedureTemplate = Schema['Procedure']['type']
+type CreateProcedureTemplateInput = Schema['Procedure']['createType']
 
 interface ProcedureTemplateManagerProps {
   accountId: string
@@ -255,16 +256,16 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
   const loadTemplates = async () => {
     setIsLoading(true)
     try {
-      // Debug: Check what methods are available
-            console.log('Available ProcedureTemplate methods:', Object.keys(client.models.ProcedureTemplate))
-
-      const result = await (client.models.ProcedureTemplate.listProcedureTemplateByAccountIdAndUpdatedAt as any)({
+      const result = await (client.models.Procedure.listProcedureByAccountIdAndUpdatedAt as any)({
         accountId: accountId,
-
       })
-      
+
       if (result.data) {
-        setTemplates(result.data)
+        // Filter for templates only (isTemplate=true) and map code -> template
+        const templateData = result.data
+          .filter((p: any) => p.isTemplate === true)
+          .map((p: any) => ({ ...p, template: p.code }))
+        setTemplates(templateData)
       }
     } catch (error) {
       console.error('Error loading templates:', error)
@@ -285,14 +286,15 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
       const input = {
         name: formData.name,
         description: formData.description || undefined,
-        template: formData.template,
+        code: formData.template, // Map template -> code
         version: formData.version,
         category: formData.category || undefined,
         isDefault: formData.isDefault || undefined,
+        isTemplate: true, // Mark as template
         accountId: accountId
       }
 
-      const result = await (client.models.ProcedureTemplate.create as any)(input as any)
+      const result = await (client.models.Procedure.create as any)(input as any)
       
       if (result.data) {
         setTemplates(prev => [result.data!, ...prev])
@@ -315,7 +317,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
 
     setIsLoading(true)
     try {
-      await (client.models.ProcedureTemplate.delete as any)({ id: template.id })
+      await (client.models.Procedure.delete as any)({ id: template.id })
       setTemplates(prev => prev.filter(t => t.id !== template.id))
       if (selectedTemplate?.id === template.id) {
         setSelectedTemplate(null)
@@ -330,11 +332,13 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
   }
 
   const handleCopyTemplate = (template: ProcedureTemplate) => {
+    // Note: We map code -> template when loading, but TypeScript doesn't know about it
+    const templateCode = (template as any).template || template.code || ''
     setFormData({
       name: `${template.name} (Copy)`,
       description: template.description || '',
-      template: template.template,
-      version: (template as any).version || '1.0',
+      template: templateCode,
+      version: template.version || '1.0',
       category: template.category || 'hypothesis_generation',
       isDefault: false
     })
@@ -363,19 +367,21 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
   }
 
   const handleExportTemplate = (template: ProcedureTemplate) => {
+    // Note: We map code -> template when loading, but TypeScript doesn't know about it
+    const templateCode = (template as any).template || template.code || ''
     const dataStr = JSON.stringify({
       name: template.name,
       description: template.description,
-      template: template.template,
-      version: (template as any).version || '1.0',
+      template: templateCode,
+      version: template.version || '1.0',
       category: template.category
     }, null, 2)
-    
+
     const dataBlob = new Blob([dataStr], { type: 'application/json' })
     const url = URL.createObjectURL(dataBlob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `${template.name}-v${(template as any).version || '1.0'}.json`
+    link.download = `${template.name}-v${template.version || '1.0'}.json`
     link.click()
     URL.revokeObjectURL(url)
   }

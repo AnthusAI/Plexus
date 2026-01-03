@@ -5,18 +5,21 @@ This provides shared pipeline logic for both staging and production environments
 """
 
 import aws_cdk as cdk
+import os
+import boto3
 from aws_cdk import (
     Stack,
     pipelines as pipelines,
     aws_codebuild as codebuild,
     aws_ecr as ecr,
     aws_iam as iam,
-    SecretValue,
 )
 from constructs import Construct
 from stacks.scoring_worker_stack import ScoringWorkerStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
 from stacks.metrics_aggregation_stack import MetricsAggregationStack
+from stacks.command_worker_stack import CommandWorkerStack
+from stacks.ml_training_stack import MLTrainingStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 
 
@@ -51,11 +54,27 @@ class BasePipelineStack(Stack):
         """
         super().__init__(scope, construct_id, **kwargs)
 
-        # Use GitHub token from Secrets Manager
-        source = pipelines.CodePipelineSource.git_hub(
+        # Fetch GitHub CodeConnection ARN from SSM Parameter Store at synth time
+        # This avoids storing the ARN in the repository
+        # Create the parameter with: aws ssm put-parameter --name /plexus/github-connection-arn --value "arn:aws:..." --type String
+        ssm = boto3.client('ssm', region_name=kwargs.get('env').region if kwargs.get('env') else 'us-west-2')
+        try:
+            response = ssm.get_parameter(Name='/plexus/github-connection-arn')
+            connection_arn = response['Parameter']['Value']
+        except Exception as e:
+            raise ValueError(
+                f"Failed to fetch GitHub connection ARN from SSM Parameter Store: {e}\n"
+                "Create it with: aws ssm put-parameter --name /plexus/github-connection-arn "
+                "--value 'arn:aws:codeconnections:us-west-2:ACCOUNT:connection/ID' --type String"
+            )
+
+        # Use CodeConnection for GitHub source (no automatic webhook triggers)
+        # Pipeline will only run when manually triggered (e.g., by GitHub Actions)
+        source = pipelines.CodePipelineSource.connection(
             f"{github_owner}/{github_repo}",
             branch,
-            authentication=SecretValue.secrets_manager("github-token")
+            connection_arn=connection_arn,
+            trigger_on_push=False  # Disable automatic triggers - GitHub Actions will trigger it
         )
 
         # Reference ECR repository (created in separate EcrRepositoriesStack)
@@ -88,7 +107,14 @@ class BasePipelineStack(Stack):
                 build_environment=codebuild.BuildEnvironment(
                     build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                     privileged=True,  # Required for Docker builds
-                )
+                ),
+                role_policy=[
+                    # Grant permission to read GitHub connection ARN from SSM
+                    iam.PolicyStatement(
+                        actions=["ssm:GetParameter"],
+                        resources=[f"arn:aws:ssm:{kwargs.get('env').region if kwargs.get('env') else 'us-west-2'}:{kwargs.get('env').account if kwargs.get('env') else '*'}:parameter/plexus/github-connection-arn"]
+                    )
+                ]
             ),
             docker_enabled_for_synth=True,  # Enable Docker for the synth step
         )
@@ -150,10 +176,11 @@ class BasePipelineStack(Stack):
             env=kwargs.get("env")
         )
 
-        # Add deployment stage with Docker build as a pre-step
+        # Add deployment stage with Docker build as pre-step
+        # App deployment is now handled by separate app deployment pipeline
         pipeline.add_stage(
             deployment_stage,
-            pre=[docker_build_step]  # Build Docker image before deploying
+            pre=[docker_build_step]  # Build Docker image before deploying infrastructure
         )
 
 
@@ -182,36 +209,60 @@ class DeploymentStage(cdk.Stage):
         """
         super().__init__(scope, construct_id, **kwargs)
 
-        # Deploy scoring worker stack (creates SQS queues)
-        scoring_worker_stack = ScoringWorkerStack(
+        # Deploy ML Training infrastructure (S3 buckets + IAM roles)
+        # Deployed to both staging and production
+        ml_training_stack = MLTrainingStack(
             self,
-            "ScoringWorker",
+            "MLTraining",
             environment=environment,
-            stack_name=f"plexus-scoring-worker-{environment}",
+            stack_name=f"plexus-ml-training-{environment}",
             env=kwargs.get("env")
         )
 
-        # Deploy Lambda score processor stack (uses the same queues)
-        # Configuration is loaded from SSM Parameter Store by the stack
-        LambdaScoreProcessorStack(
-            self,
-            "LambdaScoreProcessor",
-            environment=environment,
-            ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
-            standard_request_queue=scoring_worker_stack.standard_request_queue,
-            response_queue_url=scoring_worker_stack.response_queue.queue_url,
-            stack_name=f"plexus-lambda-score-processor-{environment}",
-            env=kwargs.get("env")
-        )
+        # Deploy Lambda score processor stack (with SQS queues)
+        # Only deploy in production - staging can't use Lambda due to reserved concurrency limits
+        if environment == "production":
+            # Deploy scoring worker stack (creates SQS queues) - only for production
+            scoring_worker_stack = ScoringWorkerStack(
+                self,
+                "ScoringWorker",
+                environment=environment,
+                stack_name=f"plexus-scoring-worker-{environment}",
+                env=kwargs.get("env")
+            )
+
+            LambdaScoreProcessorStack(
+                self,
+                "LambdaScoreProcessor",
+                environment=environment,
+                ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
+                standard_request_queue=scoring_worker_stack.standard_request_queue,
+                response_queue_url=scoring_worker_stack.response_queue.queue_url,
+                stack_name=f"plexus-lambda-score-processor-{environment}",
+                env=kwargs.get("env")
+            )
 
         # Deploy metrics aggregation stack (processes DynamoDB streams)
-        MetricsAggregationStack(
-            self,
-            "MetricsAggregation",
-            environment=environment,
-            stack_name=f"plexus-metrics-aggregation-{environment}",
-            env=kwargs.get("env")
-        )
+        # Only deploy in production - staging doesn't need metrics aggregation
+        if environment == "production":
+            MetricsAggregationStack(
+                self,
+                "MetricsAggregation",
+                environment=environment,
+                stack_name=f"plexus-metrics-aggregation-{environment}",
+                env=kwargs.get("env")
+            )
+
+        # Deploy command worker stack (manages EC2 command worker configuration)
+        # Only deploy in production - staging doesn't need command worker
+        if environment == "production":
+            CommandWorkerStack(
+                self,
+                "CommandWorker",
+                environment=environment,
+                stack_name=f"plexus-command-worker-{environment}",
+                env=kwargs.get("env")
+            )
 
         # Future stacks will be added here:
         # MonitoringStack(

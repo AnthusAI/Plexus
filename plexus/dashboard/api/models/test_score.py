@@ -499,7 +499,8 @@ nodes:
         version_input = create_call['variables']['input']
         self.assertEqual(version_input['scoreId'], 'score-123')
         self.assertEqual(version_input['note'], 'Test version creation')
-        self.assertTrue(version_input['isFeatured'])
+        # Procedure-created versions are not marked as featured by default
+        self.assertFalse(version_input['isFeatured'])
         self.assertEqual(version_input['parentVersionId'], 'version-123')
 
     def test_create_version_from_yaml_no_changes(self):

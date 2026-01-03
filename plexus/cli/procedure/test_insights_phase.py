@@ -338,11 +338,13 @@ async def test_get_existing_experiment_nodes_with_insights(
     root_node = Mock(spec=GraphNode)
     root_node.id = "root-id"
     root_node.is_root = True
+    root_node.parentNodeId = None  # Root nodes have no parent
 
     all_nodes = [root_node] + mock_hypothesis_nodes + [mock_insights_node]
 
     # Mock the Procedure.get_by_id call
     mock_procedure = Mock()
+    mock_procedure.id = 'test-procedure-id'
     mock_procedure.scoreId = "test-score-id"
     mock_procedure.scorecardId = "test-scorecard-id"
 
@@ -375,9 +377,11 @@ async def test_get_existing_experiment_nodes_first_round(
     root_node = Mock(spec=GraphNode)
     root_node.id = "root-id"
     root_node.is_root = True
+    root_node.parentNodeId = None  # Root nodes have no parent
 
     # Mock the Procedure.get_by_id call
     mock_procedure = Mock()
+    mock_procedure.id = 'test-procedure-id'
     mock_procedure.scoreId = "test-score-id"
     mock_procedure.scorecardId = "test-scorecard-id"
 
