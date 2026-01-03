@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 
-from tactus.protocols.models import ProcedureMetadata, CheckpointData
+from tactus.protocols.models import ProcedureMetadata, CheckpointEntry
 
 logger = logging.getLogger(__name__)
 
@@ -79,19 +79,23 @@ class PlexusStorageAdapter:
             # Parse metadata JSON field
             raw_metadata = procedure_data.get('metadata') or {}
 
-            # Convert checkpoint data
-            checkpoints = {}
+            # Convert checkpoint data to execution_log
+            execution_log = []
+            position = 0
             for name, ckpt_data in raw_metadata.get('checkpoints', {}).items():
-                checkpoints[name] = CheckpointData(
-                    name=name,
-                    result=ckpt_data.get('result'),
-                    completed_at=datetime.fromisoformat(ckpt_data.get('completed_at'))
-                )
+                execution_log.append(CheckpointEntry(
+                    position=position,
+                    type='checkpoint',
+                    result={'name': name, 'data': ckpt_data.get('result')},
+                    timestamp=datetime.fromisoformat(ckpt_data.get('completed_at'))
+                ))
+                position += 1
 
             # Create metadata object
             metadata = ProcedureMetadata(
                 procedure_id=procedure_id,
-                checkpoints=checkpoints,
+                execution_log=execution_log,
+                replay_index=raw_metadata.get('replay_index'),
                 state=raw_metadata.get('state', {}),
                 lua_state=raw_metadata.get('lua_state', {}),
                 status=procedure_data.get('status', 'RUNNING'),
@@ -99,7 +103,7 @@ class PlexusStorageAdapter:
             )
 
             self._metadata_cache = metadata
-            logger.debug(f"Loaded metadata for {procedure_id}: {len(checkpoints)} checkpoints, {len(metadata.state)} state keys")
+            logger.debug(f"Loaded metadata for {procedure_id}: {len(execution_log)} checkpoints, {len(metadata.state)} state keys")
             return metadata
 
         except Exception as e:
@@ -109,27 +113,31 @@ class PlexusStorageAdapter:
             self._metadata_cache = metadata
             return metadata
 
-    def save_procedure_metadata(self, metadata: ProcedureMetadata) -> None:
+    def save_procedure_metadata(self, procedure_id: str, metadata: ProcedureMetadata) -> None:
         """
         Save procedure metadata to Plexus via GraphQL.
 
         Args:
+            procedure_id: Procedure ID (for API compatibility)
             metadata: ProcedureMetadata to save
         """
-        # Convert checkpoints to serializable format
+        # Convert execution_log to serializable format (store as checkpoints for backward compat)
         checkpoints_dict = {}
-        for name, checkpoint in metadata.checkpoints.items():
-            checkpoints_dict[name] = {
-                'name': checkpoint.name,
-                'result': checkpoint.result,
-                'completed_at': checkpoint.completed_at.isoformat()
-            }
+        for checkpoint in metadata.execution_log:
+            if checkpoint.type == 'checkpoint' and isinstance(checkpoint.result, dict):
+                name = checkpoint.result.get('name', f'checkpoint_{checkpoint.position}')
+                checkpoints_dict[name] = {
+                    'name': name,
+                    'result': checkpoint.result.get('data'),
+                    'completed_at': checkpoint.timestamp.isoformat()
+                }
 
         # Build metadata JSON
         metadata_json = {
             'checkpoints': checkpoints_dict,
             'state': metadata.state,
-            'lua_state': metadata.lua_state
+            'lua_state': metadata.lua_state,
+            'replay_index': metadata.replay_index
         }
 
         # Update via GraphQL mutation
@@ -212,13 +220,20 @@ class PlexusStorageAdapter:
     def checkpoint_exists(self, procedure_id: str, name: str) -> bool:
         """Check if checkpoint exists."""
         metadata = self.load_procedure_metadata(procedure_id)
-        return name in metadata.checkpoints
+        for entry in metadata.execution_log:
+            if entry.type == 'checkpoint' and isinstance(entry.result, dict):
+                if entry.result.get('name') == name:
+                    return True
+        return False
 
     def checkpoint_get(self, procedure_id: str, name: str) -> Optional[Any]:
         """Get checkpoint value."""
         metadata = self.load_procedure_metadata(procedure_id)
-        checkpoint = metadata.checkpoints.get(name)
-        return checkpoint.result if checkpoint else None
+        for entry in metadata.execution_log:
+            if entry.type == 'checkpoint' and isinstance(entry.result, dict):
+                if entry.result.get('name') == name:
+                    return entry.result.get('data')
+        return None
 
     def checkpoint_save(
         self,
@@ -228,34 +243,43 @@ class PlexusStorageAdapter:
     ) -> None:
         """Save a checkpoint."""
         metadata = self.load_procedure_metadata(procedure_id)
-        metadata.checkpoints[name] = CheckpointData(
-            name=name,
-            result=result,
-            completed_at=datetime.now(timezone.utc)
-        )
-        self.save_procedure_metadata(metadata)
+        # Add new checkpoint to execution log
+        position = len(metadata.execution_log)
+        metadata.execution_log.append(CheckpointEntry(
+            position=position,
+            type='checkpoint',
+            result={'name': name, 'data': result},
+            timestamp=datetime.now(timezone.utc)
+        ))
+        self.save_procedure_metadata(procedure_id, metadata)
 
     def checkpoint_clear_all(self, procedure_id: str) -> None:
         """Clear all checkpoints (but preserve state)."""
         metadata = self.load_procedure_metadata(procedure_id)
-        metadata.checkpoints.clear()
-        self.save_procedure_metadata(metadata)
+        metadata.execution_log.clear()
+        self.save_procedure_metadata(procedure_id, metadata)
 
     def checkpoint_clear_after(self, procedure_id: str, name: str) -> None:
         """Clear checkpoint and all subsequent ones."""
         metadata = self.load_procedure_metadata(procedure_id)
 
-        if name not in metadata.checkpoints:
+        # Find the target checkpoint
+        target_time = None
+        for entry in metadata.execution_log:
+            if entry.type == 'checkpoint' and isinstance(entry.result, dict):
+                if entry.result.get('name') == name:
+                    target_time = entry.timestamp
+                    break
+
+        if target_time is None:
             return
 
-        target_time = metadata.checkpoints[name].completed_at
-
         # Keep only checkpoints older than target
-        metadata.checkpoints = {
-            k: v for k, v in metadata.checkpoints.items()
-            if v.completed_at < target_time
-        }
-        self.save_procedure_metadata(metadata)
+        metadata.execution_log = [
+            entry for entry in metadata.execution_log
+            if entry.timestamp < target_time
+        ]
+        self.save_procedure_metadata(procedure_id, metadata)
 
     def get_state(self, procedure_id: str) -> Dict[str, Any]:
         """Get mutable state dictionary."""
@@ -266,7 +290,7 @@ class PlexusStorageAdapter:
         """Set mutable state dictionary."""
         metadata = self.load_procedure_metadata(procedure_id)
         metadata.state = state
-        self.save_procedure_metadata(metadata)
+        self.save_procedure_metadata(procedure_id, metadata)
 
     def state_get(self, procedure_id: str, key: str, default: Any = None) -> Any:
         """Get state value."""
@@ -277,17 +301,17 @@ class PlexusStorageAdapter:
         """Set state value."""
         metadata = self.load_procedure_metadata(procedure_id)
         metadata.state[key] = value
-        self.save_procedure_metadata(metadata)
+        self.save_procedure_metadata(procedure_id, metadata)
 
     def state_delete(self, procedure_id: str, key: str) -> None:
         """Delete state key."""
         metadata = self.load_procedure_metadata(procedure_id)
         if key in metadata.state:
             del metadata.state[key]
-            self.save_procedure_metadata(metadata)
+            self.save_procedure_metadata(procedure_id, metadata)
 
     def state_clear(self, procedure_id: str) -> None:
         """Clear all state."""
         metadata = self.load_procedure_metadata(procedure_id)
         metadata.state = {}
-        self.save_procedure_metadata(metadata)
+        self.save_procedure_metadata(procedure_id, metadata)
