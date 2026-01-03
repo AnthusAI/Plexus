@@ -757,7 +757,7 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
         label_score_name = score_config['label_score_name']
     else:
         label_score_name = score_name
-        
+
     if score_config.get('label_field'):
         score_name_column_name = f"{label_score_name} {score_config['label_field']}"
     else:
@@ -2336,6 +2336,7 @@ def get_data_driven_samples(
         score_name_column_name = score_name
         if score_config.get('label_score_name'):
             score_name = score_config['label_score_name']
+            score_name_column_name = score_name
         if score_config.get('label_field'):
             score_name_column_name = f"{score_name} {score_config['label_field']}"
 

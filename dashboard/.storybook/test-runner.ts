@@ -37,7 +37,7 @@ const config: TestRunnerConfig = {
     }
   },
 
-  async preRender(page: Page) {
+  async preVisit(page: Page) {
     // Inject StorybookTestRunnerError BEFORE the page renders using addInitScript
     // This ensures it's available before ANY page JavaScript executes
     await page.addInitScript(() => {
@@ -51,9 +51,7 @@ const config: TestRunnerConfig = {
       // Assign to window without checking to avoid any TDZ issues
       (window as any).StorybookTestRunnerError = StorybookTestRunnerError;
     });
-  },
 
-  async preVisit(page) {
     // Ensure the page is ready before running tests
     await page.waitForLoadState('networkidle');
   },

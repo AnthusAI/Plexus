@@ -109,6 +109,19 @@ const docSections: DocSidebarItem[] = [
     ],
   },
   {
+    name: "Procedures",
+    href: "/documentation/procedures",
+    items: [
+      { name: "Overview", href: "/documentation/procedures" },
+      { name: "Getting Started", href: "/documentation/procedures/getting-started" },
+      { name: "Human-in-the-Loop", href: "/documentation/procedures/hitl" },
+      { name: "Examples & Patterns", href: "/documentation/procedures/examples" },
+      { name: "API Reference", href: "/documentation/procedures/api" },
+      { name: "Message Classification", href: "/documentation/procedures/messages" },
+      { name: "Technical Spec", href: "/documentation/procedures/spec" },
+    ],
+  },
+  {
     name: "Evaluation Metrics",
     href: "/documentation/evaluation-metrics",
     items: [

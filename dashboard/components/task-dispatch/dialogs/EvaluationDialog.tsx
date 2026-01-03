@@ -27,6 +27,7 @@ interface EvaluationOptions {
   randomSeed?: number
   visualize: boolean
   logToLanggraph: boolean
+  versionId?: string
 }
 
 export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialOptions }: TaskDialogProps & { initialOptions?: Partial<EvaluationOptions> }) {
@@ -38,7 +39,8 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
     loadFresh: initialOptions?.loadFresh || false,
     randomSeed: initialOptions?.randomSeed,
     visualize: initialOptions?.visualize || false,
-    logToLanggraph: initialOptions?.logToLanggraph || false
+    logToLanggraph: initialOptions?.logToLanggraph || false,
+    versionId: initialOptions?.versionId
   })
 
   const handleDispatch = () => {
@@ -95,6 +97,22 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
               tabIndex={-1}
             />
           </div>
+
+          {options.versionId && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="versionId" className="text-right">
+                Version ID
+              </Label>
+              <Input
+                id="versionId"
+                value={options.versionId}
+                className="col-span-3 font-mono bg-background border-0"
+                readOnly
+                disabled
+                tabIndex={-1}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="numberOfSamples" className="text-right">

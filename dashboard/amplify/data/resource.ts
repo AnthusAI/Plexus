@@ -47,9 +47,8 @@ type AggregatedMetricsIndexFields = "accountId" | "compositeKey" | "scorecardId"
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "templateId" | "rootNodeId" | "updatedAt" | "createdAt";
+type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "rootNodeId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
 type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
-type ProcedureTemplateIndexFields = "accountId" | "category" | "name" | "version" | "template" | "description" | "isDefault" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -81,9 +80,9 @@ const schema = a.schema({
             dataSources: a.hasMany('DataSource', 'accountId'),
             dataSets: a.hasMany('DataSet', 'accountId'),
             procedures: a.hasMany('Procedure', 'accountId'),
-            procedureTemplates: a.hasMany('ProcedureTemplate', 'accountId'),
             graphNodes: a.hasMany('GraphNode', 'accountId'),
             chatSessions: a.hasMany('ChatSession', 'accountId'),
+            chatMessages: a.hasMany('ChatMessage', 'accountId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -216,8 +215,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("scoreId").sortKeys(["createdAt"]),
-            idx("updatedAt")
+            idx("scoreId").sortKeys(["createdAt"])
         ]),
 
     Evaluation: a
@@ -338,7 +336,6 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("accountId").sortKeys(["createdAt"]),
-            idx("externalId"),
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["createdAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
@@ -370,7 +367,6 @@ const schema = a.schema({
             idx("accountId").sortKeys(["name", "value"]).name("byAccountNameAndValue"), // Search within identifier type
             idx("itemId").sortKeys(["position"]).name("byItemAndPosition"),  // Get all identifiers for an item ordered by position
             idx("itemId").sortKeys(["name"]).name("byItemAndName"), // Check for duplicates by item + name
-            idx("value").name("byValue"), // Global value lookup (if cross-account search needed)
         ]),
 
     ScoringJob: a
@@ -517,8 +513,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId"),
-            idx("updatedAt")
+            idx("scoreId")
         ]),
 
     TaskStage: a
@@ -542,8 +537,7 @@ const schema = a.schema({
             // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
-            idx("taskId"),
-            idx("status")
+            idx("taskId")
         ]),
 
         
@@ -625,18 +619,17 @@ const schema = a.schema({
             reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
             reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
             updatedAt: a.datetime().required(),
-            taskId: a.string(), // Add foreign key for Task
-            task: a.belongsTo('Task', 'taskId'), // Add relationship to Task
+            taskId: a.string(),
+            task: a.belongsTo('Task', 'taskId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
-            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("reportConfigurationId").sortKeys(["createdAt"]),
-            idx("taskId") // Add index by taskId
+            idx("taskId")
         ]),
 
     ReportBlock: a
@@ -796,8 +789,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["name"]),
             idx("accountId").sortKeys(["key"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"]),
-            idx("key")
+            idx("scoreId").sortKeys(["updatedAt"])
         ]),
 
     DataSourceVersion: a
@@ -820,8 +812,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: DataSourceVersionIndexFields) => any) => [
-            idx("dataSourceId").sortKeys(["createdAt"]),
-            idx("updatedAt")
+            idx("dataSourceId").sortKeys(["createdAt"])
         ]),
 
     DataSet: a
@@ -862,11 +853,21 @@ const schema = a.schema({
 
     Procedure: a
         .model({
+            name: a.string().required(),
+            description: a.string(),
             featured: a.boolean(),
-            templateId: a.string(),
-            template: a.belongsTo('ProcedureTemplate', 'templateId'),
-            code: a.string(), // YAML template code copied from template
+            isTemplate: a.boolean(), // True if this is a template, false if it's an instance
+            parentProcedureId: a.string(), // References template procedure if this is an instance
+            parentProcedure: a.belongsTo('Procedure', 'parentProcedureId'),
+            childProcedures: a.hasMany('Procedure', 'parentProcedureId'), // Instances created from this template
+            code: a.string(), // YAML template code (for templates) or copied code (for instances)
+            category: a.string(), // For templates: e.g., "hypothesis_generation", "beam_search"
+            version: a.string(), // For templates: version (e.g., "1.0", "2.1")
+            isDefault: a.boolean(), // For templates: whether this is the default for the category
             rootNodeId: a.id(),
+            status: a.string(), // Execution status: PENDING, RUNNING, WAITING_FOR_HUMAN, COMPLETE, ERROR
+            waitingOnMessageId: a.string(), // ID of PENDING_* message blocking execution
+            metadata: a.json(), // Checkpoints, state, and lua_state for idempotent execution
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             accountId: a.string().required(),
@@ -889,8 +890,10 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
-            idx("templateId").sortKeys(["updatedAt"]),
-            idx("rootNodeId")
+            idx("parentProcedureId").sortKeys(["updatedAt"]),
+            idx("rootNodeId"),
+            idx("category").sortKeys(["version"]).name("byCategory"),
+            idx("status").sortKeys(["updatedAt"]).name("byStatus")
         ]),
 
     GraphNode: a
@@ -917,28 +920,6 @@ const schema = a.schema({
             idx("accountId").sortKeys(["createdAt"]).name("byAccountAndCreatedAt"),
             idx("procedureId").sortKeys(["createdAt"]).name("nodesByProcedureCreatedAt"),
             idx("parentNodeId").name("nodesByParent")
-        ]),
-
-    ProcedureTemplate: a
-        .model({
-            name: a.string().required(),
-            description: a.string(),
-            template: a.string().required(), // The YAML template content
-            category: a.string(), // e.g., "hypothesis_generation", "beam_search"
-            version: a.string(), // Template version (e.g., "1.0", "2.1")
-            isDefault: a.boolean(), // Whether this is the default template for the category
-            accountId: a.string().required(),
-            account: a.belongsTo('Account', 'accountId'),
-            procedures: a.hasMany('Procedure', 'templateId'),
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"])
         ]),
 
     ChatSession: a
@@ -974,11 +955,30 @@ const schema = a.schema({
 
     ChatMessage: a
         .model({
+            accountId: a.string(),
+            account: a.belongsTo('Account', 'accountId'),
             sessionId: a.string().required(),
             session: a.belongsTo('ChatSession', 'sessionId'),
             procedureId: a.string(),
             procedure: a.belongsTo('Procedure', 'procedureId'),
             role: a.enum(['USER', 'ASSISTANT', 'SYSTEM', 'TOOL']),
+            humanInteraction: a.enum([
+                'INTERNAL',           // Agent-only, hidden from human UI
+                'CHAT',               // Human message in conversation
+                'CHAT_ASSISTANT',     // AI response in conversation
+                'NOTIFICATION',       // Non-blocking notification from procedure
+                'ALERT_INFO',         // System info alert
+                'ALERT_WARNING',      // System warning alert
+                'ALERT_ERROR',        // System error alert
+                'ALERT_CRITICAL',     // System critical alert
+                'PENDING_APPROVAL',   // Waiting for yes/no from human
+                'PENDING_INPUT',      // Waiting for free-form input
+                'PENDING_REVIEW',     // Waiting for human review
+                'PENDING_ESCALATION', // Escalated to human, blocks indefinitely
+                'RESPONSE',           // Human's response to pending request
+                'TIMED_OUT',          // Request expired without response
+                'CANCELLED'           // Request was cancelled
+            ]),
             content: a.string().required(),
             metadata: a.json(),
             messageType: a.enum(['MESSAGE', 'TOOL_CALL', 'TOOL_RESPONSE']),
@@ -989,7 +989,7 @@ const schema = a.schema({
             parentMessage: a.belongsTo('ChatMessage', 'parentMessageId'),
             childMessages: a.hasMany('ChatMessage', 'parentMessageId'),
             sequenceNumber: a.integer(), // Order within the session for proper conversation flow
-            createdAt: a.datetime().required(),
+            createdAt: a.datetime().required()
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -999,7 +999,9 @@ const schema = a.schema({
             idx("sessionId").sortKeys(["sequenceNumber"]),
             idx("sessionId").sortKeys(["createdAt"]),
             idx("procedureId").sortKeys(["createdAt"]),
-            idx("parentMessageId")
+            idx("parentMessageId"),
+            idx("humanInteraction").sortKeys(["createdAt"]),
+            idx("accountId").sortKeys(["createdAt"])
         ]),
 });
 
