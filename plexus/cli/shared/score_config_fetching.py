@@ -18,7 +18,7 @@ from plexus.cli.shared.direct_memoized_resolvers import (
     direct_memoized_resolve_score_identifier
 )
 from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
-from plexus.cli.shared import get_score_yaml_path
+from plexus.cli.shared import get_score_yaml_path, get_score_guidelines_path
 
 
 def fetch_and_cache_single_score(
@@ -27,13 +27,13 @@ def fetch_and_cache_single_score(
     score_identifier: str,
     use_cache: bool = False,
     verbose: bool = False
-) -> Tuple[Dict[str, Any], Path, bool]:
+) -> Tuple[Dict[str, Any], Path, Path, bool]:
     """
-    Fetch a single score configuration from the API and cache it locally.
-    
-    This function is a unified implementation that combines the best aspects of 
+    Fetch a single score configuration and guidelines from the API and cache them locally.
+
+    This function is a unified implementation that combines the best aspects of
     both the score pull command and the evaluation command approach.
-    
+
     Args:
         client: The GraphQL API client
         scorecard_identifier: Identifier for the scorecard (ID, key, name, external ID)
@@ -42,13 +42,14 @@ def fetch_and_cache_single_score(
                    When False (default), always fetch from API but still update cache
                    When True, check local cache first and only fetch if not found
         verbose: Whether to enable verbose logging
-        
+
     Returns:
-        Tuple of (score_configuration, yaml_path, from_cache)
+        Tuple of (score_configuration, yaml_path, guidelines_path, from_cache)
         - score_configuration: The parsed score configuration as a dictionary
         - yaml_path: The path to the cached YAML file
+        - guidelines_path: The path to the cached guidelines markdown file
         - from_cache: Whether the configuration was loaded from cache
-        
+
     Raises:
         ValueError: If scorecard or score cannot be found
     """
@@ -116,10 +117,11 @@ def fetch_and_cache_single_score(
         logging.info(f"Found score: {score_name} (ID: {score_id})")
         logging.info(f"Champion version ID: {champion_version_id}")
     
-    # 4. Determine cache path and check if it exists
+    # 4. Determine cache paths and check if they exist
     yaml_path = get_score_yaml_path(scorecard_name, score_name)
+    guidelines_path = get_score_guidelines_path(scorecard_name, score_name)
     from_cache = False
-    
+
     if use_cache and yaml_path.exists() and yaml_path.stat().st_size > 0:
         # Load from cache if requested and available
         try:
@@ -127,14 +129,14 @@ def fetch_and_cache_single_score(
             yaml.preserve_quotes = True
             with open(yaml_path, 'r') as f:
                 config = yaml.load(f)
-            
+
             # Ensure consistent handling of IDs as strings
             if isinstance(config, dict) and 'id' in config and not isinstance(config['id'], str):
                 config['id'] = str(config['id'])
-            
+
             from_cache = True
-            
-            return config, yaml_path, from_cache
+
+            return config, yaml_path, guidelines_path, from_cache
         except Exception as e:
             # If there's any error loading from cache, fall back to API
             logging.warning(f"Error loading from cache, falling back to API: {str(e)}")
@@ -147,6 +149,7 @@ def fetch_and_cache_single_score(
             getScoreVersion(id: "{champion_version_id}") {{
                 id
                 configuration
+                guidelines
                 createdAt
                 updatedAt
                 note
@@ -164,48 +167,57 @@ def fetch_and_cache_single_score(
             logging.error(error_msg)
             raise ValueError(error_msg)
         
-        # 6. Parse and save the configuration
+        # 6. Parse and save the configuration and guidelines
         try:
             content = version_data.get('configuration')
-            
+            guidelines = version_data.get('guidelines', '')
+
             # Initialize ruamel.yaml with the same settings as score pull uses
             yaml = YAML()
             yaml.preserve_quotes = True
             yaml.width = 4096  # Prevent line wrapping
-            
+
             # Configure YAML formatting
             yaml.indent(mapping=2, sequence=4, offset=2)
             yaml.map_indent = 2
             yaml.sequence_indent = 4
             yaml.sequence_dash_offset = 2
-            
+
             # Configure literal block style for system_message and user_message
             def literal_presenter(dumper, data):
                 if isinstance(data, str) and "\n" in data:
                     return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
                 return dumper.represent_scalar('tag:yaml.org,2002:str', data)
-            
+
             yaml.representer.add_representer(str, literal_presenter)
-            
+
             # Parse the YAML content
             config = yaml.load(content)
-            
+
             # Add version ID if not present (for consistency with other operations)
             if isinstance(config, dict):
                 # Ensure ID is a string (if present)
                 if 'id' in config and not isinstance(config['id'], str):
                     config['id'] = str(config['id'])
-                
+
                 # Add version if not present
                 if 'version' not in config:
                     config['version'] = champion_version_id
-            
-            # Write to file
+
+            # Write YAML to file
             with open(yaml_path, 'w') as f:
                 yaml.dump(config, f)
-            
-            
-            return config, yaml_path, from_cache
+
+            # Write guidelines to file (always create file, even if empty)
+            with open(guidelines_path, 'w') as f:
+                if guidelines and guidelines.strip():
+                    f.write(guidelines)
+                else:
+                    # Write placeholder text if guidelines are empty
+                    f.write("*No guidelines specified for this score.*\n")
+
+
+            return config, yaml_path, guidelines_path, from_cache
             
         except Exception as e:
             error_msg = f"Error parsing or saving YAML content: {str(e)}"

@@ -254,8 +254,8 @@ function ChatMessage({
   )
 }
 
-const meta: Meta<typeof ChatMessage> = {
-  title: 'Experiments/ChatMessage',
+const meta = {
+  title: 'Chat/Internal/Single Message Component',
   component: ChatMessage,
   parameters: {
     layout: 'fullscreen',
@@ -277,7 +277,7 @@ const meta: Meta<typeof ChatMessage> = {
       </div>
     ),
   ],
-}
+} satisfies Meta<typeof ChatMessage>
 
 export default meta
 type Story = StoryObj<typeof meta>

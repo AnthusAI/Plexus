@@ -288,6 +288,7 @@ class TestProcedure(unittest.TestCase):
             # Verify node creation
             mock_node_class.create.assert_called_once_with(
                 client=self.mock_client,
+                accountId='account-789',  # Added accountId parameter
                 procedureId='exp-123',
                 parentNodeId=None,
                 status='ACTIVE'

@@ -4101,10 +4101,17 @@ async def test_graph_visualization_error_handling():
             with patch('builtins.open', side_effect=PermissionError("Permission denied")), \
                  patch('os.makedirs'), \
                  patch('logging.error') as mock_log_error:
-                
+
+                # Mock the graph to return dummy PNG data so we reach the file write operation
+                mock_graph = MagicMock()
+                mock_graph.draw_mermaid_png.return_value = b"fake png data"
+                mock_graph.nodes = []
+                mock_graph.edges = []
+                instance.workflow.get_graph = MagicMock(return_value=mock_graph)
+
                 with pytest.raises(PermissionError):
                     instance.generate_graph_visualization("/root/no_permission.png")
-                
+
                 # Should log the error
                 mock_log_error.assert_called()
                 

@@ -46,7 +46,9 @@ class Procedure(BaseModel):
         rootNodeId: Optional[str] = None,
         code: Optional[str] = None,
         state: Optional[str] = None,
-        templateId: Optional[str] = None,
+        parentProcedureId: Optional[str] = None,  # Changed from templateId
+        templateId: Optional[str] = None,  # Keep for backward compatibility
+        isTemplate: Optional[bool] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         scoreVersionId: Optional[str] = None,
@@ -56,7 +58,10 @@ class Procedure(BaseModel):
         self.featured = featured
         self.code = code
         self.state = state
-        self.templateId = templateId
+        # Use parentProcedureId if provided, otherwise fall back to templateId for backward compat
+        self.parentProcedureId = parentProcedureId or templateId
+        self.templateId = parentProcedureId or templateId  # Keep both for backward compat
+        self.isTemplate = isTemplate
         self.rootNodeId = rootNodeId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -71,7 +76,8 @@ class Procedure(BaseModel):
             id
             featured
             code
-            templateId
+            parentProcedureId
+            isTemplate
             rootNodeId
             createdAt
             updatedAt
@@ -91,7 +97,8 @@ class Procedure(BaseModel):
             featured=data.get('featured', False),
             code=data.get('code'),
             state=data.get('state'),
-            templateId=data.get('templateId'),
+            parentProcedureId=data.get('parentProcedureId'),
+            isTemplate=data.get('isTemplate'),
             rootNodeId=data.get('rootNodeId'),
             createdAt=created_at,
             updatedAt=updated_at,
@@ -107,42 +114,64 @@ class Procedure(BaseModel):
         cls,
         client: '_BaseAPIClient',
         accountId: str,
-        scorecardId: str,
-        scoreId: str,
+        scorecardId: Optional[str] = None,
+        scoreId: Optional[str] = None,
         featured: bool = False,
-        templateId: Optional[str] = None,
+        parentProcedureId: Optional[str] = None,
+        isTemplate: bool = False,
         code: Optional[str] = None,
         state: str = "start",
         scoreVersionId: Optional[str] = None
     ) -> 'Procedure':
         """Create a new procedure.
-        
+
         Args:
             client: The API client
             accountId: ID of the account this procedure belongs to
-            scorecardId: ID of the scorecard this procedure is associated with
-            scoreId: ID of the score this procedure is associated with
+            scorecardId: Optional ID of the scorecard this procedure is associated with
+            scoreId: Optional ID of the score this procedure is associated with
             featured: Whether this procedure should be featured
-            templateId: Optional ID of the template this procedure is based on
+            parentProcedureId: Optional ID of the parent procedure (if this is an instance)
+            isTemplate: Whether this procedure is a template (default: False)
             code: Optional YAML code for the procedure
             state: Initial state (default: "start")
-            
+            scoreVersionId: Optional ID of the score version
+
         Returns:
             The created Procedure instance
         """
-        logger.debug(f"Creating procedure for scorecard {scorecardId} and score {scoreId}")
-        
+        if scorecardId and scoreId:
+            logger.debug(f"Creating procedure for scorecard {scorecardId} and score {scoreId}")
+        else:
+            logger.debug(f"Creating standalone procedure")
+
+        # Generate name from code or use default
+        name = "Lua DSL Procedure"
+        if code:
+            # Try to extract name from YAML
+            try:
+                import yaml
+                yaml_data = yaml.safe_load(code)
+                if yaml_data and 'name' in yaml_data:
+                    name = yaml_data['name']
+            except:
+                pass
+
         input_data = {
             'accountId': accountId,
-            'scorecardId': scorecardId,
-            'scoreId': scoreId,
+            'name': name,
             'featured': featured,
-            'state': state
+            'isTemplate': isTemplate,
+            # Note: 'state' is NOT supported in CreateProcedureInput GraphQL schema
         }
-        
+
         # Add optional fields if provided
-        if templateId:
-            input_data['templateId'] = templateId
+        if scorecardId:
+            input_data['scorecardId'] = scorecardId
+        if scoreId:
+            input_data['scoreId'] = scoreId
+        if parentProcedureId:
+            input_data['parentProcedureId'] = parentProcedureId
         if code:
             input_data['code'] = code
         if scoreVersionId:
@@ -330,6 +359,7 @@ class Procedure(BaseModel):
         # Create the node
         node = GraphNode.create(
             client=self._client,
+            accountId=self.accountId,
             procedureId=self.id,
             parentNodeId=None,
             status='ACTIVE'
