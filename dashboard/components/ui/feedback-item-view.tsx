@@ -36,9 +36,9 @@ interface FeedbackItemViewProps {
   className?: string;
 }
 
-export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({ 
-  item, 
-  className 
+export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
+  item,
+  className
 }) => {
   // Format date to a more readable format
   const formatDate = (dateString?: string) => {
