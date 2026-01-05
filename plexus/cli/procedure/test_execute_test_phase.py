@@ -219,6 +219,10 @@ class TestExecuteTestPhase(unittest.IsolatedAsyncioTestCase):
 
         mock_graphnode.list_by_procedure.return_value = [node1, node2]
 
+        # Mock GraphNode.get_by_id to return updated node after version creation
+        updated_node1 = self._create_mock_node('node-1', has_version=True)
+        mock_graphnode.get_by_id.return_value = updated_node1
+
         # Mock TestPhaseAgent with one success, one failure
         mock_agent = Mock()
         mock_agent_class.return_value = mock_agent

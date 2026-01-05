@@ -83,7 +83,7 @@ def simple_lua_config():
     """Simple test Lua DSL configuration."""
     return """
 -- Procedure with outputs declared inline
-procedure({
+procedure("main", {
     outputs = {
         success = {
             type = "boolean",
@@ -106,12 +106,12 @@ procedure({
 
     Log.info("State test passed", {value = value})
 
-    -- Test checkpoint with Step.run (should persist to GraphQL via adapter)
-    local result = Step.run("test_checkpoint", function()
+    -- Test checkpoint (simplified - new API doesn't take names)
+    local result = Step.checkpoint(function()
         return {data = "checkpoint_data", status = "success"}
     end)
 
-    Log.info("Checkpoint saved", {result = result})
+    Log.info("Checkpoint executed", {result = result})
 
     return {
         success = true,
@@ -165,7 +165,7 @@ async def test_tactus_state_persistence(mock_plexus_client):
     """Test that state changes are persisted via PlexusStorageAdapter."""
 
     lua_config = """
-procedure({
+procedure("main", {
     outputs = {
         count = {
             type = "number",
@@ -212,7 +212,7 @@ async def test_tactus_checkpoint_persistence(mock_plexus_client):
     """Test that checkpoints are persisted via PlexusStorageAdapter."""
 
     lua_config = """
-procedure({
+procedure("main", {
     outputs = {
         checkpoint_exists = {
             type = "boolean",
@@ -220,19 +220,13 @@ procedure({
         }
     }
 }, function()
-    -- Save a checkpoint using Step.run
-    local step_result = Step.run("step1", function()
+    -- Save a checkpoint using Step.checkpoint (no name in new API)
+    local checkpoint_result = Step.checkpoint(function()
         return {status = "completed", data = "test_data"}
     end)
 
-    -- Check if it exists
-    local exists = Checkpoint.exists("step1")
-
-    -- Try to get it
-    local data = nil
-    if exists then
-        data = Checkpoint.get("step1")
-    end
+    -- The checkpoint should return the saved data
+    local exists = checkpoint_result ~= nil and checkpoint_result.status == "completed"
 
     return {checkpoint_exists = exists}
 end)

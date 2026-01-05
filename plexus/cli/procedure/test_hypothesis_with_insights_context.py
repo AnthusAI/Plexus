@@ -190,8 +190,14 @@ async def test_get_existing_experiment_nodes_includes_insights_context(
 
     procedure_id = "test-proc-id"
 
+    # Mock the Procedure.get_by_id call
+    mock_procedure = Mock()
+    mock_procedure.id = procedure_id
+    mock_procedure.scoreId = "test-score-id"
+    mock_procedure.scorecardId = "test-scorecard-id"
+
     with patch('plexus.dashboard.api.models.graph_node.GraphNode.list_by_procedure', return_value=mock_nodes_with_insights), \
-         patch('plexus.dashboard.api.models.procedure.Procedure.get_by_id', return_value=Mock(id=procedure_id)):
+         patch('plexus.dashboard.api.models.procedure.Procedure.get_by_id', return_value=mock_procedure):
         result = await procedure_service._get_existing_experiment_nodes(procedure_id)
 
         # Verify insights section is present
@@ -221,8 +227,14 @@ async def test_insights_context_ordering(
 
     procedure_id = "test-proc-id"
 
+    # Mock the Procedure.get_by_id call
+    mock_procedure = Mock()
+    mock_procedure.id = procedure_id
+    mock_procedure.scoreId = "test-score-id"
+    mock_procedure.scorecardId = "test-scorecard-id"
+
     with patch('plexus.dashboard.api.models.graph_node.GraphNode.list_by_procedure', return_value=mock_nodes_with_insights), \
-         patch('plexus.dashboard.api.models.procedure.Procedure.get_by_id', return_value=Mock(id=procedure_id)):
+         patch('plexus.dashboard.api.models.procedure.Procedure.get_by_id', return_value=mock_procedure):
         result = await procedure_service._get_existing_experiment_nodes(procedure_id)
 
         # Find positions of key sections
@@ -284,8 +296,14 @@ async def test_multiple_insights_rounds_ordering(procedure_service):
 
     all_nodes = [root, insights1, insights2, insights3]
 
+    # Mock the Procedure.get_by_id call
+    mock_procedure = Mock()
+    mock_procedure.id = 'test-proc-id'
+    mock_procedure.scoreId = "test-score-id"
+    mock_procedure.scorecardId = "test-scorecard-id"
+
     with patch('plexus.dashboard.api.models.graph_node.GraphNode.list_by_procedure', return_value=all_nodes), \
-         patch('plexus.dashboard.api.models.procedure.Procedure.get_by_id', return_value=Mock(id='test-proc-id')):
+         patch('plexus.dashboard.api.models.procedure.Procedure.get_by_id', return_value=mock_procedure):
         result = await procedure_service._get_existing_experiment_nodes('test-proc-id')
 
         # Check that rounds appear in order

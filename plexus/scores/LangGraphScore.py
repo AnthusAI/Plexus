@@ -24,7 +24,7 @@ from langgraph.graph import StateGraph, END
 
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
-from langchain.globals import set_debug, set_verbose
+from langchain_core.globals import set_debug, set_verbose
 # Only enable debug for very specific debugging scenarios
 debug_mode = os.getenv('LANGCHAIN_DEBUG', '').lower() in ['true', '1', 'yes']
 if debug_mode:

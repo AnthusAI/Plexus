@@ -93,109 +93,161 @@ class DataSource(BaseModel):
 
     @classmethod
     async def list(cls, client: PlexusDashboardClient, filter: Optional[Dict] = None) -> List[DataSource]:
-        """List DataSources with optional filtering."""
+        """List DataSources with optional filtering and pagination."""
         query = f"""
-            query ListDataSources($filter: ModelDataSourceFilterInput) {{
-                listDataSources(filter: $filter) {{
+            query ListDataSources($filter: ModelDataSourceFilterInput, $limit: Int, $nextToken: String) {{
+                listDataSources(filter: $filter, limit: $limit, nextToken: $nextToken) {{
                     items {{
                         {cls.fields()}
                     }}
+                    nextToken
                 }}
             }}
         """
-        variables = {"filter": filter} if filter else {}
-        response = client.execute(query, variables)
-        items = response.get('listDataSources', {}).get('items', [])
-        return [cls.from_dict(item, client) for item in items]
+
+        # Paginate through all results
+        all_items = []
+        next_token = None
+
+        while True:
+            variables = {"limit": 1000}
+            if filter:
+                variables["filter"] = filter
+            if next_token:
+                variables["nextToken"] = next_token
+
+            response = client.execute(query, variables)
+            items = response.get('listDataSources', {}).get('items', [])
+            next_token = response.get('listDataSources', {}).get('nextToken')
+
+            all_items.extend(items)
+            logging.debug(f"Fetched {len(items)} items, total so far: {len(all_items)}")
+
+            if not next_token:
+                break
+
+        logging.debug(f"Found {len(all_items)} total items across all pages")
+        return [cls.from_dict(item, client) for item in all_items]
 
     @classmethod
     async def list_by_key(cls, client: PlexusDashboardClient, key: str) -> List[DataSource]:
-        """Fetch DataSources by key using the GSI."""
+        """Fetch DataSources by key using GSI with pagination."""
         logging.debug(f"list_by_key called with key: {key}")
-        
+
         account_key = os.environ.get('PLEXUS_ACCOUNT_KEY')
         logging.debug(f"PLEXUS_ACCOUNT_KEY: {account_key}")
         if not account_key:
             logging.error("PLEXUS_ACCOUNT_KEY not found in environment")
             return []
-            
+
         account = Account.get_by_key(account_key, client)
         if not account:
             logging.error(f"Account not found for key: {account_key}")
             return []
         logging.debug(f"Found account: {account.id} ({account.name})")
 
-        # After Stage 1 deployment, we'll use the account-isolated query
-        # For now, use the non-isolated query until Stage 1 is deployed
+        # Use the account-scoped GSI query
         query = f"""
-            query ListDataSourceByKey($key: String!) {{
-                listDataSourceByKey(key: $key) {{
+            query ListDataSourceByAccountIdAndKey($accountId: String!, $key: ModelStringKeyConditionInput, $limit: Int, $nextToken: String) {{
+                listDataSourceByAccountIdAndKey(accountId: $accountId, key: $key, limit: $limit, nextToken: $nextToken) {{
                     items {{
                         {cls.fields()}
                     }}
+                    nextToken
                 }}
             }}
         """
-        variables = {"key": key}
-        
-        logging.debug(f"Executing GraphQL query: {query}")
-        logging.debug(f"Query variables: {variables}")
-        
-        response = client.execute(query, variables)
-        logging.debug(f"GraphQL response: {response}")
-        
-        items = response.get('listDataSourceByKey', {}).get('items', [])
-        logging.debug(f"Found {len(items)} items")
-        
-        # Filter by account ID since the query is not account-isolated yet
-        account_filtered_items = [item for item in items if item.get('accountId') == account.id]
-        logging.debug(f"Found {len(account_filtered_items)} items after account filtering")
-        
-        return [cls.from_dict(item, client) for item in account_filtered_items]
+
+        # Paginate through all results
+        all_items = []
+        next_token = None
+
+        while True:
+            variables = {
+                "accountId": account.id,
+                "key": {"eq": key},
+                "limit": 1000
+            }
+            if next_token:
+                variables["nextToken"] = next_token
+
+            logging.debug(f"Executing GraphQL query with variables: {variables}")
+
+            response = client.execute(query, variables)
+            logging.debug(f"GraphQL response: {response}")
+
+            items = response.get('listDataSourceByAccountIdAndKey', {}).get('items', [])
+            next_token = response.get('listDataSourceByAccountIdAndKey', {}).get('nextToken')
+
+            all_items.extend(items)
+            logging.debug(f"Fetched {len(items)} items, total so far: {len(all_items)}")
+
+            if not next_token:
+                break
+
+        logging.debug(f"Found {len(all_items)} total items across all pages")
+
+        return [cls.from_dict(item, client) for item in all_items]
 
     @classmethod
     async def list_by_name(cls, client: PlexusDashboardClient, name: str) -> List[DataSource]:
-        """Fetch DataSources by name using the GSI."""
+        """Fetch DataSources by name using GSI with pagination."""
         logging.debug(f"list_by_name called with name: {name}")
-        
+
         account_key = os.environ.get('PLEXUS_ACCOUNT_KEY')
         logging.debug(f"PLEXUS_ACCOUNT_KEY: {account_key}")
         if not account_key:
             logging.error("PLEXUS_ACCOUNT_KEY not found in environment")
             return []
-            
+
         account = Account.get_by_key(account_key, client)
         if not account:
             logging.error(f"Account not found for key: {account_key}")
             return []
         logging.debug(f"Found account: {account.id} ({account.name})")
 
-        # Use the non-isolated query since schema was reverted
+        # Use the account-scoped GSI query
         query = f"""
-            query ListDataSourceByName($name: String!) {{
-                listDataSourceByName(name: $name) {{
+            query ListDataSourceByAccountIdAndName($accountId: String!, $name: ModelStringKeyConditionInput, $limit: Int, $nextToken: String) {{
+                listDataSourceByAccountIdAndName(accountId: $accountId, name: $name, limit: $limit, nextToken: $nextToken) {{
                     items {{
                         {cls.fields()}
                     }}
+                    nextToken
                 }}
             }}
         """
-        variables = {"name": name}
-        
-        logging.debug(f"Executing GraphQL query: {query}")
-        logging.debug(f"Query variables: {variables}")
-        
-        response = client.execute(query, variables)
-        logging.debug(f"GraphQL response: {response}")
-        
-        items = response.get('listDataSourceByName', {}).get('items', [])
-        logging.debug(f"Found {len(items)} items")
-        
-        # Filter by account ID since the query is not account-isolated
-        account_filtered_items = [item for item in items if item.get('accountId') == account.id]
-        logging.debug(f"Found {len(account_filtered_items)} items after account filtering")
-        
-        return [cls.from_dict(item, client) for item in account_filtered_items]
+
+        # Paginate through all results
+        all_items = []
+        next_token = None
+
+        while True:
+            variables = {
+                "accountId": account.id,
+                "name": {"eq": name},
+                "limit": 1000
+            }
+            if next_token:
+                variables["nextToken"] = next_token
+
+            logging.debug(f"Executing GraphQL query with variables: {variables}")
+
+            response = client.execute(query, variables)
+            logging.debug(f"GraphQL response: {response}")
+
+            items = response.get('listDataSourceByAccountIdAndName', {}).get('items', [])
+            next_token = response.get('listDataSourceByAccountIdAndName', {}).get('nextToken')
+
+            all_items.extend(items)
+            logging.debug(f"Fetched {len(items)} items, total so far: {len(all_items)}")
+
+            if not next_token:
+                break
+
+        logging.debug(f"Found {len(all_items)} total items across all pages")
+
+        return [cls.from_dict(item, client) for item in all_items]
 
     @classmethod
     async def get_by_name(cls, name: str, client: PlexusDashboardClient) -> Optional[DataSource]:

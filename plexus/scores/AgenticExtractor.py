@@ -2,7 +2,8 @@ from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
 from typing import Dict, TypedDict, Optional, Literal, Annotated
-from langchain.output_parsers import ResponseSchema, StructuredOutputParser
+from pydantic import BaseModel, Field
+from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_openai import ChatOpenAI
@@ -10,7 +11,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages, AnyMessage
 
 # Logging.
-# from langchain.globals import set_debug
+# from langchain_core.globals import set_debug
 # set_debug(True)
 
 class ExtractorState(TypedDict):
@@ -19,7 +20,12 @@ class ExtractorState(TypedDict):
     entity: Optional[str]
     quote: Optional[str]
     validation_error: Optional[str]
-    
+
+class EntityExtractionResult(BaseModel):
+    """Structured output for entity extraction."""
+    entity: str = Field(description="entity in the text")
+    quote: str = Field(description="related quote(s) from the text that include the entity")
+
 class AgenticExtractor(LangGraphScore):
     
     class Parameters(LangGraphScore.Parameters):
@@ -40,12 +46,8 @@ class AgenticExtractor(LangGraphScore):
         def extract_entity_node(state: ExtractorState) -> Dict[str, str]:
             logging.info("start extract_entity_node()")
             logging.info(f"text: {state['text']}")
-            
-            response_schemas = [
-                ResponseSchema(name="entity", description="entity in the text"),
-                ResponseSchema(name="quote", description="related quote(s) from the text that include the entity"),
-            ]
-            output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
+
+            output_parser = PydanticOutputParser(pydantic_object=EntityExtractionResult)
 
 
             template_string = """
@@ -83,8 +85,8 @@ This is the text of a call center phone call that we're reviewing for QA purpose
 
             return {
                 "messages": output,
-                "entity":   result["entity"],
-                "quote":    result["quote"]
+                "entity":   result.entity,
+                "quote":    result.quote
             }
         
         def verify_entity_node(state: ExtractorState) -> Dict[str, str]:

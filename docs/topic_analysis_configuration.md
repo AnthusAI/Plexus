@@ -8,9 +8,10 @@ This guide documents the configuration options for the Topic Analysis report blo
 2. [Basic Configuration](#basic-configuration)
 3. [N-gram Export Configuration](#n-gram-export-configuration)
 4. [Topic Stability Assessment](#topic-stability-assessment)
-5. [Complete Configuration Example](#complete-configuration-example)
-6. [Output Files](#output-files)
-7. [Frontend Display](#frontend-display)
+5. [Stop Words Filtering](#stop-words-filtering)
+6. [Complete Configuration Example](#complete-configuration-example)
+7. [Output Files](#output-files)
+8. [Frontend Display](#frontend-display)
 
 ## Overview
 
@@ -155,6 +156,162 @@ In the dashboard, stability metrics are displayed in a dedicated section:
 - **Methodology information** explaining how stability was calculated
 - **Interpretation guide** helping understand the scores
 
+## Stop Words Filtering
+
+Stop words filtering helps improve topic quality by removing common words and patterns that don't add semantic value to your analysis.
+
+### Configuration
+
+```yaml
+bertopic_analysis:
+  # ... other parameters ...
+
+  # Stop words filtering
+  remove_stop_words: true
+  stop_words_languages: ["english", "spanish"]  # Optional, defaults to both
+  custom_stop_words:
+    - customer      # Literal word to exclude
+    - agent         # Literal word to exclude
+    - windows       # Literal word to exclude
+    - andersen      # Literal word to exclude
+    - '^\d+$'       # Regex pattern: exclude pure numbers
+    - '^[A-Z]{2,}$' # Regex pattern: exclude all-caps acronyms
+  min_df: 3         # Minimum document frequency
+```
+
+### Parameters
+
+- **`remove_stop_words`** (bool, default: false): Enable stop words filtering
+  - When enabled, common words from NLTK stop words corpus are filtered out
+  - Filters entire n-grams if any token within them is a stop word
+
+- **`stop_words_languages`** (string or list, optional): Languages for stop words
+  - Single language: `"english"`
+  - Multiple languages: `["english", "spanish"]`
+  - Default: `["english", "spanish"]` when `remove_stop_words` is true
+  - Supports any NLTK-supported language (french, german, portuguese, italian, etc.)
+
+- **`custom_stop_words`** (list, optional): Additional words or patterns to filter
+  - **Literal words**: Simple strings are treated as exact matches (case-insensitive)
+  - **Regex patterns**: Strings with regex special characters are treated as patterns
+  - Patterns are automatically detected by presence of regex metacharacters (`^`, `$`, `.`, `*`, `+`, `?`, `{`, `}`, `[`, `]`, `(`, `)`, `|`, `\`)
+
+- **`min_df`** (int, default: 1): Minimum document frequency
+  - Filters out n-grams that appear in fewer than this many documents
+  - Helps remove very rare terms
+  - Recommended: 2-5 for better quality
+
+### Custom Stop Words Examples
+
+#### Literal Words
+```yaml
+custom_stop_words:
+  - customer       # Filters exact word "customer"
+  - agent          # Filters exact word "agent"
+  - "hello there"  # Filters exact phrase
+```
+
+#### Regex Patterns
+```yaml
+custom_stop_words:
+  - '^\d+$'           # Pure numbers (123, 456, etc.)
+  - '^[A-Z]{2,}$'     # All-caps words (USA, API, etc.)
+  - '.*@.*'           # Email-like patterns
+  - '^(yes|no|ok)$'   # Specific alternatives
+  - '\d{3}-\d{4}'     # Phone number patterns
+```
+
+#### Combined Example
+```yaml
+custom_stop_words:
+  - customer
+  - agent
+  - windows
+  - '^\d+$'          # Numbers
+  - '^[A-Z]+$'       # Acronyms
+  - '(um|uh|hmm)'    # Filler words
+```
+
+### How It Works
+
+When `remove_stop_words` is enabled with custom stop words:
+
+1. **Base stop words** are loaded from NLTK for specified languages
+2. **Literal custom words** are added to the stop words set
+3. **Regex patterns** are compiled and validated
+4. During analysis, each token is checked:
+   - Against literal stop words (exact match)
+   - Against regex patterns (using `re.fullmatch()`)
+5. **Entire n-grams are filtered** if any token matches
+
+### Example Output
+
+With configuration:
+```yaml
+custom_stop_words:
+  - customer
+  - agent
+  - '^\d+$'
+```
+
+**Input text:**
+```
+Customer called about order 12345. Agent helped with windows installation.
+```
+
+**Without filtering:**
+```
+customer, called, order, 12345, agent, helped, windows, installation
+```
+
+**With filtering:**
+```
+called, order, helped, windows, installation
+```
+(Removed: "customer", "agent", "12345")
+
+### Performance Considerations
+
+- **Regex patterns**: Slightly slower than literal matches
+  - Performance impact is minimal for typical use cases
+  - Patterns are compiled once and reused
+
+- **Number of patterns**: More patterns = slightly longer processing
+  - Up to 20-30 patterns have negligible impact
+  - Consider consolidating patterns when possible
+
+### Best Practices
+
+1. **Start with base stop words** before adding custom ones:
+   ```yaml
+   remove_stop_words: true
+   # Test with default first, then add custom
+   ```
+
+2. **Use literal words for domain-specific terms**:
+   ```yaml
+   custom_stop_words:
+     - customer
+     - agent
+     - representative
+   ```
+
+3. **Use regex for patterns**:
+   ```yaml
+   custom_stop_words:
+     - '^\d+$'          # All numbers
+     - '^[A-Z]{2,}$'    # Acronyms
+   ```
+
+4. **Test incrementally**:
+   - Add a few stop words at a time
+   - Check the n-gram export to verify filtering
+   - Adjust based on results
+
+5. **Don't over-filter**:
+   - Too many stop words can remove meaningful content
+   - Review topic quality after adding filters
+
 ## Complete Configuration Example
 
 Here's a comprehensive example with all features enabled:
@@ -189,11 +346,15 @@ bertopic_analysis:
   
   # Stop words filtering
   remove_stop_words: true
+  stop_words_languages: ["english", "spanish"]
   custom_stop_words:
-    - "called to"
-    - "wanted to"
-    - "needed to"
-  min_df: 2
+    - customer       # Literal word
+    - agent          # Literal word
+    - windows        # Literal word
+    - andersen       # Literal word
+    - '^\d+$'        # Regex: pure numbers
+    - '^[A-Z]{2,}$'  # Regex: all-caps acronyms
+  min_df: 3
   
   # N-gram export configuration
   max_ngrams_per_topic: 100

@@ -3014,12 +3014,14 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--score', 'score', required=True, help='Score identifier (ID, name, key, or external ID). REQUIRED - feedback evaluations must be run on a single score.')
 @click.option('--days', default=7, type=int, help='Number of days to look back for feedback items (default: 7)')
 @click.option('--version', default=None, type=str, help='Specific score version ID to evaluate. If provided, runs accuracy evaluation with FeedbackItems dataset.')
+@click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 def feedback(
     scorecard: str,
     score: str,
     days: int,
     version: Optional[str],
+    use_yaml: bool,
     task_id: Optional[str]
 ):
     """
@@ -3113,7 +3115,7 @@ def feedback(
             score_external_id = score_obj.externalId if score_obj and score_obj.externalId else score
             
             console.print(f"Using score identifier: {score_external_id}")
-            
+
             # Create a temporary YAML file with FeedbackItems dataset override
             dataset_config = {
                 "class": "FeedbackItems",
@@ -3121,56 +3123,85 @@ def feedback(
                 "score": score_external_id,  # Use external ID if available, otherwise the identifier
                 "days": days
             }
-            
-            # Load the scorecard YAML
-            scorecard_yaml_path = f"scorecards/{scorecard}"
-            if not os.path.exists(scorecard_yaml_path):
-                # Try with .yaml extension
-                scorecard_yaml_path = f"scorecards/{scorecard}.yaml"
-            
-            # Check if it's a directory (individual score files) or a single YAML file
-            if os.path.isdir(scorecard_yaml_path):
-                # It's a directory with individual score YAML files
-                # Look for the score's YAML file in the directory
-                score_yaml_filename = f"{score_external_id}.yaml"
-                score_yaml_path = os.path.join(scorecard_yaml_path, score_yaml_filename)
-                
-                if not os.path.exists(score_yaml_path):
-                    # Try with score name
-                    score_yaml_path = os.path.join(scorecard_yaml_path, f"{score}.yaml")
-                
-                if not os.path.exists(score_yaml_path):
-                    console.print(f"[bold red]Error: Could not find score YAML at {score_yaml_path}[/bold red]")
-                    console.print(f"[dim]Available files in {scorecard_yaml_path}:[/dim]")
-                    for f in os.listdir(scorecard_yaml_path):
-                        if f.endswith('.yaml'):
-                            console.print(f"[dim]  - {f}[/dim]")
+
+            # Load scorecard based on --yaml flag
+            if use_yaml:
+                # Load from local YAML files
+                console.print("[dim]Loading scorecard from local YAML files...[/dim]")
+                scorecard_yaml_path = f"scorecards/{scorecard}"
+                if not os.path.exists(scorecard_yaml_path):
+                    # Try with .yaml extension
+                    scorecard_yaml_path = f"scorecards/{scorecard}.yaml"
+
+                # Check if it's a directory (individual score files) or a single YAML file
+                if os.path.isdir(scorecard_yaml_path):
+                    # It's a directory with individual score YAML files
+                    # Look for the score's YAML file in the directory
+                    score_yaml_filename = f"{score_external_id}.yaml"
+                    score_yaml_path = os.path.join(scorecard_yaml_path, score_yaml_filename)
+
+                    if not os.path.exists(score_yaml_path):
+                        # Try with score name
+                        score_yaml_path = os.path.join(scorecard_yaml_path, f"{score}.yaml")
+
+                    if not os.path.exists(score_yaml_path):
+                        console.print(f"[bold red]Error: Could not find score YAML at {score_yaml_path}[/bold red]")
+                        console.print(f"[dim]Available files in {scorecard_yaml_path}:[/dim]")
+                        for f in os.listdir(scorecard_yaml_path):
+                            if f.endswith('.yaml'):
+                                console.print(f"[dim]  - {f}[/dim]")
+                        return
+
+                    # Load the individual score YAML
+                    with open(score_yaml_path, 'r') as f:
+                        score_data = yaml.safe_load(f)
+
+                    # Ensure score_data has a 'name' field
+                    if 'name' not in score_data:
+                        score_data['name'] = score
+
+                    # Create a minimal scorecard structure with just this score
+                    # Include key and id if available from the resolved scorecard
+                    scorecard_data = {
+                        'name': scorecard,
+                        'key': scorecard.lower().replace(' ', '_').replace('-', '_'),
+                        'id': scorecard_id,  # Use the resolved scorecard ID
+                        'scores': [score_data]
+                    }
+                    console.print(f"[dim]Loaded score YAML from: {score_yaml_path}[/dim]")
+                elif os.path.isfile(scorecard_yaml_path):
+                    # It's a single YAML file with all scores
+                    with open(scorecard_yaml_path, 'r') as f:
+                        scorecard_data = yaml.safe_load(f)
+                else:
+                    console.print(f"[bold red]Error: Could not find scorecard YAML at {scorecard_yaml_path}[/bold red]")
                     return
-                
-                # Load the individual score YAML
-                with open(score_yaml_path, 'r') as f:
-                    score_data = yaml.safe_load(f)
-                
-                # Ensure score_data has a 'name' field
-                if 'name' not in score_data:
-                    score_data['name'] = score
-                
-                # Create a minimal scorecard structure with just this score
-                # Include key and id if available from the resolved scorecard
-                scorecard_data = {
-                    'name': scorecard,
-                    'key': scorecard.lower().replace(' ', '_').replace('-', '_'),
-                    'id': scorecard_id,  # Use the resolved scorecard ID
-                    'scores': [score_data]
-                }
-                console.print(f"[dim]Loaded score YAML from: {score_yaml_path}[/dim]")
-            elif os.path.isfile(scorecard_yaml_path):
-                # It's a single YAML file with all scores
-                with open(scorecard_yaml_path, 'r') as f:
-                    scorecard_data = yaml.safe_load(f)
             else:
-                console.print(f"[bold red]Error: Could not find scorecard YAML at {scorecard_yaml_path}[/bold red]")
-                return
+                # Load from API (default behavior)
+                console.print("[dim]Loading scorecard from API...[/dim]")
+                try:
+                    # Use load_scorecard_from_api to fetch the scorecard configuration
+                    # This uses the reusable identifier resolution and fetches from API
+                    scorecard_instance = load_scorecard_from_api(
+                        scorecard_identifier=scorecard,
+                        score_names=[score],
+                        use_cache=False,
+                        specific_version=version
+                    )
+
+                    # Extract the scorecard data structure from the loaded instance
+                    # We need to convert it to a dictionary format for the rest of the code
+                    scorecard_data = {
+                        'id': scorecard_id,
+                        'name': scorecard_instance.properties.get('name', scorecard) if hasattr(scorecard_instance, 'properties') else scorecard,
+                        'key': scorecard_instance.properties.get('key', scorecard.lower().replace(' ', '_').replace('-', '_')) if hasattr(scorecard_instance, 'properties') else scorecard.lower().replace(' ', '_').replace('-', '_'),
+                        'scores': scorecard_instance.scores if hasattr(scorecard_instance, 'scores') else []
+                    }
+                    console.print(f"[dim]Loaded scorecard from API: {scorecard_data['name']}[/dim]")
+                except Exception as e:
+                    console.print(f"[bold red]Error loading scorecard from API: {str(e)}[/bold red]")
+                    console.print(f"[dim]Hint: Use --yaml flag if you want to load from local YAML files[/dim]")
+                    return
             
             # Override the data section for the specific score
             if 'scores' in scorecard_data:

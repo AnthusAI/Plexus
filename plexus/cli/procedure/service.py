@@ -2951,7 +2951,7 @@ Based on this data, you should prioritize examining error types with the highest
                 overall_success = failed_eval_count == 0
                 total_nodes_successful = successful_eval_count
                 total_nodes_failed = failed_eval_count
-                message = f"Test phase complete: {len(nodes_needing_versions)} versions created, {len(nodes_to_evaluate)} evaluated ({successful_eval_count} successful, {failed_eval_count} failed)"
+                message = f"Test phase complete: {successful_version_creation_count} versions created, {len(nodes_to_evaluate)} evaluated ({successful_eval_count} successful, {failed_eval_count} failed)"
 
             total_nodes_processed = len(nodes_needing_versions) + len(nodes_needing_evaluation)
 
