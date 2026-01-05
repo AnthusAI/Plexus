@@ -5,9 +5,18 @@ description: The format for guidelines documents for Plexus scorecard scores and
 
 ## Instructions
 
-This skill helps create and update classifier guidelines documents for Plexus scorecard score configurations.  The user will provide you with information from subject matter experts that will commonly come from emails and chat messages, and your job is to incorporate that information into the scorecard score guideslines documents in the standard format, with the required elements.  If there are any missing elements where you don't have enough information then ask the user for clarification.
+This skill helps create and update classifier guidelines documents for Plexus scorecard score configurations.  The user will provide you with information from subject matter experts that will commonly come from emails, chat messages, or other documents. **This source information may be formatted for different audiences (e.g., agent instructions, training materials, operational procedures) rather than for classifier design.**
 
-After you make any change to the guidelines you need to use the tool to validate the guideslines file.
+**Your job is to transform this information into the Plexus guidelines standard format**, which is specifically designed to help distinguish between classification classes. The guidelines must be organized around **how to tell the difference between classes** (e.g., what makes something "Yes" vs "No"), NOT around operational procedures or agent instructions.
+
+### Key Transformation Principles:
+
+1. **Source Format → Classifier Format**: Convert operational rules ("agents must do X") into classification criteria ("classify as No if X is missing")
+2. **Focus on Distinguishing Classes**: Organize information around "Definition of [Class]" and "Conditions for [Class]" sections
+3. **Make Conditional Logic Explicit**: When requirements depend on context (e.g., "if metadata contains X, then Y is required"), express both sides of the condition clearly in the classification criteria
+4. **Extract Classification Criteria**: Identify what observable features distinguish one class from another, even if the source material doesn't explicitly frame it that way
+
+After you make any change to the guidelines you need to use the tool to validate the guidelines file.
 
 You can use the Plexus MCP tools to pull score versions, including either the champion or specific versions.  And you can use the MCP tool for pushing new score versions with updated guidelines, after you make changes to the guidelines and validate the changes using the tool in this skill.  You may NOT push updates without first validating them, and you may not push guidelines documents that are invalid.  Making changes to the score configuration is out of scope for this skill, this is all about the guidelines.
 
@@ -70,7 +79,10 @@ When creating or updating guidelines:
 
 ## Key Principles
 
+- **Transform, don't copy** - Source material is often written for agents/operations; transform it into classifier decision criteria
+- **Classification-focused** - Guidelines must help distinguish between classes, not just describe procedures
 - **Required sections are non-negotiable** - guidelines documents must include all required sections
+- **Make conditionals explicit** - When classification depends on context (metadata, modality, etc.), state both branches clearly
 - **Work collaboratively** - if information is missing, ask the user rather than making assumptions
 - **Validate after every update** - always run the validation tool after modifying guidelines
 - **Preserve existing content** - when updating, maintain all existing sections unless explicitly asked to remove them
@@ -179,4 +191,21 @@ Let me validate this:
 [Shows results]
 
 The guidelines are now complete and valid. Would you like to add optional Examples sections?
+```
+
+**Example transformation scenario:**
+```
+User: Here are the agent instructions for branding requirements: "Agents must state school name, program name, degree type, and modality."
+
+Claude: I need to transform these agent instructions into classification criteria. Let me think about how to distinguish between Yes and No:
+
+For a binary classifier about branding compliance:
+- "Conditions for No" would include: "Rep fails to state school name" (converting "must state" into a failure condition)
+- "Conditions for Yes" would include: "Rep states school name" (the positive case)
+
+I also notice this rule might have conditional logic. Does the degree type requirement depend on anything (like whether it's in metadata)?
+
+[User clarifies conditional requirements]
+
+[Claude creates guidelines with explicit conditional logic in both Conditions for No and Conditions for Yes sections]
 ```
