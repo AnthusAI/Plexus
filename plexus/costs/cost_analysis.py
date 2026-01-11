@@ -9,11 +9,15 @@ It is designed to be shared by CLI commands, MCP tools, and ReportBlocks.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import json
+import logging
+import time
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_decimal(value: Any) -> Decimal:
@@ -108,7 +112,7 @@ class ScoreResultCostAnalyzer:
     """
 
     # Single-entry module-level cache
-    _LAST_CACHE_KEY: Optional[Tuple[str, int, Optional[str], Optional[str]]] = None
+    _LAST_CACHE_KEY: Optional[Tuple[Any, ...]] = None
     _LAST_CACHE_RESULTS: Optional[List[Dict[str, Any]]] = None
 
     def __init__(
@@ -117,6 +121,10 @@ class ScoreResultCostAnalyzer:
         account_id: str,
         days: int = 7,
         hours: Optional[int] = 1,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        max_items: Optional[int] = None,
+        progress_logger: Optional[Callable[[str], None]] = None,
         scorecard_id: Optional[str] = None,
         score_id: Optional[str] = None,
     ) -> None:
@@ -124,6 +132,10 @@ class ScoreResultCostAnalyzer:
         self.account_id = account_id
         self.days = days
         self.hours = hours
+        self.start_time = start_time
+        self.end_time = end_time
+        self.max_items = max_items
+        self.progress_logger = progress_logger
         self.scorecard_id = scorecard_id
         self.score_id = score_id
         self._loaded: bool = False
@@ -136,7 +148,26 @@ class ScoreResultCostAnalyzer:
 
     @property
     def time_window(self) -> Tuple[datetime, datetime]:
-        end_time = datetime.now(timezone.utc)
+        def ensure_aware(dt: datetime) -> datetime:
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt
+
+        now = datetime.now(timezone.utc)
+
+        # Explicit window overrides relative hours/days.
+        if self.start_time is not None or self.end_time is not None:
+            end_time = ensure_aware(self.end_time or now)
+            if self.start_time is not None:
+                start_time = ensure_aware(self.start_time)
+            else:
+                if self.hours is not None:
+                    start_time = end_time - timedelta(hours=max(1, int(self.hours)))
+                else:
+                    start_time = end_time - timedelta(days=max(1, int(self.days)))
+            return start_time, end_time
+
+        end_time = now
         if self.hours is not None:
             start_time = end_time - timedelta(hours=max(1, int(self.hours)))
         else:
@@ -145,10 +176,16 @@ class ScoreResultCostAnalyzer:
 
     def _query_name_and_body(self) -> Tuple[str, str, Dict[str, Any]]:
         start_time, end_time = self.time_window
+        page_limit = 1000
+        if self.max_items is not None:
+            try:
+                page_limit = max(1, min(int(self.max_items), 1000))
+            except Exception:
+                page_limit = 1000
         variables: Dict[str, Any] = {
             "startTime": start_time.isoformat(),
             "endTime": end_time.isoformat(),
-            "limit": 1000,
+            "limit": page_limit,
         }
 
         # Choose best GSI depending on filters
@@ -224,7 +261,16 @@ class ScoreResultCostAnalyzer:
     def load(self) -> None:
         """Load ScoreResults into memory using GSI-backed pagination with single-entry cache."""
         # Check cache first
-        cache_key = (self.account_id, int(self.days), self.scorecard_id, self.score_id, int(self.hours) if self.hours is not None else None)
+        cache_key = (
+            self.account_id,
+            int(self.days),
+            self.scorecard_id,
+            self.score_id,
+            int(self.hours) if self.hours is not None else None,
+            self.start_time.isoformat() if self.start_time is not None else None,
+            self.end_time.isoformat() if self.end_time is not None else None,
+            int(self.max_items) if self.max_items is not None else None,
+        )
         if (
             ScoreResultCostAnalyzer._LAST_CACHE_KEY == cache_key
             and ScoreResultCostAnalyzer._LAST_CACHE_RESULTS is not None
@@ -233,23 +279,119 @@ class ScoreResultCostAnalyzer:
             self._loaded = True
             return
 
-        _, query, variables = self._query_name_and_body()
+        query_name, query, variables = self._query_name_and_body()
         next_token: Optional[str] = None
         results: List[Dict[str, Any]] = []
+        seen_tokens: set[str] = set()
+        empty_pages = 0
+        scanned_items = 0
+
+        start_time, end_time = self.time_window
+        scope = f"account_id={self.account_id}"
+        if self.scorecard_id:
+            scope += f" scorecard_id={self.scorecard_id}"
+        if self.score_id:
+            scope += f" score_id={self.score_id}"
+        scope += f" window={start_time.isoformat()}..{end_time.isoformat()}"
+        scope += (
+            f" max_items={self.max_items if self.max_items is not None else 'none'}"
+        )
+        logger.info(f"[CostAnalysis] Loading ScoreResults ({query_name}) {scope}")
+        if self.progress_logger:
+            try:
+                self.progress_logger(
+                    f"[CostAnalysis] Loading ScoreResults ({query_name}) {scope}"
+                )
+            except Exception:
+                pass
 
         page = 0
+        log_every_pages = 1 if self.max_items is not None else 25
         while True:
             vars_with_token = dict(variables)
             if next_token:
                 vars_with_token["nextToken"] = next_token
+            if page % log_every_pages == 0:
+                logger.info(
+                    f"[CostAnalysis] Fetching ({query_name}) page={page} nextToken={'set' if next_token else 'none'} "
+                    f"scanned={scanned_items} kept={len(results)}"
+                )
+            if self.progress_logger:
+                try:
+                    self.progress_logger(
+                        f"[CostAnalysis] Fetch page={page} nextToken={'set' if next_token else 'none'} "
+                        f"scanned={scanned_items} kept={len(results)}"
+                    )
+                except Exception:
+                    pass
+
+            t0 = time.time()
             data = self.client.execute(query, vars_with_token)
+            elapsed_ms = int((time.time() - t0) * 1000)
+
             # Pull the one field we asked for
             top_key = next(k for k in data.keys() if k.startswith("listScoreResult"))
-            page_items = data.get(top_key, {}).get("items", [])
-            results.extend(page_items)
+            page_items = data.get(top_key, {}).get("items", []) or []
+            scanned_items += len(page_items)
+            if not page_items:
+                empty_pages += 1
+            else:
+                empty_pages = 0
+
+            added_this_page = 0
+            for sr in page_items:
+                cost = _extract_cost(sr)
+                if not cost:
+                    continue
+                results.append(sr)
+                added_this_page += 1
+                if self.max_items is not None and len(results) >= int(self.max_items):
+                    break
+
             next_token = data.get(top_key, {}).get("nextToken")
             page += 1
+            if (page - 1) % log_every_pages == 0:
+                logger.info(
+                    f"[CostAnalysis] Page done ({query_name}) page={page} items={len(page_items)} added={added_this_page} "
+                    f"kept={len(results)} nextToken={'set' if next_token else 'none'} elapsed_ms={elapsed_ms}"
+                )
+            if self.progress_logger:
+                try:
+                    self.progress_logger(
+                        f"[CostAnalysis] Page done page={page} items={len(page_items)} added={added_this_page} "
+                        f"kept={len(results)} nextToken={'set' if next_token else 'none'} elapsed_ms={elapsed_ms}"
+                    )
+                except Exception:
+                    pass
+
+            if self.max_items is not None and len(results) >= int(self.max_items):
+                break
             if not next_token:
+                break
+            if next_token in seen_tokens:
+                logger.warning(
+                    f"[CostAnalysis] Detected repeated nextToken; breaking pagination loop ({query_name})"
+                )
+                if self.progress_logger:
+                    try:
+                        self.progress_logger(
+                            "[CostAnalysis] Detected repeated nextToken; breaking pagination loop"
+                        )
+                    except Exception:
+                        pass
+                break
+            seen_tokens.add(str(next_token))
+            if empty_pages >= 3:
+                logger.warning(
+                    f"[CostAnalysis] Received 3 consecutive empty pages; breaking pagination loop ({query_name})"
+                )
+                if self.progress_logger:
+                    try:
+                        self.progress_logger(
+                            "[CostAnalysis] Received 3 consecutive empty pages; breaking pagination loop"
+                        )
+                    except Exception:
+                        pass
                 break
 
         self._results = results
@@ -257,6 +399,20 @@ class ScoreResultCostAnalyzer:
         # Update cache
         ScoreResultCostAnalyzer._LAST_CACHE_KEY = cache_key
         ScoreResultCostAnalyzer._LAST_CACHE_RESULTS = list(results)
+        logger.info(
+            f"[CostAnalysis] Loaded kept={len(results)} scanned={scanned_items} pages={page} ({query_name})"
+        )
+        if self.progress_logger:
+            try:
+                self.progress_logger(
+                    f"[CostAnalysis] Loaded kept={len(results)} scanned={scanned_items} pages={page}"
+                )
+            except Exception:
+                pass
+
+    @staticmethod
+    def extract_cost(sr: Dict[str, Any]) -> Dict[str, Any]:
+        return _extract_cost(sr)
 
     def list_raw(self) -> List[Dict[str, Any]]:
         if not self._loaded:
@@ -288,12 +444,14 @@ class ScoreResultCostAnalyzer:
 
         group_list: List[Dict[str, Any]] = []
         for (scorecard_id, score_id), agg in groups.items():
-            group_list.append({
-                "scorecardId": scorecard_id,
-                "scoreId": score_id,
-                "scoreName": names.get((scorecard_id, score_id)),
-                **agg.to_dict(),
-            })
+            group_list.append(
+                {
+                    "scorecardId": scorecard_id,
+                    "scoreId": score_id,
+                    "scoreName": names.get((scorecard_id, score_id)),
+                    **agg.to_dict(),
+                }
+            )
 
         return {
             "accountId": self.account_id,
@@ -301,7 +459,9 @@ class ScoreResultCostAnalyzer:
             "hours": self.hours,
             "filters": {"scorecardId": self.scorecard_id, "scoreId": self.score_id},
             "totals": totals.to_dict(),
-            "groups": sorted(group_list, key=lambda g: (g["scorecardId"], g["scoreId"]))
+            "groups": sorted(
+                group_list, key=lambda g: (g["scorecardId"], g["scoreId"])
+            ),
         }
 
     # ----------------------
@@ -340,7 +500,9 @@ class ScoreResultCostAnalyzer:
         if n == 1:
             return Decimal("0")
         mean = sum(values, start=Decimal("0")) / Decimal(n)
-        var = sum((x - mean) * (x - mean) for x in values) / Decimal(n)  # population stddev
+        var = sum((x - mean) * (x - mean) for x in values) / Decimal(
+            n
+        )  # population stddev
         # Avoid negative variance from floating Decimal oddities
         if var < 0:
             var = Decimal("0")
@@ -349,6 +511,7 @@ class ScoreResultCostAnalyzer:
             return var.sqrt()  # Decimal sqrt available if context precision sufficient
         except Exception:
             import math
+
             return _parse_decimal(math.sqrt(float(var)))
 
     def analyze(self, group_by: Optional[str] = None) -> Dict[str, Any]:
@@ -366,7 +529,7 @@ class ScoreResultCostAnalyzer:
 
         # Collect values
         overall_values: List[Decimal] = []  # total_cost per result
-        overall_calls: List[Decimal] = []   # llm_calls per result
+        overall_calls: List[Decimal] = []  # llm_calls per result
         by_scorecard: Dict[str, List[Decimal]] = {}
         by_score: Dict[str, List[Decimal]] = {}
         by_pair: Dict[Tuple[str, str], List[Decimal]] = {}
@@ -429,6 +592,7 @@ class ScoreResultCostAnalyzer:
             }
 
         headline = build_stats(overall_values)
+
         # Add calls distribution metrics with _calls suffix
         def build_calls(values: List[Decimal]) -> Dict[str, Any]:
             n = len(values)
@@ -484,5 +648,3 @@ class ScoreResultCostAnalyzer:
             "groups": groups,
             "scoreNameIndex": score_name_index,
         }
-
-
