@@ -1,0 +1,33 @@
+# Example: Score using Deepgram transcript input source
+# This demonstrates the new 'item' configuration section
+
+name: Call Quality Analysis
+key: call_quality_deepgram
+external_id: call_quality_deepgram_001
+description: Analyze call quality using Deepgram transcripts with speaker diarization
+
+class: LangGraphScore
+
+# NEW: Item-level configuration
+# Specifies input source and per-item processors
+item:
+  # Input source: Extract text from Deepgram JSON attachment
+  class: DeepgramInputSource
+  options:
+    pattern: ".*deepgram.*\\.json$"  # Match any file with "deepgram" in name
+    format: "paragraphs"              # Options: paragraphs, utterances, words, raw
+    include_timestamps: false         # Optional: include [X.XXs] timestamps
+    speaker_labels: false             # Optional: include "Speaker N:" labels
+
+  # Processors: Applied AFTER input source extraction
+  processors:
+    - class: FilterCustomerOnlyProcessor
+      parameters: {}
+    - class: RemoveSpeakerIdentifiersTranscriptFilter
+      parameters: {}
+
+# Score-specific configuration
+nodes:
+  - name: analyze_greeting
+    class: LLMNode
+    # ... node configuration ...

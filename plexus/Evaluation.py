@@ -2056,10 +2056,20 @@ Total cost:       ${expenses['total_cost']:.6f}
                 columns = row.get('columns', {})
                 form_id = columns.get('form_id', '')
                 metadata_string = columns.get('metadata', {})
-                
+
                 # Get feedback_item_id from the dataset if available
                 feedback_item_id = row.get('feedback_item_id', None)
-                
+
+                # Fetch Item object if item_id is available (needed for input sources)
+                item = None
+                item_id = row.get('item_id')
+                if item_id:
+                    try:
+                        from plexus.dashboard.api.models.item import Item
+                        item = Item.get_by_id(item_id, self.scorecard.client if hasattr(self.scorecard, 'client') else None)
+                    except Exception as e:
+                        logging.warning(f"Could not fetch Item {item_id}: {e}")
+
                 # Extract feedback_item_id if available
                 
                 # Initialize human_labels dictionary
@@ -2104,7 +2114,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                 scorecard_results = await self.scorecard.score_entire_text(
                     text=text,
                     metadata=metadata,
-                    subset_of_score_names=score_names_to_process
+                    subset_of_score_names=score_names_to_process,
+                    item=item
                 )
 
                 # Create a new dictionary for filtered results

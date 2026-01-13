@@ -1,0 +1,23 @@
+# Example: Score with item.processors but no input source
+# This demonstrates the migration path - processors in 'item' section
+# while still using default item.text behavior
+
+name: Standard Score with Item Processors
+key: standard_with_item_processors
+external_id: standard_processors_001
+description: Uses default item.text with processors in item section
+
+class: LangGraphScore
+
+# Item configuration: processors WITHOUT input source class
+# This uses item.text (default) and applies processors
+item:
+  # No 'class' specified = use item.text (default behavior)
+  processors:
+    - class: FilterCustomerOnlyProcessor
+      parameters: {}
+    - class: RemoveSpeakerIdentifiersTranscriptFilter
+      parameters: {}
+
+# This is the recommended location for processors going forward
+# (instead of data.processors which is legacy)
