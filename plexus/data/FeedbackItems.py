@@ -1107,6 +1107,7 @@ class FeedbackItems(DataCache):
             row = {
                 'content_id': content_id,
                 'feedback_item_id': feedback_item_id,
+                'item_id': feedback_item.item.id if feedback_item.item else None,
                 'IDs': ids_hash,
                 'metadata': metadata,
                 'text': text,
@@ -1124,7 +1125,7 @@ class FeedbackItems(DataCache):
         # Create DataFrame with proper column structure even when empty
         if not rows:
             # Create empty DataFrame with expected columns (IDs first, then metadata, then text)
-            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', 'call_date', mapped_score_name, f"{mapped_score_name} comment", f"{mapped_score_name} edit comment"]
+            columns = ['content_id', 'feedback_item_id', 'item_id', 'IDs', 'metadata', 'text', 'call_date', mapped_score_name, f"{mapped_score_name} comment", f"{mapped_score_name} edit comment"]
             df = pd.DataFrame(columns=columns)
         else:
             df = pd.DataFrame(rows)
