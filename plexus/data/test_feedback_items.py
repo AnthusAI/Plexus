@@ -291,7 +291,8 @@ def test_create_dataset_rows_structure():
         # Verify empty DataFrame has correct columns
         expected_columns = [
             'content_id',
-            'feedback_item_id', 
+            'feedback_item_id',
+            'item_id',
             'IDs',
             'metadata',
             'text',
@@ -362,8 +363,9 @@ def test_create_dataset_rows_with_data():
         expected_columns = [
             'content_id',
             'feedback_item_id',
+            'item_id',
             'IDs',
-            'metadata', 
+            'metadata',
             'text',
             'call_date',
             'Test Score',
@@ -633,6 +635,7 @@ def test_column_mappings_applied_to_dataset():
         expected_columns_mapped = [
             'content_id',
             'feedback_item_id',
+            'item_id',
             'IDs',
             'metadata',
             'text',
@@ -656,6 +659,7 @@ def test_column_mappings_applied_to_dataset():
         expected_columns_unmapped = [
             'content_id',
             'feedback_item_id',
+            'item_id',
             'IDs',
             'metadata',
             'text',
@@ -697,6 +701,7 @@ def test_column_mappings_with_empty_dataset():
         expected_columns = [
             'content_id',
             'feedback_item_id',
+            'item_id',
             'IDs',
             'metadata',
             'text',
