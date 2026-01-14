@@ -1,30 +1,57 @@
 from abc import ABC, abstractmethod
-import pandas as pd
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
 
-class DataframeProcessor(ABC):
+
+class Processor(ABC):
+    """
+    Base class for processors that transform Score.Input → Score.Input.
+
+    These processors work on individual items (per-item processing),
+    ensuring the same transformation in production and development.
+
+    This replaces the old DataframeProcessor - we no longer work on DataFrames.
+    Each processor operates on a single Score.Input at a time, allowing the
+    exact same pipeline to run in production (1 item) and evaluation (many items).
+    """
 
     def __init__(self, **parameters):
-        self.parameters = parameters
-        self.console = Console()
-        self.summary_table = Table(
-            title=f"[royal_blue1][b]{self.__class__.__name__}[/b][/royal_blue1]",
-            header_style="sky_blue1",
-            border_style="sky_blue1"
-        )
-        self.summary_table.add_column("Parameters", style="magenta1", justify="left")
-        self.summary_table.add_column("Before", style="magenta1", justify="left")
-        self.summary_table.add_column("After", style="magenta1", justify="left")
-        self.before_summary = ""
-        self.after_summary = ""
+        """
+        Initialize the processor with configuration parameters.
 
-    def display_summary(self):
-        parameters_str = "\n".join(f"{key}: {value}" for key, value in self.parameters.items())
-        self.summary_table.add_row(parameters_str, self.before_summary, self.after_summary)
-        self.console.print(Panel(self.summary_table, border_style="royal_blue1"))
+        Args:
+            **parameters: Processor-specific configuration parameters
+        """
+        self.parameters = parameters
 
     @abstractmethod
-    def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+    def process(self, score_input: 'Score.Input') -> 'Score.Input':
+        """
+        Transform a Score.Input.
+
+        This is the core method that each processor must implement.
+        It takes a Score.Input object and returns a transformed Score.Input object.
+
+        Args:
+            score_input: Input to transform (contains text, metadata, results)
+
+        Returns:
+            Transformed Score.Input with modified text/metadata
+
+        Example:
+            class MyProcessor(Processor):
+                def process(self, score_input):
+                    # Transform the text
+                    transformed_text = self.transform(score_input.text)
+
+                    # Return new Score.Input with transformed text
+                    return Score.Input(
+                        text=transformed_text,
+                        metadata=score_input.metadata,
+                        results=score_input.results
+                    )
+        """
         pass
+
+
+# Keep DataframeProcessor as an alias for backwards compatibility during transition
+# This will be removed in a future version
+DataframeProcessor = Processor

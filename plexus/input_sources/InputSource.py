@@ -21,16 +21,32 @@ class InputSource(ABC):
         self.logger = logging.getLogger(self.__class__.__name__)
 
     @abstractmethod
-    def extract(self, item, default_text: str) -> str:
+    def extract(self, item) -> 'Score.Input':
         """
-        Extract text from the specified source.
+        Extract Score.Input from the specified source.
+
+        This method is the core of the input source pipeline. It takes an Item
+        and produces a Score.Input with text and metadata populated.
 
         Args:
-            item: Item object (may have attachedFiles)
-            default_text: Fallback text from item.text
+            item: Item object (may have attachedFiles, text, metadata)
 
         Returns:
-            Extracted text string
+            Score.Input with text field and metadata populated
+
+        Example:
+            class MyInputSource(InputSource):
+                def extract(self, item):
+                    # Extract text from source
+                    text = self.get_text_from_source(item)
+
+                    # Build metadata
+                    metadata = item.metadata or {}
+                    metadata['source'] = 'MyInputSource'
+
+                    # Return Score.Input
+                    from plexus.scores.Score import Score
+                    return Score.Input(text=text, metadata=metadata)
         """
         pass
 

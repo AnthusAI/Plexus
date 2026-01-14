@@ -9,9 +9,9 @@ class DeepgramInputSource(TextFileInputSource):
     Supports multiple output formats: paragraphs, utterances, words, raw.
     """
 
-    def extract(self, item, default_text: str) -> str:
+    def extract(self, item) -> 'Score.Input':
         """
-        Parse Deepgram JSON and format transcript.
+        Parse Deepgram JSON and format transcript into Score.Input.
 
         Options:
             format: "paragraphs" (default), "utterances", "words", "raw"
@@ -21,13 +21,15 @@ class DeepgramInputSource(TextFileInputSource):
             time_range_duration: float or None (default None) - Duration in seconds, None = no end limit
 
         Returns:
-            Formatted transcript text
+            Score.Input with formatted transcript text and Deepgram metadata
 
         Raises:
             ValueError: If no matching attachment, invalid format, or invalid time range parameters
             KeyError: If Deepgram JSON structure is invalid
             Exception: If file download or parsing fails
         """
+        from plexus.scores.Score import Score
+
         # Find matching attachment (raises ValueError if not found)
         attachment_key = self.find_matching_attachment(item)
 
@@ -64,7 +66,7 @@ class DeepgramInputSource(TextFileInputSource):
 
         # Format based on selected type (exceptions propagate)
         if format_type == "paragraphs":
-            return self._format_paragraphs(
+            formatted_text = self._format_paragraphs(
                 deepgram_result,
                 include_timestamps,
                 speaker_labels,
@@ -72,7 +74,7 @@ class DeepgramInputSource(TextFileInputSource):
                 time_range_duration,
             )
         elif format_type == "utterances":
-            return self._format_utterances(
+            formatted_text = self._format_utterances(
                 deepgram_result,
                 include_timestamps,
                 speaker_labels,
@@ -80,20 +82,35 @@ class DeepgramInputSource(TextFileInputSource):
                 time_range_duration,
             )
         elif format_type == "words":
-            return self._format_words(
+            formatted_text = self._format_words(
                 deepgram_result,
                 include_timestamps,
                 time_range_start,
                 time_range_duration,
             )
         elif format_type == "raw":
-            return self._format_raw(
+            formatted_text = self._format_raw(
                 deepgram_result, time_range_start, time_range_duration
             )
         else:
             raise ValueError(
                 f"Unknown format: {format_type}. Must be one of: paragraphs, utterances, words, raw"
             )
+
+        # Build metadata with Deepgram-specific information
+        metadata = item.metadata.copy() if item.metadata else {}
+        metadata['input_source'] = 'DeepgramInputSource'
+        metadata['format'] = format_type
+        metadata['attachment_key'] = attachment_key
+
+        # Add time range info if used
+        if time_range_start != 0.0 or time_range_duration is not None:
+            metadata['time_range_start'] = time_range_start
+            if time_range_duration is not None:
+                metadata['time_range_duration'] = time_range_duration
+
+        # Return Score.Input
+        return Score.Input(text=formatted_text, metadata=metadata)
 
     def _is_in_time_range(
         self,
