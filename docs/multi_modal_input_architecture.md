@@ -1,0 +1,352 @@
+# Multi-Modal Input Architecture Re-Architecture
+
+## Overview
+Re-architect Plexus to support multi-modal inputs (text, images, audio) by creating a consistent pipeline that transforms Item → Score.Input through input sources and processors. This ensures the exact same input format is used across all contexts: production predictions, evaluations, training, fine-tuning examples, and topic analysis.
+
+## Problem Statement
+The current system assumes text-only inputs:
+- Datasets require a `text` column
+- Item.text field is accessed directly
+- Processors work on DataFrame text columns
+- No support for images, audio, or structured data
+- Different code paths for production vs evaluation vs training
+
+This creates fundamental incompatibilities:
+- Can't use same pipeline in production (1 item) and development (datasets)
+- Can't add multi-modal features without major refactoring
+- Input sources (like DeepgramInputSource) produce text but need richer context
+- No guarantee that evaluation/training uses same input as production
+
+## Design Principles
+
+### 1. Consistent Pipeline Everywhere
+```
+Item ID → Item.to_score_input() → Score.Input → [Processors] → Score.Input → Score.predict() → Score.Result
+```
+
+This **exact same pipeline** must work for:
+- **Production predictions**: Single item, no dataset
+- **Evaluations**: Multiple items from datasets
+- **Training/Fine-tuning**: Generating examples from datasets
+- **Topic Analysis Reports**: Processing dataset items
+- **Development predictions**: CLI tool with item IDs
+
+### 2. Separation of Concerns
+
+**Item Configuration (per-item, production-compatible):**
+```yaml
+item:
+  class: DeepgramInputSource
+  options:
+    pattern: ".*deepgram.*\\.json$"
+    format: "paragraphs"
+  processors:
+    - class: FilterCustomerOnlyProcessor
+    - class: RemoveSpeakerIdentifiersTranscriptFilter
+```
+
+**Dataset Configuration (development/evaluation only):**
+```yaml
+data:
+  source: my-data-source-id
+  sample_size: 1000
+  # This section only used for loading datasets in development
+```
+
+The `item:` section is **completely independent** from `data:` section:
+- `item:` defines how to process **one item** (used in production)
+- `data:` defines where to get **many items** for evaluation/training (dev only)
+
+### 3. Key Architectural Changes
+
+#### A. Item.to_score_input() Method
+Add method to Item class to generate Score.Input:
+```python
+class Item:
+    def to_score_input(self, item_config: dict) -> Score.Input:
+        """
+        Transform this item into a Score.Input using the item configuration.
+
+        Args:
+            item_config: The 'item:' section from score YAML
+
+        Returns:
+            Score.Input with text/data fields populated
+        """
+```
+
+#### B. InputSources Return Score.Input
+Refactor InputSource.extract() signature:
+```python
+# OLD (current):
+def extract(self, item, default_text: str) -> str:
+    """Returns string text"""
+
+# NEW (proposed):
+def extract(self, item) -> Score.Input:
+    """Returns Score.Input with text and metadata"""
+```
+
+#### C. Processors Work on Score.Input (COMPLETE CONVERSION)
+Current processors work on DataFrames with text columns - this is a **fundamental problem**.
+
+**CRITICAL INSIGHTS**:
+1. "The processor pipeline always needed to be per-item, not to be based on dataframes, because we always needed to be able to run the exact same pipeline in production on one item as we ran in development on whole datasets during evaluations."
+2. "We don't need to migrate those processors to new processors, we should convert those processors. We don't want a bunch of old backward-compatibility code laying around after this."
+3. "We want to make a full break from treating the inputs as strings, to treating the inputs as IDs that we look up and generate strings in whatever way based on whatever information we have available."
+
+**Solution**: Convert all processors to work on Score.Input (NO backwards compatibility):
+```python
+# NEW processor interface (replace DataframeProcessor entirely):
+class Processor(ABC):
+    @abstractmethod
+    def process(self, score_input: Score.Input) -> Score.Input:
+        """Transform Score.Input → Score.Input"""
+```
+
+**Key principle**: Delete DataframeProcessor base class entirely. This is a clean architectural break.
+
+For datasets, apply processor per-row:
+```python
+def process_dataset(df: pd.DataFrame, processors: list) -> pd.DataFrame:
+    for idx, row in df.iterrows():
+        score_input = Score.Input(text=row['text'], metadata=row.get('metadata', {}))
+        for processor in processors:
+            score_input = processor.process(score_input)
+        df.at[idx, 'text'] = score_input.text
+        df.at[idx, 'metadata'] = score_input.metadata
+    return df
+```
+
+## Current Architecture Analysis
+
+### Score.Input Structure
+```python
+class Score.Input(BaseModel):
+    text: str                           # The content to classify
+    metadata: dict = {}                 # Additional context
+    results: Optional[List[Any]] = None # Previous score results (for dependencies)
+```
+
+### Problems with Current Approach
+
+1. **Text-only assumption**: `item.text`, `df['text']`, string-based everywhere
+2. **Inconsistent pipelines**: Different code paths for production vs evaluation
+3. **DataFrame dependency**: Processors require DataFrames, can't run on single items easily
+4. **No input source support in production**: InputSources only work in YAML, not runtime
+5. **Metadata handling inconsistent**: Sometimes dict, sometimes JSON string
+
+## Implementation Plan
+
+### Phase 1: Core Infrastructure ✅ (IN PROGRESS)
+
+#### 1.1 Add Item.to_score_input() Method ✅
+**File**: `plexus/dashboard/api/models/item.py`
+
+Added method that:
+- Uses InputSource if specified in item_config
+- Applies processors from item_config
+- Returns Score.Input with text and metadata
+
+#### 1.2 Refactor InputSource to Return Score.Input ✅
+**Files**:
+- `plexus/input_sources/InputSource.py` (base class) ✅
+- `plexus/input_sources/DeepgramInputSource.py` ✅
+- `plexus/input_sources/TextFileInputSource.py` ✅
+
+Changed signature to return Score.Input with metadata instead of string.
+
+#### 1.3 Replace DataframeProcessor with New Processor Base Class ✅
+**File**: `plexus/processors/DataframeProcessor.py` ✅
+
+Replaced with:
+```python
+from abc import ABC, abstractmethod
+
+class Processor(ABC):
+    """Base class for processors that transform Score.Input → Score.Input."""
+
+    def __init__(self, **parameters):
+        self.parameters = parameters
+
+    @abstractmethod
+    def process(self, score_input: Score.Input) -> Score.Input:
+        """Transform a Score.Input."""
+        pass
+```
+
+#### 1.4 Convert Existing Processors (5/11 Complete) 🔄
+**Completed**:
+- ✅ FilterCustomerOnlyProcessor
+- ✅ RemoveSpeakerIdentifiersTranscriptFilter
+- ✅ RemoveStopWordsTranscriptFilter
+- ✅ ExpandContractionsProcessor
+- ✅ RelevantWindowsTranscriptFilter
+
+**Remaining**:
+- ⏳ AddUnknownSpeakerIdentifiersTranscriptFilter
+- ⏳ AddEnumeratedSpeakerIdentifiersTranscriptFilter
+- ⏳ ByColumnValueDatasetFilter
+- ⏳ ColumnDatasetFilter
+- ⏳ DownsampleClassDatasetFilter
+- ⏳ MergeColumnsDatasetFilter
+
+### Phase 2: Update All Usage Points (NOT STARTED)
+
+#### 2.1 Production Predictions
+**File**: `plexus/cli/prediction/predictions.py`
+
+Replace:
+```python
+# OLD:
+text_content = item.text or ''
+sample_row = pd.DataFrame([{'text': text_content, ...}])
+```
+
+With:
+```python
+# NEW:
+item_config = scorecard_yaml.get('item', {})
+score_input = item.to_score_input(item_config)
+```
+
+#### 2.2 Evaluations
+**File**: `plexus/cli/evaluation/evaluations.py`
+
+Replace dataset text access with:
+```python
+# For each sample in dataset:
+item_id = sample['item_id']
+item = await get_item(item_id)  # Fetch full Item object
+score_input = item.to_score_input(item_config)
+```
+
+#### 2.3 Scorecard.score_entire_text()
+**File**: `plexus/Scorecard.py`
+
+Update signature:
+```python
+# OLD:
+async def score_entire_text(self, text: str, metadata: dict, ...):
+
+# NEW:
+async def score_entire_text(self, score_input: Score.Input, ...):
+```
+
+#### 2.4 Topic Analysis Report
+**File**: `plexus/reports/blocks/topic_analysis.py`
+
+Replace:
+```python
+# OLD:
+content_column = data_config.get("content_column", "text")
+for row in df.iterrows():
+    text = row[content_column]
+
+# NEW:
+item_config = self.config.get('item', {})
+for row in df.iterrows():
+    item = Item(**row)
+    score_input = item.to_score_input(item_config)
+    text = score_input.text
+```
+
+### Phase 3: Clean Break (NO Backwards Compatibility)
+
+This is a major version change that completely breaks the old architecture.
+
+#### 3.1 Breaking Changes
+- DataframeProcessor class DELETED
+- All processors converted to Score.Input interface
+- `Score.apply_processors_to_text()` removed or completely rewritten
+- No DataFrame-based processing anywhere
+- Item IDs are the starting point, not text strings
+
+#### 3.2 Migration Guide (for users)
+1. Document the breaking changes clearly
+2. Provide examples of converting custom processors
+3. Explain the new Item → Score.Input pipeline
+4. Show before/after examples
+5. This is a MAJOR version bump (e.g., 2.0.0 or 3.0.0)
+
+## Critical Files Modified
+
+### Core Models
+- ✅ `plexus/dashboard/api/models/item.py` - Added to_score_input()
+- ⏳ `plexus/scores/Score.py` - Need to update Score.Input handling
+
+### Input Sources
+- ✅ `plexus/input_sources/InputSource.py` - Changed return type
+- ✅ `plexus/input_sources/DeepgramInputSource.py` - Returns Score.Input
+- ✅ `plexus/input_sources/TextFileInputSource.py` - Returns Score.Input
+
+### Processors
+- ✅ `plexus/processors/DataframeProcessor.py` - Replaced with new Processor base class
+- ✅ `plexus/processors/FilterCustomerOnlyProcessor.py` - Converted
+- ✅ `plexus/processors/RemoveSpeakerIdentifiersTranscriptFilter.py` - Converted
+- ✅ `plexus/processors/RemoveStopWordsTranscriptFilter.py` - Converted
+- ✅ `plexus/processors/ExpandContractionsProcessor.py` - Converted
+- ✅ `plexus/processors/RelevantWindowsTranscriptFilter.py` - Converted
+- ⏳ `plexus/processors/AddUnknownSpeakerIdentifiersTranscriptFilter.py` - Pending
+- ⏳ `plexus/processors/AddEnumeratedSpeakerIdentifiersTranscriptFilter.py` - Pending
+- ⏳ `plexus/processors/ByColumnValueDatasetFilter.py` - Pending
+- ⏳ `plexus/processors/ColumnDatasetFilter.py` - Pending
+- ⏳ `plexus/processors/DownsampleClassDatasetFilter.py` - Pending
+- ⏳ `plexus/processors/MergeColumnsDatasetFilter.py` - Pending
+
+### Test Files
+- ✅ `tests/test_input_sources/test_deepgram_input_source.py` - Updated
+- ✅ `tests/test_input_sources/test_text_file_input_source.py` - Updated
+- ✅ `tests/test_input_sources/test_scorecard_integration.py` - Updated
+
+### Prediction & Evaluation (NOT STARTED)
+- ⏳ `plexus/cli/prediction/predictions.py` - Use Item.to_score_input()
+- ⏳ `plexus/cli/evaluation/evaluations.py` - Use Item.to_score_input()
+- ⏳ `plexus/Scorecard.py` - score_entire_text() signature change
+
+### Reports (NOT STARTED)
+- ⏳ `plexus/reports/blocks/topic_analysis.py` - Use Item.to_score_input()
+
+## Current Status (as of 2025-01-14)
+
+### Completed ✅
+1. Core infrastructure foundation:
+   - Item.to_score_input() method implemented with full pipeline support
+   - InputSource base class and implementations converted to return Score.Input
+   - DataframeProcessor replaced with new Processor base class
+   - 5 processors converted to Score.Input interface
+   - Test files updated for new signatures
+
+### In Progress 🔄
+- Converting remaining 6 processors to Score.Input interface
+
+### Not Started ⏳
+- Prediction pipeline updates
+- Evaluation pipeline updates
+- Scorecard signature changes
+- Topic Analysis report updates
+- Full test suite verification
+- Breaking changes documentation
+
+## Testing Strategy
+
+Working incrementally and testing frequently:
+- Environment has pre-existing psycopg import issue preventing most tests from running
+- Base InputSource tests pass (15/15) confirming foundation is solid
+- Will run full test suite after all processors are converted
+
+## Success Criteria
+
+1. **Consistent Pipeline**: Same input format in production, eval, training
+2. **Multi-modal Ready**: Score.Input can hold text, images, audio metadata
+3. **No Regression**: All existing tests pass (after updating for new interface)
+4. **Performance**: No significant slowdown (<10%)
+5. **Clean Architecture**: NO DataframeProcessor code remaining anywhere
+6. **ID-based**: Pipeline starts with item IDs, not strings
+
+## Notes
+
+- The `item:` section already exists in YAML configs (parallel to `data:`)
+- This is a MAJOR version breaking change (2.0.0 or 3.0.0)
+- No backwards compatibility - complete architectural replacement
+- Per-item processing ensures production/development consistency

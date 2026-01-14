@@ -1,13 +1,11 @@
-import pandas as pd
 import nltk.data
 import re
 from rapidfuzz import fuzz
 
-from .DataframeProcessor import DataframeProcessor
-from plexus.scores.Score import Score
+from .DataframeProcessor import Processor
 from plexus.CustomLogging import logging
 
-class RelevantWindowsTranscriptFilter(DataframeProcessor):
+class RelevantWindowsTranscriptFilter(Processor):
     """
     Filter transcript to extract relevant windows based on keywords or a classifier.
 
@@ -97,45 +95,46 @@ class RelevantWindowsTranscriptFilter(DataframeProcessor):
 
         return False
 
-    def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
-        # Get a sample for before/after display
-        random_row_index = dataframe.sample(n=1).index[0] if len(dataframe) > 0 else None
-        if random_row_index is not None:
-            original_text = dataframe.at[random_row_index, 'text']
-            truncated_original = (original_text[:512] + '...') if len(original_text) > 512 else original_text
-            self.before_summary = truncated_original
+    def process(self, score_input: 'Score.Input') -> 'Score.Input':
+        """
+        Process the Score.Input by filtering text to relevant windows.
 
-        def filter_text(text):
-            sentences = text.split('\n')
-            relevance_flags = [self.is_sentence_relevant(sentence) for sentence in sentences]
-            include_flags = self.compute_inclusion_flags(relevance_flags)
+        Args:
+            score_input: Score.Input with text
 
-            filtered_text = []
-            for i in range(len(sentences)):
-                if include_flags[i]:
-                    filtered_text.append(sentences[i])
-                elif self.should_insert_ellipsis(i, include_flags, sentences):
-                    filtered_text.append("...")
+        Returns:
+            Score.Input with filtered text
+        """
+        from plexus.scores.Score import Score
 
-            combined_text = self.combine_consecutive_ellipses(filtered_text)
-            result = '\n'.join(combined_text).strip()
+        text = score_input.text
 
-            if result == "...":
-                return ""
+        # Split into sentences
+        sentences = text.split('\n')
+        relevance_flags = [self.is_sentence_relevant(sentence) for sentence in sentences]
+        include_flags = self.compute_inclusion_flags(relevance_flags)
 
-            logging.debug(f"Filtered text: {result}")
-            return result
+        filtered_text = []
+        for i in range(len(sentences)):
+            if include_flags[i]:
+                filtered_text.append(sentences[i])
+            elif self.should_insert_ellipsis(i, include_flags, sentences):
+                filtered_text.append("...")
 
-        dataframe['text'] = dataframe['text'].apply(filter_text)
+        combined_text = self.combine_consecutive_ellipses(filtered_text)
+        result = '\n'.join(combined_text).strip()
 
-        # Get sample for after display
-        if random_row_index is not None:
-            modified_text = dataframe.at[random_row_index, 'text']
-            truncated_modified = (modified_text[:512] + '...') if len(modified_text) > 512 else modified_text
-            self.after_summary = truncated_modified
+        if result == "...":
+            result = ""
 
-        self.display_summary()
-        return dataframe
+        logging.debug(f"Filtered text: {result}")
+
+        # Return new Score.Input with filtered text
+        return Score.Input(
+            text=result,
+            metadata=score_input.metadata,
+            results=score_input.results
+        )
 
     def compute_inclusion_flags(self, relevance_flags):
         include_flags = [False] * len(relevance_flags)
