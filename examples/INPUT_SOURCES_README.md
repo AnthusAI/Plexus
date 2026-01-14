@@ -72,6 +72,8 @@ item:
   - `raw`: Complete transcript as single string
 - `include_timestamps` (optional, default: false): Add timestamp markers
 - `speaker_labels` (optional, default: false): Add "Speaker N:" prefixes
+- `time_range_start` (optional, default: 0.0): Start time in seconds for filtering
+- `time_range_duration` (optional, default: None): Duration in seconds, or None for no end limit
 
 **Format Examples:**
 
@@ -104,6 +106,87 @@ Speaker 0: I can definitely help you with that.
 [5.00s] Hi, I'm having trouble with my account login.
 [10.00s] I can definitely help you with that.
 ```
+
+### Time-Based Slicing
+
+DeepgramInputSource supports extracting specific time ranges from transcripts using the `time_range_start` and `time_range_duration` parameters.
+
+**How It Works:**
+- Elements (paragraphs/utterances/words) are included if they **start** within the time range
+- Works independently of `include_timestamps` option (you can filter by time without displaying timestamps)
+- Works across all format modes: paragraphs, utterances, words, raw
+
+**Example Configurations:**
+
+**Extract first minute:**
+```yaml
+item:
+  class: DeepgramInputSource
+  options:
+    pattern: ".*deepgram.*\\.json$"
+    format: "paragraphs"
+    time_range_start: 0
+    time_range_duration: 60
+```
+
+**Extract 2 minutes starting at 1:45 (105 seconds):**
+```yaml
+item:
+  class: DeepgramInputSource
+  options:
+    pattern: ".*deepgram.*\\.json$"
+    format: "utterances"
+    time_range_start: 105
+    time_range_duration: 120
+```
+
+**Extract everything after 5 minutes:**
+```yaml
+item:
+  class: DeepgramInputSource
+  options:
+    pattern: ".*deepgram.*\\.json$"
+    format: "words"
+    time_range_start: 300
+    # time_range_duration omitted = no end limit
+```
+
+**With floating-point precision:**
+```yaml
+item:
+  class: DeepgramInputSource
+  options:
+    pattern: ".*deepgram.*\\.json$"
+    time_range_start: 1.5
+    time_range_duration: 3.2  # Extract 3.2 seconds starting at 1.5s
+```
+
+**Time slicing with timestamp display:**
+```yaml
+item:
+  class: DeepgramInputSource
+  options:
+    pattern: ".*deepgram.*\\.json$"
+    format: "paragraphs"
+    include_timestamps: true     # Show timestamps in output
+    time_range_start: 60         # But only for content from 60s onward
+    time_range_duration: 30
+```
+
+**Parameter Behavior:**
+- `time_range_start`: Defaults to 0 (beginning of transcript)
+- `time_range_duration`: Defaults to None (no end limit - include everything from start)
+- Inclusion rule: `time_range_start <= element.start < (time_range_start + time_range_duration)`
+- If `time_range_duration` is None: Include all elements from `time_range_start` onward
+- If time range extends beyond transcript: Include all elements that start within range
+- If `time_range_start` exceeds transcript length: Return empty string
+
+**Use Cases:**
+- Analyze conversation openings (first 30 seconds)
+- Focus on specific conversation phases (middle 2 minutes)
+- Evaluate call closings (last minute)
+- Split long conversations into segments for separate scoring
+- Test scores on specific problematic time ranges
 
 ## Processing Pipeline
 
