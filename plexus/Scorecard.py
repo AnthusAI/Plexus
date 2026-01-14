@@ -789,12 +789,38 @@ class Scorecard:
     async def score_entire_text(
         self,
         *,
-        text: str,
-        metadata: dict,
+        score_input: 'Score.Input' = None,
+        text: str = None,
+        metadata: dict = None,
         modality: Optional[str] = None,
         subset_of_score_names: Optional[List[str]] = None,
         item=None,
     ) -> Dict[str, Score.Result]:
+        """
+        Score text content using the scorecard's scores.
+
+        Args:
+            score_input: Score.Input object (NEW PREFERRED METHOD)
+            text: Text to score (DEPRECATED - use score_input instead)
+            metadata: Additional metadata (DEPRECATED - use score_input instead)
+            modality: Optional modality specification
+            subset_of_score_names: Optional list of specific scores to run
+            item: Optional Item object
+
+        Returns:
+            Dictionary mapping score names to Score.Result objects
+        """
+        # Handle backwards compatibility: support both old (text, metadata) and new (score_input) signatures
+        if score_input is not None:
+            # New signature: use Score.Input
+            text = score_input.text
+            metadata = score_input.metadata if score_input.metadata else {}
+        elif text is not None:
+            # Old signature: text and metadata provided separately
+            if metadata is None:
+                metadata = {}
+        else:
+            raise ValueError("Either score_input or text must be provided")
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
 

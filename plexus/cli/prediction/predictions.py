@@ -1126,46 +1126,6 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
         
         return sample_row, item.id
 
-async def predict_score(score_name, scorecard_class, sample_row, used_item_id):
-    """Predict a single score."""
-    score_instance = None  # Initialize outside try block
-    try:
-        # Create score instance
-        score_input = create_score_input(
-            sample_row=sample_row, 
-            item_id=used_item_id, 
-            scorecard_class=scorecard_class,
-            score_name=score_name
-        )
-        
-        # Run prediction
-        try:
-            result = await predict_score_impl(
-                scorecard_class=scorecard_class,
-                score_name=score_name,
-                item_id=used_item_id,
-                input_data=score_input,
-                fresh=False
-            )
-            
-            if result[0] is not None:  # Check if we got actual results
-                return result
-            logging.info(f"No valid predictions returned for {score_name} - likely hit a breakpoint or got empty result")
-            return None, None, None
-            
-        except BatchProcessingPause:
-            raise  # Just re-raise, no cleanup needed here
-        except Exception as e:
-            logging.error(f"Error during prediction: {e}")
-            logging.error(f"Full traceback: {traceback.format_exc()}")
-            raise
-            
-    except BatchProcessingPause:
-        raise  # Just re-raise
-    except Exception as e:
-        logging.error(f"Error in predict_score: {e}")
-        logging.error(f"Full traceback: {traceback.format_exc()}")
-        raise
 
 async def predict_score_with_individual_loading(scorecard_identifier, score_name, sample_row, used_item_id, no_cache=False, yaml_only=False, specific_version=None):
     """
@@ -1209,16 +1169,26 @@ async def predict_score_with_individual_loading(scorecard_identifier, score_name
         except Exception:
             pass
 
-        # Prepare inputs
-        item_text = sample_row.iloc[0].get('text', '') if not sample_row.empty else ''
+        # Prepare inputs - create Score.Input from sample row
+        from plexus.scores.Score import Score
+
+        if sample_row.empty:
+            raise Exception("Empty sample row provided")
+
+        row_dict = sample_row.iloc[0].to_dict()
+        item_text = row_dict.get('text', '')
         if not item_text:
             raise Exception("No text content found in sample row")
-        metadata = sample_row.iloc[0].to_dict() if not sample_row.empty else {}
 
-        # Run centralized prediction with backfilling
-        results = await scorecard_instance.score_entire_text(
+        # Create Score.Input object
+        score_input = Score.Input(
             text=item_text,
-            metadata=metadata,
+            metadata=row_dict
+        )
+
+        # Run centralized prediction with backfilling using new signature
+        results = await scorecard_instance.score_entire_text(
+            score_input=score_input,
             modality=None,
             subset_of_score_names=[score_name]
         )
@@ -1363,43 +1333,6 @@ def create_feedback_comparison(
         "isAgreement": is_agreement
     }
 
-
-def create_score_input(sample_row, item_id, scorecard_class, score_name):
-    """Create a Score.Input object from sample data."""
-    score_class = Score.from_name(scorecard_class.properties['key'], score_name)
-    score_input_class = getattr(score_class, 'Input', None)
-    
-    if score_input_class is None:
-        logging.warning(f"Input class not found. Using Score.Input default.")
-        score_input_class = Score.Input
-    
-    if sample_row is not None:
-        row_dictionary = sample_row.iloc[0].to_dict()
-        text = row_dictionary.get('text', '')
-        metadata_raw = row_dictionary.get('metadata', {})
-        
-        # Handle both dict objects (from FeedbackItems) and JSON strings (from other sources)
-        if isinstance(metadata_raw, dict):
-            metadata = metadata_raw
-        else:
-            try:
-                metadata = json.loads(metadata_raw)
-            except (json.JSONDecodeError, TypeError):
-                logging.warning(f"Failed to parse metadata, using empty dict: {metadata_raw}")
-                metadata = {}
-        
-        if 'item_id' not in metadata:
-            metadata['item_id'] = str(item_id)
-        
-        logging.info(f"Creating score input with text length: {len(text)}")
-        logging.info(f"Score input text preview: {text[:200] if text else 'NO TEXT IN SCORE INPUT'}")
-        logging.info(f"Score input metadata keys: {list(metadata.keys())}")
-        logging.info(f"Complete score input metadata: {json.dumps(metadata, indent=2)}")
-        
-        return score_input_class(text=text, metadata=metadata)
-    else:
-        metadata = {"item_id": str(item_id)}
-        return score_input_class(text="", metadata=metadata)
 
 def output_yaml_prediction_results(
     results: list,
