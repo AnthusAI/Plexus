@@ -1022,9 +1022,11 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
                     feedback_item = None
             
             logging.info(f"Found item {item_id} from identifier '{item_identifier}'")
-            
-            # Create a pandas-like row structure for compatibility
-            text_content = item.text or ''
+
+            # Use Item.to_score_input() to transform the item
+            # TODO: Pass item_config from scorecard YAML once available
+            score_input = item.to_score_input(item_config=None)
+            text_content = score_input.text
             logging.info(f"Item text length: {len(text_content)}")
             logging.info(f"Item text preview: {text_content[:200] if text_content else 'EMPTY TEXT'}")
             
@@ -1100,10 +1102,14 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
         item = items[0]
         
         logging.info(f"Selected most recent item {item.id} from API")
-        
+
+        # Use Item.to_score_input() to transform the item
+        # TODO: Pass item_config from scorecard YAML once available
+        score_input = item.to_score_input(item_config=None)
+
         # Create a pandas-like row structure for compatibility
         sample_data = {
-            'text': item.text or '',
+            'text': score_input.text,
             'item_id': item.id,
             'metadata': json.dumps({
                 "item_id": item.id,
