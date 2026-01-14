@@ -1,8 +1,8 @@
 import re
-import pandas as pd
-from plexus.processors.DataframeProcessor import DataframeProcessor
+from plexus.processors.DataframeProcessor import Processor
 
-class AddEnumeratedSpeakerIdentifiersTranscriptFilter(DataframeProcessor):
+
+class AddEnumeratedSpeakerIdentifiersTranscriptFilter(Processor):
     """
     Replace speaker identifiers with enumerated labels (Speaker A, Speaker B, etc.).
 
@@ -15,25 +15,26 @@ class AddEnumeratedSpeakerIdentifiersTranscriptFilter(DataframeProcessor):
         After: "Speaker A: Hello. Speaker B: Hi. Speaker A: How are you?"
     """
 
-    def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
-        random_row_index = dataframe.sample(n=1).index[0] if len(dataframe) > 0 else None
+    def process(self, score_input: 'Score.Input') -> 'Score.Input':
+        """
+        Process the Score.Input by enumerating speaker identifiers.
 
-        if random_row_index is not None:
-            original_transcript = dataframe.at[random_row_index, 'text']
-            truncated_original_transcript = (original_transcript[:512] + '...') if len(original_transcript) > 512 else original_transcript
-            self.before_summary = truncated_original_transcript
+        Args:
+            score_input: Score.Input with text
 
-        dataframe['text'] = dataframe['text'].apply(
-            lambda text: self.enumerate_speakers(text)
+        Returns:
+            Score.Input with enumerated speaker identifiers
+        """
+        from plexus.scores.Score import Score
+
+        enumerated_text = self.enumerate_speakers(score_input.text)
+
+        # Return new Score.Input with enumerated text
+        return Score.Input(
+            text=enumerated_text,
+            metadata=score_input.metadata,
+            results=score_input.results
         )
-
-        if random_row_index is not None:
-            modified_transcript = dataframe.at[random_row_index, 'text']
-            truncated_modified_transcript = (modified_transcript[:512] + '...') if len(modified_transcript) > 512 else modified_transcript
-            self.after_summary = truncated_modified_transcript
-
-        self.display_summary()
-        return dataframe
 
     def enumerate_speakers(self, text: str) -> str:
         """
