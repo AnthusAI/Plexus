@@ -368,7 +368,7 @@ class TestScorecard:
         )
         
         # Set up a custom mock for get_score_result that returns our predefined results
-        async def mock_get_score_result(*, scorecard, score, text, metadata, modality, results):
+        async def mock_get_score_result(*, scorecard, score, text, metadata, modality, results, item=None):
             if score == 'Score1':
                 return [score1_result]
             elif score == 'Score2':
@@ -377,7 +377,7 @@ class TestScorecard:
             elif score == 'Score3':
                 # For score3, we also expect score1 results to be passed
                 return [score3_result]
-            
+
             return [Score.Result(value="Error", error=f"Score not found: {score}")]
         
         self.scorecard.get_score_result = mock_get_score_result
@@ -472,13 +472,13 @@ class TestScorecard:
         )
         
         # Set up a custom mock for get_score_result
-        async def mock_get_score_result(*, scorecard, score, text, metadata, modality, results):
+        async def mock_get_score_result(*, scorecard, score, text, metadata, modality, results, item=None):
             if score == 'Score1':
                 return [score1_result]  # Return Fail to trigger condition check
             elif score == 'Score3':
                 # This should never be called due to dependency condition
                 return [score3_result]
-            
+
             return [Score.Result(value="Error", error=f"Score not found: {score}")]
         
         self.scorecard.get_score_result = mock_get_score_result

@@ -95,7 +95,7 @@ class PlexusStorageAdapter:
             metadata = ProcedureMetadata(
                 procedure_id=procedure_id,
                 execution_log=execution_log,
-                replay_index=raw_metadata.get('replay_index'),
+                replay_index=raw_metadata.get('replay_index', 0),  # Default to 0 if not set
                 state=raw_metadata.get('state', {}),
                 lua_state=raw_metadata.get('lua_state', {}),
                 status=procedure_data.get('status', 'RUNNING'),
