@@ -12,10 +12,18 @@ Re-architect Plexus to support multi-modal inputs (text, images, audio) by creat
 4. ✅ All 7 per-item processors converted to Score.Input interface
 5. ✅ All 4 dataset-level processors updated to use DatasetProcessor
 
-### 🔄 Phase 2 Remaining: Update Usage Points
-1. ⏳ Update production predictions to use Item.to_score_input()
-2. ⏳ Update Scorecard.score_entire_text() signature
-3. ⏳ **Critical**: Update dataset generation to run Item.to_score_input() pipeline
+### ✅ Phase 2 Complete: Prediction Pipeline Updates
+1. ✅ Update production predictions to use Item.to_score_input()
+2. ✅ Remove unused create_score_input() and predict_score() functions
+3. ✅ Update predict_score_with_individual_loading() to use Score.Input
+4. ✅ Update Scorecard.score_entire_text() signature to accept Score.Input (backwards compatible)
+
+### 🔄 Phase 3 Remaining: Dataset Generation Pipeline
+1. ⏳ **Critical**: Update dataset generation to run Item.to_score_input() pipeline
+   - Files to update: FeedbackItems.py, AWSDataLakeCache.py, DataCache.py
+   - Add item_config parameter to DataCache base class
+   - Update _create_dataset_rows to use item.to_score_input(item_config)
+   - Pass item_config from dataset YAML through CLI
 
 ## Key Architectural Decision (UPDATED)
 
@@ -339,32 +347,40 @@ This is a major version change that completely breaks the old architecture.
 - ✅ `tests/test_input_sources/test_text_file_input_source.py` - Updated
 - ✅ `tests/test_input_sources/test_scorecard_integration.py` - Updated
 
-### Prediction & Evaluation (NOT STARTED)
-- ⏳ `plexus/cli/prediction/predictions.py` - Use Item.to_score_input()
-- ⏳ `plexus/cli/evaluation/evaluations.py` - Use Item.to_score_input()
-- ⏳ `plexus/Scorecard.py` - score_entire_text() signature change
+### Prediction & Evaluation
+- ✅ `plexus/cli/prediction/predictions.py` - Updated to use Item.to_score_input()
+- ✅ `plexus/Scorecard.py` - score_entire_text() signature updated (backwards compatible)
+- ⏳ `plexus/cli/evaluation/evaluations.py` - NO CHANGES NEEDED (reads from text column)
 
-### Reports (NOT STARTED)
-- ⏳ `plexus/reports/blocks/topic_analysis.py` - Use Item.to_score_input()
+### Reports
+- ⏳ `plexus/reports/blocks/topic_analysis.py` - NO CHANGES NEEDED (reads from text column)
 
-## Current Status (as of 2025-01-14)
+### Dataset Generation (REMAINING WORK)
+- ⏳ `plexus/data/FeedbackItems.py` - Update _create_dataset_rows to use item.to_score_input()
+- ⏳ `plexus/data/AWSDataLakeCache.py` - Update process_content_item to use pipeline
+- ⏳ `plexus/data/DataCache.py` - Add item_config parameter support
+- ⏳ `plexus/cli/dataset/datasets.py` - Pass item_config from YAML to DataCache
+
+## Current Status (as of 2025-01-14 Evening)
 
 ### Completed ✅
-1. Core infrastructure foundation:
+1. **Phase 1 - Core infrastructure** (100% complete):
    - Item.to_score_input() method implemented with full pipeline support
    - InputSource base class and implementations converted to return Score.Input
-   - DataframeProcessor replaced with new Processor base class
-   - 5 processors converted to Score.Input interface
+   - DataframeProcessor replaced with Processor and DatasetProcessor base classes
+   - All 11 processors converted (7 per-item + 4 dataset-level)
    - Test files updated for new signatures
 
+2. **Phase 2 - Prediction pipeline** (100% complete):
+   - Production predictions updated to use Item.to_score_input()
+   - Removed unused create_score_input() and predict_score() functions
+   - Updated predict_score_with_individual_loading() to create Score.Input
+   - Updated Scorecard.score_entire_text() signature (backwards compatible)
+
 ### In Progress 🔄
-- Converting remaining 6 processors to Score.Input interface
+- **Phase 3 - Dataset generation pipeline**: Needs item_config integration
 
 ### Not Started ⏳
-- Prediction pipeline updates
-- Evaluation pipeline updates
-- Scorecard signature changes
-- Topic Analysis report updates
 - Full test suite verification
 - Breaking changes documentation
 

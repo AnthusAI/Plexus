@@ -135,46 +135,9 @@ class Score(ABC,
                 value['percentage'] = 100.0
             return value
 
-    class Input(BaseModel):
-        """
-        Standard input structure for all Score classifications in Plexus.
-
-        The Input class standardizes how content is passed to Score classifiers,
-        supporting both the content itself and contextual metadata. It's used by:
-        - Individual Score predictions
-        - Batch processing jobs
-        - Evaluation runs
-        - Dashboard API integrations
-
-        Attributes:
-            text: The content to classify. Can be a transcript, document, etc.
-            metadata: Additional context like source, timestamps, or tracking IDs
-            results: Optional list of previous classification results, used for:
-                    - Composite scores that depend on other scores
-                    - Multi-step classification pipelines
-                    - Score dependency resolution
-
-        Common usage:
-        1. Basic classification:
-            input = Score.Input(
-                text="content to classify",
-                metadata={"source": "phone_call"}
-            )
-
-        2. With dependencies:
-            input = Score.Input(
-                text="content to classify",
-                metadata={"source": "phone_call"},
-                results=[{
-                    "name": "PriorScore",
-                    "result": prior_score_result
-                }]
-            )
-        """
-        model_config = ConfigDict(protected_namespaces=())
-        text:     str
-        metadata: dict = {}
-        results: Optional[List[Any]] = None
+    # Import lightweight ScoreInput to avoid psycopg import dependencies
+    # The Input class is now defined in ScoreInput.py to avoid circular imports
+    from plexus.core.ScoreInput import ScoreInput as Input
 
     class Result(BaseModel):
         """

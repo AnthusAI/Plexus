@@ -21,7 +21,8 @@ class TextFileInputSource(InputSource):
             ValueError: If no matching attachment found
             Exception: If file download or parsing fails
         """
-        from plexus.scores.Score import Score
+        # Import from lightweight module to avoid psycopg dependencies
+        from plexus.core.ScoreInput import ScoreInput
 
         # Find matching attachment
         attachment_key = self.find_matching_attachment(item)
@@ -46,5 +47,5 @@ class TextFileInputSource(InputSource):
         metadata['input_source'] = 'TextFileInputSource'
         metadata['attachment_key'] = attachment_key
 
-        # Return Score.Input
-        return Score.Input(text=text_content, metadata=metadata)
+        # Return ScoreInput
+        return ScoreInput(text=text_content, metadata=metadata)
