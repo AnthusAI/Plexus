@@ -43,7 +43,19 @@ class TextFileInputSource(InputSource):
         self.logger.info(f"Loaded {len(text_content)} characters from {attachment_key}")
 
         # Build metadata
-        metadata = item.metadata.copy() if item.metadata else {}
+        # Parse metadata if it's a JSON string (handle API items where metadata is a string)
+        import json
+        metadata = {}
+        if item.metadata:
+            if isinstance(item.metadata, str):
+                try:
+                    metadata = json.loads(item.metadata)
+                except json.JSONDecodeError:
+                    self.logger.warning(f"Failed to parse metadata JSON for item {getattr(item, 'id', 'unknown')}")
+                    metadata = {}
+            elif isinstance(item.metadata, dict):
+                metadata = item.metadata.copy()
+
         metadata['input_source'] = 'TextFileInputSource'
         metadata['attachment_key'] = attachment_key
 
