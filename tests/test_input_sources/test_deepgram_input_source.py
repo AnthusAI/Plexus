@@ -364,7 +364,8 @@ class TestDeepgramInputSource:
         result = source.extract(item)
 
         # Assert - minimal fixture has no paragraphs structure, should handle gracefully
-        assert isinstance(result, str)
+        assert hasattr(result, 'text')
+        assert isinstance(result.text, str)
 
     @patch("plexus.utils.score_result_s3_utils.download_score_result_trace_file")
     def test_speaker_labels_without_speaker_field(self, mock_download):
@@ -637,7 +638,7 @@ class TestDeepgramInputSource:
         full_transcript = deepgram_data["results"]["channels"][0]["alternatives"][0][
             "transcript"
         ]
-        assert len(result) < len(full_transcript)
+        assert len(result.text) < len(full_transcript)
 
     @patch("plexus.utils.score_result_s3_utils.download_score_result_trace_file")
     def test_time_range_raw_no_filtering(self, mock_download):
@@ -663,7 +664,7 @@ class TestDeepgramInputSource:
         expected = deepgram_data["results"]["channels"][0]["alternatives"][0][
             "transcript"
         ]
-        assert result == expected
+        assert result.text == expected
 
     @patch("plexus.utils.score_result_s3_utils.download_score_result_trace_file")
     def test_time_range_with_timestamps_enabled(self, mock_download):
