@@ -331,6 +331,15 @@ class Item(BaseModel):
         text = self.text or ""
         metadata = self.metadata or {}
 
+        # Parse metadata if it's a JSON string
+        if isinstance(metadata, str):
+            import json
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse metadata JSON for item {self.id}")
+                metadata = {}
+
         # If item_config specifies an input source, use it
         if item_config and 'class' in item_config:
             from plexus.input_sources.InputSourceFactory import InputSourceFactory
