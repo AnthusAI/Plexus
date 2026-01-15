@@ -11,9 +11,10 @@ class TestInputSourceFactoryIntegration:
         with open(f"tests/fixtures/{filename}", "r") as f:
             return json.load(f)
 
-    @patch('plexus.input_sources.TextFileInputSource.download_score_result_log_file')
+    @patch('plexus.utils.score_result_s3_utils.download_score_result_log_file')
     def test_factory_creates_and_extracts_text_file(self, mock_download):
         """Test complete workflow: factory -> create -> extract for TextFileInputSource"""
+        from plexus.input_sources.TextFileInputSource import TextFileInputSource
         from plexus.input_sources.InputSourceFactory import InputSourceFactory
 
         # Setup
@@ -37,12 +38,13 @@ class TestInputSourceFactoryIntegration:
         text = input_source.extract(item)
 
         # Assert
-        assert text == "Content from text file"
+        assert text.text == "Content from text file"
         mock_download.assert_called_once_with("s3://bucket/path/transcript.txt")
 
-    @patch('plexus.input_sources.DeepgramInputSource.download_score_result_trace_file')
+    @patch('plexus.utils.score_result_s3_utils.download_score_result_trace_file')
     def test_factory_creates_and_extracts_deepgram(self, mock_download):
         """Test complete workflow: factory -> create -> extract for DeepgramInputSource"""
+        from plexus.input_sources.DeepgramInputSource import DeepgramInputSource
         from plexus.input_sources.InputSourceFactory import InputSourceFactory
 
         # Setup
@@ -69,12 +71,13 @@ class TestInputSourceFactoryIntegration:
         text = input_source.extract(item)
 
         # Assert
-        assert "Hello, thank you for calling customer support" in text
-        assert "\n\n" in text  # Paragraphs format
+        assert "Hello, thank you for calling customer support" in text.text
+        assert "\n\n" in text.text  # Paragraphs format
         mock_download.assert_called_once_with("s3://bucket/path/deepgram_transcript.json")
 
     def test_factory_creates_source_without_item(self):
         """Test that factory can create sources even without an item (for testing/validation)"""
+        from plexus.input_sources.TextFileInputSource import TextFileInputSource
         from plexus.input_sources.InputSourceFactory import InputSourceFactory
 
         # Execute
@@ -87,9 +90,10 @@ class TestInputSourceFactoryIntegration:
         assert source is not None
         assert source.pattern.pattern == r".*\.txt$"
 
-    @patch('plexus.input_sources.DeepgramInputSource.download_score_result_trace_file')
+    @patch('plexus.utils.score_result_s3_utils.download_score_result_trace_file')
     def test_factory_handles_different_deepgram_formats(self, mock_download):
         """Test that factory can create DeepgramInputSource with different format options"""
+        from plexus.input_sources.DeepgramInputSource import DeepgramInputSource
         from plexus.input_sources.InputSourceFactory import InputSourceFactory
 
         deepgram_data = self.load_fixture("deepgram_simple_conversation.json")
@@ -122,14 +126,16 @@ class TestInputSourceFactoryIntegration:
 
     def test_factory_error_handling_for_unknown_source(self):
         """Test that factory raises clear error for unknown input source class"""
+        from plexus.input_sources.TextFileInputSource import TextFileInputSource
         from plexus.input_sources.InputSourceFactory import InputSourceFactory
 
         with pytest.raises(ValueError, match="Unknown input source"):
             InputSourceFactory.create_input_source("NonExistentInputSource")
 
-    @patch('plexus.input_sources.TextFileInputSource.download_score_result_log_file')
+    @patch('plexus.utils.score_result_s3_utils.download_score_result_log_file')
     def test_factory_error_propagates_from_extract(self, mock_download):
         """Test that errors from extract() method propagate correctly"""
+        from plexus.input_sources.TextFileInputSource import TextFileInputSource
         from plexus.input_sources.InputSourceFactory import InputSourceFactory
 
         # Setup: download fails
@@ -156,6 +162,7 @@ class TestInputSourceFactoryIntegration:
 
     def test_factory_handles_complex_yaml_options(self):
         """Test that factory correctly passes through complex YAML options"""
+        from plexus.input_sources.DeepgramInputSource import DeepgramInputSource
         from plexus.input_sources.InputSourceFactory import InputSourceFactory
 
         config = {
@@ -182,9 +189,10 @@ class TestInputSourceFactoryIntegration:
         assert source.options["speaker_labels"] is False
         assert source.options["custom_nested"]["key"] == "value"
 
-    @patch('plexus.input_sources.TextFileInputSource.download_score_result_log_file')
+    @patch('plexus.utils.score_result_s3_utils.download_score_result_log_file')
     def test_no_matching_attachment_raises_clear_error(self, mock_download):
         """Test that missing attachment raises clear error with available files listed"""
+        from plexus.input_sources.TextFileInputSource import TextFileInputSource
         from plexus.input_sources.InputSourceFactory import InputSourceFactory
 
         config = {
