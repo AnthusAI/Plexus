@@ -104,7 +104,7 @@ class TestDeepgramInputSource:
         result = source.extract(item)
 
         # Assert
-        assert "[0.00s]" in result.text or "[0.0s]" in result
+        assert "[0.00s]" in result.text or "[0.0s]" in result.text
         assert "s]" in result.text  # Has timestamp markers
         lines = result.text.split("\n\n")
         for line in lines:
@@ -132,7 +132,7 @@ class TestDeepgramInputSource:
         result = source.extract(item)
 
         # Assert
-        assert "[" in result.text and "s]" in result  # Has timestamps
+        assert "[" in result.text and "s]" in result.text  # Has timestamps
         assert "Speaker 0:" in result.text
         assert "Speaker 1:" in result.text
 
@@ -246,7 +246,7 @@ class TestDeepgramInputSource:
         result = source.extract(item)
 
         # Assert
-        assert "Hello[0.00]" in result.text or "Hello[0.0]" in result
+        assert "Hello[0.00]" in result.text or "Hello[0.0]" in result.text
         assert "world[" in result.text
         assert "]" in result.text
 
