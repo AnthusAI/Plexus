@@ -361,7 +361,7 @@ This is a major version change that completely breaks the old architecture.
 - ⏳ `plexus/data/DataCache.py` - Add item_config parameter support
 - ⏳ `plexus/cli/dataset/datasets.py` - Pass item_config from YAML to DataCache
 
-## Current Status (as of 2025-01-14 Evening)
+## Current Status (as of 2025-01-14 Late Evening)
 
 ### Completed ✅
 1. **Phase 1 - Core infrastructure** (100% complete):
@@ -377,11 +377,22 @@ This is a major version change that completely breaks the old architecture.
    - Updated predict_score_with_individual_loading() to create Score.Input
    - Updated Scorecard.score_entire_text() signature (backwards compatible)
 
+3. **Phase 3 - Dataset generation pipeline** (100% complete):
+   - Updated FeedbackItems to use Item.to_score_input() when item_config provided
+   - Updated CLI dataset command to pass item_config from YAML
+   - Dataset generation now runs full Item → Score.Input pipeline
+
 ### In Progress 🔄
-- **Phase 3 - Dataset generation pipeline**: Needs item_config integration
+- **Test suite fixes**: 50/74 tests passing (68%), fixing remaining failures
+  - Deepgram tests: 25/35 passing (71%)
+  - Text file tests: 5/13 passing (38%)
+  - Integration tests: 4/8 passing (50%)
+  - Factory tests: 16/18 passing (89%)
+  - Fixed psycopg import issue by moving ScoreInput to core package
+  - Fixed test mocking by moving imports inside test functions
+  - Updated assertions to use result.text for ScoreInput objects
 
 ### Not Started ⏳
-- Full test suite verification
 - Breaking changes documentation
 
 ## Testing Strategy
