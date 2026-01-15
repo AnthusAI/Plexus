@@ -29,6 +29,7 @@ class TestInputSourceFactoryIntegration:
         }
 
         item = Mock()
+        item.metadata = {}
         item.attachedFiles = ["s3://bucket/path/transcript.txt"]
 
         # Execute: Create via factory and extract
@@ -62,6 +63,7 @@ class TestInputSourceFactoryIntegration:
         }
 
         item = Mock()
+        item.metadata = {}
         item.attachedFiles = ["s3://bucket/path/deepgram_transcript.json"]
 
         # Execute: Create via factory and extract
@@ -100,6 +102,7 @@ class TestInputSourceFactoryIntegration:
         mock_download.return_value = (deepgram_data, None)
 
         item = Mock()
+        item.metadata = {}
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Test different format configurations
@@ -118,11 +121,11 @@ class TestInputSourceFactoryIntegration:
                 config["class"],
                 **config["options"]
             )
-            text = source.extract(item)
+            result = source.extract(item)
 
-            # All formats should return a non-empty string
-            assert isinstance(text, str)
-            assert len(text) > 0
+            # All formats should return a non-empty ScoreInput with text
+            assert hasattr(result, 'text')
+            assert len(result.text) > 0
 
     def test_factory_error_handling_for_unknown_source(self):
         """Test that factory raises clear error for unknown input source class"""
@@ -149,6 +152,7 @@ class TestInputSourceFactoryIntegration:
         }
 
         item = Mock()
+        item.metadata = {}
         item.attachedFiles = ["s3://bucket/file.txt"]
 
         source = InputSourceFactory.create_input_source(
@@ -203,6 +207,7 @@ class TestInputSourceFactoryIntegration:
         }
 
         item = Mock()
+        item.metadata = {}
         item.attachedFiles = [
             "s3://bucket/file1.json",
             "s3://bucket/file2.xml"
