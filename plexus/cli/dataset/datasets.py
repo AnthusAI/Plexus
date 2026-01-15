@@ -161,6 +161,10 @@ def load(source_identifier: str, fresh: bool, reload: bool):
 
         # Handle both scorecard format (with 'data' section) and dataset format (direct config)
         data_config = config.get('data')
+
+        # Extract item config if present (applies to both formats)
+        item_config = config.get('item')
+
         if not data_config:
             # Check if this is a direct dataset configuration (recommended format)
             if 'class' in config:
@@ -175,9 +179,16 @@ def load(source_identifier: str, fresh: bool, reload: bool):
                     # Client-specific extensions (existing behavior)
                     class_path = f"plexus_extensions.{class_name}.{class_name}"
                 
+                # Separate 'item' section from other parameters
+                params = {k: v for k, v in config.items() if k not in ['class', 'item']}
+
+                # If there's an 'item' section, add it to item_config parameter
+                if 'item' in config:
+                    params['item_config'] = config['item']
+
                 data_config = {
                     'class': class_path,
-                    'parameters': {k: v for k, v in config.items() if k != 'class'}
+                    'parameters': params
                 }
             else:
                 logging.error("No 'data' section in yamlConfiguration and no 'class' specified.")
@@ -213,6 +224,13 @@ def load(source_identifier: str, fresh: bool, reload: bool):
         # 4. Load dataframe
         logging.info(f"Loading dataframe using {data_cache_class_path}...")
         data_cache_params = data_config.get('parameters', {})
+
+        # Add item_config if present (for scorecard format)
+        # For direct format, it was already added to params earlier
+        if item_config and 'item_config' not in data_cache_params:
+            data_cache_params['item_config'] = item_config
+            logging.info("Added item_config from YAML to data cache parameters")
+
         data_cache = data_cache_class(**data_cache_params)
 
         # Check if the data cache's load_dataframe method supports the update parameter

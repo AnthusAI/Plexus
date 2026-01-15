@@ -28,7 +28,8 @@ class DeepgramInputSource(TextFileInputSource):
             KeyError: If Deepgram JSON structure is invalid
             Exception: If file download or parsing fails
         """
-        from plexus.scores.Score import Score
+        # Import from lightweight module to avoid psycopg dependencies
+        from plexus.core.ScoreInput import ScoreInput
 
         # Find matching attachment (raises ValueError if not found)
         attachment_key = self.find_matching_attachment(item)
@@ -109,8 +110,8 @@ class DeepgramInputSource(TextFileInputSource):
             if time_range_duration is not None:
                 metadata['time_range_duration'] = time_range_duration
 
-        # Return Score.Input
-        return Score.Input(text=formatted_text, metadata=metadata)
+        # Return ScoreInput
+        return ScoreInput(text=formatted_text, metadata=metadata)
 
     def _is_in_time_range(
         self,

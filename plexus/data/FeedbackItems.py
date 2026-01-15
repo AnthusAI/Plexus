@@ -70,6 +70,7 @@ class FeedbackItems(DataCache):
         backfill_cells: Optional[bool] = Field(False, description="If True, backfill confusion matrix cells to limit_per_cell using older data outside the time window when cells have insufficient items")
         identifier_extractor: Optional[str] = Field(None, description="Optional client-specific identifier extractor class (e.g., 'CallCriteriaIdentifierExtractor')")
         column_mappings: Optional[Dict[str, str]] = Field(None, description="Optional mapping of original score names to new column names (e.g., {'Agent Misrepresentation': 'Agent Misrepresentation - With Confidence'})")
+        item_config: Optional[Dict] = Field(None, description="Optional item configuration for running Item.to_score_input() pipeline (from 'item:' section of score YAML)")
         cache_file: str = Field(default="feedback_items_cache.parquet", description="Cache file name")
         local_cache_directory: str = Field(default='./.plexus_training_data_cache/', description="Local cache directory")
         
@@ -1057,27 +1058,38 @@ class FeedbackItems(DataCache):
             # feedback_item_id: Use feedback item ID
             feedback_item_id = feedback_item.id
             
-            # text: Get the text content from Item.text (the transcript)
+            # text: Get the text content from Item
             text = ""
             if feedback_item.item:
-                # First try the direct text field
-                text = feedback_item.item.text
-                
-                # If text is None, try to reload the item with full data
-                if text is None and hasattr(feedback_item.item, 'get_by_id'):
+                # Use Item.to_score_input() pipeline if item_config is provided
+                if self.parameters.item_config:
                     try:
-                        full_item = feedback_item.item.get_by_id(feedback_item.item.id)
-                        if full_item and full_item.text:
-                            text = full_item.text
-                            print(f"DEBUG: Loaded text from full item: {len(text)} characters")
-                        else:
-                            print(f"DEBUG: Full item still has no text")
+                        # Run the Item → Score.Input pipeline
+                        score_input = feedback_item.item.to_score_input(self.parameters.item_config)
+                        text = score_input.text
+                        logger.debug(f"Generated text via Item.to_score_input() pipeline: {len(text)} characters")
                     except Exception as e:
-                        print(f"DEBUG: Error loading full item: {e}")
-                
+                        logger.warning(f"Error running Item.to_score_input() pipeline, falling back to item.text: {e}")
+                        text = feedback_item.item.text or ""
+                else:
+                    # Legacy behavior: use item.text directly
+                    text = feedback_item.item.text
+
+                    # If text is None, try to reload the item with full data
+                    if text is None and hasattr(feedback_item.item, 'get_by_id'):
+                        try:
+                            full_item = feedback_item.item.get_by_id(feedback_item.item.id)
+                            if full_item and full_item.text:
+                                text = full_item.text
+                                print(f"DEBUG: Loaded text from full item: {len(text)} characters")
+                            else:
+                                print(f"DEBUG: Full item still has no text")
+                        except Exception as e:
+                            print(f"DEBUG: Error loading full item: {e}")
+
                 # Convert None to empty string
                 text = text or ""
-                
+
                 # Text content retrieved for processing
             
             # metadata: Create JSON string of metadata structure
