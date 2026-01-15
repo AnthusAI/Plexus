@@ -1180,10 +1180,30 @@ async def predict_score_with_individual_loading(scorecard_identifier, score_name
         if not item_text:
             raise Exception("No text content found in sample row")
 
+        # Extract and parse metadata from row_dict
+        metadata = {}
+        if 'metadata' in row_dict:
+            try:
+                # The metadata in row_dict is usually a JSON string
+                if isinstance(row_dict['metadata'], str):
+                    import json
+                    metadata = json.loads(row_dict['metadata'])
+                elif isinstance(row_dict['metadata'], dict):
+                    metadata = row_dict['metadata']
+            except Exception as e:
+                logging.warning(f"Failed to parse metadata from row_dict: {e}")
+                # Fallback to including the raw value if parsing fails
+                metadata = {'raw_metadata': row_dict['metadata']}
+
+        # Add other useful context from row_dict to metadata, excluding the redundant 'metadata' field
+        for key, value in row_dict.items():
+            if key not in ['text', 'metadata'] and key not in metadata:
+                metadata[key] = value
+
         # Create Score.Input object
         score_input = Score.Input(
             text=item_text,
-            metadata=row_dict
+            metadata=metadata
         )
 
         # Run centralized prediction with backfilling using new signature
