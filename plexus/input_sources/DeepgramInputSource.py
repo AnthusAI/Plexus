@@ -175,7 +175,16 @@ class DeepgramInputSource(TextFileInputSource):
 
         lines = []
         for para in filtered_paragraphs:
-            text = para["text"]
+            # Production Deepgram JSON has "sentences" array instead of "text" key
+            if "sentences" in para:
+                # Combine all sentence texts into paragraph text
+                text = " ".join(sentence["text"] for sentence in para["sentences"])
+            elif "text" in para:
+                # Support older format with direct "text" key (for backwards compatibility)
+                text = para["text"]
+            else:
+                # Skip paragraphs without text
+                continue
 
             if speakers and "speaker" in para:
                 text = f"Speaker {para['speaker']}: {text}"

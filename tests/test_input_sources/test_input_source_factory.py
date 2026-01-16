@@ -1,4 +1,5 @@
 import pytest
+import sys
 from unittest.mock import patch, Mock
 from plexus.input_sources.InputSourceFactory import InputSourceFactory
 from plexus.input_sources.InputSource import InputSource
@@ -116,11 +117,11 @@ class TestInputSourceFactory:
         with pytest.raises(ValueError, match="Unknown input source"):
             InputSourceFactory.create_input_source("", pattern=r".*\.txt$")
 
-    @patch('plexus.input_sources.InputSourceFactory.importlib.import_module')
-    def test_create_import_error_propagates(self, mock_import):
+    @patch.object(sys.modules['plexus.input_sources.InputSourceFactory'], 'importlib')
+    def test_create_import_error_propagates(self, mock_importlib):
         """Test that import errors are logged and re-raised"""
         # Setup
-        mock_import.side_effect = ImportError("Module not found")
+        mock_importlib.import_module.side_effect = ImportError("Module not found")
 
         # Execute & Assert
         with pytest.raises(ImportError, match="Module not found"):
@@ -223,8 +224,8 @@ class TestInputSourceFactory:
         assert source.options["custom_config"]["nested"] == "value"
         assert source.options["custom_config"]["number"] == 42
 
-    @patch('plexus.input_sources.InputSourceFactory.logging.error')
-    def test_create_logs_error_on_failure(self, mock_log_error):
+    @patch.object(sys.modules['plexus.input_sources.InputSourceFactory'], 'logging')
+    def test_create_logs_error_on_failure(self, mock_logging):
         """Test that factory logs errors when creation fails"""
         # Execute
         try:
@@ -233,8 +234,8 @@ class TestInputSourceFactory:
             pass  # Expected
 
         # Assert
-        mock_log_error.assert_called()
-        call_args = str(mock_log_error.call_args)
+        mock_logging.error.assert_called()
+        call_args = str(mock_logging.error.call_args)
         assert "Error creating input source" in call_args
         assert "NonExistentSource" in call_args
 

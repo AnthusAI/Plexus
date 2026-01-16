@@ -1023,9 +1023,42 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
             
             logging.info(f"Found item {item_id} from identifier '{item_identifier}'")
 
+            # Load score YAML to get item config if available
+            item_config = None
+            try:
+                # Load score YAML config directly to get item: section
+                from plexus.scores.Score import Score
+                from plexus.cli.shared import get_score_yaml_path
+                from plexus.cli.shared.client_utils import create_client
+                from plexus.cli.shared.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
+                from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
+                from ruamel.yaml import YAML
+
+                # Resolve scorecard to get the actual name for YAML path
+                client = create_client()
+                scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+                if scorecard_id:
+                    scorecard_structure = fetch_scorecard_structure(client, scorecard_id)
+                    if scorecard_structure:
+                        scorecard_name = scorecard_structure.get('name')
+                        yaml_path = get_score_yaml_path(scorecard_name, score_name)
+
+                        if yaml_path.exists():
+                            with open(yaml_path, 'r') as f:
+                                yaml_parser = YAML(typ='safe')
+                                config = yaml_parser.load(f)
+
+                                if config and 'item' in config:
+                                    item_config = config['item']
+                                    logging.info(f"✅ Using item config from score YAML: {item_config}")
+                        else:
+                            logging.info(f"Score YAML not found at {yaml_path}")
+            except Exception as e:
+                logging.info(f"Could not load score YAML for item config (using default): {e}")
+                item_config = None
+
             # Use Item.to_score_input() to transform the item
-            # TODO: Pass item_config from scorecard YAML once available
-            score_input = item.to_score_input(item_config=None)
+            score_input = item.to_score_input(item_config=item_config)
             text_content = score_input.text
             logging.info(f"Item text length: {len(text_content)}")
             logging.info(f"Item text preview: {text_content[:200] if text_content else 'EMPTY TEXT'}")
@@ -1206,6 +1239,12 @@ async def predict_score_with_individual_loading(scorecard_identifier, score_name
             metadata=metadata
         )
 
+        # Log the Score.Input that will be used for prediction
+        logging.info(f"📝 SCORE.INPUT GOING TO CLASSIFIER:")
+        logging.info(f"   - Text length: {len(score_input.text)} characters")
+        logging.info(f"   - First 300 chars: {score_input.text[:300]}")
+        logging.info(f"   - Last 200 chars: ...{score_input.text[-200:]}")
+
         # Run centralized prediction with backfilling using new signature
         results = await scorecard_instance.score_entire_text(
             score_input=score_input,
@@ -1215,18 +1254,44 @@ async def predict_score_with_individual_loading(scorecard_identifier, score_name
 
         # Extract target result by name or ID
         prediction_result = None
+        logging.info(f"🔍 EXTRACTING RESULT:")
+        logging.info(f"  - results type: {type(results)}")
+        logging.info(f"  - results keys: {list(results.keys()) if results else 'None'}")
+        logging.info(f"  - looking for score_name: {score_name}")
+
         if results:
             if score_name in results:
                 prediction_result = results[score_name]
+                logging.info(f"  ✅ Found by score_name")
             else:
-                # try to find by matching parameters.name
-                for _, res in results.items():
-                    if hasattr(res, 'parameters') and getattr(res.parameters, 'name', None) == score_name:
-                        prediction_result = res
-                        break
+                logging.info(f"  ❌ Not found by score_name, trying parameters.key...")
+                # try to find by matching parameters.key (or parameters.name as fallback)
+                for key, res in results.items():
+                    logging.info(f"    - checking key '{key}': {type(res)}")
+                    if hasattr(res, 'parameters'):
+                        param_key = getattr(res.parameters, 'key', None)
+                        param_name = getattr(res.parameters, 'name', None)
+                        logging.info(f"      - parameters.key: {param_key}")
+                        logging.info(f"      - parameters.name: {param_name}")
+                        # Match by key first (preferred), then by name as fallback
+                        if param_key == score_name or param_name == score_name:
+                            prediction_result = res
+                            logging.info(f"  ✅ Found by parameters.key or parameters.name")
+                            break
+                    else:
+                        logging.info(f"      - no parameters attribute")
+        else:
+            logging.info(f"  ❌ results is empty/None")
 
         # Extract costs from scorecard instance accumulators
         costs = getattr(scorecard_instance, 'get_accumulated_costs', lambda: {'total_cost': 0})()
+
+        logging.info(f"🔍 RETURNING FROM predict_score_with_individual_loading:")
+        logging.info(f"  - prediction_result type: {type(prediction_result)}")
+        logging.info(f"  - prediction_result is None: {prediction_result is None}")
+        if prediction_result:
+            logging.info(f"  - prediction_result.value: {getattr(prediction_result, 'value', 'NO VALUE ATTR')}")
+            logging.info(f"  - prediction_result bool: {bool(prediction_result)}")
 
         return scorecard_instance, prediction_result, costs
     except Exception as e:

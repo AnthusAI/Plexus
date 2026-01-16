@@ -284,7 +284,7 @@ class Item(BaseModel):
             client=client
         )
 
-    def to_score_input(self, item_config: Optional[Dict] = None) -> 'Score.Input':
+    def to_score_input(self, item_config: Optional[Dict] = None) -> 'ScoreInput':
         """
         Transform this item into a Score.Input using the item configuration.
 
@@ -325,7 +325,8 @@ class Item(BaseModel):
             }
             score_input = item.to_score_input(item_config)
         """
-        from plexus.scores.Score import Score
+        # Import from lightweight module to avoid psycopg dependencies
+        from plexus.core.ScoreInput import ScoreInput
 
         # Start with item.text as default
         text = self.text or ""
@@ -352,14 +353,14 @@ class Item(BaseModel):
                     input_source_class,
                     **input_source_options
                 )
-                # InputSource.extract() now returns Score.Input
+                # InputSource.extract() now returns ScoreInput
                 score_input = input_source.extract(self)
             except Exception as e:
                 logging.error(f"Error creating input source {input_source_class}: {e}")
                 # Fall back to default text
-                score_input = Score.Input(text=text, metadata=metadata)
+                score_input = ScoreInput(text=text, metadata=metadata)
         else:
-            score_input = Score.Input(text=text, metadata=metadata)
+            score_input = ScoreInput(text=text, metadata=metadata)
 
         # Apply processors if configured
         processors_config = item_config.get('processors', []) if item_config else []
