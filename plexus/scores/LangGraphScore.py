@@ -34,8 +34,9 @@ else:
     set_debug(False)
     set_verbose(False)
 
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from pathlib import Path
+# Lazy import to avoid requiring psycopg for non-LangGraph operations
+AsyncPostgresSaver = None
 import uuid
 from langgraph.errors import NodeInterrupt
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -246,15 +247,26 @@ class LangGraphScore(Score, LangChainUser):
         
         if db_uri:
             logging.info("Using PostgreSQL checkpoint database")
-            # Create checkpointer and store the context manager
-            self._checkpointer_context = AsyncPostgresSaver.from_conn_string(db_uri)
-            # Enter the context and store the checkpointer
-            self.checkpointer = await self._checkpointer_context.__aenter__()
-            
-            # Initialize tables
-            logging.info("Setting up checkpointer database tables...")
-            await self.checkpointer.setup()
-            logging.info("PostgreSQL checkpointer setup complete")
+            # Lazy import only when actually using PostgreSQL checkpointer
+            global AsyncPostgresSaver
+            if AsyncPostgresSaver is None:
+                try:
+                    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+                except ImportError as e:
+                    logging.warning(f"PostgreSQL checkpointer requested but psycopg not available: {e}")
+                    logging.warning("Falling back to in-memory checkpointer")
+                    db_uri = None  # Fall through to else branch
+
+            if db_uri and AsyncPostgresSaver is not None:
+                # Create checkpointer and store the context manager
+                self._checkpointer_context = AsyncPostgresSaver.from_conn_string(db_uri)
+                # Enter the context and store the checkpointer
+                self.checkpointer = await self._checkpointer_context.__aenter__()
+
+                # Initialize tables
+                logging.info("Setting up checkpointer database tables...")
+                await self.checkpointer.setup()
+                logging.info("PostgreSQL checkpointer setup complete")
         else:
             logging.info("No PostgreSQL URL provided - running without checkpointing")
             self.checkpointer = None

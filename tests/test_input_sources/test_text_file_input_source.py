@@ -1,19 +1,18 @@
 import pytest
-from unittest.mock import Mock, patch, mock_open
+import sys
+from unittest.mock import Mock, patch
+
+# Import to ensure module is loaded
 from plexus.input_sources.TextFileInputSource import TextFileInputSource
 
 
 class TestTextFileInputSource:
     """Test cases for TextFileInputSource"""
 
-    @patch('builtins.open', new_callable=mock_open, read_data="This is the file content")
-    @patch('boto3.client')
-    def test_extract_successful(self, mock_boto_client, mock_file):
+    @patch.object(sys.modules['plexus.input_sources.TextFileInputSource'], 'download_score_result_log_file')
+    def test_extract_successful(self, mock_download):
         """Test successful text extraction from a matching attachment"""
-        # Setup S3 mock
-        mock_s3 = Mock()
-        mock_boto_client.return_value = mock_s3
-        mock_s3.download_file.return_value = None
+        mock_download.return_value = ("This is the file content", None)
 
         source = TextFileInputSource(pattern=r".*transcript\.txt$")
 
@@ -29,16 +28,12 @@ class TestTextFileInputSource:
 
         # Assert
         assert result.text == "This is the file content"
-        mock_s3.download_file.assert_called_once()
+        mock_download.assert_called_once()
 
-    @patch('builtins.open', new_callable=mock_open, read_data="First file content")
-    @patch('boto3.client')
-    def test_extract_multiple_matches_uses_first(self, mock_boto_client, mock_file):
+    @patch.object(sys.modules['plexus.input_sources.TextFileInputSource'], 'download_score_result_log_file')
+    def test_extract_multiple_matches_uses_first(self, mock_download):
         """Test that first matching attachment is used when multiple match"""
-        # Setup S3 mock
-        mock_s3 = Mock()
-        mock_boto_client.return_value = mock_s3
-        mock_s3.download_file.return_value = None
+        mock_download.return_value = ("First file content", None)
 
         source = TextFileInputSource(pattern=r".*\.txt$")
 
@@ -55,7 +50,7 @@ class TestTextFileInputSource:
 
         # Assert
         assert result.text == "First file content"
-        mock_s3.download_file.assert_called_once()
+        mock_download.assert_called_once()
 
     def test_extract_no_matching_attachment(self):
         """Test that ValueError is raised when no attachment matches pattern"""
@@ -115,13 +110,10 @@ class TestTextFileInputSource:
 
         assert "No attachment matching pattern" in str(exc_info.value)
 
-    @patch('boto3.client')
-    def test_extract_download_raises_exception(self, mock_boto_client):
+    @patch.object(sys.modules['plexus.input_sources.TextFileInputSource'], 'download_score_result_log_file')
+    def test_extract_download_raises_exception(self, mock_download):
         """Test that exceptions from download propagate up"""
-        # Setup S3 mock to raise exception
-        mock_s3 = Mock()
-        mock_boto_client.return_value = mock_s3
-        mock_s3.download_file.side_effect = Exception("S3 download failed")
+        mock_download.side_effect = Exception("S3 download failed")
 
         source = TextFileInputSource(pattern=r".*\.txt$")
 
@@ -133,17 +125,11 @@ class TestTextFileInputSource:
         with pytest.raises(Exception, match="S3 download failed"):
             source.extract(item)
 
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('boto3.client')
-    def test_extract_large_file(self, mock_boto_client, mock_file):
+    @patch.object(sys.modules['plexus.input_sources.TextFileInputSource'], 'download_score_result_log_file')
+    def test_extract_large_file(self, mock_download):
         """Test extraction of a large text file"""
-        # Setup
         large_content = "A" * 1_000_000  # 1MB of text
-        mock_file.return_value.read.return_value = large_content
-
-        mock_s3 = Mock()
-        mock_boto_client.return_value = mock_s3
-        mock_s3.download_file.return_value = None
+        mock_download.return_value = (large_content, None)
 
         source = TextFileInputSource(pattern=r".*\.txt$")
 
@@ -158,14 +144,10 @@ class TestTextFileInputSource:
         assert result.text == large_content
         assert len(result.text) == 1_000_000
 
-    @patch('builtins.open', new_callable=mock_open, read_data="")
-    @patch('boto3.client')
-    def test_extract_empty_file(self, mock_boto_client, mock_file):
+    @patch.object(sys.modules['plexus.input_sources.TextFileInputSource'], 'download_score_result_log_file')
+    def test_extract_empty_file(self, mock_download):
         """Test extraction of an empty text file"""
-        # Setup S3 mock
-        mock_s3 = Mock()
-        mock_boto_client.return_value = mock_s3
-        mock_s3.download_file.return_value = None
+        mock_download.return_value = ("", None)
 
         source = TextFileInputSource(pattern=r".*\.txt$")
 
@@ -179,14 +161,10 @@ class TestTextFileInputSource:
         # Assert
         assert result.text == ""
 
-    @patch('builtins.open', new_callable=mock_open, read_data="Hello 世界 🌍 Привет")
-    @patch('boto3.client')
-    def test_extract_file_with_unicode(self, mock_boto_client, mock_file):
+    @patch.object(sys.modules['plexus.input_sources.TextFileInputSource'], 'download_score_result_log_file')
+    def test_extract_file_with_unicode(self, mock_download):
         """Test extraction of file with unicode characters"""
-        # Setup S3 mock
-        mock_s3 = Mock()
-        mock_boto_client.return_value = mock_s3
-        mock_s3.download_file.return_value = None
+        mock_download.return_value = ("Hello 世界 🌍 Привет", None)
 
         source = TextFileInputSource(pattern=r".*\.txt$")
 
@@ -200,14 +178,10 @@ class TestTextFileInputSource:
         # Assert
         assert result.text == "Hello 世界 🌍 Привет"
 
-    @patch('builtins.open', new_callable=mock_open, read_data="File content")
-    @patch('boto3.client')
-    def test_extract_with_options_ignored(self, mock_boto_client, mock_file):
+    @patch.object(sys.modules['plexus.input_sources.TextFileInputSource'], 'download_score_result_log_file')
+    def test_extract_with_options_ignored(self, mock_download):
         """Test that extra options don't affect TextFileInputSource behavior"""
-        # Setup S3 mock
-        mock_s3 = Mock()
-        mock_boto_client.return_value = mock_s3
-        mock_s3.download_file.return_value = None
+        mock_download.return_value = ("File content", None)
 
         source = TextFileInputSource(
             pattern=r".*\.txt$",
@@ -226,14 +200,10 @@ class TestTextFileInputSource:
         assert result.text == "File content"
         assert source.options == {"extra_option": "ignored", "another_option": 123}
 
-    @patch('builtins.open', new_callable=mock_open, read_data="Content")
-    @patch('boto3.client')
-    def test_extract_complex_s3_path(self, mock_boto_client, mock_file):
+    @patch.object(sys.modules['plexus.input_sources.TextFileInputSource'], 'download_score_result_log_file')
+    def test_extract_complex_s3_path(self, mock_download):
         """Test extraction with complex S3 path structure"""
-        # Setup S3 mock
-        mock_s3 = Mock()
-        mock_boto_client.return_value = mock_s3
-        mock_s3.download_file.return_value = None
+        mock_download.return_value = ("Content", None)
 
         source = TextFileInputSource(pattern=r".*deepgram.*\.txt$")
 
@@ -248,7 +218,7 @@ class TestTextFileInputSource:
 
         # Assert
         assert result.text == "Content"
-        mock_s3.download_file.assert_called_once()
+        mock_download.assert_called_once()
 
     def test_default_text_parameter_not_used(self):
         """Test that default_text parameter is not used in TextFileInputSource"""

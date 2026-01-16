@@ -14,12 +14,26 @@ logger = logging.getLogger(__name__)
 # This should match the resource name in amplify/storage/resource.ts
 DEFAULT_BUCKET_NAME = "scoreresultattachments-production"
 
+# Default bucket for data sources (item attachments like Deepgram files)
+# From amplify_outputs.json storage.bucket_name
+DEFAULT_DATASOURCES_BUCKET = "amplify-d1cegb1ft4iove-ma-datasourcesbucketa1d38c0-vqhrgycupls2"
+
 def get_bucket_name():
     """
     Get the S3 bucket name for score result attachments from environment variables
     or fall back to the default.
     """
     return os.environ.get("AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME", DEFAULT_BUCKET_NAME)
+
+def get_datasources_bucket_name():
+    """
+    Get the S3 bucket name for data sources (item attachments) from environment
+    variables or use default.
+
+    This bucket contains item attachments like Deepgram JSON files, transcripts, etc.
+    The path format is typically: items/{item_external_id}/{filename}
+    """
+    return os.environ.get("DATASOURCES_BUCKET", DEFAULT_DATASOURCES_BUCKET)
 
 def upload_score_result_trace_file(score_result_id, trace_data, file_name="trace.json"):
     """
@@ -111,16 +125,24 @@ def upload_score_result_trace_file(score_result_id, trace_data, file_name="trace
 
 def download_score_result_trace_file(s3_path, local_path=None):
     """
-    Download a trace file from the score result attachments S3 bucket.
-    
+    Download a trace file from S3.
+
+    Automatically detects the correct bucket based on the path:
+    - Paths starting with 'items/' use the datasources bucket (item attachments)
+    - Other paths use the score result attachments bucket
+
     Args:
-        s3_path: S3 key path for the file (e.g., 'scoreresults/123/trace.json')
+        s3_path: S3 key path for the file (e.g., 'items/123/deepgram.json' or 'scoreresults/123/trace.json')
         local_path: Optional local path to save the file to
-        
+
     Returns:
         The content of the file as a dictionary (parsed JSON), and the local path if saved
     """
-    bucket_name = get_bucket_name()
+    # Determine which bucket to use based on path
+    if s3_path.startswith('items/'):
+        bucket_name = get_datasources_bucket_name()
+    else:
+        bucket_name = get_bucket_name()
     s3_client = boto3.client('s3')
     
     # Create a temporary file if no local path provided
@@ -379,16 +401,24 @@ def upload_score_result_log_file(score_result_id: str, log_content: str) -> Opti
 
 def download_score_result_log_file(s3_path, local_path=None):
     """
-    Download a log file from the score result attachments S3 bucket.
-    
+    Download a log file from S3.
+
+    Automatically detects the correct bucket based on the path:
+    - Paths starting with 'items/' use the datasources bucket (item attachments)
+    - Other paths use the score result attachments bucket
+
     Args:
-        s3_path: S3 key path for the file (e.g., 'scoreresults/123/log.txt')
+        s3_path: S3 key path for the file (e.g., 'items/123/transcript.txt' or 'scoreresults/123/log.txt')
         local_path: Optional local path to save the file to
-        
+
     Returns:
         The content of the file as a string, and the local path if saved
     """
-    bucket_name = get_bucket_name()
+    # Determine which bucket to use based on path
+    if s3_path.startswith('items/'):
+        bucket_name = get_datasources_bucket_name()
+    else:
+        bucket_name = get_bucket_name()
     s3_client = boto3.client('s3')
     
     # Create a temporary file if no local path provided
