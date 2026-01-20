@@ -284,6 +284,111 @@ class Item(BaseModel):
             client=client
         )
 
+    def to_score_input(self, item_config: Optional[Dict] = None) -> 'ScoreInput':
+        """
+        Transform this item into a Score.Input using the item configuration.
+
+        This is the core method for the new architecture that ensures consistent
+        input processing across production, evaluation, training, and all other contexts.
+
+        Args:
+            item_config: Optional 'item:' configuration from score YAML containing:
+                        - 'class': InputSource class name (e.g., 'DeepgramInputSource')
+                        - 'options': InputSource-specific options
+                        - 'processors': List of processor configurations
+
+        Returns:
+            Score.Input with text field and metadata populated
+
+        Example:
+            # Simple case - use item.text directly
+            score_input = item.to_score_input()
+
+            # With input source (e.g., Deepgram)
+            item_config = {
+                'class': 'DeepgramInputSource',
+                'options': {
+                    'pattern': '.*deepgram.*\\.json$',
+                    'format': 'paragraphs'
+                }
+            }
+            score_input = item.to_score_input(item_config)
+
+            # With input source and processors
+            item_config = {
+                'class': 'DeepgramInputSource',
+                'options': {'pattern': '.*deepgram.*\\.json$'},
+                'processors': [
+                    {'class': 'FilterCustomerOnlyProcessor'},
+                    {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+                ]
+            }
+            score_input = item.to_score_input(item_config)
+        """
+        # Import from lightweight module to avoid psycopg dependencies
+        from plexus.core.ScoreInput import ScoreInput
+
+        # Start with item.text as default
+        text = self.text or ""
+        metadata = self.metadata or {}
+
+        # Parse metadata if it's a JSON string
+        if isinstance(metadata, str):
+            import json
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse metadata JSON for item {self.id}")
+                metadata = {}
+
+        # If item_config specifies an input source, use it
+        if item_config and 'class' in item_config:
+            from plexus.input_sources.InputSourceFactory import InputSourceFactory
+
+            input_source_class = item_config['class']
+            input_source_options = item_config.get('options', {})
+
+            try:
+                input_source = InputSourceFactory.create_input_source(
+                    input_source_class,
+                    **input_source_options
+                )
+                # InputSource.extract() now returns ScoreInput
+                score_input = input_source.extract(self)
+            except Exception as e:
+                logging.error(f"Error creating input source {input_source_class}: {e}")
+                # Fall back to default text
+                score_input = ScoreInput(text=text, metadata=metadata)
+        else:
+            score_input = ScoreInput(text=text, metadata=metadata)
+
+        # Apply processors if configured
+        processors_config = item_config.get('processors', []) if item_config else []
+        if processors_config:
+            from plexus.processors.ProcessorFactory import ProcessorFactory
+
+            for processor_config in processors_config:
+                processor_class = processor_config.get('class')
+                if not processor_class:
+                    logging.warning(f"Processor config missing 'class' field: {processor_config}")
+                    continue
+
+                processor_parameters = processor_config.get('parameters', {})
+
+                try:
+                    processor_instance = ProcessorFactory.create_processor(
+                        processor_class,
+                        **processor_parameters
+                    )
+                    # Processor.process() now works on Score.Input
+                    score_input = processor_instance.process(score_input)
+                except Exception as e:
+                    logging.error(f"Error applying processor {processor_class}: {e}")
+                    # Continue with other processors even if one fails
+                    continue
+
+        return score_input
+
     def update(self, **kwargs) -> 'Item':
         if 'createdAt' in kwargs:
             raise ValueError("createdAt cannot be modified after creation")

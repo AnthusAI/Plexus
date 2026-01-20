@@ -135,46 +135,9 @@ class Score(ABC,
                 value['percentage'] = 100.0
             return value
 
-    class Input(BaseModel):
-        """
-        Standard input structure for all Score classifications in Plexus.
-
-        The Input class standardizes how content is passed to Score classifiers,
-        supporting both the content itself and contextual metadata. It's used by:
-        - Individual Score predictions
-        - Batch processing jobs
-        - Evaluation runs
-        - Dashboard API integrations
-
-        Attributes:
-            text: The content to classify. Can be a transcript, document, etc.
-            metadata: Additional context like source, timestamps, or tracking IDs
-            results: Optional list of previous classification results, used for:
-                    - Composite scores that depend on other scores
-                    - Multi-step classification pipelines
-                    - Score dependency resolution
-
-        Common usage:
-        1. Basic classification:
-            input = Score.Input(
-                text="content to classify",
-                metadata={"source": "phone_call"}
-            )
-
-        2. With dependencies:
-            input = Score.Input(
-                text="content to classify",
-                metadata={"source": "phone_call"},
-                results=[{
-                    "name": "PriorScore",
-                    "result": prior_score_result
-                }]
-            )
-        """
-        model_config = ConfigDict(protected_namespaces=())
-        text:     str
-        metadata: dict = {}
-        results: Optional[List[Any]] = None
+    # Import lightweight ScoreInput to avoid psycopg import dependencies
+    # The Input class is now defined in ScoreInput.py to avoid circular imports
+    from plexus.core.ScoreInput import ScoreInput as Input
 
     class Result(BaseModel):
         """
@@ -849,7 +812,7 @@ class Score(ABC,
         Apply a list of processors to text for production predictions.
         
         This method applies the same processor pipeline used during training/evaluation
-        to production prediction inputs. It creates a single-row DataFrame, applies
+        to production prediction inputs. It creates a Score.Input, applies
         all configured processors, and returns the processed text.
         
         Args:
@@ -873,9 +836,10 @@ class Score(ABC,
         
         # Import here to avoid circular dependency
         from plexus.processors import ProcessorFactory
+        from plexus.core.ScoreInput import ScoreInput
         
-        # Create a single-row DataFrame with the text
-        df = pd.DataFrame({'text': [text]})
+        # Create ScoreInput
+        score_input = ScoreInput(text=text)
         
         # Apply each processor in sequence
         for processor_config in processors_config:
@@ -891,13 +855,13 @@ class Score(ABC,
                     processor_class, 
                     **processor_parameters
                 )
-                df = processor_instance.process(df)
+                score_input = processor_instance.process(score_input)
             except Exception as e:
                 logging.error(f"Error applying processor {processor_class}: {e}")
                 # Continue with other processors even if one fails
                 continue
         
-        # Extract the processed text from the DataFrame
-        return df['text'].iloc[0] if len(df) > 0 else text
+        # Extract the processed text
+        return score_input.text
 
 Score.Result.model_rebuild()

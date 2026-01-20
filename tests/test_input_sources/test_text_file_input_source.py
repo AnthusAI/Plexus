@@ -20,10 +20,10 @@ class TestTextFileInputSource:
         ]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert result == "This is the file content"
+        assert result.text == "This is the file content"
         mock_download.assert_called_once_with("s3://bucket/path/transcript.txt")
 
     @patch('plexus.input_sources.TextFileInputSource.download_score_result_log_file')
@@ -41,10 +41,10 @@ class TestTextFileInputSource:
         ]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert result == "First file content"
+        assert result.text == "First file content"
         mock_download.assert_called_once_with("s3://bucket/path/file1.txt")
 
     def test_extract_no_matching_attachment(self):
@@ -60,7 +60,7 @@ class TestTextFileInputSource:
 
         # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
-            source.extract(item, "default_text")
+            source.extract(item)
 
         assert "No attachment matching pattern" in str(exc_info.value)
         assert ".*transcript\\.txt$" in str(exc_info.value)
@@ -74,7 +74,7 @@ class TestTextFileInputSource:
 
         # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
-            source.extract(item, "default_text")
+            source.extract(item)
 
         assert "No attachment matching pattern" in str(exc_info.value)
 
@@ -85,7 +85,7 @@ class TestTextFileInputSource:
 
         # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
-            source.extract(item=None, default_text="default_text")
+            source.extract(item=None)
 
         assert "No attachment matching pattern" in str(exc_info.value)
 
@@ -99,7 +99,7 @@ class TestTextFileInputSource:
 
         # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
-            source.extract(item, "default_text")
+            source.extract(item)
 
         assert "No attachment matching pattern" in str(exc_info.value)
 
@@ -115,7 +115,7 @@ class TestTextFileInputSource:
 
         # Execute & Assert
         with pytest.raises(Exception, match="S3 download failed"):
-            source.extract(item, "default_text")
+            source.extract(item)
 
     @patch('plexus.input_sources.TextFileInputSource.download_score_result_log_file')
     def test_extract_large_file(self, mock_download):
@@ -129,11 +129,11 @@ class TestTextFileInputSource:
         item.attachedFiles = ["s3://bucket/path/large.txt"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert result == large_content
-        assert len(result) == 1_000_000
+        assert result.text == large_content
+        assert len(result.text) == 1_000_000
 
     @patch('plexus.input_sources.TextFileInputSource.download_score_result_log_file')
     def test_extract_empty_file(self, mock_download):
@@ -146,10 +146,10 @@ class TestTextFileInputSource:
         item.attachedFiles = ["s3://bucket/path/empty.txt"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert result == ""
+        assert result.text == ""
 
     @patch('plexus.input_sources.TextFileInputSource.download_score_result_log_file')
     def test_extract_file_with_unicode(self, mock_download):
@@ -163,10 +163,10 @@ class TestTextFileInputSource:
         item.attachedFiles = ["s3://bucket/path/unicode.txt"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert result == unicode_content
+        assert result.text == unicode_content
 
     @patch('plexus.input_sources.TextFileInputSource.download_score_result_log_file')
     def test_extract_with_options_ignored(self, mock_download):
@@ -183,10 +183,10 @@ class TestTextFileInputSource:
         item.attachedFiles = ["s3://bucket/path/file.txt"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert result == "File content"
+        assert result.text == "File content"
         assert source.options == {"extra_option": "ignored", "another_option": 123}
 
     @patch('plexus.input_sources.TextFileInputSource.download_score_result_log_file')
@@ -202,10 +202,10 @@ class TestTextFileInputSource:
         ]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert result == "Content"
+        assert result.text == "Content"
         mock_download.assert_called_once_with(
             "s3://my-bucket/tenant-123/items/456/attachments/deepgram_transcript.txt"
         )
@@ -220,4 +220,4 @@ class TestTextFileInputSource:
         item.attachedFiles = ["s3://bucket/path/file.json"]
 
         with pytest.raises(ValueError):
-            source.extract(item, "this_default_should_not_be_used")
+            source.extract(item)

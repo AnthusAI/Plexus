@@ -24,14 +24,14 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/path/deepgram_result.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "Hello, thank you for calling customer support" in result
-        assert "Hi, I'm having trouble with my account login" in result
-        assert "I can definitely help you with that" in result
+        assert "Hello, thank you for calling customer support" in result.text
+        assert "Hi, I'm having trouble with my account login" in result.text
+        assert "I can definitely help you with that" in result.text
         # Paragraphs should be double-spaced
-        assert "\n\n" in result
+        assert "\n\n" in result.text
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_extract_paragraphs_explicit(self, mock_download):
@@ -45,10 +45,10 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        lines = result.split("\n\n")
+        lines = result.text.split("\n\n")
         assert len(lines) == 3  # Three paragraphs
         assert "customer support" in lines[0]
         assert "account login" in lines[1]
@@ -68,12 +68,12 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "Speaker 0:" in result
-        assert "Speaker 1:" in result
-        lines = result.split("\n\n")
+        assert "Speaker 0:" in result.text
+        assert "Speaker 1:" in result.text
+        lines = result.text.split("\n\n")
         assert lines[0].startswith("Speaker 0:")
         assert lines[1].startswith("Speaker 1:")
         assert lines[2].startswith("Speaker 0:")
@@ -92,12 +92,12 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "[0.00s]" in result or "[0.0s]" in result
-        assert "s]" in result  # Has timestamp markers
-        lines = result.split("\n\n")
+        assert "[0.00s]" in result.text or "[0.0s]" in result.text
+        assert "s]" in result.text  # Has timestamp markers
+        lines = result.text.split("\n\n")
         for line in lines:
             assert line.startswith("[")
 
@@ -118,12 +118,12 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "[" in result and "s]" in result  # Has timestamps
-        assert "Speaker 0:" in result
-        assert "Speaker 1:" in result
+        assert "[" in result.text and "s]" in result.text  # Has timestamps
+        assert "Speaker 0:" in result.text
+        assert "Speaker 1:" in result.text
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_extract_utterances_format(self, mock_download):
@@ -137,14 +137,14 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        lines = result.split("\n")
+        lines = result.text.split("\n")
         assert len(lines) == 3  # Three utterances
         # Utterances should be single-spaced
-        assert "\n\n" not in result
-        assert "Hello, thank you for calling customer support" in result
+        assert "\n\n" not in result.text
+        assert "Hello, thank you for calling customer support" in result.text
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_extract_utterances_with_speaker_labels(self, mock_download):
@@ -160,10 +160,10 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        lines = result.split("\n")
+        lines = result.text.split("\n")
         assert "Speaker 0:" in lines[0]
         assert "Speaker 1:" in lines[1]
         assert "Speaker 0:" in lines[2]
@@ -182,10 +182,10 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        lines = result.split("\n")
+        lines = result.text.split("\n")
         for line in lines:
             assert line.startswith("[")
             assert "s]" in line
@@ -202,11 +202,11 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert result == "Hello world"
-        assert " " in result  # Space-separated words
+        assert result.text == "Hello world"
+        assert " " in result.text  # Space-separated words
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_extract_words_with_timestamps(self, mock_download):
@@ -222,12 +222,12 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "Hello[0.00]" in result or "Hello[0.0]" in result
-        assert "world[" in result
-        assert "]" in result
+        assert "Hello[0.00]" in result.text or "Hello[0.0]" in result.text
+        assert "world[" in result.text
+        assert "]" in result.text
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_extract_raw_format(self, mock_download):
@@ -241,15 +241,15 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
         # Raw format should be the complete transcript without formatting
-        assert "Hello, thank you for calling customer support" in result
-        assert "Hi, I'm having trouble with my account login" in result
+        assert "Hello, thank you for calling customer support" in result.text
+        assert "Hi, I'm having trouble with my account login" in result.text
         # Should not have formatting markers
-        assert "Speaker" not in result
-        assert "[" not in result or "s]" not in result
+        assert "Speaker" not in result.text
+        assert "[" not in result.text or "s]" not in result.text
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_extract_invalid_format_raises_error(self, mock_download):
@@ -264,7 +264,7 @@ class TestDeepgramInputSource:
 
         # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
-            source.extract(item, "default_text")
+            source.extract(item)
 
         assert "Unknown format: invalid_format" in str(exc_info.value)
         assert "Must be one of: paragraphs, utterances, words, raw" in str(
@@ -283,7 +283,7 @@ class TestDeepgramInputSource:
 
         # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
-            source.extract(item, "default_text")
+            source.extract(item)
 
         assert "No Deepgram file matching pattern" in str(exc_info.value)
         assert "Available attachments:" in str(exc_info.value)
@@ -301,7 +301,7 @@ class TestDeepgramInputSource:
 
         # Execute & Assert
         with pytest.raises(KeyError):
-            source.extract(item, "default_text")
+            source.extract(item)
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_extract_download_failure_propagates(self, mock_download):
@@ -314,7 +314,7 @@ class TestDeepgramInputSource:
 
         # Execute & Assert
         with pytest.raises(Exception, match="S3 download failed"):
-            source.extract(item, "default_text")
+            source.extract(item)
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_extract_minimal_fixture(self, mock_download):
@@ -328,10 +328,10 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert - minimal fixture has no paragraphs structure, should handle gracefully
-        assert isinstance(result, str)
+        assert isinstance(result.text, str)
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_speaker_labels_without_speaker_field(self, mock_download):
@@ -367,11 +367,11 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert - should not have "Speaker" prefix since field is missing
-        assert "Test paragraph without speaker field" in result
-        assert "Speaker" not in result
+        assert "Test paragraph without speaker field" in result.text
+        assert "Speaker" not in result.text
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_format_options_case_sensitive(self, mock_download):
@@ -388,7 +388,7 @@ class TestDeepgramInputSource:
 
         # Execute & Assert
         with pytest.raises(ValueError, match="Unknown format"):
-            source.extract(item, "default_text")
+            source.extract(item)
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_inheritance_from_text_file_input_source(self, mock_download):
@@ -416,11 +416,11 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "this_should_be_ignored")
+        result = source.extract(item)
 
         # Assert - should return Deepgram content, not default
-        assert result != "this_should_be_ignored"
-        assert "Hello world" in result
+        assert result.text != "this_should_be_ignored"
+        assert "Hello world" in result.text
 
     # ========================================================================
     # Time Range Filtering Tests
@@ -443,13 +443,13 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "Hello, thank you for calling customer support" in result
-        assert "Hi, I'm having trouble" not in result  # Second paragraph starts at 5.0s
-        assert "I can definitely help" not in result  # Third paragraph starts at 10.0s
-        paragraphs = result.split("\n\n")
+        assert "Hello, thank you for calling customer support" in result.text
+        assert "Hi, I'm having trouble" not in result.text  # Second paragraph starts at 5.0s
+        assert "I can definitely help" not in result.text  # Third paragraph starts at 10.0s
+        paragraphs = result.text.split("\n\n")
         assert len(paragraphs) == 1
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
@@ -469,15 +469,15 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "Hello, thank you" not in result  # First paragraph
-        assert "Hi, I'm having trouble" in result  # Second paragraph
+        assert "Hello, thank you" not in result.text  # First paragraph
+        assert "Hi, I'm having trouble" in result.text  # Second paragraph
         assert (
-            "I can definitely help" not in result
+            "I can definitely help" not in result.text
         )  # Third paragraph (starts at 10.0s)
-        paragraphs = result.split("\n\n")
+        paragraphs = result.text.split("\n\n")
         assert len(paragraphs) == 1
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
@@ -497,13 +497,13 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "Hello, thank you" not in result  # First paragraph at 0.0s
-        assert "Hi, I'm having trouble" in result  # Second paragraph at 5.0s
-        assert "I can definitely help" in result  # Third paragraph at 10.0s
-        paragraphs = result.split("\n\n")
+        assert "Hello, thank you" not in result.text  # First paragraph at 0.0s
+        assert "Hi, I'm having trouble" in result.text  # Second paragraph at 5.0s
+        assert "I can definitely help" in result.text  # Third paragraph at 10.0s
+        paragraphs = result.text.split("\n\n")
         assert len(paragraphs) == 2
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
@@ -523,12 +523,12 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        lines = result.split("\n")
+        lines = result.text.split("\n")
         assert len(lines) == 1  # Only first utterance
-        assert "Hello, thank you for calling customer support" in result
+        assert "Hello, thank you for calling customer support" in result.text
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_words(self, mock_download):
@@ -547,10 +547,10 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        words = result.split()
+        words = result.text.split()
         assert "Hello" in words
         assert "support" in words  # Word at 2.0s
         # Words at 3.0s+ should not be included
@@ -573,19 +573,19 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert - should have first portion only (0.0s to 5.0s, exclusive)
-        assert "Hello" in result
-        assert "today" in result  # Word at 3.8s should be included
+        assert "Hello" in result.text
+        assert "today" in result.text  # Word at 3.8s should be included
         assert (
-            "Hi" not in result
+            "Hi" not in result.text
         )  # Word at 5.0s (boundary - excluded due to exclusive upper bound)
         # Should be significantly shorter than full transcript
         full_transcript = deepgram_data["results"]["channels"][0]["alternatives"][0][
             "transcript"
         ]
-        assert len(result) < len(full_transcript)
+        assert len(result.text) < len(full_transcript)
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_raw_no_filtering(self, mock_download):
@@ -603,13 +603,13 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert - should return original raw transcript
         expected = deepgram_data["results"]["channels"][0]["alternatives"][0][
             "transcript"
         ]
-        assert result == expected
+        assert result.text == expected
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_with_timestamps_enabled(self, mock_download):
@@ -629,12 +629,12 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "[5.00s]" in result  # Timestamp for second paragraph
-        assert "[0.00s]" not in result  # First paragraph filtered out
-        assert "Hi, I'm having trouble" in result
+        assert "[5.00s]" in result.text  # Timestamp for second paragraph
+        assert "[0.00s]" not in result.text  # First paragraph filtered out
+        assert "Hi, I'm having trouble" in result.text
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_with_speaker_labels(self, mock_download):
@@ -654,11 +654,11 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert "Speaker 1:" in result  # Second paragraph is speaker 1
-        assert result.count("Speaker") == 1  # Only one paragraph
+        assert "Speaker 1:" in result.text  # Second paragraph is speaker 1
+        assert result.text.count("Speaker") == 1  # Only one paragraph
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_start_beyond_transcript(self, mock_download):
@@ -677,10 +677,10 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert
-        assert result == ""  # Empty string for no matches
+        assert result.text == ""  # Empty string for no matches
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_boundary_exact_start(self, mock_download):
@@ -699,10 +699,10 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert - element starting at 5.0 should be included
-        assert "Hi, I'm having trouble" in result
+        assert "Hi, I'm having trouble" in result.text
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_invalid_start_negative(self, mock_download):
@@ -717,7 +717,7 @@ class TestDeepgramInputSource:
 
         # Execute & Assert
         with pytest.raises(ValueError, match="time_range_start must be >= 0.0"):
-            source.extract(item, "default_text")
+            source.extract(item)
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_invalid_duration_negative(self, mock_download):
@@ -734,7 +734,7 @@ class TestDeepgramInputSource:
         with pytest.raises(
             ValueError, match="time_range_duration must be > 0.0 or None"
         ):
-            source.extract(item, "default_text")
+            source.extract(item)
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_invalid_duration_zero(self, mock_download):
@@ -751,7 +751,7 @@ class TestDeepgramInputSource:
         with pytest.raises(
             ValueError, match="time_range_duration must be > 0.0 or None"
         ):
-            source.extract(item, "default_text")
+            source.extract(item)
 
     @patch("plexus.input_sources.DeepgramInputSource.download_score_result_trace_file")
     def test_time_range_floating_point_precision(self, mock_download):
@@ -770,10 +770,10 @@ class TestDeepgramInputSource:
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
         # Execute
-        result = source.extract(item, "default_text")
+        result = source.extract(item)
 
         # Assert - should handle floating point values correctly
-        words = result.split()
+        words = result.text.split()
         assert "Hello" not in words  # Starts at 0.0s
         assert "thank" in words  # Starts at 0.5s (included)
         assert len(words) > 0

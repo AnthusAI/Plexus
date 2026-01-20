@@ -268,31 +268,6 @@ def load(source_identifier: str, fresh: bool, reload: bool):
             data_source_version_id = data_source.currentVersionId
             logging.info(f"Using existing DataSource version ID: {data_source_version_id}")
 
-        # Get the score version - use the score linked to the DataSource if available (optional)
-        score_version_id = None
-        if hasattr(data_source, 'scoreId') and data_source.scoreId:
-            logging.info(f"DataSource is linked to score ID: {data_source.scoreId}")
-            # Get the champion version of this score
-            score_query = client.execute(
-                """
-                query GetScore($id: ID!) {
-                    getScore(id: $id) {
-                        id
-                        name
-                        championVersionId
-                    }
-                }
-                """,
-                {"id": data_source.scoreId}
-            )
-            
-            if score_query and score_query.get('getScore') and score_query['getScore'].get('championVersionId'):
-                score_version_id = score_query['getScore']['championVersionId']
-                logging.info(f"Using champion version ID: {score_version_id}")
-            else:
-                logging.warning(f"Score {data_source.scoreId} has no champion version. Creating DataSet without score version.")
-        else:
-            logging.info("DataSource is not linked to a specific score. Creating DataSet without score version.")
 
         # Create a DataSet linked to the DataSource version and optionally to a score version
         dataset_input = {

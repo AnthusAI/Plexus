@@ -34,10 +34,10 @@ class TestInputSourceFactoryIntegration:
         source_class = input_source_config.get('class')
         source_options = input_source_config.get('options', {})
         input_source = InputSourceFactory.create_input_source(source_class, **source_options)
-        text = input_source.extract(item, "default_text")
+        text = input_source.extract(item)
 
         # Assert
-        assert text == "Content from text file"
+        assert text.text == "Content from text file"
         mock_download.assert_called_once_with("s3://bucket/path/transcript.txt")
 
     @patch('plexus.input_sources.DeepgramInputSource.download_score_result_trace_file')
@@ -66,11 +66,11 @@ class TestInputSourceFactoryIntegration:
         source_class = input_source_config.get('class')
         source_options = input_source_config.get('options', {})
         input_source = InputSourceFactory.create_input_source(source_class, **source_options)
-        text = input_source.extract(item, "default_text")
+        text = input_source.extract(item)
 
         # Assert
-        assert "Hello, thank you for calling customer support" in text
-        assert "\n\n" in text  # Paragraphs format
+        assert "Hello, thank you for calling customer support" in text.text
+        assert "\n\n" in text.text  # Paragraphs format
         mock_download.assert_called_once_with("s3://bucket/path/deepgram_transcript.json")
 
     def test_factory_creates_source_without_item(self):
@@ -114,11 +114,11 @@ class TestInputSourceFactoryIntegration:
                 config["class"],
                 **config["options"]
             )
-            text = source.extract(item, "default")
+            result = source.extract(item)
 
-            # All formats should return a non-empty string
-            assert isinstance(text, str)
-            assert len(text) > 0
+            # All formats should return a non-empty ScoreInput with text
+            assert hasattr(result, 'text')
+            assert len(result.text) > 0
 
     def test_factory_error_handling_for_unknown_source(self):
         """Test that factory raises clear error for unknown input source class"""
@@ -152,7 +152,7 @@ class TestInputSourceFactoryIntegration:
 
         # Execute & Assert: error should propagate
         with pytest.raises(Exception, match="S3 download failed"):
-            source.extract(item, "default")
+            source.extract(item)
 
     def test_factory_handles_complex_yaml_options(self):
         """Test that factory correctly passes through complex YAML options"""
@@ -206,7 +206,7 @@ class TestInputSourceFactoryIntegration:
         )
 
         with pytest.raises(ValueError) as exc_info:
-            source.extract(item, "default")
+            source.extract(item)
 
         # Error message should be helpful
         error_msg = str(exc_info.value)
