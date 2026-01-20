@@ -1,8 +1,7 @@
 import re
-import pandas as pd
-from plexus.processors.DataframeProcessor import DataframeProcessor
+from plexus.processors.DataframeProcessor import Processor
 
-class FilterCustomerOnlyProcessor(DataframeProcessor):
+class FilterCustomerOnlyProcessor(Processor):
     """
     Processor that filters transcript text to include only customer utterances.
     
@@ -15,53 +14,33 @@ class FilterCustomerOnlyProcessor(DataframeProcessor):
     RemoveSpeakerIdentifiersTranscriptFilter.
     
     Example usage in YAML:
-        data:
+        item:
           processors:
             - class: FilterCustomerOnlyProcessor
             - class: RemoveSpeakerIdentifiersTranscriptFilter
     """
 
-    def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+    def process(self, score_input: 'Score.Input') -> 'Score.Input':
         """
-        Process the dataframe by filtering text to customer utterances only.
+        Process the Score.Input by filtering text to customer utterances only.
         
         Args:
-            dataframe: DataFrame with 'text' column containing transcripts
+            score_input: Score.Input with text containing transcripts
             
         Returns:
-            DataFrame with 'text' column filtered to customer speech only
+            Score.Input with text filtered to customer speech only
         """
-        # Sample a random row for before/after comparison
-        if len(dataframe) > 0:
-            random_row_index = dataframe.sample(n=1).index[0]
-            original_transcript = dataframe.at[random_row_index, 'text']
-            # Handle NaN/None values
-            if pd.isna(original_transcript) or original_transcript is None:
-                truncated_original_transcript = ""
-            else:
-                truncated_original_transcript = (original_transcript[:512] + '...') if len(original_transcript) > 512 else original_transcript
-        else:
-            truncated_original_transcript = ""
+        from plexus.core.ScoreInput import ScoreInput
 
-        # Apply customer-only filter to all rows
-        dataframe['text'] = dataframe['text'].apply(self._extract_customer_only)
+        # Extract customer-only text
+        filtered_text = self._extract_customer_only(score_input.text)
 
-        # Get modified transcript for comparison
-        if len(dataframe) > 0:
-            modified_transcript = dataframe.at[random_row_index, 'text']
-            # Handle NaN/None values
-            if pd.isna(modified_transcript) or modified_transcript is None:
-                truncated_modified_transcript = ""
-            else:
-                truncated_modified_transcript = (modified_transcript[:512] + '...') if len(modified_transcript) > 512 else modified_transcript
-        else:
-            truncated_modified_transcript = ""
-
-        self.before_summary = truncated_original_transcript
-        self.after_summary = truncated_modified_transcript
-
-        self.display_summary()
-        return dataframe
+        # Return new Score.Input with filtered text
+        return ScoreInput(
+            text=filtered_text,
+            metadata=score_input.metadata,
+            results=score_input.results
+        )
 
     def _extract_customer_only(self, text: str) -> str:
         """
@@ -79,7 +58,7 @@ class FilterCustomerOnlyProcessor(DataframeProcessor):
             String containing only customer utterances concatenated together,
             or the original text if no speaker labels are found
         """
-        if pd.isna(text) or not text:
+        if not text:
             return ""
         
         # Check if text contains any speaker labels

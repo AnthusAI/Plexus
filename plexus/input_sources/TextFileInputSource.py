@@ -7,21 +7,23 @@ class TextFileInputSource(InputSource):
     Extracts raw text from a file attachment matching a pattern.
     """
 
-    def extract(self, item, default_text: str) -> str:
+    def extract(self, item) -> 'Score.Input':
         """
-        Find and return text from matching attachment.
+        Find and return Score.Input with text from matching attachment.
 
         Args:
             item: Item with attachedFiles
-            default_text: Not used (kept for interface compatibility)
 
         Returns:
-            Text content from file
+            Score.Input with text content from file
 
         Raises:
             ValueError: If no matching attachment found
             Exception: If file download or parsing fails
         """
+        # Import from lightweight module to avoid psycopg dependencies
+        from plexus.core.ScoreInput import ScoreInput
+
         # Find matching attachment
         attachment_key = self.find_matching_attachment(item)
 
@@ -39,4 +41,23 @@ class TextFileInputSource(InputSource):
         # Download text file from S3 (exceptions propagate)
         text_content, _ = download_score_result_log_file(attachment_key)
         self.logger.info(f"Loaded {len(text_content)} characters from {attachment_key}")
-        return text_content
+
+        # Build metadata
+        # Parse metadata if it's a JSON string (handle API items where metadata is a string)
+        import json
+        metadata = {}
+        if item.metadata:
+            if isinstance(item.metadata, str):
+                try:
+                    metadata = json.loads(item.metadata)
+                except json.JSONDecodeError:
+                    self.logger.warning(f"Failed to parse metadata JSON for item {getattr(item, 'id', 'unknown')}")
+                    metadata = {}
+            elif isinstance(item.metadata, dict):
+                metadata = item.metadata.copy()
+
+        metadata['input_source'] = 'TextFileInputSource'
+        metadata['attachment_key'] = attachment_key
+
+        # Return ScoreInput
+        return ScoreInput(text=text_content, metadata=metadata)
