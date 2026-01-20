@@ -1,8 +1,8 @@
 import pandas as pd
-from plexus.processors.DataframeProcessor import DataframeProcessor
+from plexus.processors.DataframeProcessor import DatasetProcessor
 from plexus.CustomLogging import logging, console
 
-class MergeColumnsDatasetFilter(DataframeProcessor):
+class MergeColumnsDatasetFilter(DatasetProcessor):
 
     def __init__(self, **parameters):
         super().__init__(**parameters)

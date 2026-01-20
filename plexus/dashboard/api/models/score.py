@@ -1043,8 +1043,33 @@ class Score(BaseModel):
             new_version = result['createScoreVersion']
             new_version_id = new_version['id']
 
-            # MCP tools should NOT promote versions to champion - that's a separate process
+            # Check if we should auto-promote to champion (if no champion exists)
             champion_updated = False
+            if not current_champion_id:
+                try:
+                    update_mutation = """
+                    mutation UpdateScore($input: UpdateScoreInput!) {
+                        updateScore(input: $input) {
+                            id
+                            championVersionId
+                        }
+                    }
+                    """
+                    update_result = self._client.execute(update_mutation, {
+                        'input': {
+                            'id': self.id,
+                            'championVersionId': new_version_id
+                        }
+                    })
+                    
+                    if update_result and 'updateScore' in update_result:
+                        champion_updated = True
+                        logger.info(f"Auto-promoted initial version {new_version_id} to champion for Score {self.name}")
+                    else:
+                        logger.warning(f"Failed to auto-promote version {new_version_id} to champion")
+                        
+                except Exception as e:
+                    logger.warning(f"Error auto-promoting champion version: {e}")
 
             logger.info(f"Successfully created new version {new_version_id} for Score {self.name}")
             

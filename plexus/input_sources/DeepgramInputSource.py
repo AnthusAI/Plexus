@@ -9,9 +9,9 @@ class DeepgramInputSource(TextFileInputSource):
     Supports multiple output formats: paragraphs, utterances, words, raw.
     """
 
-    def extract(self, item, default_text: str) -> str:
+    def extract(self, item) -> 'Score.Input':
         """
-        Parse Deepgram JSON and format transcript.
+        Parse Deepgram JSON and format transcript into Score.Input.
 
         Options:
             format: "paragraphs" (default), "utterances", "words", "raw"
@@ -21,13 +21,16 @@ class DeepgramInputSource(TextFileInputSource):
             time_range_duration: float or None (default None) - Duration in seconds, None = no end limit
 
         Returns:
-            Formatted transcript text
+            Score.Input with formatted transcript text and Deepgram metadata
 
         Raises:
             ValueError: If no matching attachment, invalid format, or invalid time range parameters
             KeyError: If Deepgram JSON structure is invalid
             Exception: If file download or parsing fails
         """
+        # Import from lightweight module to avoid psycopg dependencies
+        from plexus.core.ScoreInput import ScoreInput
+
         # Find matching attachment (raises ValueError if not found)
         attachment_key = self.find_matching_attachment(item)
 
@@ -64,7 +67,7 @@ class DeepgramInputSource(TextFileInputSource):
 
         # Format based on selected type (exceptions propagate)
         if format_type == "paragraphs":
-            return self._format_paragraphs(
+            formatted_text = self._format_paragraphs(
                 deepgram_result,
                 include_timestamps,
                 speaker_labels,
@@ -72,7 +75,7 @@ class DeepgramInputSource(TextFileInputSource):
                 time_range_duration,
             )
         elif format_type == "utterances":
-            return self._format_utterances(
+            formatted_text = self._format_utterances(
                 deepgram_result,
                 include_timestamps,
                 speaker_labels,
@@ -80,20 +83,47 @@ class DeepgramInputSource(TextFileInputSource):
                 time_range_duration,
             )
         elif format_type == "words":
-            return self._format_words(
+            formatted_text = self._format_words(
                 deepgram_result,
                 include_timestamps,
                 time_range_start,
                 time_range_duration,
             )
         elif format_type == "raw":
-            return self._format_raw(
+            formatted_text = self._format_raw(
                 deepgram_result, time_range_start, time_range_duration
             )
         else:
             raise ValueError(
                 f"Unknown format: {format_type}. Must be one of: paragraphs, utterances, words, raw"
             )
+
+        # Build metadata with Deepgram-specific information
+        # Parse metadata if it's a JSON string (handle API items where metadata is a string)
+        import json
+        metadata = {}
+        if item.metadata:
+            if isinstance(item.metadata, str):
+                try:
+                    metadata = json.loads(item.metadata)
+                except json.JSONDecodeError:
+                    self.logger.warning(f"Failed to parse metadata JSON for item {getattr(item, 'id', 'unknown')}")
+                    metadata = {}
+            elif isinstance(item.metadata, dict):
+                metadata = item.metadata.copy()
+            
+        metadata['input_source'] = 'DeepgramInputSource'
+        metadata['format'] = format_type
+        metadata['attachment_key'] = attachment_key
+
+        # Add time range info if used
+        if time_range_start != 0.0 or time_range_duration is not None:
+            metadata['time_range_start'] = time_range_start
+            if time_range_duration is not None:
+                metadata['time_range_duration'] = time_range_duration
+
+        # Return ScoreInput
+        return ScoreInput(text=formatted_text, metadata=metadata)
 
     def _is_in_time_range(
         self,
@@ -145,7 +175,16 @@ class DeepgramInputSource(TextFileInputSource):
 
         lines = []
         for para in filtered_paragraphs:
-            text = para["text"]
+            # Production Deepgram JSON has "sentences" array instead of "text" key
+            if "sentences" in para:
+                # Combine all sentence texts into paragraph text
+                text = " ".join(sentence["text"] for sentence in para["sentences"])
+            elif "text" in para:
+                # Support older format with direct "text" key (for backwards compatibility)
+                text = para["text"]
+            else:
+                # Skip paragraphs without text
+                continue
 
             if speakers and "speaker" in para:
                 text = f"Speaker {para['speaker']}: {text}"
