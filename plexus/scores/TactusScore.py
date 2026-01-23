@@ -132,23 +132,24 @@ class TactusScore(Score, LangChainUser):
         # The metadata dict may contain a 'metadata' key that is either:
         # 1. A JSON string (needs parsing)
         # 2. A dict (already parsed)
+        # Always preserve the outer metadata structure.
+        parsed = metadata.copy()
         if 'metadata' in metadata:
             if isinstance(metadata['metadata'], str):
                 # metadata.metadata is a JSON string - parse it
                 try:
-                    parsed = json.loads(metadata['metadata'])
-                    logger.info(f"Parsed nested metadata JSON string, got keys: {list(parsed.keys())}")
+                    parsed_inner = json.loads(metadata['metadata'])
+                    parsed['metadata'] = parsed_inner
+                    logger.info(
+                        "Parsed nested metadata JSON string, got keys: "
+                        f"{list(parsed_inner.keys()) if isinstance(parsed_inner, dict) else 'N/A'}"
+                    )
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to parse nested metadata JSON: {e}")
-                    parsed = metadata.copy()
             elif isinstance(metadata['metadata'], dict):
                 # metadata.metadata is already a dict
-                logger.info("Found nested metadata dict, extracting inner metadata")
-                parsed = metadata['metadata'].copy()
-            else:
-                parsed = metadata.copy()
-        else:
-            parsed = metadata.copy()
+                logger.info("Found nested metadata dict, preserving outer metadata")
+                parsed['metadata'] = metadata['metadata'].copy()
 
         # Common fields that are JSON strings in Plexus metadata
         json_fields = ['schools', 'other_data']
