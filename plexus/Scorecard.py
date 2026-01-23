@@ -473,7 +473,7 @@ class Scorecard:
         if score_class is None:
             logging.error(f"Score with name '{score}' not found.")
             logging.error(
-                f"Available scores in registry: {list(self.score_registry._registry.keys())}"
+                f"Available scores in registry: {list(self.score_registry._classes_by_name.keys())}"
             )
             return [
                 Score.Result(
