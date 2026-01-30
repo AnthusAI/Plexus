@@ -11,6 +11,9 @@ langchain-community>=0.3.24
 langchain-aws>=0.2.23
 langgraph-checkpoint-postgres==2.0.9
 
+# Tactus
+tactus>=0.32.0
+
 # AWS & Azure
 boto3
 watchtower
