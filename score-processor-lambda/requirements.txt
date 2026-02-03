@@ -2,17 +2,17 @@
 awslambdaric
 
 # LangChain/LangGraph - pin langchain-core to avoid _RestrictedSandboxedEnvironment issue
-langchain>=0.3.25
+langchain==0.3.27
 langgraph==0.6.7
-langchain-core<0.3.79
-langchain-openai>=0.3.34
-langchain-anthropic>=0.3.10
-langchain-community>=0.3.24
-langchain-aws>=0.2.23
+langchain-core==0.3.78
+langchain-openai==0.3.35
+langchain-anthropic==0.3.22
+langchain-community==0.3.31
+langchain-aws==0.2.35
 langgraph-checkpoint-postgres==2.0.9
 
 # Tactus
-tactus>=0.32.0
+tactus>=0.38.0
 
 # AWS & Azure
 boto3
