@@ -108,6 +108,9 @@ This ensures:
 - `tests/smoke_test.py` - Container smoke test
 - `tests/conftest.py` - Pytest configuration and fixtures
 - `Makefile` - Convenient test commands
+- `tests/README.md` - Documentation for the test suite
+
+**CI/CD Note**: These tests are excluded from the main GitHub Actions test suite (configured in `pytest.ini`) since they're specific to the Lambda container environment. Run them independently using the Makefile commands before deploying.
 
 ## Deployment
 
