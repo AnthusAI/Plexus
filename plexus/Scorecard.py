@@ -566,6 +566,13 @@ class Scorecard:
                 item_config = score_configuration.get("item")
 
                 # Step 1: Apply input source if class is specified
+                if item_config:
+                    source_class = item_config.get("class")
+                    if source_class and not item:
+                        raise ValueError(
+                            f"Item is required for input source '{source_class}' but no Item was provided."
+                        )
+
                 if item_config and item:
                     source_class = item_config.get("class")
 
@@ -581,9 +588,15 @@ class Scorecard:
                         input_source = InputSourceFactory.create_input_source(
                             source_class, **source_options
                         )
-                        text = input_source.extract(
-                            item, text
+                        score_input = input_source.extract(
+                            item
                         )  # May raise ValueError or other exceptions
+                        text = score_input.text
+                        if score_input.metadata:
+                            metadata = {
+                                **score_input.metadata,
+                                **(metadata or {}),
+                            }
 
                         logging.info(f"Input source extracted {len(text)} characters")
 

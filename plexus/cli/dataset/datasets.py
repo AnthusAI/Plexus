@@ -13,6 +13,7 @@ from botocore.exceptions import NoCredentialsError
 
 from plexus.CustomLogging import logging
 from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.models.item import Item
 from plexus.dashboard.api.models.data_source import DataSource
 # from plexus.dashboard.api.models.data_set import DataSet
 from plexus.data.DataCache import DataCache
@@ -44,6 +45,27 @@ def get_amplify_bucket():
     except (IOError, KeyError, TypeError) as e:
         logging.error(f"Could not read S3 bucket from environment variable AMPLIFY_STORAGE_DATASETS_BUCKET_NAME or amplify_outputs.json: {e}")
         return None
+
+def apply_item_pipeline_to_dataframe(dataframe, item_config, client):
+    if dataframe.empty or not item_config:
+        return dataframe
+
+    if "item_id" not in dataframe.columns:
+        raise ValueError("item_config provided but dataset has no item_id column.")
+
+    def resolve_text(row):
+        item_id = row.get("item_id")
+        if not item_id:
+            raise ValueError("item_config provided but dataset row has no item_id.")
+        item = Item.get_by_id(str(item_id), client)
+        if not item:
+            raise ValueError(f"Item not found: {item_id}")
+        score_input = item.to_score_input(item_config=item_config)
+        return score_input.text
+
+    dataframe = dataframe.copy()
+    dataframe["text"] = dataframe.apply(resolve_text, axis=1)
+    return dataframe
 
 async def create_initial_data_source_version(client, data_source):
     """Create the initial version for a DataSource that doesn't have one yet."""
@@ -248,6 +270,10 @@ def load(source_identifier: str, fresh: bool, reload: bool):
         # Pass the parameters (which contain queries, searches, etc.) to load_dataframe
         # not the entire data_config which includes class information
         dataframe = data_cache.load_dataframe(**kwargs)
+
+        if item_config:
+            logging.info("Applying item pipeline from item_config to dataset text...")
+            dataframe = apply_item_pipeline_to_dataframe(dataframe, item_config, client)
         
         # Basic dataset logging (optimized for large datasets)
         logging.info(f"Dataset loaded: {dataframe.shape[0]} rows x {dataframe.shape[1]} columns")

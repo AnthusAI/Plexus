@@ -348,17 +348,12 @@ class Item(BaseModel):
             input_source_class = item_config['class']
             input_source_options = item_config.get('options', {})
 
-            try:
-                input_source = InputSourceFactory.create_input_source(
-                    input_source_class,
-                    **input_source_options
-                )
-                # InputSource.extract() now returns ScoreInput
-                score_input = input_source.extract(self)
-            except Exception as e:
-                logging.error(f"Error creating input source {input_source_class}: {e}")
-                # Fall back to default text
-                score_input = ScoreInput(text=text, metadata=metadata)
+            input_source = InputSourceFactory.create_input_source(
+                input_source_class,
+                **input_source_options
+            )
+            # InputSource.extract() now returns ScoreInput (errors propagate)
+            score_input = input_source.extract(self)
         else:
             score_input = ScoreInput(text=text, metadata=metadata)
 

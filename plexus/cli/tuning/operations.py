@@ -22,6 +22,8 @@ import textwrap
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
 from plexus.scores.Score import Score
+from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.models.item import Item
 
 @click.group()
 def tuning():
@@ -39,6 +41,45 @@ def get_file_path(output_dir, file_type):
 
 def get_id_file_path(output_dir, file_type):
     return f"{output_dir}/{file_type}_ids.txt"
+
+def _get_item_client():
+    if not hasattr(_get_item_client, "client"):
+        _get_item_client.client = PlexusDashboardClient()
+    return _get_item_client.client
+
+def _get_item_config(score_instance):
+    item_config = None
+    params = getattr(score_instance, "parameters", None)
+    if params is not None:
+        item_config = getattr(params, "item_config", None)
+        if not item_config:
+            data = getattr(params, "data", None)
+            if isinstance(data, dict):
+                item_config = data.get("item_config")
+    if not item_config:
+        item_config = getattr(score_instance, "item_config", None)
+    return item_config
+
+def _resolve_row_text(score_instance, row):
+    item_config = _get_item_config(score_instance)
+    if not item_config:
+        return row.get("text") if hasattr(row, "get") else row["text"]
+
+    item_id = None
+    if hasattr(row, "get"):
+        item_id = row.get("item_id") or row.get("itemId")
+    else:
+        item_id = row["item_id"]
+
+    if not item_id:
+        raise ValueError("Item is required for item_config but row has no item_id.")
+
+    item = Item.get_by_id(str(item_id), _get_item_client())
+    if not item:
+        raise ValueError(f"Item not found: {item_id}")
+
+    score_input = item.to_score_input(item_config=item_config)
+    return score_input.text
 
 def append_feedback_to_conversation(conversation_history, feedback_message):
     """
@@ -347,7 +388,7 @@ def verify_quotes_in_completion(completion_text, original_transcript, fuzzy_thre
     
     return result
 
-def generate_llm_completion(score_instance, row, completion_template, conversation_history=None):
+def generate_llm_completion(score_instance, row, completion_template, conversation_history=None, resolved_text=None):
     """
     Generate completion using an LLM with full context and gold standard labels.
     
@@ -360,6 +401,12 @@ def generate_llm_completion(score_instance, row, completion_template, conversati
     Returns:
         tuple: (completion_text, updated_conversation_history)
     """
+    if resolved_text is None:
+        resolved_text = _resolve_row_text(score_instance, row)
+    row_for_prompt = row.copy()
+    if resolved_text is not None:
+        row_for_prompt["text"] = resolved_text
+
     try:
         # Get LLM configuration from score parameters
         node_config = score_instance.parameters.graph[0]
@@ -383,10 +430,10 @@ def generate_llm_completion(score_instance, row, completion_template, conversati
         formatted_user_message = PromptTemplate.from_template(
             original_user_message, 
             template_format="jinja2"
-        ).format(**{"text": row['text']})
+        ).format(**{"text": row_for_prompt['text']})
         
         # Prepare labels for interpolation (same as original template approach)
-        labels = row.copy()
+        labels = row_for_prompt.copy()
         
         # Apply massage_labels if present
         if 'massage_labels' in node_config:
@@ -415,7 +462,7 @@ def massage_labels(labels):
         interpolated_completion_template = PromptTemplate.from_template(
             completion_template,
             template_format="jinja2"
-        ).format(labels=labels, **row)
+        ).format(labels=labels, **row_for_prompt)
         
         logging.info(f"Interpolated completion template: {interpolated_completion_template}")
         
@@ -443,7 +490,7 @@ IMPORTANT:
             user_prompt = f"""Based on the scoring criteria and completion instructions above, generate the appropriate completion for this transcript:
 
 <transcript>
-{row['text']}
+{row_for_prompt['text']}
 </transcript>
 
 Generate your completion now (following the format and content from the completion instructions):"""
@@ -480,7 +527,7 @@ Generate your completion now (following the format and content from the completi
     except Exception as e:
         logging.error(f"Error generating LLM completion: {str(e)}")
         # Fallback to original template-based approach
-        labels = row.copy()
+        labels = row_for_prompt.copy()
         
         # Apply massage_labels if present in fallback
         if 'massage_labels' in score_instance.parameters.graph[0]:
@@ -499,7 +546,7 @@ def massage_labels(labels):
             completion_template,
             template_format="jinja2"
         )
-        fallback_completion = prompt.format(labels=labels, **row).strip()
+        fallback_completion = prompt.format(labels=labels, **row_for_prompt).strip()
         logging.info(f"Using fallback template completion: {fallback_completion}")
         
         # Return empty conversation history for fallback
@@ -613,6 +660,11 @@ def generate_examples(scorecard_name, score_name,
         logging.info(f"Nodes: {nodes}")
 
         def process_row(scorecard_name, row, score_instance, score_configuration):
+            resolved_text = _resolve_row_text(score_instance, row)
+            row_for_prompt = row.copy()
+            if resolved_text is not None:
+                row_for_prompt["text"] = resolved_text
+
             # Get the original user message from the score configuration
             user_message = score_instance.parameters.graph[0]['user_message']
 
@@ -624,8 +676,9 @@ def generate_examples(scorecard_name, score_name,
                     logging.info("Using LLM-based completion generation")
                     completion, conversation_history = generate_llm_completion(
                         score_instance=score_instance,
-                        row=row,
-                        completion_template=node_config['completion_template']
+                        row=row_for_prompt,
+                        completion_template=node_config['completion_template'],
+                        resolved_text=resolved_text
                     )
                     
                     # Check for disagreement with gold standard
@@ -645,7 +698,7 @@ def generate_examples(scorecard_name, score_name,
                         
                         verification = verify_quotes_in_completion(
                             completion, 
-                            row['text'], 
+                            resolved_text, 
                             fuzzy_threshold=fuzzy_threshold,
                             enable_fuzzy=fuzzy_enabled,
                             debug=debug_mode
@@ -684,7 +737,7 @@ def generate_examples(scorecard_name, score_name,
                                     logging.info(f"Retry attempt {retry_count + 1}/{max_retries}")
                                     
                                     # Create feedback message about the hallucinations
-                                    feedback_message = create_hallucination_feedback(current_verification, row['text'])
+                                    feedback_message = create_hallucination_feedback(current_verification, resolved_text)
                                     logging.info(f"Providing feedback to LLM: {len(current_verification['hallucinated_quotes'])} hallucinated quotes detected")
                                     
                                     # Append feedback to conversation history
@@ -696,15 +749,16 @@ def generate_examples(scorecard_name, score_name,
                                     # Generate new completion with conversation history
                                     retry_completion, new_conversation_history = generate_llm_completion(
                                         score_instance=score_instance,
-                                        row=row,
+                                        row=row_for_prompt,
                                         completion_template=node_config['completion_template'],
-                                        conversation_history=updated_conversation_history
+                                        conversation_history=updated_conversation_history,
+                                        resolved_text=resolved_text
                                     )
                                     
                                     # Verify the new completion with same settings
                                     retry_verification = verify_quotes_in_completion(
                                         retry_completion, 
-                                        row['text'],
+                                        resolved_text,
                                         fuzzy_threshold=fuzzy_threshold,
                                         enable_fuzzy=fuzzy_enabled,
                                         debug=debug_mode
@@ -759,15 +813,16 @@ def generate_examples(scorecard_name, score_name,
                                     # Generate final completion with no-quotes strategy
                                     final_completion, final_conversation_history = generate_llm_completion(
                                         score_instance=score_instance,
-                                        row=row,
+                                        row=row_for_prompt,
                                         completion_template=node_config['completion_template'],
-                                        conversation_history=final_conversation_history
+                                        conversation_history=final_conversation_history,
+                                        resolved_text=resolved_text
                                     )
                                     
                                     # Still verify the final completion (LLM might still include quotes despite instructions)
                                     final_verification = verify_quotes_in_completion(
                                         final_completion, 
-                                        row['text'],
+                                        resolved_text,
                                         fuzzy_threshold=fuzzy_threshold,
                                         enable_fuzzy=fuzzy_enabled,
                                         debug=debug_mode
@@ -806,7 +861,7 @@ def generate_examples(scorecard_name, score_name,
                     # If completion was set to None due to quote verification failure with template fallback
                     if completion is None:
                         logging.info("Generating template-based completion as fallback")
-                        labels = row.copy()
+                        labels = row_for_prompt.copy()
                         
                         if 'massage_labels' in node_config:
                             massage_labels_code = node_config['massage_labels']
@@ -835,11 +890,11 @@ def massage_labels(labels):
                             node_config['completion_template'],
                             template_format="jinja2"
                         )
-                        completion = prompt.format(labels=labels, **row).strip()
+                        completion = prompt.format(labels=labels, **row_for_prompt).strip()
                         completion = re.sub(r'\s+$', '', completion)
                 else:
                     # Original template-based approach
-                    labels = row.copy()
+                    labels = row_for_prompt.copy()
                     
                     if 'massage_labels' in node_config:
                         massage_labels_code = node_config['massage_labels']
@@ -868,20 +923,20 @@ def massage_labels(labels):
                         node_config['completion_template'],
                         template_format="jinja2"
                     )
-                    completion = prompt.format(labels=labels, **row).strip()
+                    completion = prompt.format(labels=labels, **row_for_prompt).strip()
                     completion = re.sub(r'\s+$', '', completion)
             else:
-                completion = row[score_instance.get_label_score_name()]
+                completion = row_for_prompt[score_instance.get_label_score_name()]
             logging.info(f"Completion: {completion}")
 
             # Construct the messages for the JSON-L file
             messages = [
                 {"role": "system", "content": score_instance.parameters.graph[0]['system_message']},
-                {"role": "user", "content": PromptTemplate.from_template(user_message, template_format="jinja2").format(**{"text": row['text']})},
+                {"role": "user", "content": PromptTemplate.from_template(user_message, template_format="jinja2").format(**{"text": row_for_prompt['text']})},
                 {"role": "assistant", "content": completion}
             ]
 
-            return {"messages": messages, "content_id": row['content_id']}
+            return {"messages": messages, "content_id": row_for_prompt['content_id']}
 
         # Update the partial function call
         process_row_partial = partial(

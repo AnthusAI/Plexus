@@ -211,10 +211,21 @@ class JobProcessor:
 
                 dynamo_score_id = resolved_score_info['id']
 
-                # Get transcript, metadata, and external_id from Item
-                logging.info(f"🔄 Fetching transcript, metadata, and external_id from Item")
-                transcript_text = await get_text_from_item(item_id, self.client)
-                if not transcript_text:
+                # Get Item, transcript, metadata, and external_id
+                logging.info(f"🔄 Fetching Item, transcript, metadata, and external_id")
+                item = None
+                try:
+                    from plexus.dashboard.api.models.item import Item
+                    item = await asyncio.to_thread(Item.get_by_id, item_id, self.client)
+                except Exception as e:
+                    logging.warning(f"Could not fetch Item {item_id}: {e}")
+
+                transcript_text = ""
+                if item and item.text:
+                    transcript_text = item.text
+                else:
+                    transcript_text = await get_text_from_item(item_id, self.client)
+                if not transcript_text and not item:
                     raise Exception(f"No transcript found for item {item_id}")
 
                 metadata = await get_metadata_from_item(item_id, self.client)
@@ -270,9 +281,10 @@ class JobProcessor:
 
                 # Perform scoring
                 score_results = await scorecard_instance.score_entire_text(
-                    text=transcript_text,
+                    text=transcript_text or "",
                     metadata=metadata,
-                    modality="API"
+                    modality="API",
+                    item=item,
                 )
 
                 result = score_results.get(dynamo_score_id)
