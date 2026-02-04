@@ -2066,7 +2066,14 @@ Total cost:       ${expenses['total_cost']:.6f}
                 if item_id:
                     try:
                         from plexus.dashboard.api.models.item import Item
-                        item = Item.get_by_id(item_id, self.scorecard.client if hasattr(self.scorecard, 'client') else None)
+                        item_client = None
+                        if hasattr(self.scorecard, 'client') and self.scorecard.client:
+                            item_client = self.scorecard.client
+                        elif getattr(self, 'dashboard_client', None):
+                            item_client = self.dashboard_client
+                        item = Item.get_by_id(item_id, item_client) if item_client else None
+                        if not item_client:
+                            logging.warning(f"No dashboard client available to fetch Item {item_id}")
                     except Exception as e:
                         logging.warning(f"Could not fetch Item {item_id}: {e}")
 
@@ -3859,4 +3866,3 @@ class AccuracyEvaluation(Evaluation):
             use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
             yaml_only=False  # Allow API calls if needed
         )
-

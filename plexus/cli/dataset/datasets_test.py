@@ -84,6 +84,82 @@ def test_load_command_success(mock_resolve, runner):
         # Verify that resolve_data_source was called
         mock_resolve.assert_called_once()
 
+@patch('plexus.cli.dataset.datasets.resolve_data_source')
+def test_load_command_applies_item_pipeline_to_text(mock_resolve, runner):
+    """Ensure item_config drives initial text generation during dataset load."""
+    import plexus.cli.dataset.datasets as datasets_module
+    with patch.dict('os.environ', {
+        'PLEXUS_API_URL': 'https://test-api.example.com',
+        'PLEXUS_API_KEY': 'test-key-123'
+    }):
+        mock_data_source = DataSource(
+            id='ds-123',
+            name='Test Source',
+            key='test-source',
+            yamlConfiguration="""
+            class: plexus.data.dummy.DummyDataCache
+            parameters:
+                rows: 10
+            item:
+                class: DeepgramInputSource
+            """,
+            owner='account-123'
+        )
+        mock_data_source.accountId = 'account-123'
+        mock_data_source.currentVersionId = 'version-123'
+        mock_data_source.scoreId = 'score-123'
+        mock_data_source.scorecardId = 'scorecard-123'
+
+        mock_resolve.return_value = mock_data_source
+
+        with patch('plexus.cli.dataset.datasets.PlexusDashboardClient') as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value = mock_client
+            mock_client.execute = MagicMock(side_effect=[
+                {'getScore': {'id': 'score-123', 'name': 'Test Score', 'championVersionId': 'score-version-123'}},
+                {'createDataSet': {'id': 'new-ds-456', 'name': 'New Dataset', 'dataSourceVersionId': 'version-123', 'scoreVersionId': 'score-version-123'}},
+                {'updateDataSet': {'id': 'new-ds-456', 'file': 'datasets/account-123/ds-123/new-ds-456/test.parquet'}}
+            ])
+
+            with patch('importlib.import_module') as mock_import:
+                mock_dummy_cache_module = MagicMock()
+                mock_dummy_cache_class = MagicMock()
+                mock_dummy_cache_instance = MagicMock()
+
+                from pandas import DataFrame
+                df = DataFrame({
+                    'text': ['WRONG'],
+                    'item_id': ['item-123'],
+                })
+                mock_dummy_cache_instance.load_dataframe.return_value = df
+
+                mock_dummy_cache_class.return_value = mock_dummy_cache_instance
+                mock_dummy_cache_module.DummyDataCache = mock_dummy_cache_class
+                mock_import.return_value = mock_dummy_cache_module
+
+                with patch('plexus.cli.dataset.datasets.get_amplify_bucket') as mock_get_bucket:
+                    mock_get_bucket.return_value = 'test-bucket'
+                    with patch('boto3.client') as mock_boto3:
+                        mock_s3_client = MagicMock()
+                        mock_boto3.return_value = mock_s3_client
+                        mock_item = MagicMock()
+                        mock_item.to_score_input.return_value = MagicMock(text='RIGHT', metadata={})
+                        mock_item.__bool__.return_value = True
+                        item_stub = MagicMock()
+                        item_stub.get_by_id.return_value = mock_item
+                        with patch.object(datasets_module, 'Item', item_stub):
+                            captured = {}
+
+                            def capture_write_table(table, *args, **kwargs):
+                                captured['df'] = table.to_pandas()
+                                return None
+
+                            with patch.object(datasets_module.pq, 'write_table', side_effect=capture_write_table):
+                                result = runner.invoke(dataset, ['load', '--source', 'test-source'])
+
+        assert result.exit_code == 0
+        assert captured['df']['text'].iloc[0] == 'RIGHT'
+
 @patch('plexus.cli.dataset.datasets.create_client')
 @patch('plexus.cli.dataset.datasets.resolve_data_source')  # Patch in the right module
 def test_load_command_source_not_found(mock_resolve, mock_create_client, runner):

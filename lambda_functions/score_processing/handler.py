@@ -1378,7 +1378,15 @@ class JobProcessor:
             dyn_score_id = resolved["id"]
 
             transcript_text = await get_text_from_report(report_id)
-            if not transcript_text:
+            item = None
+            if PLEXUS_ITEM_AVAILABLE and scoring_job.itemId:
+                try:
+                    item = await asyncio.to_thread(Item.get_by_id, scoring_job.itemId, self.client)
+                except Exception as e:
+                    logging.warning(f"Could not fetch Item {scoring_job.itemId}: {e}")
+            if item and item.text:
+                transcript_text = item.text
+            if not transcript_text and not item:
                 raise RuntimeError(f"No transcript for report {report_id}")
 
             metadata = await get_metadata_from_report(report_id) or {}
@@ -1390,7 +1398,10 @@ class JobProcessor:
                 raise RuntimeError(f"Failed to create scorecard instance for {scorecard_id}")
 
             score_results = await scorecard_instance.score_entire_text(
-                text=transcript_text, metadata=metadata, modality="Worker"
+                text=transcript_text or "",
+                metadata=metadata,
+                modality="Worker",
+                item=item,
             )
             result = score_results.get(dyn_score_id)
             if not result:

@@ -1054,23 +1054,23 @@ class FeedbackItems(DataCache):
         for i, feedback_item in enumerate(feedback_items):
             # content_id: Use DynamoDB item ID
             content_id = feedback_item.itemId
-            
+
             # feedback_item_id: Use feedback item ID
             feedback_item_id = feedback_item.id
-            
+
             # text: Get the text content from Item
             text = ""
+            if self.parameters.item_config and not feedback_item.item:
+                raise ValueError(
+                    f"Item is required for item_config but feedback_item {feedback_item_id} has no Item."
+                )
             if feedback_item.item:
                 # Use Item.to_score_input() pipeline if item_config is provided
                 if self.parameters.item_config:
-                    try:
-                        # Run the Item → Score.Input pipeline
-                        score_input = feedback_item.item.to_score_input(self.parameters.item_config)
-                        text = score_input.text
-                        logger.debug(f"Generated text via Item.to_score_input() pipeline: {len(text)} characters")
-                    except Exception as e:
-                        logger.warning(f"Error running Item.to_score_input() pipeline, falling back to item.text: {e}")
-                        text = feedback_item.item.text or ""
+                    # Run the Item → Score.Input pipeline (errors propagate)
+                    score_input = feedback_item.item.to_score_input(self.parameters.item_config)
+                    text = score_input.text
+                    logger.debug(f"Generated text via Item.to_score_input() pipeline: {len(text)} characters")
                 else:
                     # Legacy behavior: use item.text directly
                     text = feedback_item.item.text

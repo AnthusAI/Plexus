@@ -51,6 +51,7 @@ from plexus.utils.scoring import (
     get_external_id_from_item,
     create_score_result
 )
+from plexus.dashboard.api.models.item import Item
 from plexus.utils.request_log_capture import capture_request_logs
 
 
@@ -192,9 +193,19 @@ class LambdaJobProcessor:
                 dynamo_score_id = resolved_score_info['id']
 
                 # Get data from Item
-                logging.info("🔄 Fetching transcript and metadata")
-                transcript_text = await get_text_from_item(item_id, self.client)
-                if not transcript_text:
+                logging.info("🔄 Fetching Item, transcript and metadata")
+                item = None
+                try:
+                    item = await asyncio.to_thread(Item.get_by_id, item_id, self.client)
+                except Exception as e:
+                    logging.warning(f"Could not fetch Item {item_id}: {e}")
+
+                transcript_text = ""
+                if item and item.text:
+                    transcript_text = item.text
+                else:
+                    transcript_text = await get_text_from_item(item_id, self.client)
+                if not transcript_text and not item:
                     raise Exception(f"No transcript found for item {item_id}")
 
                 metadata = await get_metadata_from_item(item_id, self.client)
@@ -227,9 +238,10 @@ class LambdaJobProcessor:
                 # Perform scoring
                 logging.info("🎯 Performing scoring")
                 score_results = await scorecard_instance.score_entire_text(
-                    text=transcript_text,
+                    text=transcript_text or "",
                     metadata=metadata,
-                    modality="API"
+                    modality="API",
+                    item=item,
                 )
 
                 result = score_results.get(dynamo_score_id)

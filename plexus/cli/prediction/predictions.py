@@ -1210,8 +1210,19 @@ async def predict_score_with_individual_loading(scorecard_identifier, score_name
 
         row_dict = sample_row.iloc[0].to_dict()
         item_text = row_dict.get('text', '')
-        if not item_text:
-            raise Exception("No text content found in sample row")
+        item = None
+        item_id = row_dict.get('item_id')
+        if item_id:
+            try:
+                from plexus.dashboard.api.models.item import Item
+                item = Item.get_by_id(item_id, client)
+                if item and not item_text:
+                    item_text = item.text or ""
+            except Exception as e:
+                logging.warning(f"Could not fetch Item {item_id}: {e}")
+
+        if not item_text and not item:
+            raise Exception("No text content found in sample row and no item_id provided")
 
         # Extract and parse metadata from row_dict
         metadata = {}
@@ -1249,7 +1260,8 @@ async def predict_score_with_individual_loading(scorecard_identifier, score_name
         results = await scorecard_instance.score_entire_text(
             score_input=score_input,
             modality=None,
-            subset_of_score_names=[score_name]
+            subset_of_score_names=[score_name],
+            item=item,
         )
 
         # Extract target result by name or ID

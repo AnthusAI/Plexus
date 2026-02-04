@@ -1166,7 +1166,10 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None, 
                 # Use the reusable resolve_score_identifier function
                 resolved_id = resolve_score_identifier(client, scorecard_id, identifier)
                 if resolved_id:
+                    original_id = config.get('id')
                     config['id'] = resolved_id
+                    if original_id and str(original_id) != str(resolved_id):
+                        config.setdefault('originalExternalId', str(original_id))
                     logging.info(f"Enriched '{config.get('name')}' (identifier: '{identifier}') with ID: {resolved_id}")
                 else:
                     logging.warning(f"Could not resolve ID for score '{config.get('name')}' with identifier '{identifier}'")
