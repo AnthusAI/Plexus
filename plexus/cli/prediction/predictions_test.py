@@ -8,8 +8,8 @@ import os
 from decimal import Decimal
 
 from plexus.cli.prediction.predictions import (
-    predict, predict_impl, output_excel, select_sample, predict_score,
-    predict_score_impl, handle_exception, create_score_input,
+    predict, predict_impl, output_excel, select_sample,
+    predict_score_impl, handle_exception,
     create_feedback_comparison
 )
 from plexus.scores.LangGraphScore import BatchProcessingPause
@@ -608,48 +608,67 @@ class TestSelectSample:
     
     def test_select_sample_with_item_id_direct_lookup(self, mock_client, mock_item, sample_item_data, mock_env_vars):
         """Test select_sample with specific item ID - direct lookup"""
+        from plexus.scores.Score import Score
+
         # Mock Item.get_by_id success
         mock_item_instance = Mock()
         mock_item_instance.id = sample_item_data['id']
         mock_item_instance.text = sample_item_data['text']
         mock_item_instance.metadata = None  # No metadata to avoid JSON serialization issues
+
+        # Mock the to_score_input method to return a proper Score.Input
+        mock_score_input = Score.Input(
+            text=sample_item_data['text'],
+            metadata={'item_id': sample_item_data['id']}
+        )
+        mock_item_instance.to_score_input = Mock(return_value=mock_score_input)
+
         mock_item.get_by_id.return_value = mock_item_instance
-        
+
         with patch('plexus.cli.report.utils.resolve_account_id_for_command') as mock_resolve_account, \
              patch('plexus.cli.prediction.predictions.memoized_resolve_item_identifier') as mock_resolve_item:
             mock_resolve_account.return_value = 'account-123'
             mock_resolve_item.return_value = 'item-123'
-            
+
             sample_row, used_item_id = select_sample(
                 'test-scorecard', 'test-score', 'item-123', fresh=False
             )
-            
+
             assert used_item_id == 'item-123'
             assert isinstance(sample_row, pd.DataFrame)
             mock_item.get_by_id.assert_called_with('item-123', mock_client)
     
     def test_select_sample_with_item_id_identifier_search(self, mock_client, mock_item, sample_item_data, mock_env_vars):
         """Test select_sample with identifier search fallback"""
+        from plexus.scores.Score import Score
+
         # Mock item instance that will be returned by Item.get_by_id for the resolved ID
         mock_item_instance = Mock()
         mock_item_instance.id = sample_item_data['id']
         mock_item_instance.text = sample_item_data['text']
         mock_item_instance.metadata = None  # No metadata to avoid JSON serialization issues
-        
+
+        # Mock the to_score_input method to return a proper Score.Input
+        mock_score_input = Score.Input(
+            text=sample_item_data['text'],
+            metadata={'item_id': sample_item_data['id']}
+        )
+        mock_item_instance.to_score_input = Mock(return_value=mock_score_input)
+
         # Mock Item.get_by_id to succeed for the resolved ID
         mock_item.get_by_id.return_value = mock_item_instance
-        
+
         with patch('plexus.cli.report.utils.resolve_account_id_for_command') as mock_resolve_account, \
              patch('plexus.cli.prediction.predictions.memoized_resolve_item_identifier') as mock_resolve_identifier:
-            
+
             mock_resolve_account.return_value = 'account-123'
             # Mock identifier resolution to succeed and return the item ID
             mock_resolve_identifier.return_value = 'item-123'
-            
+
             sample_row, used_item_id = select_sample(
                 'test-scorecard', 'test-score', 'search-term', fresh=False
             )
-            
+
             assert used_item_id == 'item-123'
             assert isinstance(sample_row, pd.DataFrame)
             mock_resolve_identifier.assert_called_once_with(mock_client, 'search-term', 'account-123')
@@ -703,60 +722,6 @@ class TestSelectSample:
             
             with pytest.raises(ValueError, match="No items found in the account"):
                 select_sample(sample_scorecard_class, 'test-score', None, fresh=False)
-
-
-class TestPredictScore:
-    """Test the predict_score async function"""
-    
-    @pytest.mark.asyncio
-    async def test_predict_score_success(self, sample_scorecard_class):
-        """Test successful score prediction"""
-        sample_row = pd.DataFrame([{'text': 'test text', 'metadata': '{}'}])
-        
-        with patch('plexus.cli.prediction.predictions.create_score_input') as mock_create_input, \
-             patch('plexus.cli.prediction.predictions.predict_score_impl') as mock_predict_impl:
-            
-            mock_create_input.return_value = Mock()
-            mock_score_instance = Mock()
-            mock_prediction = Mock()
-            mock_costs = 0.05
-            mock_predict_impl.return_value = (mock_score_instance, mock_prediction, mock_costs)
-            
-            result = await predict_score(
-                'test-score', sample_scorecard_class, sample_row, 'item-123'
-            )
-            
-            assert result == (mock_score_instance, mock_prediction, mock_costs)
-            mock_create_input.assert_called_once()
-            mock_predict_impl.assert_called_once()
-    
-    @pytest.mark.asyncio
-    async def test_predict_score_batch_processing_pause(self, sample_scorecard_class):
-        """Test predict_score with BatchProcessingPause"""
-        sample_row = pd.DataFrame([{'text': 'test text', 'metadata': '{}'}])
-        
-        with patch('plexus.cli.prediction.predictions.create_score_input') as mock_create_input, \
-             patch('plexus.cli.prediction.predictions.predict_score_impl') as mock_predict_impl:
-            
-            mock_create_input.return_value = Mock()
-            mock_predict_impl.side_effect = BatchProcessingPause("batch-123", "thread-456", "Test pause")
-            
-            with pytest.raises(BatchProcessingPause):
-                await predict_score('test-score', sample_scorecard_class, sample_row, 'item-123')
-    
-    @pytest.mark.asyncio
-    async def test_predict_score_general_error(self, sample_scorecard_class):
-        """Test predict_score with general error"""
-        sample_row = pd.DataFrame([{'text': 'test text', 'metadata': '{}'}])
-        
-        with patch('plexus.cli.prediction.predictions.create_score_input') as mock_create_input, \
-             patch('plexus.cli.prediction.predictions.predict_score_impl') as mock_predict_impl:
-            
-            mock_create_input.return_value = Mock()
-            mock_predict_impl.side_effect = Exception("Test error")
-            
-            with pytest.raises(Exception, match="Test error"):
-                await predict_score('test-score', sample_scorecard_class, sample_row, 'item-123')
 
 
 class TestPredictScoreImpl:
@@ -867,69 +832,6 @@ class TestHandleException:
             mock_loop.stop.assert_called_once()
 
 
-
-
-class TestCreateScoreInput:
-    """Test the create_score_input function"""
-    
-    def test_create_score_input_with_sample_row(self, mock_score_class):
-        """Test create_score_input with sample row data"""
-        mock_score_input_class = Mock()
-        mock_score_instance = Mock()
-        mock_score_instance.Input = mock_score_input_class
-        mock_score_class.from_name.return_value = mock_score_instance
-        
-        sample_scorecard_class = Mock()
-        sample_scorecard_class.properties = {'key': 'test-scorecard'}
-        
-        sample_row = pd.DataFrame([{
-            'text': 'test text',
-            'metadata': json.dumps({'existing': 'data'})
-        }])
-        
-        result = create_score_input(sample_row, 'item-123', sample_scorecard_class, 'test-score')
-        
-        mock_score_input_class.assert_called_once()
-        call_args = mock_score_input_class.call_args
-        assert call_args[1]['text'] == 'test text'
-        assert 'item_id' in call_args[1]['metadata']
-    
-    def test_create_score_input_without_sample_row(self, mock_score_class):
-        """Test create_score_input without sample row data"""
-        mock_score_input_class = Mock()
-        mock_score_instance = Mock()
-        mock_score_instance.Input = mock_score_input_class
-        mock_score_class.from_name.return_value = mock_score_instance
-        
-        sample_scorecard_class = Mock()
-        sample_scorecard_class.properties = {'key': 'test-scorecard'}
-        
-        result = create_score_input(None, 'item-123', sample_scorecard_class, 'test-score')
-        
-        mock_score_input_class.assert_called_once()
-        call_args = mock_score_input_class.call_args
-        assert call_args[1]['text'] == ''
-        assert call_args[1]['metadata']['item_id'] == 'item-123'
-    
-    def test_create_score_input_no_input_class(self, mock_score_class):
-        """Test create_score_input when Input class is not available"""
-        mock_score_instance = Mock()
-        # No Input attribute
-        delattr(mock_score_instance, 'Input')
-        mock_score_class.from_name.return_value = mock_score_instance
-        
-        # Mock the default Score.Input
-        mock_default_input = Mock()
-        mock_score_class.Input = mock_default_input
-        
-        sample_scorecard_class = Mock()
-        sample_scorecard_class.properties = {'key': 'test-scorecard'}
-        
-        sample_row = pd.DataFrame([{'text': 'test text', 'metadata': '{}'}])
-        
-        result = create_score_input(sample_row, 'item-123', sample_scorecard_class, 'test-score')
-        
-        mock_default_input.assert_called_once()
 
 
 class TestIntegration:

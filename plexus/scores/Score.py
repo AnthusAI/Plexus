@@ -810,20 +810,20 @@ class Score(ABC,
     def apply_processors_to_text(text: str, processors_config: list) -> str:
         """
         Apply a list of processors to text for production predictions.
-        
+
         This method applies the same processor pipeline used during training/evaluation
-        to production prediction inputs. It creates a single-row DataFrame, applies
+        to production prediction inputs. It creates a Score.Input, applies
         all configured processors, and returns the processed text.
-        
+
         Args:
             text: Input text to process
             processors_config: List of processor configurations, each with 'class' and optional 'parameters'
-                              Example: [{'class': 'FilterCustomerOnlyProcessor'}, 
+                              Example: [{'class': 'FilterCustomerOnlyProcessor'},
                                        {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}]
-        
+
         Returns:
             Processed text after applying all processors
-            
+
         Example:
             processors = [
                 {'class': 'FilterCustomerOnlyProcessor'},
@@ -833,34 +833,34 @@ class Score(ABC,
         """
         if not processors_config or not text:
             return text
-        
+
         # Import here to avoid circular dependency
         from plexus.processors import ProcessorFactory
-        
-        # Create a single-row DataFrame with the text
-        df = pd.DataFrame({'text': [text]})
-        
+
+        # Create Score.Input
+        score_input = Score.Input(text=text, metadata={})
+
         # Apply each processor in sequence
         for processor_config in processors_config:
             processor_class = processor_config.get('class')
             if not processor_class:
                 logging.warning(f"Processor config missing 'class' field: {processor_config}")
                 continue
-            
+
             processor_parameters = processor_config.get('parameters', {})
-            
+
             try:
                 processor_instance = ProcessorFactory.create_processor(
-                    processor_class, 
+                    processor_class,
                     **processor_parameters
                 )
-                df = processor_instance.process(df)
+                score_input = processor_instance.process(score_input)
             except Exception as e:
                 logging.error(f"Error applying processor {processor_class}: {e}")
                 # Continue with other processors even if one fails
                 continue
-        
-        # Extract the processed text from the DataFrame
-        return df['text'].iloc[0] if len(df) > 0 else text
+
+        # Extract the processed text from the Score.Input
+        return score_input.text
 
 Score.Result.model_rebuild()
