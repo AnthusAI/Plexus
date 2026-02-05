@@ -68,6 +68,8 @@ class RelevantWindowsTranscriptFilter(Processor):
         if self.keywords:
             return self._matches_keywords(sentence)
         elif self.classifier:
+            # Import at runtime to avoid circular dependency
+            from plexus.scores.Score import Score
             return self.classifier.predict(model_input=Score.Input(text=sentence)).value
         return False
 

@@ -5,6 +5,23 @@ Tests for enhanced RelevantWindowsTranscriptFilter with keyword and fuzzy matchi
 import unittest
 import pandas as pd
 from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
+from plexus.scores.Score import Score
+
+
+def _process_text(processor, text):
+    """
+    Helper function to process text through a processor.
+
+    Args:
+        processor: The processor instance
+        text: The text to process
+
+    Returns:
+        The processed text string
+    """
+    score_input = Score.Input(text=text, metadata={})
+    result = processor.process(score_input)
+    return result.text
 
 
 class TestKeywordMatching(unittest.TestCase):
@@ -20,7 +37,7 @@ class TestKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         self.assertIn("My child is in school", result)
         self.assertNotIn("We have a dog", result)
@@ -37,7 +54,7 @@ class TestKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         self.assertIn("My child is 5 years old", result)
         self.assertIn("We have dependents", result)
@@ -54,7 +71,7 @@ class TestKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         self.assertIn("My CHILD is here", result)
 
@@ -69,7 +86,7 @@ class TestKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         self.assertIn("My child is there", result)
         self.assertNotIn("My CHILD is here", result)
@@ -84,7 +101,7 @@ class TestKeywordMatching(unittest.TestCase):
             next_count=1
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         self.assertIn("Line 2", result)
         self.assertIn("My child is here", result)
@@ -102,7 +119,7 @@ class TestKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         self.assertEqual(result, "")
 
@@ -122,7 +139,7 @@ class TestFuzzyKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         # Should match "chidl" as close to "child"
         self.assertIn("chidl", result)
@@ -139,7 +156,7 @@ class TestFuzzyKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         # "kid" should match "child" with fuzzy matching at reasonable threshold
         # Note: This may or may not match depending on the fuzzy algorithm
@@ -158,7 +175,7 @@ class TestFuzzyKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result_strict = processor_strict.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result_strict = _process_text(processor_strict, transcript)
 
         # Low threshold - should match
         processor_lenient = RelevantWindowsTranscriptFilter(
@@ -169,7 +186,7 @@ class TestFuzzyKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result_lenient = processor_lenient.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result_lenient = _process_text(processor_lenient, transcript)
 
         # Lenient should match where strict doesn't
         self.assertIn("chld", result_lenient)
@@ -186,7 +203,7 @@ class TestFuzzyKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         # Should match both "chld" and "dependants" with fuzzy matching
         self.assertIn("chld", result)
@@ -203,7 +220,7 @@ class TestFuzzyKeywordMatching(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         # Should NOT match typo with exact matching
         self.assertEqual(result, "")
@@ -222,7 +239,7 @@ class TestPhrasesAndContextWindow(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         self.assertIn("quick brown fox", result)
 
@@ -236,7 +253,7 @@ class TestPhrasesAndContextWindow(unittest.TestCase):
             next_count=1
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         # Windows should overlap and merge: Line 2, Keyword 1, Line 4, Keyword 2, Line 6
         self.assertIn("Line 2", result)
@@ -257,7 +274,7 @@ class TestPhrasesAndContextWindow(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         # Should have both keywords with ellipsis between
         self.assertIn("Keyword 1", result)
@@ -281,7 +298,7 @@ class TestEdgeCases(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         self.assertEqual(result, "")
 
@@ -305,7 +322,7 @@ class TestEdgeCases(unittest.TestCase):
             next_count=1
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         self.assertEqual(result, transcript)
 
@@ -319,7 +336,7 @@ class TestEdgeCases(unittest.TestCase):
             next_count=0
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         # All lines should be included without ellipsis
         self.assertEqual(result, transcript)
@@ -345,7 +362,7 @@ Agent: Of course, let me explain that."""
             next_count=1
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         # Should include mentions of daughter and dependent with context
         self.assertIn("daughter", result)
@@ -373,7 +390,7 @@ Agent: Thank you for that information."""
             next_count=1
         )
 
-        result = processor.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(processor, transcript)
 
         # Should match "chilren" and "daughtr" with fuzzy matching
         self.assertIn("chilren", result)
