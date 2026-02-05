@@ -1,14 +1,15 @@
 # Score Processor Lambda
 
-AWS Lambda function for processing scoring jobs from SQS queues. This Lambda polls the SQS queue for scoring job requests, performs scoring using the Plexus scorecard system, and sends results back via a response queue.
+AWS Lambda function for processing scoring jobs from SQS queues. This Lambda is automatically triggered by SQS events, performs scoring using the Plexus scorecard system, and sends results back via a response queue.
 
 ## Architecture
 
-- **Trigger**: Manual invocation (polls SQS queue)
-- **Input**: Retrieves one message from `PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL`
+- **Trigger**: SQS event source (automatic, one message per invocation, max 500 concurrent executions)
+- **Input**: Receives messages from `PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL`
 - **Processing**: Performs scoring using Plexus scorecard system
 - **Output**: Sends results to `PLEXUS_RESPONSE_WORKER_QUEUE_URL`
 - **Storage**: Creates ScoreResult in DynamoDB
+- **Error Handling**: Failed messages are retried by SQS, then moved to DLQ after max retries
 
 ## Prerequisites
 
@@ -26,6 +27,90 @@ The Lambda function requires these environment variables:
 - `PLEXUS_ACCOUNT_KEY` - Plexus account key for authentication
 
 **Note**: `SCORECARD_CACHE_DIR` is automatically set to `/tmp/scorecards` in the handler code since `/tmp` is the only writable directory in Lambda.
+
+## Testing
+
+The Lambda function has two types of tests:
+
+### 1. Unit Tests (pytest)
+
+Standard Python unit tests that run outside the container:
+
+```bash
+# Run from project root
+make test-unit
+
+# Or run pytest directly
+cd .. && PYTHONPATH=score-processor-lambda pytest score-processor-lambda/tests/test_*.py -v
+```
+
+**What's tested:**
+- Handler initialization
+- Event parsing logic
+- Environment variable validation
+- Mock integration tests
+
+### 2. Container Smoke Tests
+
+Validates the Docker container has all dependencies correctly installed:
+
+```bash
+# Build and run smoke test
+make test-smoke
+
+# Or run manually
+make build
+docker run --rm \
+  -v $(PWD)/tests/smoke_test.py:/var/task/smoke_test.py \
+  --entrypoint python \
+  score-processor-lambda:latest \
+  smoke_test.py
+```
+
+**What's tested:**
+- All dependencies importable (langchain, tactus, boto3, etc.)
+- Pinned package versions match requirements.txt
+- Plexus modules load correctly
+- Handler can initialize
+- NLTK data available
+- Container filesystem writable
+
+### Running All Tests
+
+```bash
+# Run both unit and smoke tests
+make test
+
+# Or run individually
+make test-unit    # Unit tests only
+make test-smoke   # Container smoke test only
+```
+
+### Pre-deployment Testing
+
+Before deploying to AWS, run the full test suite:
+
+```bash
+# Build image and run all tests
+make build-and-test
+```
+
+This ensures:
+1. Image builds successfully
+2. All dependencies install correctly
+3. Pinned versions are correct (avoiding dependency resolution issues)
+4. Handler can initialize
+5. All imports work in the Lambda environment
+
+### Test Files
+
+- `tests/test_handler.py` - Unit tests for handler logic
+- `tests/smoke_test.py` - Container smoke test
+- `tests/conftest.py` - Pytest configuration and fixtures
+- `Makefile` - Convenient test commands
+- `tests/README.md` - Documentation for the test suite
+
+**CI/CD Note**: These tests are excluded from the main GitHub Actions test suite (configured in `pytest.ini`) since they're specific to the Lambda container environment. Run them independently using the Makefile commands before deploying.
 
 ## Deployment
 
@@ -54,13 +139,62 @@ The pipeline automatically:
 5. CDK deploys the Lambda function and any infrastructure updates
 6. Lambda function automatically uses the latest image from ECR
 
-**Note**: The Lambda function is NOT automatically triggered by SQS yet. It must be invoked manually until SQS event source is enabled in the CDK stack.
+**SQS Event Source Trigger**:
+The Lambda function is automatically triggered by the SQS queue (`PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL`) with the following configuration:
+- **Batch size**: 1 (processes one message per Lambda invocation)
+- **Max concurrency**: 500 (up to 500 concurrent Lambda executions)
+- **Error handling**: On exception, the message is returned to the queue for retry (up to maxReceiveCount, then moved to DLQ)
+- **Configuration**: Defined in `infrastructure/stacks/lambda_score_processor_stack.py` (lines 199-209)
 
-### Manual Deployment (Development/Testing)
+### Manual Deployment (Emergency Only)
 
-For local development and testing, you can manually build and deploy using the commands below.
+**⚠️ Warning:** Manual deployment should only be used in emergency situations. Normal deployment is handled automatically by the CDK pipeline when pushing to `main` or `staging` branches.
+
+For emergency situations where the pipeline is unavailable, you can manually build and deploy using the commands below.
 
 ## Quick Commands
+
+### Using Makefile (Recommended)
+
+The Makefile provides convenient commands for local development and testing:
+
+```bash
+# Show all available commands
+make help
+
+# Testing
+make test              # Run all tests (unit + smoke)
+make test-unit         # Run pytest unit tests only
+make test-smoke        # Run container smoke test
+make build-and-test    # Build image and run smoke test
+
+# Building (for local testing only)
+make build             # Build Docker image locally
+
+# Utilities
+make info              # Show configuration
+make clean             # Remove local images
+```
+
+**Local development workflow:**
+```bash
+# 1. Make changes to code or requirements
+vim handler.py
+
+# 2. Build and test locally
+make build-and-test
+
+# 3. Commit and push to trigger deployment
+git add .
+git commit -m "Update score processor"
+git push origin main  # Triggers CDK pipeline deployment
+```
+
+**Note:** Deployment is handled automatically by AWS CDK pipelines. See the [Automated Deployment](#automated-deployment-recommended) section above for details. The infrastructure is defined in `infrastructure/stacks/lambda_score_processor_stack.py`.
+
+### Manual Commands
+
+If you prefer to run commands manually without the Makefile:
 
 ### ECR Login
 
@@ -157,50 +291,37 @@ aws logs describe-log-streams \
   --region us-west-2
 ```
 
-## Development Workflow
+## Monitoring
 
-1. **Make code changes** to `handler.py` or update dependencies in `requirements.txt`
+Useful commands for monitoring the deployed Lambda function:
 
-2. **Build and push** the new image:
-   ```bash
-   aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin {AWS_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com
-
-   docker buildx build --platform linux/amd64 --provenance=false --push -f score-processor-lambda/Dockerfile -t {AWS_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/plexus/score-processor-lambda:latest .
-   ```
-
-3. **Update Lambda** with the new image:
-   ```bash
-   aws lambda update-function-code --function-name plexus-score-processor-lambda --image-uri {AWS_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/plexus/score-processor-lambda:latest --region us-west-2
-   ```
-
-4. **Test** the function:
-   ```bash
-   aws lambda invoke --function-name plexus-score-processor-lambda --region us-west-2 --log-type Tail response.json
-   cat response.json | jq
-   ```
-
-5. **Monitor logs**:
-   ```bash
-   aws logs tail /aws/lambda/plexus-score-processor-lambda --follow --region us-west-2
-   ```
-
-## Local Testing
-
-To test the image locally before pushing:
+### View Lambda Logs
 
 ```bash
-# Build locally
-docker buildx build --platform linux/amd64 --load -f score-processor-lambda/Dockerfile -t score-processor-lambda:latest .
+aws logs tail /aws/lambda/plexus-score-processor-lambda --follow --region us-west-2
+```
 
-# Run container with environment variables
-docker run --rm \
-  -e PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL=<queue-url> \
-  -e PLEXUS_RESPONSE_WORKER_QUEUE_URL=<response-queue-url> \
-  -e PLEXUS_ACCOUNT_KEY=<account-key> \
-  -e AWS_ACCESS_KEY_ID=<your-key> \
-  -e AWS_SECRET_ACCESS_KEY=<your-secret> \
-  -e AWS_DEFAULT_REGION=us-west-2 \
-  score-processor-lambda:latest
+### Invoke Lambda Function (Test)
+
+```bash
+aws lambda invoke \
+  --function-name plexus-score-processor-lambda \
+  --region us-west-2 \
+  --log-type Tail \
+  --query 'LogResult' \
+  --output text \
+  response.json | base64 --decode
+
+# Check response
+cat response.json | jq
+```
+
+### Get Lambda Function Info
+
+```bash
+aws lambda get-function \
+  --function-name plexus-score-processor-lambda \
+  --region us-west-2
 ```
 
 ## Troubleshooting
