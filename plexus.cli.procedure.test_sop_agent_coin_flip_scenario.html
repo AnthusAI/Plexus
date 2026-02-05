@@ -1,0 +1,394 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.test_sop_agent_coin_flip_scenario module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.test_state_machine module" href="plexus.cli.procedure.test_state_machine.html" />
+    <link rel="prev" title="plexus.cli.procedure.test_service_root_node module" href="plexus.cli.procedure.test_service_root_node.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.test_sop_agent_coin_flip_scenario module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.test_sop_agent_coin_flip_scenario.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.test_sop_agent_coin_flip_scenario">
+<span id="plexus-cli-procedure-test-sop-agent-coin-flip-scenario-module"></span><h1>plexus.cli.procedure.test_sop_agent_coin_flip_scenario module<a class="headerlink" href="#module-plexus.cli.procedure.test_sop_agent_coin_flip_scenario" title="Link to this heading"></a></h1>
+<p>BDD Test Suite: SOP Agent Coin Flip Scenario</p>
+<p>This module provides comprehensive testing of the StandardOperatingProcedureAgent
+using a simple, controllable scenario: conducting a coin flip procedure.</p>
+<p>The scenario tests all core SOP agent features:
+1. Worker agent tool access management
+2. Tool explanation enforcement
+3. Stop tool functionality
+4. Manager agent coaching
+5. Procedure completion detection
+6. Chat recording integration</p>
+<p>Test Scenario:
+1. Worker calls coin_flip tool 3 times
+2. Worker calls data_logging tool to record each result
+3. Worker calls accuracy_calculator tool to compute results
+4. Worker calls stop_procedure tool to finish
+5. Manager provides coaching guidance throughout</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_sop_agent_coin_flip_scenario.</span></span><span class="sig-name descname"><span class="pre">CoinFlipProcedureDefinition</span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.cli.procedure.sop_agent_base.html#plexus.cli.procedure.sop_agent_base.ProcedureDefinition" title="plexus.cli.procedure.sop_agent_base.ProcedureDefinition"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProcedureDefinition</span></code></a></p>
+<p>Simple procedure definition for coin flip procedure.</p>
+<p>This demonstrates how to create a custom procedure with:
+- Specific tool subset for worker agent
+- Custom prompts for the task
+- Simple completion criteria</p>
+<p>Initialize with coin flip procedure tools.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize with coin flip procedure tools.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_allowed_tools">
+<span class="sig-name descname"><span class="pre">get_allowed_tools</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_allowed_tools" title="Link to this definition"></a></dt>
+<dd><p>Get allowed tools for worker agent.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_completion_summary">
+<span class="sig-name descname"><span class="pre">get_completion_summary</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_completion_summary" title="Link to this definition"></a></dt>
+<dd><p>Get completion summary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_sop_guidance_prompt">
+<span class="sig-name descname"><span class="pre">get_sop_guidance_prompt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_sop_guidance_prompt" title="Link to this definition"></a></dt>
+<dd><p>Get SOP manager guidance prompt.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_system_prompt">
+<span class="sig-name descname"><span class="pre">get_system_prompt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_system_prompt" title="Link to this definition"></a></dt>
+<dd><p>Get worker agent system prompt for coin flip procedure.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_user_prompt">
+<span class="sig-name descname"><span class="pre">get_user_prompt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.get_user_prompt" title="Link to this definition"></a></dt>
+<dd><p>Get initial user prompt for coin flip procedure.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.should_continue">
+<span class="sig-name descname"><span class="pre">should_continue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.CoinFlipProcedureDefinition.should_continue" title="Link to this definition"></a></dt>
+<dd><p>Determine if procedure should continue.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_sop_agent_coin_flip_scenario.</span></span><span class="sig-name descname"><span class="pre">MockCoinFlipChatRecorder</span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.cli.procedure.sop_agent_base.html#plexus.cli.procedure.sop_agent_base.ChatRecorder" title="plexus.cli.procedure.sop_agent_base.ChatRecorder"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChatRecorder</span></code></a></p>
+<p>Mock chat recorder for testing.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.end_session">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">end_session</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.end_session" title="Link to this definition"></a></dt>
+<dd><p>End recording session.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.record_message">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">record_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.record_message" title="Link to this definition"></a></dt>
+<dd><p>Record a message.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.record_system_message">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">record_system_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.record_system_message" title="Link to this definition"></a></dt>
+<dd><p>Record a system message.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.start_session">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">start_session</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipChatRecorder.start_session" title="Link to this definition"></a></dt>
+<dd><p>Start recording session.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_sop_agent_coin_flip_scenario.</span></span><span class="sig-name descname"><span class="pre">MockCoinFlipFlowManager</span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.cli.procedure.sop_agent_base.html#plexus.cli.procedure.sop_agent_base.FlowManager" title="plexus.cli.procedure.sop_agent_base.FlowManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">FlowManager</span></code></a></p>
+<p>Mock flow manager for coin flip procedure.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.get_completion_summary">
+<span class="sig-name descname"><span class="pre">get_completion_summary</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.get_completion_summary" title="Link to this definition"></a></dt>
+<dd><p>Get completion summary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.get_next_guidance">
+<span class="sig-name descname"><span class="pre">get_next_guidance</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.get_next_guidance" title="Link to this definition"></a></dt>
+<dd><p>Get guidance for next step.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.should_continue">
+<span class="sig-name descname"><span class="pre">should_continue</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.should_continue" title="Link to this definition"></a></dt>
+<dd><p>Check if flow should continue.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.update_state">
+<span class="sig-name descname"><span class="pre">update_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.MockCoinFlipFlowManager.update_state" title="Link to this definition"></a></dt>
+<dd><p>Update and return current state.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_sop_agent_coin_flip_scenario.</span></span><span class="sig-name descname"><span class="pre">TestSOPAgentCoinFlipScenario</span></span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Comprehensive BDD test suite for SOP agent using coin flip scenario.</p>
+<p>This tests all core SOP agent functionality:
+- Tool access management
+- Tool explanation enforcement 
+- Manager coaching
+- Stop functionality
+- Chat recording
+- Procedure completion</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.coin_flip_procedure_definition">
+<span class="sig-name descname"><span class="pre">coin_flip_procedure_definition</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.coin_flip_procedure_definition" title="Link to this definition"></a></dt>
+<dd><p>Create coin flip procedure definition.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_coin_flip_scenario_story_complete_workflow">
+<span class="sig-name descname"><span class="pre">test_coin_flip_scenario_story_complete_workflow</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_coin_flip_scenario_story_complete_workflow" title="Link to this definition"></a></dt>
+<dd><p>Story Test: Complete coin flip procedure workflow</p>
+<p>This test tells the complete story of using an SOP agent to accomplish
+the coin flip task, demonstrating all the key features working together.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_procedure_when_checking_continuation_then_respects_stop_and_safety_limits">
+<span class="sig-name descname"><span class="pre">test_given_coin_flip_procedure_when_checking_continuation_then_respects_stop_and_safety_limits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coin_flip_procedure_definition</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_procedure_when_checking_continuation_then_respects_stop_and_safety_limits" title="Link to this definition"></a></dt>
+<dd><p>Given a coin flip procedure definition
+When checking if procedure should continue
+Then it should respect stop requests and safety limits</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_procedure_when_generating_sop_guidance_then_provides_contextual_coaching">
+<span class="sig-name descname"><span class="pre">test_given_coin_flip_procedure_when_generating_sop_guidance_then_provides_contextual_coaching</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coin_flip_procedure_definition</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_procedure_when_generating_sop_guidance_then_provides_contextual_coaching" title="Link to this definition"></a></dt>
+<dd><p>Given a coin flip procedure definition
+When generating SOP guidance at different stages
+Then it should provide contextual coaching questions</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_procedure_when_getting_prompts_then_provides_task_specific_guidance">
+<span class="sig-name descname"><span class="pre">test_given_coin_flip_procedure_when_getting_prompts_then_provides_task_specific_guidance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coin_flip_procedure_definition</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_procedure_when_getting_prompts_then_provides_task_specific_guidance" title="Link to this definition"></a></dt>
+<dd><p>Given a coin flip procedure definition
+When getting system and user prompts
+Then it should provide task-specific guidance for the coin flip experiment</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_procedure_when_initialized_then_has_correct_tools">
+<span class="sig-name descname"><span class="pre">test_given_coin_flip_procedure_when_initialized_then_has_correct_tools</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coin_flip_procedure_definition</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_procedure_when_initialized_then_has_correct_tools" title="Link to this definition"></a></dt>
+<dd><p>Given a coin flip procedure definition
+When the procedure is initialized
+Then it should have the correct subset of tools available</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_scenario_when_checking_stop_tool_functionality_then_stops_correctly">
+<span class="sig-name descname"><span class="pre">test_given_coin_flip_scenario_when_checking_stop_tool_functionality_then_stops_correctly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coin_flip_procedure_definition</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_coin_flip_scenario_when_checking_stop_tool_functionality_then_stops_correctly" title="Link to this definition"></a></dt>
+<dd><p>Given a coin flip scenario
+When the stop tool is used
+Then the procedure should stop correctly with proper reason tracking</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_multiple_coin_flip_procedures_when_comparing_configurations_then_demonstrates_customization">
+<span class="sig-name descname"><span class="pre">test_given_multiple_coin_flip_procedures_when_comparing_configurations_then_demonstrates_customization</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_sop_agent_coin_flip_scenario.TestSOPAgentCoinFlipScenario.test_given_multiple_coin_flip_procedures_when_comparing_configurations_then_demonstrates_customization" title="Link to this definition"></a></dt>
+<dd><p>Given multiple coin flip procedure configurations
+When comparing their setup
+Then it should demonstrate how the base SOP agent can be customized for different tasks</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.test_service_root_node.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.test_service_root_node module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.test_state_machine.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.test_state_machine module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

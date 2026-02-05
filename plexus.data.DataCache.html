@@ -1,0 +1,302 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.data.DataCache module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.data.FeedbackItems module" href="plexus.data.FeedbackItems.html" />
+    <link rel="prev" title="plexus.data.AWSDataLakeCache module" href="plexus.data.AWSDataLakeCache.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.data.html">plexus.data package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.data.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.data.html">plexus.data package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.data.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.AWSDataLakeCache.html">plexus.data.AWSDataLakeCache module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.data.DataCache module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.data.DataCache.DataCache"><code class="docutils literal notranslate"><span class="pre">DataCache</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.FeedbackItems.html">plexus.data.FeedbackItems module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.HuggingFaceDataCache.html">plexus.data.HuggingFaceDataCache module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.TestDataCache.html">plexus.data.TestDataCache module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.session_manager.html">plexus.data.session_manager module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.test_feedback_items.html">plexus.data.test_feedback_items module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.test_feedback_sampling.html">plexus.data.test_feedback_sampling module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.data.html">plexus.data package</a></li>
+      <li class="breadcrumb-item active">plexus.data.DataCache module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.data.DataCache.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.data.DataCache">
+<span id="plexus-data-datacache-module"></span><h1>plexus.data.DataCache module<a class="headerlink" href="#module-plexus.data.DataCache" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.data.DataCache.</span></span><span class="sig-name descname"><span class="pre">DataCache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.DataCache.DataCache" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
+<p>A data cache is responsible for loading data from a source and caching it locally.  This is an
+abstract base class that defines the interface and the parameter validation schema.  Subclasses
+are responsible for implementing the actual data loading logic.  Most subclasses will also need
+to extend the <cite>Parameters</cite> class to define any necessary parameters for getting the data.</p>
+<p>Initialize the DataCache instance with the given parameters.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>parameters<span class="classifier">dict</span></dt><dd><p>Arbitrary keyword arguments that are used to initialize the Parameters instance.</p>
+</dd>
+</dl>
+</section>
+<section id="raises">
+<h2>Raises<a class="headerlink" href="#raises" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>ValidationError</dt><dd><p>If the provided parameters do not pass validation.</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache.Parameters">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'DataCache'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.DataCache.DataCache.Parameters" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Parameters for data caching.  Override this class to define any necessary parameters for
+getting the data.</p>
+<section id="attributes">
+<h3>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>class<span class="classifier">str</span></dt><dd><p>The name of the data cache class.</p>
+</dd>
+</dl>
+<p>Create a new model by parsing and validating input data from keyword arguments.</p>
+<p>Raises [<cite>ValidationError</cite>][pydantic_core.ValidationError] if the input data cannot be
+validated to form a valid model.</p>
+<p><cite>self</cite> is explicitly positional-only to allow <cite>self</cite> as a field name.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache.Parameters.class_name">
+<span class="sig-name descname"><span class="pre">class_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.data.DataCache.DataCache.Parameters.class_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache.Parameters.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{}</span></span><a class="headerlink" href="#plexus.data.DataCache.DataCache.Parameters.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.DataCache.DataCache.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the DataCache instance with the given parameters.</p>
+<section id="id3">
+<h3>Parameters<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><a href="#id4"><span class="problematic" id="id5">**</span></a>parameters<span class="classifier">dict</span></dt><dd><p>Arbitrary keyword arguments that are used to initialize the Parameters instance.</p>
+</dd>
+</dl>
+</section>
+<section id="id6">
+<h3>Raises<a class="headerlink" href="#id6" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>ValidationError</dt><dd><p>If the provided parameters do not pass validation.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache.debug_dataframe">
+<span class="sig-name descname"><span class="pre">debug_dataframe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'DATAFRAME'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.DataCache.DataCache.debug_dataframe" title="Link to this definition"></a></dt>
+<dd><p>Essential debug logging for dataframes.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: pandas DataFrame to analyze
+context: String identifier for the context (used in log messages)
+logger: Logger instance to use (defaults to module logger)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache.format_value_for_display">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">format_value_for_display</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.DataCache.DataCache.format_value_for_display" title="Link to this definition"></a></dt>
+<dd><p>Format a value for display in logs and debug output.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>value: The value to format
+column_name: Optional column name (unused but kept for API compatibility)</p>
+</dd>
+<dt>Returns:</dt><dd><p>str: Formatted string representation of the value</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache.load_dataframe">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">load_dataframe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.DataCache.DataCache.load_dataframe" title="Link to this definition"></a></dt>
+<dd><p>Load a dataframe based on the provided parameters.</p>
+<section id="returns">
+<h3>Returns<a class="headerlink" href="#returns" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>pd.DataFrame</dt><dd><p>The loaded dataframe.</p>
+</dd>
+</dl>
+<p>This method must be implemented by all subclasses.</p>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache.log_validation_errors">
+<span class="sig-name descname"><span class="pre">log_validation_errors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.DataCache.DataCache.log_validation_errors" title="Link to this definition"></a></dt>
+<dd><p>Log validation errors for the parameters.</p>
+<section id="id7">
+<h3>Parameters<a class="headerlink" href="#id7" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>error<span class="classifier">ValidationError</span></dt><dd><p>The validation error object containing details about the validation failures.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.DataCache.DataCache.upsert_item_for_dataset_row">
+<span class="sig-name descname"><span class="pre">upsert_item_for_dataset_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dashboard_client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">identifiers_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">external_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.DataCache.DataCache.upsert_item_for_dataset_row" title="Link to this definition"></a></dt>
+<dd><p>Common method to upsert an Item for a dataset row.
+This centralizes Item creation logic that was duplicated across subclasses.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>dashboard_client: PlexusDashboardClient instance
+account_id: The account ID
+item_data: Dict or object containing item information (id, description, etc.)
+identifiers_dict: Dict of identifier key-value pairs for the item
+external_id: Optional external ID for the item (defaults to item_data.id)
+score_id: Optional score ID to associate with the Item</p>
+</dd>
+<dt>Returns:</dt><dd><p>Tuple[str, bool, str]: (item_id, was_created, error_msg)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.data.AWSDataLakeCache.html" class="btn btn-neutral float-left" title="plexus.data.AWSDataLakeCache module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.data.FeedbackItems.html" class="btn btn-neutral float-right" title="plexus.data.FeedbackItems module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

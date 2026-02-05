@@ -1,0 +1,519 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.lua_dsl package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.lua_dsl.primitives package" href="plexus.cli.procedure.lua_dsl.primitives.html" />
+    <link rel="prev" title="plexus.cli.procedure package" href="plexus.cli.procedure.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.lua_dsl package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.lua_dsl.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.lua_dsl">
+<span id="plexus-cli-procedure-lua-dsl-package"></span><h1>plexus.cli.procedure.lua_dsl package<a class="headerlink" href="#module-plexus.cli.procedure.lua_dsl" title="Link to this heading"></a></h1>
+<p>Lua DSL Runtime for Plexus Procedures.</p>
+<p>This module provides a Lua-based domain-specific language for defining
+agentic workflows. It enables declarative orchestration through YAML
+configuration with Lua code for control flow.</p>
+<p>Key components:
+- LuaDSLRuntime: Main execution engine
+- Primitives: Python implementations of Lua-callable operations
+- YAML Parser: Configuration validation and loading
+- Lua Sandbox: Safe, restricted Lua execution environment</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.LuaDSLRuntime">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.</span></span><span class="sig-name descname"><span class="pre">LuaDSLRuntime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mcp_server</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">openai_api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.LuaDSLRuntime" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Main execution engine for Lua-based procedure workflows.</p>
+<p>Responsibilities:
+- Parse and validate YAML configuration
+- Setup sandboxed Lua environment
+- Create and inject primitives
+- Configure agents with LLMs and tools
+- Execute Lua workflow code
+- Return results</p>
+<p>Initialize the Lua DSL runtime.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: Unique procedure identifier
+client: PlexusDashboardClient instance
+mcp_server: MCP server providing tools
+openai_api_key: Optional OpenAI API key for LLMs</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.LuaDSLRuntime.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mcp_server</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">openai_api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.LuaDSLRuntime.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the Lua DSL runtime.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: Unique procedure identifier
+client: PlexusDashboardClient instance
+mcp_server: MCP server providing tools
+openai_api_key: Optional OpenAI API key for LLMs</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.LuaDSLRuntime.execute">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">execute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.LuaDSLRuntime.execute" title="Link to this definition"></a></dt>
+<dd><p>Execute a Lua-based procedure workflow.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>yaml_config: YAML configuration string
+context: Optional context dict with pre-loaded data</p>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Execution results dict with:</dt><dd><ul class="simple">
+<li><p>success: bool</p></li>
+<li><p>result: Any (return value from Lua workflow)</p></li>
+<li><p>state: Final state</p></li>
+<li><p>iterations: Number of iterations</p></li>
+<li><p>tools_used: List of tool names called</p></li>
+<li><p>error: Error message if failed</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Raises:</dt><dd><p>LuaDSLRuntimeError: If execution fails</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.LuaDSLRuntime.get_iteration_count">
+<span class="sig-name descname"><span class="pre">get_iteration_count</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.LuaDSLRuntime.get_iteration_count" title="Link to this definition"></a></dt>
+<dd><p>Get current iteration count.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.LuaDSLRuntime.get_state">
+<span class="sig-name descname"><span class="pre">get_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.LuaDSLRuntime.get_state" title="Link to this definition"></a></dt>
+<dd><p>Get current procedure state.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.LuaDSLRuntime.is_stopped">
+<span class="sig-name descname"><span class="pre">is_stopped</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.LuaDSLRuntime.is_stopped" title="Link to this definition"></a></dt>
+<dd><p>Check if procedure was stopped.</p>
+</dd></dl>
+
+</dd></dl>
+
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html">plexus.cli.procedure.lua_dsl.primitives package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.flush_recordings"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.flush_recordings()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.get_conversation"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.get_conversation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.reset"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.reset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.turn"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.turn()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.create"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.create()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.current"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.current()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.root"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.root()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.set_current"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.set_current()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.approve"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.approve()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.escalate"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.escalate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.flush_recordings"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.flush_recordings()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.input"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.input()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.notify"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.notify()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.review"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.review()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.current"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.current()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.exceeded"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.exceeded()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.increment"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.increment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.reset"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.reset()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive"><code class="docutils literal notranslate"><span class="pre">StatePrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.all"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.all()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.append"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.append()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.clear"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.clear()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.get"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.increment"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.increment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.set"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.set()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive"><code class="docutils literal notranslate"><span class="pre">StopPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.reason"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.reason()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.request"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.request()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.requested"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.requested()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.reset"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.reset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.success"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.success()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive"><code class="docutils literal notranslate"><span class="pre">SystemPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">SystemPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive.alert"><code class="docutils literal notranslate"><span class="pre">SystemPrimitive.alert()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive.flush_recordings"><code class="docutils literal notranslate"><span class="pre">SystemPrimitive.flush_recordings()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.called"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.called()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.get_all_calls"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.get_all_calls()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.get_call_count"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.get_call_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.last_call"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.last_call()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.last_result"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.last_result()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.record_call"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.record_call()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.reset"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.reset()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.html#submodules">Submodules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html">plexus.cli.procedure.lua_dsl.primitives.agent module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentPrimitive"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentResponse"><code class="docutils literal notranslate"><span class="pre">AgentResponse</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html">plexus.cli.procedure.lua_dsl.primitives.control module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.IterationsPrimitive"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.StopPrimitive"><code class="docutils literal notranslate"><span class="pre">StopPrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.file.html">plexus.cli.procedure.lua_dsl.primitives.file module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.file.html#plexus.cli.procedure.lua_dsl.primitives.file.FilePrimitive"><code class="docutils literal notranslate"><span class="pre">FilePrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html">plexus.cli.procedure.lua_dsl.primitives.graph module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.GraphNodePrimitive"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.NodeWrapper"><code class="docutils literal notranslate"><span class="pre">NodeWrapper</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html">plexus.cli.procedure.lua_dsl.primitives.human module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.json.html">plexus.cli.procedure.lua_dsl.primitives.json module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.json.html#plexus.cli.procedure.lua_dsl.primitives.json.JsonPrimitive"><code class="docutils literal notranslate"><span class="pre">JsonPrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.log.html">plexus.cli.procedure.lua_dsl.primitives.log module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.log.html#plexus.cli.procedure.lua_dsl.primitives.log.LogPrimitive"><code class="docutils literal notranslate"><span class="pre">LogPrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html">plexus.cli.procedure.lua_dsl.primitives.procedure module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.retry.html">plexus.cli.procedure.lua_dsl.primitives.retry module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.retry.html#plexus.cli.procedure.lua_dsl.primitives.retry.RetryPrimitive"><code class="docutils literal notranslate"><span class="pre">RetryPrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html">plexus.cli.procedure.lua_dsl.primitives.session module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html">plexus.cli.procedure.lua_dsl.primitives.stage module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive"><code class="docutils literal notranslate"><span class="pre">StagePrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html">plexus.cli.procedure.lua_dsl.primitives.state module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html#plexus.cli.procedure.lua_dsl.primitives.state.StatePrimitive"><code class="docutils literal notranslate"><span class="pre">StatePrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html">plexus.cli.procedure.lua_dsl.primitives.step module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.CheckpointPrimitive"><code class="docutils literal notranslate"><span class="pre">CheckpointPrimitive</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.StepPrimitive"><code class="docutils literal notranslate"><span class="pre">StepPrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.system.html">plexus.cli.procedure.lua_dsl.primitives.system module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.system.html#plexus.cli.procedure.lua_dsl.primitives.system.SystemPrimitive"><code class="docutils literal notranslate"><span class="pre">SystemPrimitive</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html">plexus.cli.procedure.lua_dsl.primitives.tool module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolCall"><code class="docutils literal notranslate"><span class="pre">ToolCall</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html">plexus.cli.procedure.lua_dsl.execution_context module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ExecutionContext"><code class="docutils literal notranslate"><span class="pre">ExecutionContext</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ExecutionContext.checkpoint_clear_after"><code class="docutils literal notranslate"><span class="pre">ExecutionContext.checkpoint_clear_after()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ExecutionContext.checkpoint_clear_all"><code class="docutils literal notranslate"><span class="pre">ExecutionContext.checkpoint_clear_all()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ExecutionContext.checkpoint_exists"><code class="docutils literal notranslate"><span class="pre">ExecutionContext.checkpoint_exists()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ExecutionContext.checkpoint_get"><code class="docutils literal notranslate"><span class="pre">ExecutionContext.checkpoint_get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ExecutionContext.sleep"><code class="docutils literal notranslate"><span class="pre">ExecutionContext.sleep()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ExecutionContext.step_run"><code class="docutils literal notranslate"><span class="pre">ExecutionContext.step_run()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ExecutionContext.wait_for_human"><code class="docutils literal notranslate"><span class="pre">ExecutionContext.wait_for_human()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.GraphQLServiceAdapter"><code class="docutils literal notranslate"><span class="pre">GraphQLServiceAdapter</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.GraphQLServiceAdapter.__init__"><code class="docutils literal notranslate"><span class="pre">GraphQLServiceAdapter.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.GraphQLServiceAdapter.mutate"><code class="docutils literal notranslate"><span class="pre">GraphQLServiceAdapter.mutate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.GraphQLServiceAdapter.query"><code class="docutils literal notranslate"><span class="pre">GraphQLServiceAdapter.query()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.HumanResponse"><code class="docutils literal notranslate"><span class="pre">HumanResponse</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.HumanResponse.__init__"><code class="docutils literal notranslate"><span class="pre">HumanResponse.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.HumanResponse.responded_at"><code class="docutils literal notranslate"><span class="pre">HumanResponse.responded_at</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.HumanResponse.value"><code class="docutils literal notranslate"><span class="pre">HumanResponse.value</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext.__init__"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext.checkpoint_clear_after"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext.checkpoint_clear_after()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext.checkpoint_clear_all"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext.checkpoint_clear_all()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext.checkpoint_exists"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext.checkpoint_exists()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext.checkpoint_get"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext.checkpoint_get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext.checkpoints"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext.checkpoints</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext.sleep"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext.sleep()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext.step_run"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext.step_run()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.LocalExecutionContext.wait_for_human"><code class="docutils literal notranslate"><span class="pre">LocalExecutionContext.wait_for_human()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ProcedureWaitingForHuman"><code class="docutils literal notranslate"><span class="pre">ProcedureWaitingForHuman</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.execution_context.html#plexus.cli.procedure.lua_dsl.execution_context.ProcedureWaitingForHuman.__init__"><code class="docutils literal notranslate"><span class="pre">ProcedureWaitingForHuman.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html">plexus.cli.procedure.lua_dsl.lua_sandbox module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandbox"><code class="docutils literal notranslate"><span class="pre">LuaSandbox</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandbox.__init__"><code class="docutils literal notranslate"><span class="pre">LuaSandbox.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandbox.create_lua_table"><code class="docutils literal notranslate"><span class="pre">LuaSandbox.create_lua_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandbox.eval"><code class="docutils literal notranslate"><span class="pre">LuaSandbox.eval()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandbox.execute"><code class="docutils literal notranslate"><span class="pre">LuaSandbox.execute()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandbox.get_global"><code class="docutils literal notranslate"><span class="pre">LuaSandbox.get_global()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandbox.inject_primitive"><code class="docutils literal notranslate"><span class="pre">LuaSandbox.inject_primitive()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandbox.lua_table_to_dict"><code class="docutils literal notranslate"><span class="pre">LuaSandbox.lua_table_to_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandbox.set_global"><code class="docutils literal notranslate"><span class="pre">LuaSandbox.set_global()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.lua_sandbox.html#plexus.cli.procedure.lua_dsl.lua_sandbox.LuaSandboxError"><code class="docutils literal notranslate"><span class="pre">LuaSandboxError</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.output_validator.html">plexus.cli.procedure.lua_dsl.output_validator module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.output_validator.html#plexus.cli.procedure.lua_dsl.output_validator.OutputValidationError"><code class="docutils literal notranslate"><span class="pre">OutputValidationError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.output_validator.html#plexus.cli.procedure.lua_dsl.output_validator.OutputValidator"><code class="docutils literal notranslate"><span class="pre">OutputValidator</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.output_validator.html#plexus.cli.procedure.lua_dsl.output_validator.OutputValidator.TYPE_MAP"><code class="docutils literal notranslate"><span class="pre">OutputValidator.TYPE_MAP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.output_validator.html#plexus.cli.procedure.lua_dsl.output_validator.OutputValidator.__init__"><code class="docutils literal notranslate"><span class="pre">OutputValidator.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.output_validator.html#plexus.cli.procedure.lua_dsl.output_validator.OutputValidator.get_field_description"><code class="docutils literal notranslate"><span class="pre">OutputValidator.get_field_description()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.output_validator.html#plexus.cli.procedure.lua_dsl.output_validator.OutputValidator.get_optional_fields"><code class="docutils literal notranslate"><span class="pre">OutputValidator.get_optional_fields()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.output_validator.html#plexus.cli.procedure.lua_dsl.output_validator.OutputValidator.get_required_fields"><code class="docutils literal notranslate"><span class="pre">OutputValidator.get_required_fields()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.output_validator.html#plexus.cli.procedure.lua_dsl.output_validator.OutputValidator.validate"><code class="docutils literal notranslate"><span class="pre">OutputValidator.validate()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.runtime.html">plexus.cli.procedure.lua_dsl.runtime module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.runtime.html#plexus.cli.procedure.lua_dsl.runtime.LuaDSLRuntime"><code class="docutils literal notranslate"><span class="pre">LuaDSLRuntime</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.runtime.html#plexus.cli.procedure.lua_dsl.runtime.LuaDSLRuntime.__init__"><code class="docutils literal notranslate"><span class="pre">LuaDSLRuntime.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.runtime.html#plexus.cli.procedure.lua_dsl.runtime.LuaDSLRuntime.execute"><code class="docutils literal notranslate"><span class="pre">LuaDSLRuntime.execute()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.runtime.html#plexus.cli.procedure.lua_dsl.runtime.LuaDSLRuntime.get_iteration_count"><code class="docutils literal notranslate"><span class="pre">LuaDSLRuntime.get_iteration_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.runtime.html#plexus.cli.procedure.lua_dsl.runtime.LuaDSLRuntime.get_state"><code class="docutils literal notranslate"><span class="pre">LuaDSLRuntime.get_state()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.runtime.html#plexus.cli.procedure.lua_dsl.runtime.LuaDSLRuntime.is_stopped"><code class="docutils literal notranslate"><span class="pre">LuaDSLRuntime.is_stopped()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.runtime.html#plexus.cli.procedure.lua_dsl.runtime.LuaDSLRuntimeError"><code class="docutils literal notranslate"><span class="pre">LuaDSLRuntimeError</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.test_runtime_basic.html">plexus.cli.procedure.lua_dsl.test_runtime_basic module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.test_runtime_basic.html#plexus.cli.procedure.lua_dsl.test_runtime_basic.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.test_runtime_basic.html#plexus.cli.procedure.lua_dsl.test_runtime_basic.test_control_primitives"><code class="docutils literal notranslate"><span class="pre">test_control_primitives()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.test_runtime_basic.html#plexus.cli.procedure.lua_dsl.test_runtime_basic.test_full_workflow"><code class="docutils literal notranslate"><span class="pre">test_full_workflow()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.test_runtime_basic.html#plexus.cli.procedure.lua_dsl.test_runtime_basic.test_lua_sandbox"><code class="docutils literal notranslate"><span class="pre">test_lua_sandbox()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.test_runtime_basic.html#plexus.cli.procedure.lua_dsl.test_runtime_basic.test_state_primitive"><code class="docutils literal notranslate"><span class="pre">test_state_primitive()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.test_runtime_basic.html#plexus.cli.procedure.lua_dsl.test_runtime_basic.test_tool_primitive"><code class="docutils literal notranslate"><span class="pre">test_tool_primitive()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.test_runtime_basic.html#plexus.cli.procedure.lua_dsl.test_runtime_basic.test_yaml_parser"><code class="docutils literal notranslate"><span class="pre">test_yaml_parser()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.yaml_parser.html">plexus.cli.procedure.lua_dsl.yaml_parser module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.yaml_parser.html#plexus.cli.procedure.lua_dsl.yaml_parser.ProcedureConfigError"><code class="docutils literal notranslate"><span class="pre">ProcedureConfigError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.yaml_parser.html#plexus.cli.procedure.lua_dsl.yaml_parser.ProcedureYAMLParser"><code class="docutils literal notranslate"><span class="pre">ProcedureYAMLParser</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.yaml_parser.html#plexus.cli.procedure.lua_dsl.yaml_parser.ProcedureYAMLParser.extract_agent_names"><code class="docutils literal notranslate"><span class="pre">ProcedureYAMLParser.extract_agent_names()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.yaml_parser.html#plexus.cli.procedure.lua_dsl.yaml_parser.ProcedureYAMLParser.get_agent_config"><code class="docutils literal notranslate"><span class="pre">ProcedureYAMLParser.get_agent_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.yaml_parser.html#plexus.cli.procedure.lua_dsl.yaml_parser.ProcedureYAMLParser.parse"><code class="docutils literal notranslate"><span class="pre">ProcedureYAMLParser.parse()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.html" class="btn btn-neutral float-left" title="plexus.cli.procedure package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.lua_dsl.primitives.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.lua_dsl.primitives package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
