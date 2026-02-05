@@ -1,5 +1,9 @@
+from typing import TYPE_CHECKING
 from plexus.input_sources.InputSource import InputSource
 from plexus.utils.score_result_s3_utils import download_score_result_log_file
+
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
 
 
 class TextFileInputSource(InputSource):

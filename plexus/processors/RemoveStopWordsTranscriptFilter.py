@@ -1,6 +1,10 @@
 import nltk
+from typing import TYPE_CHECKING
 from nltk.corpus import stopwords
 from plexus.processors.DataframeProcessor import Processor
+
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
 
 
 class RemoveStopWordsTranscriptFilter(Processor):

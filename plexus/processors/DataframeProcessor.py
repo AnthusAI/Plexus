@@ -1,5 +1,9 @@
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 import pandas as pd
+
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
 
 
 class Processor(ABC):

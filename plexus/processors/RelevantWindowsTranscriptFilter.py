@@ -1,9 +1,14 @@
 import nltk.data
 import re
+from typing import TYPE_CHECKING
 from rapidfuzz import fuzz
 
 from .DataframeProcessor import Processor
 from plexus.CustomLogging import logging
+
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
+
 
 class RelevantWindowsTranscriptFilter(Processor):
     """

@@ -1,7 +1,10 @@
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
 
 
 class InputSource(ABC):

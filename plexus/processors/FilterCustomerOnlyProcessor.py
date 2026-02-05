@@ -1,5 +1,9 @@
 import re
+from typing import TYPE_CHECKING
 from plexus.processors.DataframeProcessor import Processor
+
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
 
 
 class FilterCustomerOnlyProcessor(Processor):
