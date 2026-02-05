@@ -1,6 +1,9 @@
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from plexus.input_sources.TextFileInputSource import TextFileInputSource
 from plexus.utils.score_result_s3_utils import download_score_result_trace_file
+
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
 
 
 class DeepgramInputSource(TextFileInputSource):

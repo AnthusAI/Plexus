@@ -6,6 +6,7 @@ from .base import BaseModel
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
+    from plexus.core.ScoreInput import ScoreInput
 import json
 import logging
 
