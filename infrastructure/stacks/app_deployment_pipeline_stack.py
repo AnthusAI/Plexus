@@ -130,6 +130,9 @@ class AppDeploymentPipelineStack(Stack):
             )
         )
 
+        # Determine which appspec.yml to use based on environment
+        appspec_file = "appspec.staging.yml" if environment == "staging" else "appspec.yml"
+
         # Create CodeBuild project to prepare deployment bundle
         build_project = codebuild.PipelineProject(
             self,
@@ -146,7 +149,7 @@ class AppDeploymentPipelineStack(Stack):
                             # Create deployment bundle with code and deployment artifacts
                             "echo 'Creating deployment bundle...'",
                             # Copy deployment artifacts (appspec.yml and scripts) to root
-                            "cp infrastructure/deployment_artifacts/appspec.yml .",
+                            f"cp infrastructure/deployment_artifacts/{appspec_file} appspec.yml",
                             "cp -r infrastructure/deployment_artifacts/scripts .",
                             "echo 'Deployment bundle created successfully'"
                         ]
