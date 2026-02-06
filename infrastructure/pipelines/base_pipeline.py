@@ -210,37 +210,52 @@ class DeploymentStage(cdk.Stage):
         super().__init__(scope, construct_id, **kwargs)
 
         # Deploy ML Training infrastructure (S3 buckets + IAM roles)
+        # Only deploy in production - staging doesn't need ML training infrastructure yet
+        if environment == "production":
+            ml_training_stack = MLTrainingStack(
+                self,
+                "MLTraining",
+                environment=environment,
+                stack_name=f"plexus-ml-training-{environment}",
+                env=kwargs.get("env")
+            )
+
+        # Determine concurrency settings based on environment
+        # Staging uses reduced concurrency (10) since it only processes test traffic
+        # Production uses full concurrency (500) for production workloads
+        if environment == "staging":
+            reserved_concurrency = 10
+            max_concurrency = 10
+        elif environment == "production":
+            reserved_concurrency = 500
+            max_concurrency = 500
+        else:
+            raise ValueError(f"Unknown environment: {environment}")
+
+        # Deploy scoring worker stack (creates SQS queues)
         # Deployed to both staging and production
-        ml_training_stack = MLTrainingStack(
+        scoring_worker_stack = ScoringWorkerStack(
             self,
-            "MLTraining",
+            "ScoringWorker",
             environment=environment,
-            stack_name=f"plexus-ml-training-{environment}",
+            stack_name=f"plexus-scoring-worker-{environment}",
             env=kwargs.get("env")
         )
 
-        # Deploy Lambda score processor stack (with SQS queues)
-        # Only deploy in production - staging can't use Lambda due to reserved concurrency limits
-        if environment == "production":
-            # Deploy scoring worker stack (creates SQS queues) - only for production
-            scoring_worker_stack = ScoringWorkerStack(
-                self,
-                "ScoringWorker",
-                environment=environment,
-                stack_name=f"plexus-scoring-worker-{environment}",
-                env=kwargs.get("env")
-            )
-
-            LambdaScoreProcessorStack(
-                self,
-                "LambdaScoreProcessor",
-                environment=environment,
-                ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
-                standard_request_queue=scoring_worker_stack.standard_request_queue,
-                response_queue_url=scoring_worker_stack.response_queue.queue_url,
-                stack_name=f"plexus-lambda-score-processor-{environment}",
-                env=kwargs.get("env")
-            )
+        # Deploy Lambda score processor stack with environment-specific concurrency
+        # Deployed to both staging and production
+        LambdaScoreProcessorStack(
+            self,
+            "LambdaScoreProcessor",
+            environment=environment,
+            ecr_repository_name=ecr_repository_name,  # Pass repository name to look up
+            standard_request_queue=scoring_worker_stack.standard_request_queue,
+            response_queue_url=scoring_worker_stack.response_queue.queue_url,
+            reserved_concurrent_executions=reserved_concurrency,
+            max_concurrency=max_concurrency,
+            stack_name=f"plexus-lambda-score-processor-{environment}",
+            env=kwargs.get("env")
+        )
 
         # Deploy metrics aggregation stack (processes DynamoDB streams)
         # Only deploy in production - staging doesn't need metrics aggregation

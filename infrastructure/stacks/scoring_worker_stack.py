@@ -66,8 +66,9 @@ class ScoringWorkerStack(Stack):
         #     "gpu-request"
         # )
 
-        # Create SSM document for scoring worker service management
-        self._create_worker_service_document()
+        # SSM document for EC2-based scoring worker service management
+        # Commented out - replaced by Lambda-based score processor
+        # self._create_worker_service_document()
 
     def _create_queue_with_dlq(
         self,
