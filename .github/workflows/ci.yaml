@@ -115,7 +115,7 @@ jobs:
           "npx wait-on --verbose --interval 1000 --timeout 30000 http-get://127.0.0.1:6006 && echo 'Server ready' && npm run test-storybook -- --url http://127.0.0.1:6006 --verbose"
 
     - name: Initialize Version Tag (if needed)
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/develop')
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
         git config --global user.email "semantic-release@github.actions"
         git config --global user.name "Semantic Release Bot"
@@ -125,7 +125,7 @@ jobs:
         fi
 
     - name: Semantic Release
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/develop')
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
