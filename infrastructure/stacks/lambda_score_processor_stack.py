@@ -40,6 +40,8 @@ class LambdaScoreProcessorStack(Stack):
         ecr_repository_name: str,
         standard_request_queue: sqs.IQueue,
         response_queue_url: str,
+        reserved_concurrent_executions: int = 500,
+        max_concurrency: int = 500,
         **kwargs
     ) -> None:
         """
@@ -52,6 +54,8 @@ class LambdaScoreProcessorStack(Stack):
             ecr_repository_name: Name of ECR repository containing Lambda container image
             standard_request_queue: SQS queue for incoming requests
             response_queue_url: SQS queue URL for responses
+            reserved_concurrent_executions: Reserved concurrent executions for Lambda (default: 500)
+            max_concurrency: Maximum concurrent SQS pollers (default: 500)
             **kwargs: Additional stack properties
         """
         super().__init__(scope, construct_id, **kwargs)
@@ -135,7 +139,7 @@ class LambdaScoreProcessorStack(Stack):
             role=lambda_role,
             timeout=Duration.seconds(300),  # 5 minutes
             memory_size=2048,
-            reserved_concurrent_executions=500,  # Reserve 500 slots (leaves 500 for other Lambdas)
+            reserved_concurrent_executions=reserved_concurrent_executions,
             environment={
                 "environment": self.env_name,
                 # SQS Queue URLs (from ScoringWorkerStack)
@@ -202,7 +206,7 @@ class LambdaScoreProcessorStack(Stack):
             lambda_events.SqsEventSource(
                 queue=standard_request_queue,
                 batch_size=1,  # Process one message per Lambda invocation
-                max_concurrency=500,  # Max 500 concurrent pollers (leaves 500 for other Lambdas)
+                max_concurrency=max_concurrency,  # Max concurrent pollers
                 # report_batch_item_failures=False (default) - Lambda handles deletion manually
                 # On exception, SQS returns message to queue for retry
             )
