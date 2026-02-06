@@ -156,7 +156,7 @@ jobs:
             APP_PIPELINE="plexus-app-deploy-production-pipeline"
             ENVIRONMENT="production"
           elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
-            INFRA_PIPELINE=""
+            INFRA_PIPELINE="plexus-infrastructure-staging-pipeline"
             APP_PIPELINE="plexus-app-deploy-staging-pipeline"
             ENVIRONMENT="staging"
           fi
