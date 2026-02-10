@@ -27,6 +27,7 @@ from .shared.naming import (
     get_sagemaker_endpoint_name,
     get_sagemaker_model_name,
     get_sagemaker_endpoint_config_name,
+    get_sagemaker_resource_metadata,
 )
 
 
@@ -124,7 +125,7 @@ class SageMakerInferenceStack(Stack):
 
         # Store parameters for later use
         self.deployment_type = deployment_type
-        self.environment = environment
+        self.deployment_environment = environment  # Renamed to avoid conflict with Stack.environment property
         self.instance_type = instance_type
         self.min_instances = min_instances
         self.max_instances = max_instances
@@ -148,13 +149,19 @@ class SageMakerInferenceStack(Stack):
             scorecard_key, score_key, model_s3_uri, environment
         )
 
-        # Add tags
+        # Get metadata for tags (includes full names for discovery)
+        metadata = get_sagemaker_resource_metadata(scorecard_key, score_key, environment)
+
+        # Add comprehensive tags for resource discovery
         Tags.of(self).add("Service", "sagemaker-inference")
         Tags.of(self).add("ManagedBy", "CDK")
-        Tags.of(self).add("Scorecard", scorecard_key)
-        Tags.of(self).add("Score", score_key)
-        Tags.of(self).add("DeploymentType", deployment_type)
         Tags.of(self).add("Environment", environment)
+        Tags.of(self).add("DeploymentType", deployment_type)
+        # Full keys for discovery (not truncated)
+        Tags.of(self).add("ScorecardKey", metadata['scorecard_key'])
+        Tags.of(self).add("ScoreKey", metadata['score_key'])
+        # Resource hash for mapping truncated names back to full names
+        Tags.of(self).add("ResourceHash", metadata['resource_hash'])
 
         # Import shared SageMaker inference role from ML Training Stack
         inference_role_arn = Fn.import_value(
@@ -191,7 +198,7 @@ class SageMakerInferenceStack(Stack):
             # Setup auto-scaling for scale-to-zero
             self._setup_autoscaling()
 
-        # Outputs
+        # Outputs - Resource names and metadata
         CfnOutput(
             self, "EndpointName",
             value=self.endpoint_name,
@@ -211,6 +218,22 @@ class SageMakerInferenceStack(Stack):
             self, "EndpointArn",
             value=self.endpoint.ref,
             description="ARN of the SageMaker endpoint"
+        )
+        # Full names for discovery (not truncated)
+        CfnOutput(
+            self, "ScorecardKey",
+            value=metadata['scorecard_key'],
+            description="Full scorecard key (not truncated)"
+        )
+        CfnOutput(
+            self, "ScoreKey",
+            value=metadata['score_key'],
+            description="Full score key (not truncated)"
+        )
+        CfnOutput(
+            self, "ResourceHash",
+            value=metadata['resource_hash'],
+            description="Resource hash for name uniqueness"
         )
 
         # Additional outputs for real-time endpoints

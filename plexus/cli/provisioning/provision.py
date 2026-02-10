@@ -230,9 +230,11 @@ def status(scorecard_name, score_name, yaml, deployment_type):
               help='Load scorecard from local YAML files instead of the API.')
 @click.option('--deployment-type', type=click.Choice(['serverless', 'realtime']), default='serverless',
               help='Deployment type to delete.')
+@click.option('--region', type=str, default=None,
+              help='AWS region where the endpoint is deployed (e.g., us-east-1).')
 @click.option('--confirm', is_flag=True,
               help='Skip confirmation prompt.')
-def delete(scorecard_name, score_name, yaml, deployment_type, confirm):
+def delete(scorecard_name, score_name, yaml, deployment_type, region, confirm):
     """
     Delete a provisioned endpoint.
 
@@ -258,7 +260,8 @@ def delete(scorecard_name, score_name, yaml, deployment_type, confirm):
             scorecard_name=scorecard_name,
             score_name=score_name,
             use_yaml=yaml,
-            deployment_type=deployment_type
+            deployment_type=deployment_type,
+            region=region
         )
 
         if result['success']:

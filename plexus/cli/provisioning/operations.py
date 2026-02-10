@@ -233,7 +233,8 @@ def delete_endpoint_operation(
     scorecard_name: str,
     score_name: str,
     use_yaml: bool = False,
-    deployment_type: str = 'serverless'
+    deployment_type: str = 'serverless',
+    region: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Delete a provisioned endpoint.
@@ -243,6 +244,7 @@ def delete_endpoint_operation(
         score_name: Name of the score
         use_yaml: Load from local YAML files
         deployment_type: 'serverless' or 'realtime'
+        region: AWS region where the endpoint is deployed
 
     Returns:
         Dictionary with deletion result
@@ -253,14 +255,33 @@ def delete_endpoint_operation(
             scorecard_name, score_name, use_yaml
         )
 
-        scorecard_key = get_scorecard_key(scorecard_name=scorecard_name)
+        # Get normalized keys for naming - SAME LOGIC AS PROVISION
+        # IMPORTANT: Use the actual scorecard name from the loaded class, not the identifier
+        if hasattr(scorecard_class, 'name') and callable(scorecard_class.name):
+            actual_scorecard_name = scorecard_class.name()
+        else:
+            actual_scorecard_name = scorecard_name
+        scorecard_key = get_scorecard_key(scorecard_name=actual_scorecard_name)
         score_key = get_score_key(score_config)
 
+        logging.info(f"Actual scorecard name: {actual_scorecard_name}")
+        logging.info(f"Scorecard key: {scorecard_key}")
+        logging.info(f"Score key: {score_key}")
+
+        # Get environment from env vars
+        environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
+
         # Generate endpoint name using Plexus naming convention
-        endpoint_name = f"plexus-{scorecard_key}-{score_key}-{deployment_type}"
+        from infrastructure.stacks.shared.naming import get_sagemaker_endpoint_name
+        endpoint_name = get_sagemaker_endpoint_name(
+            scorecard_key=scorecard_key,
+            score_key=score_key,
+            deployment_type=deployment_type,
+            environment=environment
+        )
 
         # Delete via CDK destroy
-        result = _delete_via_cdk(scorecard_key, score_key, deployment_type)
+        result = _delete_via_cdk(scorecard_key, score_key, deployment_type, region)
 
         result['endpoint_name'] = endpoint_name
         return result
@@ -736,8 +757,9 @@ def _deploy_via_cdk(
     # Falls back to development if not set
     environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
 
-    # Construct stack name (replace underscores with hyphens for CDK compatibility)
-    stack_name = f"PlexusInference-{scorecard_key}-{score_key}".replace('_', '-')
+    # Construct stack name with full names for readability (CloudFormation limit: 128 chars)
+    # Only SageMaker resources need truncation due to 63-char limit
+    stack_name = f"PlexusInference-{environment}-{scorecard_key}-{score_key}".replace('_', '-')
 
     # Build stack parameters
     stack_params = [
@@ -795,7 +817,14 @@ def _deploy_via_cdk(
         )
 
         # Generate endpoint name using Plexus naming convention
-        endpoint_name = f"plexus-{scorecard_key}-{score_key}-{deployment_type}"
+        # Import here to avoid circular dependency
+        from infrastructure.stacks.shared.naming import get_sagemaker_endpoint_name
+        endpoint_name = get_sagemaker_endpoint_name(
+            scorecard_key=scorecard_key,
+            score_key=score_key,
+            deployment_type=deployment_type,
+            environment=environment
+        )
 
         return {
             'success': True,
@@ -816,44 +845,95 @@ def _deploy_via_cdk(
 def _delete_via_cdk(
     scorecard_key: str,
     score_key: str,
-    deployment_type: str
+    deployment_type: str,
+    region: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Delete endpoint using CDK destroy.
+    Delete endpoint by deleting the CloudFormation stack directly via AWS CLI.
 
     Args:
         scorecard_key: Scorecard key
         score_key: Score key
         deployment_type: 'serverless' or 'realtime'
+        region: AWS region where the endpoint is deployed
 
     Returns:
         Dictionary with deletion result
     """
-    # Find CDK directory
-    project_root = Path(__file__).parent.parent.parent.parent
-    cdk_dir = project_root / 'infrastructure'
+    # Get environment from env vars (PLEXUS_ENVIRONMENT or environment from .env file)
+    environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
 
-    stack_name = f"PlexusInference-{scorecard_key}-{score_key}"
+    # Construct stack name with full names for readability (CloudFormation limit: 128 chars)
+    # Only SageMaker resources need truncation due to 63-char limit
+    stack_name = f"PlexusInference-{environment}-{scorecard_key}-{score_key}".replace('_', '-')
 
+    # Get AWS region - prefer explicitly provided region, then fall back to environment
+    if region:
+        aws_region = region
+        logging.info(f"Using explicitly provided region: {aws_region}")
+    else:
+        # Try multiple sources in order of preference
+        aws_region = (
+            os.getenv('AWS_REGION') or
+            os.getenv('AWS_DEFAULT_REGION') or
+            os.getenv('PLEXUS_AWS_REGION_NAME')
+        )
+
+        # If not in environment, detect from boto3 session
+        if not aws_region:
+            try:
+                import boto3
+                session = boto3.Session()
+                aws_region = session.region_name
+                if aws_region:
+                    logging.info(f"Detected region from boto3 session: {aws_region}")
+            except Exception as e:
+                logging.warning(f"Could not detect region from boto3: {e}")
+
+        if not aws_region:
+            raise ValueError(
+                "AWS region not configured. Set AWS_REGION, AWS_DEFAULT_REGION, or "
+                "configure default region in ~/.aws/config, or use --region flag"
+            )
+
+        logging.info(f"Deleting from AWS region: {aws_region}")
+
+    # Use AWS CLI to delete CloudFormation stack directly
+    # This avoids CDK app.py loading issues with pipeline stacks
     cmd = [
-        'cdk', 'destroy',
-        stack_name,
-        '--force'  # Skip confirmation
+        'aws', 'cloudformation', 'delete-stack',
+        '--stack-name', stack_name,
+        '--region', aws_region
     ]
 
-    logging.info(f"Running CDK destroy: {' '.join(cmd)}")
+    logging.info(f"Deleting CloudFormation stack in region {aws_region}: {stack_name}")
 
     try:
         result = subprocess.run(
             cmd,
-            cwd=cdk_dir,
             capture_output=True,
             text=True,
             check=True
         )
 
-        logging.info("CDK destroy output:")
-        logging.info(result.stdout)
+        logging.info(f"Stack deletion initiated for {stack_name}")
+        logging.info("Waiting for stack deletion to complete...")
+
+        # Wait for stack deletion to complete
+        wait_cmd = [
+            'aws', 'cloudformation', 'wait', 'stack-delete-complete',
+            '--stack-name', stack_name,
+            '--region', aws_region
+        ]
+
+        wait_result = subprocess.run(
+            wait_cmd,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        logging.info(f"Stack {stack_name} deleted successfully")
 
         return {
             'success': True,
@@ -861,8 +941,8 @@ def _delete_via_cdk(
         }
 
     except subprocess.CalledProcessError as e:
-        logging.error(f"CDK destroy failed: {e.stderr}")
+        logging.error(f"Stack deletion failed: {e.stderr}")
         return {
             'success': False,
-            'error': f"CDK destroy failed: {e.stderr}"
+            'error': f"Stack deletion failed: {e.stderr}"
         }

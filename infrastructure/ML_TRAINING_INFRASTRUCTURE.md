@@ -186,15 +186,28 @@ export PLEXUS_ENVIRONMENT=production
 ```
 
 **Resource naming pattern:**
-- Endpoints: `plexus-{environment}-{scorecard-key}-{score-key}-{deployment-type}`
-- Models: `plexus-{environment}-{scorecard-key}-{score-key}-{hash}`
-- Configs: `plexus-{environment}-{scorecard-key}-{score-key}-config-{hash}`
 
-**Example:**
-- Development: `plexus-development-my-scorecard-my-score-realtime`
-- Production: `plexus-production-my-scorecard-my-score-realtime`
+SageMaker resources use a hybrid hash + truncation strategy to fit within the 63-character limit while remaining human-readable:
 
-This ensures you can safely deploy the same score to multiple environments without resource name collisions.
+- **Pattern**: `plexus-{env_abbrev}-{hash}-{scorecard_trunc}-{score_trunc}-{type}`
+- **Endpoints**: `plexus-dev-a7f3c2d1-aw-confirm-accurate-d-realtime`
+- **Components**: `plexus-dev-a7f3c2d1-aw-confirm-accurate-d-realtime-adapter`
+- **Models**: `plexus-dev-a7f3c2d1-aw-confirm-accurate-d-b4e8f2a9`
+- **Configs**: `plexus-dev-a7f3c2d1-aw-confirm-accurate-d-config-b4e8f2a9`
+- **CloudFormation Stack**: `PlexusInference-development-aw-confirmation-accurate-disposition` (no truncation, 128-char limit)
+
+**Environment abbreviations:**
+- `development` → `dev`
+- `staging` → `staging` (kept full for clarity)
+- `production` → `prod`
+
+**Example with full names:**
+- Scorecard: "AW - Confirmation"
+- Score: "Accurate Disposition"
+- Hash: `a7f3c2d1` (SHA256 of scorecard+score keys)
+- Truncated: `aw-confirm` + `accurate-d` (10 chars each)
+
+**Discovery:** Full names are stored in CloudFormation tags (`ScorecardKey`, `ScoreKey`, `ResourceHash`) and outputs for easy lookup. This ensures you can safely deploy the same score to multiple environments without resource name collisions.
 
 ### When to Use Real-time Endpoints
 
@@ -366,9 +379,10 @@ print(result)
 
 **Important**:
 - Always use `InferenceComponentName` to specify the adapter component
-- The endpoint name follows the pattern: `plexus-{environment}-{scorecard-key}-{score-key}-realtime`
+- The endpoint name follows the pattern: `plexus-{env_abbrev}-{hash}-{scorecard_trunc}-{score_trunc}-realtime`
 - Environment comes from `.env` file (`environment=development`) or `PLEXUS_ENVIRONMENT` env var
 - Component names: `{endpoint-name}-base` and `{endpoint-name}-adapter`
+- Full names available in CloudFormation stack outputs and tags
 - Don't use AWS CLI `invoke-endpoint` as it gzip-compresses payloads (causes parsing errors)
 
 ### Monitoring Scale-to-Zero
@@ -416,7 +430,11 @@ The real-time provisioning creates these AWS resources:
 
 **Custom Resource Lambda**: Workaround for CloudFormation limitation where adapter components can't be created natively. The Lambda handler creates the adapter component via boto3 API after the base component is ready.
 
-**Environment Isolation**: The `{environment}` prefix ensures that development, staging, and production endpoints have unique names and never conflict. The environment is determined from your `.env` file (`environment=development`) or `PLEXUS_ENVIRONMENT` environment variable.
+**Environment Isolation**: The `{environment}` prefix and resource hash ensure that development, staging, and production resources have unique names and never conflict:
+- **CloudFormation Stack**: `PlexusInference-{environment}-{scorecard-key}-{score-key}` (full names, no truncation)
+- **SageMaker Resources**: `plexus-{env_abbrev}-{hash}-{scorecard_trunc}-{score_trunc}-{resource}` (truncated to fit 63-char limit)
+- **Resource Discovery**: Full names stored in CloudFormation tags (`ScorecardKey`, `ScoreKey`, `ResourceHash`) and outputs
+- Environment is determined from your `.env` file (`environment=development`) or `PLEXUS_ENVIRONMENT` environment variable
 
 ### Cross-Region Deployment
 
