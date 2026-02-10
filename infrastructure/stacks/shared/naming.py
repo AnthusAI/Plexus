@@ -7,14 +7,70 @@ Examples:
   - plexus-scoring-production-dlq
   - plexus-monitoring-staging-dashboard
 
-SageMaker naming convention: plexus-{environment}-{scorecard_key}-{score_key}-{resource}
+SageMaker naming convention (hybrid hash + truncation):
+  plexus-{env_abbrev}-{hash}-{scorecard_trunc}-{score_trunc}-{resource}
+
 Examples:
-  - plexus-development-selectquote-hcs-compliance-check-serverless
-  - plexus-production-selectquote-hcs-compliance-check-model-abc123ef
-  - plexus-staging-selectquote-hcs-compliance-check-config-abc123ef
+  - plexus-dev-a7f3c2d1-aw-confirm-accurate-d-realtime
+  - plexus-staging-a7f3c2d1-aw-confirm-accurate-d-realtime-adapter
+  - plexus-prod-a7f3c2d1-aw-confirm-accurate-d-model
+
+This pattern ensures:
+  - Names always fit within 63-character SageMaker limits
+  - Hash provides uniqueness (SHA256, 8 chars = ~16 trillion combinations)
+  - Truncated names provide human readability
+  - Full names stored in CloudFormation tags for discovery
 """
 
 import hashlib
+from typing import Dict, Any
+
+
+def _abbreviate_environment(environment: str) -> str:
+    """
+    Abbreviate environment name for resource naming.
+
+    Args:
+        environment: Full environment name
+
+    Returns:
+        Abbreviated environment (staging stays full for clarity)
+    """
+    env_map = {
+        'development': 'dev',
+        'staging': 'staging',  # Keep full name for clarity
+        'production': 'prod'
+    }
+    return env_map.get(environment, environment)
+
+
+def _generate_resource_hash(scorecard_key: str, score_key: str) -> str:
+    """
+    Generate deterministic 8-character hash for resource uniqueness.
+
+    Args:
+        scorecard_key: Normalized scorecard key
+        score_key: Normalized score key
+
+    Returns:
+        8-character hex hash (provides ~16 trillion unique combinations)
+    """
+    hash_input = f"{scorecard_key}-{score_key}"
+    return hashlib.sha256(hash_input.encode()).hexdigest()[:8]
+
+
+def _truncate_name(name: str, max_length: int = 10) -> str:
+    """
+    Truncate name to fit within character budget.
+
+    Args:
+        name: Original name
+        max_length: Maximum length (default: 10 chars)
+
+    Returns:
+        Truncated name
+    """
+    return name[:max_length]
 
 
 def get_resource_name(service: str, environment: str, resource: str) -> str:
@@ -39,10 +95,14 @@ def get_sagemaker_endpoint_name(
     environment: str = 'development'
 ) -> str:
     """
-    Generate stable SageMaker endpoint name (doesn't change with model updates).
+    Generate stable SageMaker endpoint name with hash + truncation.
 
-    Pattern: plexus-{environment}-{scorecard_key}-{score_key}-{deployment_type}
-    Example: plexus-production-call-quality-compliance-check-serverless
+    Pattern: plexus-{env_abbrev}-{hash}-{scorecard_trunc}-{score_trunc}-{type}
+    Example: plexus-dev-a7f3c2d1-aw-confirm-accurate-d-realtime
+
+    Budget analysis (worst case with staging + realtime):
+      plexus-staging-{hash8}-{scorecard10}-{score10}-realtime = 55 chars
+      Component suffix adds: -base (5) or -adapter (8) = 60-63 chars
 
     Args:
         scorecard_key: Normalized scorecard key (filesystem-safe)
@@ -51,12 +111,19 @@ def get_sagemaker_endpoint_name(
         environment: Environment name ('development', 'staging', 'production')
 
     Returns:
-        Stable endpoint name for resource discovery
+        Stable endpoint name guaranteed to fit within 63-char limit
     """
     # Replace underscores with hyphens for SageMaker compatibility
     scorecard_key = scorecard_key.replace('_', '-')
     score_key = score_key.replace('_', '-')
-    return f"plexus-{environment}-{scorecard_key}-{score_key}-{deployment_type}"
+
+    # Generate components
+    env_abbrev = _abbreviate_environment(environment)
+    resource_hash = _generate_resource_hash(scorecard_key, score_key)
+    scorecard_trunc = _truncate_name(scorecard_key, 10)
+    score_trunc = _truncate_name(score_key, 10)
+
+    return f"plexus-{env_abbrev}-{resource_hash}-{scorecard_trunc}-{score_trunc}-{deployment_type}"
 
 
 def get_sagemaker_model_name(
@@ -66,10 +133,10 @@ def get_sagemaker_model_name(
     environment: str = 'development'
 ) -> str:
     """
-    Generate versioned SageMaker model name (includes hash of model S3 URI).
+    Generate versioned SageMaker model name with hash + truncation.
 
-    Pattern: plexus-{environment}-{scorecard_key}-{score_key}-{hash[:8]}
-    Example: plexus-production-call-quality-compliance-check-a1b2c3d4
+    Pattern: plexus-{env_abbrev}-{resource_hash}-{scorecard_trunc}-{score_trunc}-{model_hash}
+    Example: plexus-dev-a7f3c2d1-aw-confirm-accurate-d-b4e8f2a9
 
     Args:
         scorecard_key: Normalized scorecard key (filesystem-safe)
@@ -83,8 +150,15 @@ def get_sagemaker_model_name(
     # Replace underscores with hyphens for SageMaker compatibility
     scorecard_key = scorecard_key.replace('_', '-')
     score_key = score_key.replace('_', '-')
-    uri_hash = hashlib.sha256(model_s3_uri.encode()).hexdigest()[:8]
-    return f"plexus-{environment}-{scorecard_key}-{score_key}-{uri_hash}"
+
+    # Generate components
+    env_abbrev = _abbreviate_environment(environment)
+    resource_hash = _generate_resource_hash(scorecard_key, score_key)
+    scorecard_trunc = _truncate_name(scorecard_key, 10)
+    score_trunc = _truncate_name(score_key, 10)
+    model_hash = hashlib.sha256(model_s3_uri.encode()).hexdigest()[:8]
+
+    return f"plexus-{env_abbrev}-{resource_hash}-{scorecard_trunc}-{score_trunc}-{model_hash}"
 
 
 def get_sagemaker_endpoint_config_name(
@@ -94,10 +168,10 @@ def get_sagemaker_endpoint_config_name(
     environment: str = 'development'
 ) -> str:
     """
-    Generate versioned SageMaker endpoint config name (includes hash of model S3 URI).
+    Generate versioned SageMaker endpoint config name with hash + truncation.
 
-    Pattern: plexus-{environment}-{scorecard_key}-{score_key}-config-{hash[:8]}
-    Example: plexus-production-call-quality-compliance-check-config-a1b2c3d4
+    Pattern: plexus-{env_abbrev}-{resource_hash}-{scorecard_trunc}-{score_trunc}-config-{model_hash}
+    Example: plexus-dev-a7f3c2d1-aw-confirm-accurate-d-config-b4e8f2a9
 
     Args:
         scorecard_key: Normalized scorecard key (filesystem-safe)
@@ -111,5 +185,46 @@ def get_sagemaker_endpoint_config_name(
     # Replace underscores with hyphens for SageMaker compatibility
     scorecard_key = scorecard_key.replace('_', '-')
     score_key = score_key.replace('_', '-')
-    uri_hash = hashlib.sha256(model_s3_uri.encode()).hexdigest()[:8]
-    return f"plexus-{environment}-{scorecard_key}-{score_key}-config-{uri_hash}"
+
+    # Generate components
+    env_abbrev = _abbreviate_environment(environment)
+    resource_hash = _generate_resource_hash(scorecard_key, score_key)
+    scorecard_trunc = _truncate_name(scorecard_key, 10)
+    score_trunc = _truncate_name(score_key, 10)
+    model_hash = hashlib.sha256(model_s3_uri.encode()).hexdigest()[:8]
+
+    return f"plexus-{env_abbrev}-{resource_hash}-{scorecard_trunc}-{score_trunc}-config-{model_hash}"
+
+
+def get_sagemaker_resource_metadata(
+    scorecard_key: str,
+    score_key: str,
+    environment: str = 'development'
+) -> Dict[str, Any]:
+    """
+    Generate metadata dict for CloudFormation tags and outputs.
+
+    This provides full names and identifiers for resource discovery when
+    truncated names are used in actual resource names.
+
+    Args:
+        scorecard_key: Normalized scorecard key (filesystem-safe)
+        score_key: Normalized score key (filesystem-safe)
+        environment: Environment name ('development', 'staging', 'production')
+
+    Returns:
+        Dict with full names, truncated names, hash, and environment info
+    """
+    # Replace underscores with hyphens
+    scorecard_key_normalized = scorecard_key.replace('_', '-')
+    score_key_normalized = score_key.replace('_', '-')
+
+    return {
+        'environment': environment,
+        'env_abbrev': _abbreviate_environment(environment),
+        'resource_hash': _generate_resource_hash(scorecard_key_normalized, score_key_normalized),
+        'scorecard_key': scorecard_key_normalized,
+        'score_key': score_key_normalized,
+        'scorecard_trunc': _truncate_name(scorecard_key_normalized, 10),
+        'score_trunc': _truncate_name(score_key_normalized, 10)
+    }
