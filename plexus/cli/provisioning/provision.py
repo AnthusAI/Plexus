@@ -30,18 +30,33 @@ def provision():
               help='Specific score version ID to provision. If not provided with --yaml, reads from local YAML file.')
 @click.option('--model-s3-uri',
               help='S3 URI to model.tar.gz. If not provided, uses local trained model.')
-@click.option('--deployment-type', type=click.Choice(['serverless', 'realtime']), default='serverless',
-              help='Deployment type: serverless or realtime.')
-@click.option('--memory', type=int, default=4096,
-              help='Memory allocation in MB (1024-6144) for serverless endpoints.')
-@click.option('--max-concurrency', type=int, default=10,
-              help='Maximum concurrent invocations (1-200) for serverless endpoints.')
+@click.option('--deployment-type', type=click.Choice(['serverless', 'realtime']),
+              help='Deployment type: serverless or realtime. Defaults to YAML config or serverless.')
+@click.option('--memory', type=int,
+              help='Memory allocation in MB (1024-6144) for serverless endpoints. Defaults to YAML config or 4096.')
+@click.option('--max-concurrency', type=int,
+              help='Maximum concurrent invocations (1-200) for serverless endpoints. Defaults to YAML config or 10.')
+@click.option('--instance-type',
+              help='Instance type for real-time endpoints (e.g., ml.g5.xlarge). Defaults to YAML config.')
+@click.option('--min-instances', type=int,
+              help='Minimum instance count for real-time (0 for scale-to-zero). Defaults to YAML config or 0.')
+@click.option('--max-instances', type=int,
+              help='Maximum instance count for real-time. Defaults to YAML config or 1.')
+@click.option('--scale-in-cooldown', type=int,
+              help='Scale-in cooldown in seconds. Defaults to YAML config or 300.')
+@click.option('--scale-out-cooldown', type=int,
+              help='Scale-out cooldown in seconds. Defaults to YAML config or 60.')
+@click.option('--target-invocations', type=float,
+              help='Target invocations per instance. Defaults to YAML config or 1.0.')
 @click.option('--pytorch-version', default='2.3.0',
               help='PyTorch inference container version.')
+@click.option('--region',
+              help='AWS region for infrastructure deployment (e.g., us-east-1). If not specified, uses default region.')
 @click.option('--force', is_flag=True,
               help='Force re-provisioning even if endpoint already exists and is up-to-date.')
 def provision_endpoint(scorecard_name, score_name, yaml, version, model_s3_uri, deployment_type,
-                      memory, max_concurrency, pytorch_version, force):
+                      memory, max_concurrency, instance_type, min_instances, max_instances,
+                      scale_in_cooldown, scale_out_cooldown, target_invocations, pytorch_version, region, force):
     """
     Provision a SageMaker endpoint for a trained model.
 
@@ -77,7 +92,14 @@ def provision_endpoint(scorecard_name, score_name, yaml, version, model_s3_uri, 
             deployment_type=deployment_type,
             memory_mb=memory,
             max_concurrency=max_concurrency,
+            instance_type=instance_type,
+            min_instances=min_instances,
+            max_instances=max_instances,
+            scale_in_cooldown=scale_in_cooldown,
+            scale_out_cooldown=scale_out_cooldown,
+            target_invocations=target_invocations,
             pytorch_version=pytorch_version,
+            region=region,
             force=force
         )
 

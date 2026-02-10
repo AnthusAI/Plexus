@@ -39,10 +39,17 @@ class ProvisioningDispatcher:
                  yaml: bool = False,
                  version: Optional[str] = None,
                  model_s3_uri: Optional[str] = None,
-                 deployment_type: str = 'serverless',
-                 memory_mb: int = 4096,
-                 max_concurrency: int = 10,
+                 deployment_type: Optional[str] = None,
+                 memory_mb: Optional[int] = None,
+                 max_concurrency: Optional[int] = None,
+                 instance_type: Optional[str] = None,
+                 min_instances: Optional[int] = None,
+                 max_instances: Optional[int] = None,
+                 scale_in_cooldown: Optional[int] = None,
+                 scale_out_cooldown: Optional[int] = None,
+                 target_invocations: Optional[float] = None,
                  pytorch_version: str = '2.3.0',
+                 region: Optional[str] = None,
                  force: bool = False):
         """
         Initialize dispatcher.
@@ -53,10 +60,17 @@ class ProvisioningDispatcher:
             yaml: Load from local YAML files instead of API (default: False)
             version: Specific score version ID to provision (optional)
             model_s3_uri: Explicit model S3 URI (optional)
-            deployment_type: Deployment type ('serverless' or 'realtime')
-            memory_mb: Memory allocation in MB
-            max_concurrency: Max concurrent invocations
+            deployment_type: Deployment type override (None = use YAML config)
+            memory_mb: Memory allocation override (None = use YAML config)
+            max_concurrency: Max concurrent invocations override (None = use YAML config)
+            instance_type: Instance type override (None = use YAML config)
+            min_instances: Min instances override (None = use YAML config)
+            max_instances: Max instances override (None = use YAML config)
+            scale_in_cooldown: Scale-in cooldown override (None = use YAML config)
+            scale_out_cooldown: Scale-out cooldown override (None = use YAML config)
+            target_invocations: Target invocations override (None = use YAML config)
             pytorch_version: PyTorch version for container
+            region: AWS region for infrastructure deployment (None = use default)
             force: Force re-provisioning
         """
         self.scorecard_name = scorecard_name
@@ -67,7 +81,14 @@ class ProvisioningDispatcher:
         self.deployment_type = deployment_type
         self.memory_mb = memory_mb
         self.max_concurrency = max_concurrency
+        self.instance_type = instance_type
+        self.min_instances = min_instances
+        self.max_instances = max_instances
+        self.scale_in_cooldown = scale_in_cooldown
+        self.scale_out_cooldown = scale_out_cooldown
+        self.target_invocations = target_invocations
         self.pytorch_version = pytorch_version
+        self.region = region
         self.force = force
 
         self.scorecard_class = None
@@ -112,7 +133,14 @@ class ProvisioningDispatcher:
                 deployment_type=self.deployment_type,
                 memory_mb=self.memory_mb,
                 max_concurrency=self.max_concurrency,
+                instance_type=self.instance_type,
+                min_instances=self.min_instances,
+                max_instances=self.max_instances,
+                scale_in_cooldown=self.scale_in_cooldown,
+                scale_out_cooldown=self.scale_out_cooldown,
+                target_invocations=self.target_invocations,
                 pytorch_version=self.pytorch_version,
+                region=self.region,
                 force=self.force
             )
 

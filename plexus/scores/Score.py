@@ -102,6 +102,21 @@ class Score(ABC,
         ----------
         data : dict
             Dictionary containing data-related parameters.
+        deployment : dict, optional
+            SageMaker endpoint deployment configuration.
+            Fields:
+            - type: str - 'serverless' or 'realtime'
+            - instance_type: str - e.g. 'ml.g5.xlarge' (required for realtime)
+            - min_instances: int - minimum instances (0 for scale-to-zero)
+            - max_instances: int - maximum instances
+            - scale_in_cooldown: int - scale-in cooldown in seconds
+            - scale_out_cooldown: int - scale-out cooldown in seconds
+            - target_invocations_per_instance: float - target invocations per instance
+            - base_model_hf_id: str - HuggingFace model ID (for inference components)
+            - adapter_s3_uri: str - S3 URI to LoRA adapter (optional, for inference components)
+            - container_image: str - Docker container image URI
+            - hf_token: str - HuggingFace token
+            - environment: dict - Additional environment variables
         """
         model_config = ConfigDict(protected_namespaces=())
         scorecard_name: Optional[str] = None
@@ -110,6 +125,7 @@ class Score(ABC,
         key: Optional[str] = None
         dependencies: Optional[List[dict]] = None
         data: Optional[dict] = None
+        deployment: Optional[dict] = None
         number_of_classes: Optional[int] = None
         label_score_name: Optional[str] = None
         label_field: Optional[str] = None

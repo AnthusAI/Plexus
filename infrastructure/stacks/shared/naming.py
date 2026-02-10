@@ -51,6 +51,9 @@ def get_sagemaker_endpoint_name(
     Returns:
         Stable endpoint name for resource discovery
     """
+    # Replace underscores with hyphens for SageMaker compatibility
+    scorecard_key = scorecard_key.replace('_', '-')
+    score_key = score_key.replace('_', '-')
     return f"plexus-{scorecard_key}-{score_key}-{deployment_type}"
 
 
@@ -73,6 +76,9 @@ def get_sagemaker_model_name(
     Returns:
         Versioned model name (changes when model S3 URI changes)
     """
+    # Replace underscores with hyphens for SageMaker compatibility
+    scorecard_key = scorecard_key.replace('_', '-')
+    score_key = score_key.replace('_', '-')
     uri_hash = hashlib.sha256(model_s3_uri.encode()).hexdigest()[:8]
     return f"plexus-{scorecard_key}-{score_key}-{uri_hash}"
 
@@ -96,5 +102,8 @@ def get_sagemaker_endpoint_config_name(
     Returns:
         Versioned endpoint config name (changes when model S3 URI changes)
     """
+    # Replace underscores with hyphens for SageMaker compatibility
+    scorecard_key = scorecard_key.replace('_', '-')
+    score_key = score_key.replace('_', '-')
     uri_hash = hashlib.sha256(model_s3_uri.encode()).hexdigest()[:8]
     return f"plexus-{scorecard_key}-{score_key}-config-{uri_hash}"
