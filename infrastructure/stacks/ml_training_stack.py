@@ -279,6 +279,7 @@ class MLTrainingStack(Stack):
             inline_policies={
                 "InferenceBucketAccess": iam.PolicyDocument(
                     statements=[
+                        # Plexus inference bucket access
                         iam.PolicyStatement(
                             actions=[
                                 "s3:GetObject",
@@ -287,6 +288,17 @@ class MLTrainingStack(Stack):
                             resources=[
                                 self.inference_bucket.bucket_arn,
                                 f"{self.inference_bucket.bucket_arn}/*",
+                            ],
+                        ),
+                        # LoRA adapter bucket access (for inference components)
+                        iam.PolicyStatement(
+                            actions=[
+                                "s3:GetObject",
+                                "s3:ListBucket",
+                            ],
+                            resources=[
+                                "arn:aws:s3:::llama-sagemaker-models-695039645615",
+                                "arn:aws:s3:::llama-sagemaker-models-695039645615/*",
                             ],
                         )
                     ]

@@ -18,6 +18,7 @@ from plexus.scores.BERTClassifier import BERTClassifier
 # from plexus.scores.LangGraphClassifier import LangGraphClassifier
 # from plexus.scores.LLMClassifier import LLMClassifier
 from plexus.scores.LangGraphScore import LangGraphScore
+from plexus.scores.LoRAClassifier import LoRAClassifier
 from plexus.scores.OpenAIEmbeddingsClassifier import OpenAIEmbeddingsClassifier
 
 # Import node classes that are used in YAML files
