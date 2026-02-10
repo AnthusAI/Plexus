@@ -52,13 +52,16 @@ def get_sagemaker_endpoint(
         logger.warning("boto3 not available, cannot check for SageMaker endpoints")
         return None
 
+    # Get environment from env vars (PLEXUS_ENVIRONMENT or environment from .env file)
+    environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
+
     # Import naming function from infrastructure
     try:
         from infrastructure.stacks.shared.naming import get_sagemaker_endpoint_name
-        endpoint_name = get_sagemaker_endpoint_name(scorecard_key, score_key, deployment_type)
+        endpoint_name = get_sagemaker_endpoint_name(scorecard_key, score_key, deployment_type, environment)
     except ImportError:
         # Fallback to inline construction if infrastructure not in path
-        endpoint_name = f"plexus-{scorecard_key}-{score_key}-{deployment_type}"
+        endpoint_name = f"plexus-{environment}-{scorecard_key}-{score_key}-{deployment_type}"
 
     try:
         # Get AWS region from environment
@@ -121,12 +124,15 @@ def should_deploy_endpoint(
         logger.warning("boto3 not available, cannot check endpoint status")
         return True  # Assume deployment needed if we can't check
 
+    # Get environment from env vars (PLEXUS_ENVIRONMENT or environment from .env file)
+    environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
+
     # Import naming function
     try:
         from infrastructure.stacks.shared.naming import get_sagemaker_endpoint_name
-        endpoint_name = get_sagemaker_endpoint_name(scorecard_key, score_key, deployment_type)
+        endpoint_name = get_sagemaker_endpoint_name(scorecard_key, score_key, deployment_type, environment)
     except ImportError:
-        endpoint_name = f"plexus-{scorecard_key}-{score_key}-{deployment_type}"
+        endpoint_name = f"plexus-{environment}-{scorecard_key}-{score_key}-{deployment_type}"
 
     try:
         region = os.getenv('AWS_DEFAULT_REGION', os.getenv('AWS_REGION', 'us-east-1'))
@@ -197,11 +203,14 @@ def get_endpoint_status(
         logger.warning("boto3 not available")
         return None
 
+    # Get environment from env vars (PLEXUS_ENVIRONMENT or environment from .env file)
+    environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
+
     try:
         from infrastructure.stacks.shared.naming import get_sagemaker_endpoint_name
-        endpoint_name = get_sagemaker_endpoint_name(scorecard_key, score_key, deployment_type)
+        endpoint_name = get_sagemaker_endpoint_name(scorecard_key, score_key, deployment_type, environment)
     except ImportError:
-        endpoint_name = f"plexus-{scorecard_key}-{score_key}-{deployment_type}"
+        endpoint_name = f"plexus-{environment}-{scorecard_key}-{score_key}-{deployment_type}"
 
     try:
         region = os.getenv('AWS_DEFAULT_REGION', os.getenv('AWS_REGION', 'us-east-1'))

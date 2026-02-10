@@ -615,16 +615,9 @@ def _copy_model_to_inference_bucket(
     # Get version ID from config
     version_id = score_config.get('version', 'latest')
 
-    # Determine environment from training bucket name
-    # plexus-{environment}-training -> {environment}
-    if 'development' in training_bucket:
-        environment = 'development'
-    elif 'staging' in training_bucket:
-        environment = 'staging'
-    elif 'production' in training_bucket:
-        environment = 'production'
-    else:
-        environment = 'development'  # Default
+    # Get environment from env vars (PLEXUS_ENVIRONMENT or environment from .env file)
+    # Falls back to development if not set
+    environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
 
     # Construct inference bucket name and key
     inference_bucket = f"plexus-{environment}-inference"
@@ -739,15 +732,9 @@ def _deploy_via_cdk(
 
         logging.info(f"Deploying to AWS region: {aws_region}")
 
-    # Determine environment from model S3 URI
-    if 'development' in model_s3_uri:
-        environment = 'development'
-    elif 'staging' in model_s3_uri:
-        environment = 'staging'
-    elif 'production' in model_s3_uri:
-        environment = 'production'
-    else:
-        environment = 'development'  # Default
+    # Get environment from env vars (PLEXUS_ENVIRONMENT or environment from .env file)
+    # Falls back to development if not set
+    environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
 
     # Construct stack name (replace underscores with hyphens for CDK compatibility)
     stack_name = f"PlexusInference-{scorecard_key}-{score_key}".replace('_', '-')
