@@ -124,6 +124,7 @@ class SageMakerInferenceStack(Stack):
 
         # Store parameters for later use
         self.deployment_type = deployment_type
+        self.environment = environment
         self.instance_type = instance_type
         self.min_instances = min_instances
         self.max_instances = max_instances
@@ -136,15 +137,15 @@ class SageMakerInferenceStack(Stack):
         self.hf_token = hf_token
         self.environment_vars = environment_vars or {}
 
-        # Generate resource names using naming conventions
+        # Generate resource names using naming conventions (including environment)
         self.endpoint_name = get_sagemaker_endpoint_name(
-            scorecard_key, score_key, deployment_type
+            scorecard_key, score_key, deployment_type, environment
         )
         self.model_name = get_sagemaker_model_name(
-            scorecard_key, score_key, model_s3_uri
+            scorecard_key, score_key, model_s3_uri, environment
         )
         self.endpoint_config_name = get_sagemaker_endpoint_config_name(
-            scorecard_key, score_key, model_s3_uri
+            scorecard_key, score_key, model_s3_uri, environment
         )
 
         # Add tags
