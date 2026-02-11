@@ -228,3 +228,116 @@ def get_sagemaker_resource_metadata(
         'scorecard_trunc': _truncate_name(scorecard_key_normalized, 10),
         'score_trunc': _truncate_name(score_key_normalized, 10)
     }
+
+
+# ============================================================================
+# Shared Base Model Endpoint Naming (for LoRA classifiers)
+# ============================================================================
+
+
+def get_base_model_key(base_model_hf_id: str) -> str:
+    """
+    Generate normalized base model key from HuggingFace model ID.
+
+    Converts HuggingFace model IDs to filesystem-safe keys for use in
+    resource names, stack names, and tags.
+
+    Args:
+        base_model_hf_id: HuggingFace model ID (e.g., 'meta-llama/Llama-3.1-8B-Instruct')
+
+    Returns:
+        Normalized key (e.g., 'llama-3-1-8b-instruct')
+
+    Examples:
+        >>> get_base_model_key('meta-llama/Llama-3.1-8B-Instruct')
+        'llama-3-1-8b-instruct'
+        >>> get_base_model_key('mistralai/Mistral-7B-Instruct-v0.2')
+        'mistralai-mistral-7b-instruct-v0-2'
+    """
+    key = base_model_hf_id.lower()
+    # Replace common separators with hyphens
+    key = key.replace('/', '-')
+    key = key.replace('.', '-')
+    key = key.replace('_', '-')
+    # Remove special characters
+    key = ''.join(c for c in key if c.isalnum() or c == '-')
+    return key
+
+
+def get_base_endpoint_name(
+    base_model_key: str,
+    environment: str = 'development'
+) -> str:
+    """
+    Generate base endpoint name from base model key.
+
+    Pattern: plexus-{env_abbrev}-{base_hash}-{base_model_trunc}-realtime
+    Example: plexus-dev-6a43fce1-meta-llama-llama-3-1-realtime
+
+    This name is used for the shared SageMaker endpoint that hosts the base
+    model inference component. Multiple scores using the same base model will
+    share this endpoint.
+
+    The hash ensures uniqueness (calculated from full base_model_key), while
+    the truncated name provides human readability with version information.
+
+    Args:
+        base_model_key: Normalized base model key (from get_base_model_key)
+        environment: Environment name ('development', 'staging', 'production')
+
+    Returns:
+        Base endpoint name guaranteed to fit within 63-char SageMaker limit
+
+    Examples:
+        >>> get_base_endpoint_name('meta-llama-llama-3-1-8b-instruct', 'development')
+        'plexus-dev-6a43fce1-meta-llama-llama-3-1-realtime'
+        >>> get_base_endpoint_name('meta-llama-llama-3-1-70b-instruct', 'production')
+        'plexus-prod-b9df3f43-meta-llama-llama-3-1-realtime'
+    """
+    env_abbrev = _abbreviate_environment(environment)
+    base_hash = hashlib.sha256(base_model_key.encode()).hexdigest()[:8]
+    # Use longer truncation (20 chars) to include version info for readability
+    # Budget: plexus-staging-{hash8}-{trunc20}-realtime = 54 chars (within 63 limit)
+    base_model_trunc = _truncate_name(base_model_key, 20)
+
+    return f"plexus-{env_abbrev}-{base_hash}-{base_model_trunc}-realtime"
+
+
+def get_adapter_component_name(
+    scorecard_key: str,
+    score_key: str,
+    environment: str = 'development'
+) -> str:
+    """
+    Generate adapter component name from scorecard and score keys.
+
+    Pattern: plexus-{env_abbrev}-{score_hash}-{scorecard_trunc}-{score_trunc}-adapter
+    Example: plexus-dev-a7f3c2d1-aw-confirm-accurate-d-adapter
+
+    This name is used for the LoRA adapter inference component that references
+    the base component. Each score gets its own unique adapter component.
+
+    Args:
+        scorecard_key: Normalized scorecard key (filesystem-safe)
+        score_key: Normalized score key (filesystem-safe)
+        environment: Environment name ('development', 'staging', 'production')
+
+    Returns:
+        Adapter component name guaranteed to fit within 63-char SageMaker limit
+
+    Examples:
+        >>> get_adapter_component_name('aw-confirmation', 'accurate-disposition', 'development')
+        'plexus-dev-a7f3c2d1-aw-confirm-accurate-d-adapter'
+        >>> get_adapter_component_name('sentiment-analysis', 'positive-negative', 'staging')
+        'plexus-staging-b8c9d1e2-sentiment-a-positive-n-adapter'
+    """
+    # Replace underscores with hyphens for SageMaker compatibility
+    scorecard_key = scorecard_key.replace('_', '-')
+    score_key = score_key.replace('_', '-')
+
+    env_abbrev = _abbreviate_environment(environment)
+    score_hash = _generate_resource_hash(scorecard_key, score_key)
+    scorecard_trunc = _truncate_name(scorecard_key, 10)
+    score_trunc = _truncate_name(score_key, 10)
+
+    return f"plexus-{env_abbrev}-{score_hash}-{scorecard_trunc}-{score_trunc}-adapter"
