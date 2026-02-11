@@ -12,7 +12,7 @@ import os
 import subprocess
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from plexus.CustomLogging import logging
 from plexus.training.utils import get_scorecard_key, get_score_key
@@ -60,6 +60,16 @@ def provision_endpoint_operation(
         Dictionary with provisioning result
     """
     try:
+        # Auto-detect AWS region if not provided
+        if not region:
+            import boto3
+            session = boto3.Session()
+            region = session.region_name
+            if not region:
+                # Fallback to environment variable or default
+                region = os.getenv('AWS_DEFAULT_REGION', os.getenv('AWS_REGION', 'us-east-1'))
+            logging.info(f"Auto-detected AWS region: {region}")
+
         # Step 1: Load scorecard and get score configuration
         logging.info("Loading scorecard and score configuration...")
         scorecard_class, score_config = _load_scorecard_and_score(
@@ -81,6 +91,100 @@ def provision_endpoint_operation(
         logging.info(f"Scorecard key: {scorecard_key}")
         logging.info(f"Score key: {score_key}")
 
+        # Get the score class from the scorecard's registry
+        score_class = scorecard_class.score_registry.get(score_name)
+        if not score_class:
+            # Try by score key if name lookup failed
+            score_class = scorecard_class.score_registry.get(score_key)
+
+        if not score_class:
+            raise ValueError(f"Score class not found in registry for '{score_name}' (key: '{score_key}')")
+
+        # Step 2.5: Check if this is a LoRA classifier (shared stack architecture)
+        # LoRA classifiers have get_deployment_config() method and use shared base model endpoints
+        if hasattr(score_class, 'get_deployment_config') and callable(score_class.get_deployment_config):
+            logging.info(f"✨ Detected LoRA classifier: {score_class.__name__}")
+            logging.info("Using shared base model endpoint architecture")
+
+            # Get deployment config from class (convention over configuration)
+            deployment_config = score_class.get_deployment_config()
+
+            # Inject HuggingFace token from environment if not in config
+            if 'hf_token' not in deployment_config:
+                hf_token_from_env = os.getenv('HUGGING_FACE_HUB_TOKEN') or os.getenv('HF_TOKEN')
+                if hf_token_from_env:
+                    deployment_config['hf_token'] = hf_token_from_env
+                    logging.info("Injected HuggingFace token from environment")
+
+            # Inject region into container image URL (ECR images must match deployment region)
+            container_image = deployment_config.get('container_image', '')
+            if container_image and '.ecr.' in container_image:
+                # Parse current region from image URL
+                parts = container_image.split('.ecr.')
+                if len(parts) == 2:
+                    # Extract the rest after region
+                    after_region = parts[1].split('.', 1)
+                    if len(after_region) == 2:
+                        # Reconstruct with correct region
+                        deployment_config['container_image'] = f"{parts[0]}.ecr.{region}.{after_region[1]}"
+                        logging.info(f"Updated container image region to {region}")
+
+            # Extract base model info
+            base_model_hf_id = deployment_config.get('base_model_hf_id')
+            if not base_model_hf_id:
+                raise ValueError(f"{score_class.__name__}.get_deployment_config() must return 'base_model_hf_id'")
+
+            # Get adapter S3 URI from score config
+            adapter_s3_uri = score_config.get('provisioning', {}).get('adapter_s3_uri')
+            if not adapter_s3_uri:
+                raise ValueError(
+                    f"Score '{score_name}' is missing 'provisioning.adapter_s3_uri'. "
+                    "LoRA classifiers require an adapter S3 URI in the score YAML."
+                )
+
+            logging.info(f"Base model: {base_model_hf_id}")
+            logging.info(f"Adapter S3 URI: {adapter_s3_uri}")
+
+            # Discover ALL active scores using this classifier class
+            class_name = score_class.__name__
+            logging.info(f"Discovering all active scores using {class_name}...")
+            all_scores = discover_scores_by_class(class_name, use_yaml)
+
+            if len(all_scores) == 0:
+                logging.warning(f"No active scores found using {class_name}")
+                logging.info("Nothing to provision - all scores are disabled")
+                return {
+                    'success': True,
+                    'message': f'No active scores found using {class_name}',
+                    'adapter_count': 0
+                }
+
+            logging.info(f"✅ Discovered {len(all_scores)} active score(s) using {class_name}:")
+            for score in all_scores:
+                logging.info(f"   - {score['scorecard_name']}/{score['score_name']} → {score['adapter_s3_uri']}")
+
+            # Generate base model key for naming
+            from infrastructure.stacks.shared.naming import get_base_model_key
+            base_model_key = get_base_model_key(base_model_hf_id)
+
+            # Get environment
+            environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
+
+            # Provision shared stack with base + all adapters
+            logging.info(f"Provisioning shared stack for base model: {base_model_key}")
+            result = _provision_shared_stack_via_cdk(
+                base_model_key=base_model_key,
+                base_config=deployment_config,
+                adapter_configs=all_scores,
+                environment=environment,
+                region=region
+            )
+
+            return result
+
+        # Legacy path: Non-LoRA classifiers (per-score stack architecture)
+        logging.info(f"Using legacy per-score stack architecture for {score_class.__name__}")
+
         # Step 2.5: Read deployment config from YAML and merge with CLI overrides
         deployment_config = _get_deployment_config(
             score_config=score_config,
@@ -97,6 +201,14 @@ def provision_endpoint_operation(
         )
 
         logging.info(f"Deployment config: {deployment_config}")
+
+        # Inject HuggingFace token from environment if not already in config
+        # Try multiple environment variable names (HUGGING_FACE_HUB_TOKEN is the standard)
+        if 'hf_token' not in deployment_config:
+            hf_token_from_env = os.getenv('HUGGING_FACE_HUB_TOKEN') or os.getenv('HF_TOKEN')
+            if hf_token_from_env:
+                deployment_config['hf_token'] = hf_token_from_env
+                logging.info("Injected HuggingFace token from environment variable")
 
         # Extract deployment parameters
         deployment_type = deployment_config['type']
@@ -160,7 +272,7 @@ def provision_endpoint_operation(
 
         # Step 6: Deploy via CDK
         logging.info("Deploying endpoint via CDK...")
-        result = _deploy_via_cdk(
+        result = _provision_via_cdk(
             scorecard_key=scorecard_key,
             score_key=score_key,
             model_s3_uri=inference_model_uri,
@@ -281,7 +393,7 @@ def delete_endpoint_operation(
         )
 
         # Delete via CDK destroy
-        result = _delete_via_cdk(scorecard_key, score_key, deployment_type, region)
+        result = _deprovision_via_cdk(scorecard_key, score_key, deployment_type, region)
 
         result['endpoint_name'] = endpoint_name
         return result
@@ -395,6 +507,227 @@ def _load_scorecard_and_score(
         )
 
     return scorecard_class, score_config
+
+
+def discover_scores_by_class(
+    target_class_name: str,
+    use_yaml: bool = False
+) -> list:
+    """
+    Discover all active scores that use a specific classifier class.
+
+    This function is used to find all scores that should share the same
+    base model endpoint (e.g., all scores using Llama318BInstructClassifier).
+
+    Args:
+        target_class_name: The classifier class name to search for (e.g., 'Llama318BInstructClassifier')
+        use_yaml: Whether to use local YAML files (True) or API (False)
+
+    Returns:
+        List of dicts containing:
+        - scorecard_id: Scorecard ID
+        - scorecard_name: Scorecard name
+        - scorecard_key: Scorecard key
+        - score_id: Score ID
+        - score_name: Score name
+        - score_key: Score key
+        - score_config: Parsed score configuration dict
+        - adapter_s3_uri: S3 URI for the adapter (from provisioning section)
+
+    Note: For YAML mode, this searches local files. For API mode, it queries
+    all scorecards and scores, which is O(n) but acceptable for 10s-100s of scores.
+    """
+    matching_scores = []
+
+    if use_yaml:
+        # For YAML mode, search local scorecards directory
+        from ruamel.yaml import YAML
+
+        # Get scorecards directory (allow override via environment variable)
+        scorecards_base = os.environ.get('SCORECARD_CACHE_DIR', 'scorecards')
+        scorecards_dir = Path(scorecards_base)
+
+        if not scorecards_dir.exists():
+            logging.warning(f"Scorecards directory not found: {scorecards_dir}")
+            return matching_scores
+
+        # Iterate through all scorecard directories
+        for scorecard_dir in scorecards_dir.iterdir():
+            if not scorecard_dir.is_dir():
+                continue
+
+            scorecard_name = scorecard_dir.name
+
+            # Iterate through all score YAML files in this scorecard
+            for score_file in scorecard_dir.glob('*.yaml'):
+                if score_file.stem == 'scorecard':  # Skip scorecard.yaml
+                    continue
+
+                try:
+                    yaml = YAML()
+                    with open(score_file, 'r') as f:
+                        config = yaml.load(f)
+
+                    # Check if this score uses the target class
+                    if config.get('class') == target_class_name:
+                        # Check if score is disabled
+                        if config.get('is_disabled', False):
+                            logging.debug(f"Skipping disabled score: {scorecard_name}/{score_file.stem}")
+                            continue
+
+                        # Extract adapter S3 URI from provisioning section
+                        provisioning = config.get('provisioning', {})
+                        adapter_s3_uri = provisioning.get('adapter_s3_uri')
+
+                        if not adapter_s3_uri:
+                            logging.warning(
+                                f"Score {scorecard_name}/{score_file.stem} uses {target_class_name} "
+                                f"but has no adapter_s3_uri in provisioning section. Skipping."
+                            )
+                            continue
+
+                        # Get keys for naming
+                        scorecard_key = get_scorecard_key(scorecard_name=scorecard_name)
+                        score_key = get_score_key(config)
+
+                        matching_scores.append({
+                            'scorecard_id': config.get('id', 'unknown'),
+                            'scorecard_name': scorecard_name,
+                            'scorecard_key': scorecard_key,
+                            'score_id': config.get('id', 'unknown'),
+                            'score_name': config.get('name', score_file.stem),
+                            'score_key': score_key,
+                            'score_config': config,
+                            'adapter_s3_uri': adapter_s3_uri
+                        })
+
+                except Exception as e:
+                    logging.warning(f"Error parsing {score_file}: {str(e)}")
+                    continue
+
+    else:
+        # For API mode, query all scorecards and scores
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
+        from ruamel.yaml import YAML
+        from gql import gql
+
+        client = PlexusDashboardClient()
+        yaml = YAML()
+
+        # Query all scorecards for the account
+        query = """
+        query ListAllScorecards {
+            listScorecards {
+                items {
+                    id
+                    name
+                    key
+                    externalId
+                }
+            }
+        }
+        """
+
+        try:
+            result = client.execute(query, {})
+            scorecards = result.get('listScorecards', {}).get('items', [])
+
+            logging.info(f"Discovering scores with class '{target_class_name}' across {len(scorecards)} scorecards...")
+
+            # For each scorecard, get its scores
+            for scorecard in scorecards:
+                scorecard_id = scorecard['id']
+                scorecard_name = scorecard['name']
+                scorecard_key = scorecard['key']
+
+                # Fetch scorecard structure (includes all scores)
+                scorecard_structure = fetch_scorecard_structure(client, scorecard_id)
+                if not scorecard_structure:
+                    continue
+
+                # Iterate through sections and scores
+                sections = scorecard_structure.get('sections', {}).get('items', [])
+                for section in sections:
+                    scores = section.get('scores', {}).get('items', [])
+
+                    for score in scores:
+                        score_id = score['id']
+                        score_name = score['name']
+                        champion_version_id = score.get('championVersionId')
+                        is_disabled = score.get('isDisabled', False)
+
+                        # Skip disabled scores
+                        if is_disabled:
+                            logging.debug(f"Skipping disabled score: {scorecard_name}/{score_name}")
+                            continue
+
+                        # Skip scores without champion version
+                        if not champion_version_id:
+                            logging.debug(f"Skipping score without champion version: {scorecard_name}/{score_name}")
+                            continue
+
+                        # Fetch the champion version configuration
+                        try:
+                            version_query = f"""
+                            query GetScoreVersion {{
+                                getScoreVersion(id: "{champion_version_id}") {{
+                                    id
+                                    configuration
+                                }}
+                            }}
+                            """
+
+                            version_result = client.execute(version_query, {})
+                            version_data = version_result.get('getScoreVersion', {})
+
+                            if not version_data or not version_data.get('configuration'):
+                                logging.debug(f"No configuration for score: {scorecard_name}/{score_name}")
+                                continue
+
+                            # Parse YAML configuration
+                            config_yaml = version_data['configuration']
+                            config = yaml.load(config_yaml)
+
+                            # Check if this score uses the target class
+                            if config.get('class') == target_class_name:
+                                # Extract adapter S3 URI from provisioning section
+                                provisioning = config.get('provisioning', {})
+                                adapter_s3_uri = provisioning.get('adapter_s3_uri')
+
+                                if not adapter_s3_uri:
+                                    logging.warning(
+                                        f"Score {scorecard_name}/{score_name} uses {target_class_name} "
+                                        f"but has no adapter_s3_uri in provisioning section. Skipping."
+                                    )
+                                    continue
+
+                                # Get score key for naming
+                                score_key = get_score_key(config)
+
+                                matching_scores.append({
+                                    'scorecard_id': scorecard_id,
+                                    'scorecard_name': scorecard_name,
+                                    'scorecard_key': scorecard_key,
+                                    'score_id': score_id,
+                                    'score_name': score_name,
+                                    'score_key': score_key,
+                                    'score_config': config,
+                                    'adapter_s3_uri': adapter_s3_uri
+                                })
+
+                                logging.info(f"Found matching score: {scorecard_name}/{score_name}")
+
+                        except Exception as e:
+                            logging.warning(f"Error fetching config for {scorecard_name}/{score_name}: {str(e)}")
+                            continue
+
+        except Exception as e:
+            logging.error(f"Error querying scorecards: {str(e)}")
+            raise
+
+    logging.info(f"Discovered {len(matching_scores)} score(s) using class '{target_class_name}'")
+    return matching_scores
 
 
 def _find_or_upload_model(
@@ -666,7 +999,7 @@ def _copy_model_to_inference_bucket(
         raise
 
 
-def _deploy_via_cdk(
+def _provision_via_cdk(
     scorecard_key: str,
     score_key: str,
     model_s3_uri: str,
@@ -688,7 +1021,7 @@ def _deploy_via_cdk(
     region: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Deploy endpoint using CDK.
+    Provision endpoint using CDK.
 
     Args:
         scorecard_key: Scorecard key
@@ -842,14 +1175,159 @@ def _deploy_via_cdk(
         }
 
 
-def _delete_via_cdk(
+def _provision_shared_stack_via_cdk(
+    base_model_key: str,
+    base_config: Dict[str, Any],
+    adapter_configs: List[Dict[str, Any]],
+    environment: str,
+    region: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Provision single shared stack containing base + all adapters.
+
+    This function is used for LoRA classifiers that share a base model endpoint.
+    It creates ONE CloudFormation stack containing:
+    - SageMaker endpoint with managed instance scaling
+    - Base inference component (foundation model)
+    - Multiple adapter inference components (one per score)
+    - Application Auto Scaling configuration
+
+    Args:
+        base_model_key: Normalized base model key (e.g., 'meta-llama-llama-3-1-8b-instruct')
+        base_config: Deployment config from get_deployment_config() with keys:
+            - base_model_hf_id: HuggingFace model ID
+            - instance_type: Instance type
+            - min_instances, max_instances: Scaling config
+            - scale_in_cooldown, scale_out_cooldown: Timing
+            - target_invocations_per_instance: Auto-scaling target
+            - container_image: Container image URI
+            - hf_token: HuggingFace token (optional)
+            - environment: Dict of environment variables
+        adapter_configs: List of adapter configs from discover_scores_by_class() with keys:
+            - scorecard_key: Normalized scorecard key
+            - score_key: Normalized score key
+            - adapter_s3_uri: S3 URI to LoRA adapter
+        environment: Environment name ('development', 'staging', 'production')
+        region: AWS region (optional, detected from environment if not provided)
+
+    Returns:
+        Dictionary with deployment result including endpoint_name and success status
+    """
+    # Find CDK directory
+    project_root = Path(__file__).parent.parent.parent.parent  # Go up to project root
+    cdk_dir = project_root / 'infrastructure'
+
+    if not cdk_dir.exists():
+        raise FileNotFoundError(f"CDK directory not found: {cdk_dir}")
+
+    logging.info(f"Using CDK directory: {cdk_dir}")
+
+    # Get AWS region - prefer explicitly provided region, then fall back to environment
+    if region:
+        aws_region = region
+        logging.info(f"Using explicitly provided region: {aws_region}")
+    else:
+        # Try multiple sources in order of preference
+        aws_region = (
+            os.getenv('AWS_REGION') or
+            os.getenv('AWS_DEFAULT_REGION') or
+            os.getenv('PLEXUS_AWS_REGION_NAME')
+        )
+
+        # If not in environment, detect from boto3 session (which uses AWS config files)
+        if not aws_region:
+            try:
+                import boto3
+                session = boto3.Session()
+                aws_region = session.region_name
+                if aws_region:
+                    logging.info(f"Detected region from boto3 session: {aws_region}")
+            except Exception as e:
+                logging.warning(f"Could not detect region from boto3: {e}")
+
+        if not aws_region:
+            raise ValueError(
+                "AWS region not configured. Set AWS_REGION, AWS_DEFAULT_REGION, or "
+                "configure default region in ~/.aws/config, or use --region flag"
+            )
+
+        logging.info(f"Deploying to AWS region: {aws_region}")
+
+    # Construct stack name for shared base model endpoint
+    # Pattern: PlexusInferenceShared-{environment}-{base_model_key}
+    stack_name = f"PlexusInferenceShared-{environment}-{base_model_key}".replace('_', '-')
+
+    logging.info(f"Stack name: {stack_name}")
+    logging.info(f"Base model: {base_config.get('base_model_hf_id')}")
+    logging.info(f"Number of adapters: {len(adapter_configs)}")
+
+    # Build Python code to pass dicts/lists to CDK
+    # Use repr() for safe serialization of dicts and lists
+    base_config_repr = repr(base_config)
+    adapter_configs_repr = repr(adapter_configs)
+
+    # Build stack parameters
+    stack_params = [
+        f'base_config={base_config_repr}',
+        f'adapter_configs={adapter_configs_repr}',
+        f'environment=\\"{environment}\\"'
+    ]
+
+    # Build CDK deploy command
+    # The Python code constructs the CDK app inline and passes data structures directly
+    cmd = [
+        'cdk', 'deploy',
+        '--app', f'python3 -c "import sys; sys.path.insert(0, \\"{cdk_dir}\\"); from stacks.sagemaker_shared_inference_stack import SageMakerSharedInferenceStack; import aws_cdk as cdk; app = cdk.App(); SageMakerSharedInferenceStack(app, \\"{stack_name}\\", {", ".join(stack_params)}, env=cdk.Environment(region=\\"{aws_region}\\")); app.synth()"',
+        '--require-approval', 'never'
+    ]
+
+    logging.info(f"Running CDK deploy for shared stack: {stack_name}")
+    logging.debug(f"CDK command: {' '.join(cmd)}")
+
+    try:
+        # Run CDK deploy with real-time output streaming
+        result = subprocess.run(
+            cmd,
+            cwd=cdk_dir,
+            check=True
+        )
+
+        # Generate endpoint name using base model naming convention
+        from infrastructure.stacks.shared.naming import get_base_endpoint_name
+        endpoint_name = get_base_endpoint_name(base_model_key, environment)
+
+        logging.info(f"✅ Shared stack deployed successfully: {stack_name}")
+        logging.info(f"   Endpoint: {endpoint_name}")
+        logging.info(f"   Base model: {base_config.get('base_model_hf_id')}")
+        logging.info(f"   Adapters: {len(adapter_configs)}")
+
+        return {
+            'success': True,
+            'endpoint_name': endpoint_name,
+            'stack_name': stack_name,
+            'base_model_key': base_model_key,
+            'adapter_count': len(adapter_configs),
+            'status': 'InService',
+            'message': f'Shared endpoint provisioned with {len(adapter_configs)} adapter(s)'
+        }
+
+    except subprocess.CalledProcessError as e:
+        logging.error(f"CDK deploy failed with exit code {e.returncode}")
+        return {
+            'success': False,
+            'error': f"CDK deploy failed with exit code {e.returncode}",
+            'stack_name': stack_name
+        }
+
+
+def _deprovision_via_cdk(
     scorecard_key: str,
     score_key: str,
     deployment_type: str,
     region: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Delete endpoint by deleting the CloudFormation stack directly via AWS CLI.
+    Deprovision endpoint by deleting the CloudFormation stack directly via AWS CLI.
 
     Args:
         scorecard_key: Scorecard key

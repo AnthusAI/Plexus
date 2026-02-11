@@ -13,13 +13,7 @@ from rich.table import Table
 from rich.panel import Panel
 
 
-@click.group()
-def provision():
-    """Provision and manage SageMaker endpoints for trained models."""
-    pass
-
-
-@provision.command(name='endpoint', help="Provision a SageMaker endpoint for a trained model.")
+@click.command()
 @click.option('--scorecard', '--scorecard-name', 'scorecard_name', required=True,
               help='The name of the scorecard.')
 @click.option('--score', '--score-name', 'score_name', required=True,
@@ -54,9 +48,9 @@ def provision():
               help='AWS region for infrastructure deployment (e.g., us-east-1). If not specified, uses default region.')
 @click.option('--force', is_flag=True,
               help='Force re-provisioning even if endpoint already exists and is up-to-date.')
-def provision_endpoint(scorecard_name, score_name, yaml, version, model_s3_uri, deployment_type,
-                      memory, max_concurrency, instance_type, min_instances, max_instances,
-                      scale_in_cooldown, scale_out_cooldown, target_invocations, pytorch_version, region, force):
+def provision(scorecard_name, score_name, yaml, version, model_s3_uri, deployment_type,
+              memory, max_concurrency, instance_type, min_instances, max_instances,
+              scale_in_cooldown, scale_out_cooldown, target_invocations, pytorch_version, region, force):
     """
     Provision a SageMaker endpoint for a trained model.
 
@@ -67,17 +61,29 @@ def provision_endpoint(scorecard_name, score_name, yaml, version, model_s3_uri, 
 
     Examples:
         # Provision using local trained model
-        plexus provision endpoint --scorecard "SelectQuote HCS" --score "Compliance Check"
+        plexus provision --scorecard "SelectQuote HCS" --score "Compliance Check"
 
         # Provision from specific S3 model
-        plexus provision endpoint --scorecard "SelectQuote HCS" --score "Compliance Check" \\
+        plexus provision --scorecard "SelectQuote HCS" --score "Compliance Check" \\
             --model-s3-uri s3://bucket/path/to/model.tar.gz
 
         # Custom resources
-        plexus provision endpoint --scorecard "SelectQuote HCS" --score "Compliance Check" \\
+        plexus provision --scorecard "SelectQuote HCS" --score "Compliance Check" \\
             --memory 8192 --max-concurrency 20
     """
     from plexus.cli.provisioning.provisioning_dispatcher import ProvisioningDispatcher
+    import os
+
+    # Validate --yaml flag is not used in production
+    environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
+    if yaml and environment == 'production':
+        console.print(Panel(
+            "[red]✗ Error:[/red] The --yaml flag cannot be used in production environment.\n\n"
+            "Production deployments must use the API to ensure proper version control and auditing.",
+            title="Invalid Option",
+            border_style="red"
+        ))
+        return
 
     logging.info(f"Provisioning endpoint for [magenta1][b]{scorecard_name}[/b][/magenta1] / [cyan1][b]{score_name}[/b][/cyan1]")
 
@@ -120,7 +126,15 @@ def provision_endpoint(scorecard_name, score_name, yaml, version, model_s3_uri, 
                 # Display test results
                 if result.test_result:
                     test_result = result.test_result
-                    if test_result['success']:
+                    # Handle warning case (test was skipped)
+                    if 'warning' in test_result:
+                        console.print(Panel(
+                            f"[yellow]⚠ Endpoint test skipped[/yellow]\n\n"
+                            f"{test_result['warning']}",
+                            title="Endpoint Test",
+                            border_style="yellow"
+                        ))
+                    elif test_result.get('success'):
                         latency_info = f" ({test_result.get('latency_ms', 0):.2f}ms)" if 'latency_ms' in test_result else ""
                         console.print(Panel(
                             f"[green]✓ Endpoint test passed![/green]\n\n"
@@ -131,7 +145,7 @@ def provision_endpoint(scorecard_name, score_name, yaml, version, model_s3_uri, 
                     else:
                         console.print(Panel(
                             f"[yellow]⚠ Endpoint test had issues[/yellow]\n\n"
-                            f"{test_result['message']}",
+                            f"{test_result.get('message', 'Unknown issue')}",
                             title="Endpoint Test",
                             border_style="yellow"
                         ))
@@ -159,133 +173,6 @@ def provision_endpoint(scorecard_name, score_name, yaml, version, model_s3_uri, 
             border_style="red"
         ))
 
-
-@provision.command(name='status', help="Check the status of a provisioned endpoint.")
-@click.option('--scorecard', '--scorecard-name', 'scorecard_name', required=True,
-              help='The name of the scorecard.')
-@click.option('--score', '--score-name', 'score_name', required=True,
-              help='The name of the score.')
-@click.option('--yaml', is_flag=True,
-              help='Load scorecard from local YAML files instead of the API.')
-@click.option('--deployment-type', type=click.Choice(['serverless', 'realtime']), default='serverless',
-              help='Deployment type to check.')
-def status(scorecard_name, score_name, yaml, deployment_type):
-    """
-    Check the status of a provisioned endpoint.
-
-    Displays endpoint status, model URI, creation time, and other details.
-
-    Examples:
-        plexus provision status --scorecard "SelectQuote HCS" --score "Compliance Check"
-    """
-    from plexus.cli.provisioning.operations import get_endpoint_status_operation
-
-    logging.info(f"Checking endpoint status for {scorecard_name} / {score_name}")
-
-    try:
-        status_info = get_endpoint_status_operation(
-            scorecard_name=scorecard_name,
-            score_name=score_name,
-            use_yaml=yaml,
-            deployment_type=deployment_type
-        )
-
-        if status_info:
-            table = Table(title="Endpoint Status", show_header=True)
-            table.add_column("Property", style="cyan")
-            table.add_column("Value", style="white")
-
-            table.add_row("Endpoint Name", status_info['endpoint_name'])
-            table.add_row("Status", status_info['status'])
-            table.add_row("Model S3 URI", status_info['model_s3_uri'])
-
-            if status_info.get('creation_time'):
-                table.add_row("Created", str(status_info['creation_time']))
-            if status_info.get('last_modified_time'):
-                table.add_row("Last Modified", str(status_info['last_modified_time']))
-
-            console.print(table)
-        else:
-            console.print(Panel(
-                f"[yellow]No endpoint found for {scorecard_name} / {score_name}[/yellow]",
-                title="Not Found",
-                border_style="yellow"
-            ))
-
-    except Exception as e:
-        logging.error(f"Failed to get status: {str(e)}", exc_info=True)
-        console.print(Panel(
-            f"[red]Error getting status:[/red] {str(e)}",
-            title="Error",
-            border_style="red"
-        ))
-
-
-@provision.command(name='delete', help="Delete a provisioned endpoint.")
-@click.option('--scorecard', '--scorecard-name', 'scorecard_name', required=True,
-              help='The name of the scorecard.')
-@click.option('--score', '--score-name', 'score_name', required=True,
-              help='The name of the score.')
-@click.option('--yaml', is_flag=True,
-              help='Load scorecard from local YAML files instead of the API.')
-@click.option('--deployment-type', type=click.Choice(['serverless', 'realtime']), default='serverless',
-              help='Deployment type to delete.')
-@click.option('--region', type=str, default=None,
-              help='AWS region where the endpoint is deployed (e.g., us-east-1).')
-@click.option('--confirm', is_flag=True,
-              help='Skip confirmation prompt.')
-def delete(scorecard_name, score_name, yaml, deployment_type, region, confirm):
-    """
-    Delete a provisioned endpoint.
-
-    This removes the SageMaker endpoint, endpoint configuration, and model resources.
-
-    Examples:
-        plexus provision delete --scorecard "SelectQuote HCS" --score "Compliance Check"
-    """
-    from plexus.cli.provisioning.operations import delete_endpoint_operation
-
-    if not confirm:
-        if not click.confirm(
-            f"Delete endpoint for {scorecard_name} / {score_name}?",
-            default=False
-        ):
-            console.print("[yellow]Deletion cancelled[/yellow]")
-            return
-
-    logging.info(f"Deleting endpoint for {scorecard_name} / {score_name}")
-
-    try:
-        result = delete_endpoint_operation(
-            scorecard_name=scorecard_name,
-            score_name=score_name,
-            use_yaml=yaml,
-            deployment_type=deployment_type,
-            region=region
-        )
-
-        if result['success']:
-            console.print(Panel(
-                f"[green]✓ Endpoint deleted successfully[/green]\n\n"
-                f"Endpoint: {result['endpoint_name']}",
-                title="Deletion Complete",
-                border_style="green"
-            ))
-        else:
-            console.print(Panel(
-                f"[red]✗ Deletion failed[/red]\n\n"
-                f"{result.get('error', 'Unknown error')}",
-                title="Deletion Failed",
-                border_style="red"
-            ))
-
-    except Exception as e:
-        logging.error(f"Deletion failed: {str(e)}", exc_info=True)
-        console.print(Panel(
-            f"[red]Error:[/red] {str(e)}",
-            title="Error",
-            border_style="red"
-        ))
 
 
 if __name__ == '__main__':

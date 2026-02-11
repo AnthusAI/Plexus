@@ -1,243 +1,265 @@
 """
-LoRA Classifier Score - Generic fine-tuned model with LoRA adapters.
+LoRAClassifier - Base class for LoRA adapter-based classifiers.
 
-This score class supports any foundation model fine-tuned with LoRA (Low-Rank Adaptation).
-It's designed for deploying fine-tuned models to SageMaker real-time endpoints with
-inference components architecture.
-
-Example use cases:
-- Llama 3.1 fine-tuned for sentiment classification
-- Mistral fine-tuned for intent detection
-- Any other foundation model + LoRA adapter combination
-
-The score requires:
-1. A base model from HuggingFace (e.g., meta-llama/Llama-3.1-8B-Instruct)
-2. A LoRA adapter trained and uploaded to S3
-3. Deployment configuration specifying instance type and scaling
+This base class provides common functionality for classifiers that use
+Low-Rank Adaptation (LoRA) fine-tuning on large language models.
 """
 
-from typing import Optional, Dict, Any
-from pydantic import Field
+from abc import abstractmethod
+from typing import Dict, Any, Optional
 from plexus.scores.Score import Score
+from plexus.CustomLogging import logging
 
 
 class LoRAClassifier(Score):
     """
-    Generic classifier using LoRA-fine-tuned foundation models.
+    Base class for LoRA adapter-based classifiers.
 
-    Supports any foundation model that can be loaded from HuggingFace and
-    fine-tuned with LoRA adapters. Deploys to SageMaker real-time endpoints
-    using inference components for efficient serving.
+    LoRAClassifier is designed for classification tasks that use large language
+    models fine-tuned with LoRA (Low-Rank Adaptation) adapters. This approach
+    allows efficient fine-tuning of large models by only training a small number
+    of additional parameters (the adapter).
+
+    Subclasses must implement:
+    - get_deployment_config(): Returns infrastructure configuration for the model
+    - predict(): Classification logic using the LoRA-tuned model
+
+    Key features:
+    - Convention over configuration: Infrastructure details defined at class level
+    - Shared base model support: Multiple scores can share the same base model
+    - Scale-to-zero capable: Real-time endpoints with managed instance scaling
+    - SageMaker Inference Components: Base component + adapter component architecture
+
+    Example usage:
+        class Llama318BInstructClassifier(LoRAClassifier):
+            @classmethod
+            def get_deployment_config(cls) -> Dict[str, Any]:
+                return {
+                    'deployment_type': 'realtime',
+                    'base_model_hf_id': 'meta-llama/Llama-3.1-8B-Instruct',
+                    'instance_type': 'ml.g6e.xlarge',
+                    # ... additional configuration
+                }
+
+            def predict(self, context, model_input: Score.Input) -> Score.Result:
+                # LoRA-specific prediction logic
+                pass
+
+    Score YAML configuration:
+        name: My Classifier
+        class: Llama318BInstructClassifier
+        provisioning:
+          adapter_s3_uri: s3://bucket/adapters/my-adapter.tar.gz
     """
 
-    class Parameters(Score.Parameters):
-        """Configuration parameters for LoRA Classifier."""
-
-        # Base model configuration
-        base_model_id: str = Field(
-            ...,
-            description="HuggingFace model ID for the base foundation model (e.g., 'meta-llama/Llama-3.1-8B-Instruct')"
-        )
-
-        # Training configuration (for fine-tuning)
-        training: Optional[Dict[str, Any]] = Field(
-            default=None,
-            description="Training configuration for LoRA fine-tuning"
-        )
-
-        # Deployment configuration (for provisioning)
-        deployment: Optional[Dict[str, Any]] = Field(
-            default=None,
-            description="SageMaker endpoint deployment configuration. For LoRA models, should specify: "
-                       "type='realtime', instance_type (GPU), base_model_hf_id, adapter_s3_uri, "
-                       "container_image (optional), hf_token (optional), environment (optional)"
-        )
-
     @classmethod
-    def supports_training(cls) -> bool:
-        """LoRA classifiers support training."""
-        return True
+    @abstractmethod
+    def get_deployment_config(cls) -> Dict[str, Any]:
+        """
+        Return deployment configuration for this model.
+
+        This method defines all infrastructure settings needed to deploy the model
+        to SageMaker, including instance types, container images, and environment
+        variables. By defining these at the class level, we follow convention over
+        configuration - users don't need to specify infrastructure details in YAML.
+
+        Returns:
+            Dict[str, Any]: Deployment configuration dictionary with the following required keys:
+
+            Required keys:
+            - deployment_type (str): Must be 'realtime' for LoRA classifiers
+            - base_model_hf_id (str): HuggingFace model ID (e.g., 'meta-llama/Llama-3.1-8B-Instruct')
+            - instance_type (str): SageMaker instance type (e.g., 'ml.g6e.xlarge')
+            - min_instances (int): Minimum instances (usually 0 for scale-to-zero)
+            - max_instances (int): Maximum instances (usually 1)
+            - scale_in_cooldown (int): Seconds before scaling in (default 300)
+            - scale_out_cooldown (int): Seconds before scaling out (default 60)
+            - target_invocations_per_instance (float): Target for auto-scaling (default 1.0)
+            - container_image (str): DJL inference container image URI
+            - environment (Dict[str, str]): Environment variables for vLLM/LoRA configuration
+
+            Environment variables should typically include:
+            - OPTION_ROLLING_BATCH: 'vllm' (enables vLLM for efficient inference)
+            - OPTION_ENABLE_LORA: 'true' (enables LoRA adapter support)
+            - OPTION_MAX_LORAS: '10' (max number of adapters on shared base)
+            - OPTION_MAX_LORA_RANK: '64' (max rank for LoRA matrices)
+            - OPTION_MAX_MODEL_LEN: '4096' (max sequence length)
+            - OPTION_GPU_MEMORY_UTILIZATION: '0.8' (GPU memory utilization)
+
+        Example:
+            @classmethod
+            def get_deployment_config(cls) -> Dict[str, Any]:
+                return {
+                    'deployment_type': 'realtime',
+                    'base_model_hf_id': 'meta-llama/Llama-3.1-8B-Instruct',
+                    'instance_type': 'ml.g6e.xlarge',
+                    'min_instances': 0,
+                    'max_instances': 1,
+                    'scale_in_cooldown': 300,
+                    'scale_out_cooldown': 60,
+                    'target_invocations_per_instance': 1.0,
+                    'container_image': '763104351884.dkr.ecr.us-east-1.amazonaws.com/djl-inference:0.31.0-lmi13.0.0-cu124',
+                    'environment': {
+                        'OPTION_ROLLING_BATCH': 'vllm',
+                        'OPTION_ENABLE_LORA': 'true',
+                        'OPTION_MAX_LORAS': '10',
+                        'OPTION_MAX_LORA_RANK': '64',
+                        'OPTION_MAX_MODEL_LEN': '4096',
+                        'OPTION_GPU_MEMORY_UTILIZATION': '0.8'
+                    }
+                }
+
+        Raises:
+            NotImplementedError: If subclass doesn't implement this method
+        """
+        raise NotImplementedError(
+            f"{cls.__name__} must implement get_deployment_config() class method. "
+            "This method should return a dictionary with deployment configuration "
+            "including base_model_hf_id, instance_type, container_image, and environment variables."
+        )
 
     @classmethod
     def supports_provisioning(cls) -> bool:
-        """LoRA classifiers support provisioning to SageMaker endpoints."""
+        """
+        Check if this classifier supports SageMaker endpoint provisioning.
+
+        LoRA classifiers support provisioning via SageMaker real-time endpoints
+        with inference components (base component + adapter component).
+
+        Returns:
+            bool: Always True for LoRA classifiers
+        """
         return True
 
-    def train(self, **kwargs) -> Dict[str, Any]:
+    @classmethod
+    def validate_deployment_config(cls) -> None:
         """
-        Train a LoRA adapter on the base model.
+        Validate that the deployment configuration is complete and correct.
 
-        This would implement the LoRA fine-tuning workflow:
-        1. Load base model from HuggingFace
-        2. Prepare training dataset
-        3. Apply LoRA configuration
-        4. Fine-tune with training data
-        5. Save adapter to S3
+        This method checks that get_deployment_config() returns all required
+        fields with appropriate types and values. Called during provisioning
+        to catch configuration errors early.
 
-        Args:
-            **kwargs: Training parameters
-
-        Returns:
-            Training results including adapter S3 URI
+        Raises:
+            ValueError: If configuration is missing required fields or has invalid values
         """
-        raise NotImplementedError(
-            "LoRA training not yet implemented. "
-            "Use the Classification-with-Confidence project for training examples, "
-            "then specify the adapter_s3_uri in deployment config."
-        )
-
-    def provision_endpoint(self, **kwargs) -> Dict[str, Any]:
-        """
-        Provision a SageMaker endpoint for the LoRA classifier.
-
-        Creates a real-time endpoint with inference components:
-        - Base component: Foundation model (e.g., Llama)
-        - Adapter component: LoRA fine-tuned adapter
-
-        Args:
-            **kwargs: Provisioning parameters including:
-                - scorecard: Scorecard instance (required)
-                - model_s3_uri: Not used for LoRA (adapter comes from deployment config)
-                - deployment_type: Should be 'realtime' for LoRA models
-                - memory_mb: Memory for serverless (not used for LoRA)
-                - max_concurrency: Concurrency for serverless (not used for LoRA)
-                - instance_type: GPU instance type (required for LoRA)
-                - min_instances: Minimum instances (0 for scale-to-zero)
-                - max_instances: Maximum instances
-                - scale_in_cooldown: Scale-in cooldown in seconds
-                - scale_out_cooldown: Scale-out cooldown in seconds
-                - target_invocations: Target invocations per instance
-                - pytorch_version: PyTorch version (not used for DJL LMI containers)
-                - force: Force re-provisioning
-
-        Returns:
-            Provisioning result with endpoint details
-        """
-        from plexus.cli.provisioning.operations import provision_endpoint_operation
-
-        # Extract parameters
-        scorecard = kwargs.get('scorecard')
-        if not scorecard:
-            return {
-                'success': False,
-                'error': 'Scorecard instance required for provisioning'
-            }
-
-        scorecard_name = scorecard.name()
-        score_name = self.parameters.name
-
-        model_s3_uri = kwargs.get('model_s3_uri')
-        deployment_type = kwargs.get('deployment_type', 'realtime')
-        memory_mb = kwargs.get('memory_mb', 4096)
-        max_concurrency = kwargs.get('max_concurrency', 10)
-        instance_type = kwargs.get('instance_type')
-        min_instances = kwargs.get('min_instances', 0)
-        max_instances = kwargs.get('max_instances', 1)
-        scale_in_cooldown = kwargs.get('scale_in_cooldown', 300)
-        scale_out_cooldown = kwargs.get('scale_out_cooldown', 60)
-        target_invocations = kwargs.get('target_invocations', 1.0)
-        pytorch_version = kwargs.get('pytorch_version', '2.3.0')
-        region = kwargs.get('region')
-        force = kwargs.get('force', False)
-
-        # Get deployment config from parameters
-        deployment_config = self.parameters.deployment or {}
-
-        # Validate LoRA-specific requirements
-        if not deployment_config.get('base_model_hf_id'):
-            raise ValueError(
-                "LoRA classifier requires 'base_model_hf_id' in deployment config. "
-                "Example: deployment.base_model_hf_id = 'meta-llama/Llama-3.1-8B-Instruct'"
-            )
-
-        if not deployment_config.get('adapter_s3_uri'):
-            raise ValueError(
-                "LoRA classifier requires 'adapter_s3_uri' in deployment config. "
-                "This should point to your trained LoRA adapter in S3. "
-                "Example: deployment.adapter_s3_uri = 's3://bucket/adapters/my_adapter.tar.gz'"
-            )
-
-        # Ensure deployment type is realtime
-        if deployment_type != 'realtime':
-            deployment_type = 'realtime'
-
         try:
-            # Call provisioning operation
-            result = provision_endpoint_operation(
-                scorecard_name=scorecard_name,
-                score_name=score_name,
-                use_yaml=True,  # Always use YAML config for LoRA
-                model_s3_uri=model_s3_uri,  # Not used for LoRA, but kept for API compatibility
-                deployment_type=deployment_type,
-                memory_mb=memory_mb,
-                max_concurrency=max_concurrency,
-                instance_type=instance_type,
-                min_instances=min_instances,
-                max_instances=max_instances,
-                scale_in_cooldown=scale_in_cooldown,
-                scale_out_cooldown=scale_out_cooldown,
-                target_invocations=target_invocations,
-                pytorch_version=pytorch_version,
-                region=region,
-                force=force
+            config = cls.get_deployment_config()
+        except NotImplementedError:
+            raise ValueError(f"{cls.__name__} must implement get_deployment_config()")
+
+        # Required fields
+        required_fields = [
+            'deployment_type',
+            'base_model_hf_id',
+            'instance_type',
+            'min_instances',
+            'max_instances',
+            'scale_in_cooldown',
+            'scale_out_cooldown',
+            'target_invocations_per_instance',
+            'container_image',
+            'environment'
+        ]
+
+        missing_fields = [field for field in required_fields if field not in config]
+        if missing_fields:
+            raise ValueError(
+                f"{cls.__name__}.get_deployment_config() is missing required fields: {missing_fields}"
             )
 
-            return result
+        # Validate deployment_type
+        if config['deployment_type'] != 'realtime':
+            raise ValueError(
+                f"{cls.__name__}: LoRA classifiers must use deployment_type='realtime', "
+                f"got '{config['deployment_type']}'"
+            )
 
-        except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+        # Validate instance_type
+        if not config['instance_type'].startswith('ml.'):
+            raise ValueError(
+                f"{cls.__name__}: instance_type must be a valid SageMaker instance type "
+                f"(e.g., 'ml.g6e.xlarge'), got '{config['instance_type']}'"
+            )
 
-    def test_endpoint(self, endpoint_name: str) -> Dict[str, Any]:
+        # Validate scaling parameters
+        if not isinstance(config['min_instances'], int) or config['min_instances'] < 0:
+            raise ValueError(
+                f"{cls.__name__}: min_instances must be a non-negative integer, "
+                f"got {config['min_instances']}"
+            )
+
+        if not isinstance(config['max_instances'], int) or config['max_instances'] < 1:
+            raise ValueError(
+                f"{cls.__name__}: max_instances must be a positive integer, "
+                f"got {config['max_instances']}"
+            )
+
+        if config['min_instances'] > config['max_instances']:
+            raise ValueError(
+                f"{cls.__name__}: min_instances ({config['min_instances']}) cannot be "
+                f"greater than max_instances ({config['max_instances']})"
+            )
+
+        # Validate environment is a dictionary
+        if not isinstance(config['environment'], dict):
+            raise ValueError(
+                f"{cls.__name__}: environment must be a dictionary, got {type(config['environment'])}"
+            )
+
+        logging.debug(f"{cls.__name__}: Deployment configuration validated successfully")
+
+    def __init__(self, *args, **kwargs):
         """
-        Test the provisioned endpoint with a sample input.
+        Initialize the LoRA classifier.
+
+        Validates deployment configuration on initialization to catch
+        configuration errors early.
+        """
+        super().__init__(*args, **kwargs)
+
+        # Validate deployment config on initialization
+        try:
+            self.__class__.validate_deployment_config()
+        except ValueError as e:
+            logging.warning(f"Deployment configuration validation failed: {e}")
+
+    @abstractmethod
+    def predict(self, context, model_input: Score.Input) -> Score.Result:
+        """
+        Make a prediction using the LoRA-tuned model.
+
+        Subclasses must implement this method with their specific prediction logic.
+        The implementation should handle:
+        - Preparing input for the model (formatting, tokenization, etc.)
+        - Making the prediction (via SageMaker endpoint or local inference)
+        - Parsing and formatting the result
 
         Args:
-            endpoint_name: Name of the SageMaker endpoint
+            context: Execution context (may contain shared state, configuration, etc.)
+            model_input (Score.Input): Input data with text and optional metadata
 
         Returns:
-            Test result with success status and response
+            Score.Result: Prediction result with value, confidence, explanation, etc.
+
+        Example:
+            def predict(self, context, model_input: Score.Input) -> Score.Result:
+                text = model_input.text
+
+                # Prepare input for model
+                prompt = self._format_prompt(text)
+
+                # Make prediction via SageMaker endpoint
+                response = self._invoke_endpoint(prompt)
+
+                # Parse result
+                value = self._parse_response(response)
+
+                return Score.Result(
+                    parameters=self.parameters,
+                    value=value,
+                    confidence=response.get('confidence'),
+                    explanation=response.get('explanation')
+                )
         """
-        # For now, return a placeholder
-        # TODO: Implement actual endpoint testing with sample prompt
-        return {
-            'success': True,
-            'message': f'Endpoint {endpoint_name} is ready for inference',
-            'note': 'Endpoint testing not yet implemented for LoRA classifiers'
-        }
-
-    def predict(self, text: str, **kwargs) -> Dict[str, Any]:
-        """
-        Predict/classify the input text using the LoRA-fine-tuned model.
-
-        This is the abstract method required by Score base class.
-        It would call the SageMaker endpoint with the input text.
-
-        Args:
-            text: Input text to classify
-            **kwargs: Additional parameters
-
-        Returns:
-            Classification result
-        """
-        raise NotImplementedError(
-            "LoRA classifier prediction not yet implemented. "
-            "This will invoke the SageMaker endpoint once provisioned."
-        )
-
-    def score(self, text: str, **kwargs) -> Dict[str, Any]:
-        """
-        Score/classify the input text using the LoRA-fine-tuned model.
-
-        This calls predict() internally.
-
-        Args:
-            text: Input text to classify
-            **kwargs: Additional parameters
-
-        Returns:
-            Classification result
-        """
-        return self.predict(text, **kwargs)
+        raise NotImplementedError(f"{self.__class__.__name__} must implement predict()")

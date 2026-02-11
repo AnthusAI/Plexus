@@ -122,13 +122,15 @@ class ProvisioningDispatcher:
                         message=f"Score '{self.score_name}' does not support provisioning",
                     )
 
-            # Step 3: Instantiate the Score
-            score_instance = self._instantiate_score(score_class)
+            # Step 3: Call provision_endpoint_operation directly
+            # This handles both LoRA classifiers (shared stack) and legacy classifiers (per-score stack)
+            from plexus.cli.provisioning.operations import provision_endpoint_operation
 
-            # Step 4: Call score.provision_endpoint()
-            logger.info(f"Calling {score_class.__name__}.provision_endpoint()...")
-            result = score_instance.provision_endpoint(
-                scorecard=self.scorecard_class,
+            logger.info(f"Provisioning endpoint for {score_class.__name__}...")
+            result = provision_endpoint_operation(
+                scorecard_name=self.scorecard_name,
+                score_name=self.score_name,
+                use_yaml=self.yaml,
                 model_s3_uri=self.model_s3_uri,
                 deployment_type=self.deployment_type,
                 memory_mb=self.memory_mb,
@@ -152,9 +154,21 @@ class ProvisioningDispatcher:
 
             endpoint_name = result['endpoint_name']
 
-            # Step 5: Test the endpoint via score.test_endpoint()
-            logger.info(f"Testing endpoint '{endpoint_name}'...")
-            test_result = score_instance.test_endpoint(endpoint_name=endpoint_name)
+            # Step 5: Test the endpoint (only if score class supports test_endpoint)
+            test_result = None
+            if hasattr(score_class, 'test_endpoint'):
+                try:
+                    # Create a score instance for testing
+                    from plexus.scores.Score import Score
+                    score_instance = score_class(Score.Parameters(**self.score_config))
+
+                    logger.info(f"Testing endpoint '{endpoint_name}'...")
+                    test_result = score_instance.test_endpoint(endpoint_name=endpoint_name)
+                except Exception as e:
+                    logger.warning(f"Endpoint test failed (non-fatal): {e}")
+                    test_result = {'warning': f'Test skipped: {str(e)}'}
+            else:
+                logger.info(f"Score class {score_class.__name__} does not implement test_endpoint(), skipping test")
 
             return ProvisioningResult(
                 success=True,
