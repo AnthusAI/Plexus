@@ -28,6 +28,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 from typing import List, Dict, Any, Optional
+import hashlib
 import os
 from .shared.naming import (
     get_base_model_key,
@@ -355,11 +356,16 @@ class SageMakerSharedInferenceStack(Stack):
             on_event_handler=adapter_lambda
         )
 
-        # Create adapter components dynamically
+        # Create adapter components dynamically (stable ordering + stable logical IDs)
         adapter_components = []
         base_component_name = self.base_component.inference_component_name
+        # Deterministic ordering prevents CloudFormation from remapping logical IDs
+        sorted_adapters = sorted(
+            self.adapter_configs,
+            key=lambda c: (c.get('scorecard_key', ''), c.get('score_key', ''))
+        )
 
-        for i, adapter_config in enumerate(self.adapter_configs):
+        for adapter_config in sorted_adapters:
             scorecard_key = adapter_config['scorecard_key']
             score_key = adapter_config['score_key']
             adapter_s3_uri = adapter_config['adapter_s3_uri']
@@ -371,10 +377,13 @@ class SageMakerSharedInferenceStack(Stack):
                 self.deployment_environment
             )
 
+            # Stable logical ID based on deterministic name hash (prevents duplicate creation)
+            adapter_id = f"AdapterComponent{hashlib.sha256(adapter_component_name.encode()).hexdigest()[:8]}"
+
             # Create custom resource for this adapter
             adapter_component = CustomResource(
                 self,
-                f"AdapterComponent{i}",
+                adapter_id,
                 service_token=adapter_provider.service_token,
                 properties={
                     "InferenceComponentName": adapter_component_name,
@@ -390,12 +399,12 @@ class SageMakerSharedInferenceStack(Stack):
 
             # Output for this adapter
             CfnOutput(
-                self, f"Adapter{i}Name",
+                self, f"{adapter_id}Name",
                 value=adapter_component_name,
                 description=f"Adapter component for {scorecard_key}/{score_key}"
             )
             CfnOutput(
-                self, f"Adapter{i}S3URI",
+                self, f"{adapter_id}S3URI",
                 value=adapter_s3_uri,
                 description=f"S3 URI for {scorecard_key}/{score_key} adapter"
             )
@@ -501,35 +510,6 @@ class SageMakerSharedInferenceStack(Stack):
         )
         base_alarm.add_dependency(step_scaling)
 
-        # 5. CloudWatch alarms for adapter components (one per adapter)
-        for i, adapter_config in enumerate(self.adapter_configs):
-            scorecard_key = adapter_config['scorecard_key']
-            score_key = adapter_config['score_key']
-
-            adapter_component_name = get_adapter_component_name(
-                scorecard_key,
-                score_key,
-                self.deployment_environment
-            )
-
-            adapter_alarm = cloudwatch.CfnAlarm(
-                self, f"Adapter{i}ScaleOutAlarm",
-                alarm_name=f"{adapter_component_name}-scale-out",
-                alarm_description=f"Triggers scale out from 0 when adapter {scorecard_key}/{score_key} requests fail due to no capacity",
-                comparison_operator="GreaterThanOrEqualToThreshold",
-                evaluation_periods=1,
-                metric_name="NoCapacityInvocationFailures",
-                namespace="AWS/SageMaker",
-                period=60,
-                statistic="Sum",
-                threshold=1,
-                treat_missing_data="notBreaching",
-                dimensions=[
-                    cloudwatch.CfnAlarm.DimensionProperty(
-                        name="InferenceComponentName",
-                        value=adapter_component_name
-                    )
-                ],
-                alarm_actions=[step_scaling.attr_arn]
-            )
-            adapter_alarm.add_dependency(step_scaling)
+        # 5. Adapter alarms intentionally omitted.
+        # Base component scale-out alarm is sufficient to bring capacity from 0->1
+        # for all adapters that share the base component.

@@ -322,15 +322,37 @@ class LoRAClassifier(Score):
             # Parse response
             result = json.loads(response['Body'].read().decode())
 
-            # Extract prediction value
-            # Note: Response format depends on the model/container, adjust as needed
-            value = result.get('prediction', result.get('output', result))
+            # Extract prediction value (handle common LMI/vLLM response shapes)
+            value = None
+            if isinstance(result, dict):
+                if 'generated_text' in result:
+                    value = result['generated_text']
+                elif 'prediction' in result:
+                    value = result['prediction']
+                elif 'output' in result:
+                    value = result['output']
+                else:
+                    # Fallback to a stable string representation
+                    value = json.dumps(result)
+            elif isinstance(result, list) and result:
+                first = result[0]
+                if isinstance(first, dict) and 'generated_text' in first:
+                    value = first['generated_text']
+                else:
+                    value = json.dumps(result)
+            else:
+                value = str(result)
+
+            # Ensure parameters is a Parameters instance
+            params = self.parameters
+            if isinstance(params, dict):
+                params = Score.Parameters(**params)
 
             return Score.Result(
-                parameters=self.parameters,
+                parameters=params,
                 value=value,
-                confidence=result.get('confidence'),
-                explanation=result.get('explanation')
+                confidence=result.get('confidence') if isinstance(result, dict) else None,
+                explanation=result.get('explanation') if isinstance(result, dict) else None
             )
 
         except Exception as e:
