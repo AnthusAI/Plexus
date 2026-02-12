@@ -45,11 +45,9 @@ class LoRAClassifier(Score):
                 # LoRA-specific prediction logic
                 pass
 
-    Score YAML configuration:
+    Score YAML configuration (adapter path is derived by convention):
         name: My Classifier
         class: Llama318BInstructClassifier
-        provisioning:
-          adapter_s3_uri: s3://bucket/adapters/my-adapter.tar.gz
     """
 
     @classmethod

@@ -22,11 +22,9 @@ class Llama318BInstructClassifier(LoRAClassifier):
     - Scale-to-zero capability (0-1 instances)
     - Support for up to 10 LoRA adapters on shared base model
 
-    Score YAML configuration:
+    Score YAML configuration (adapter path is derived by convention):
         name: My Sentiment Classifier
         class: Llama318BInstructClassifier
-        provisioning:
-          adapter_s3_uri: s3://my-bucket/adapters/sentiment-classifier.tar.gz
 
     The class defines all infrastructure settings, so the YAML only needs to specify
     the adapter location. Multiple scores using this class will share the same endpoint

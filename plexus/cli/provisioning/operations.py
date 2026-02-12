@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 from plexus.CustomLogging import logging
-from plexus.training.utils import get_scorecard_key, get_score_key
+from plexus.training.utils import get_scorecard_key, get_score_key, get_adapter_s3_uri
 from plexus.training.endpoint_utils import (
     get_sagemaker_endpoint,
     should_deploy_endpoint,
@@ -134,13 +134,12 @@ def provision_endpoint_operation(
             if not base_model_hf_id:
                 raise ValueError(f"{score_class.__name__}.get_deployment_config() must return 'base_model_hf_id'")
 
-            # Get adapter S3 URI from score config
-            adapter_s3_uri = score_config.get('provisioning', {}).get('adapter_s3_uri')
-            if not adapter_s3_uri:
-                raise ValueError(
-                    f"Score '{score_name}' is missing 'provisioning.adapter_s3_uri'. "
-                    "LoRA classifiers require an adapter S3 URI in the score YAML."
-                )
+            # Derive adapter S3 URI by convention (no YAML config required)
+            adapter_s3_uri = get_adapter_s3_uri(
+                scorecard_name=actual_scorecard_name,
+                score_config=score_config,
+                base_model_hf_id=base_model_hf_id
+            )
 
             logging.info(f"Base model: {base_model_hf_id}")
             logging.info(f"Adapter S3 URI: {adapter_s3_uri}")
@@ -148,7 +147,11 @@ def provision_endpoint_operation(
             # Discover ALL active scores using this classifier class
             class_name = score_class.__name__
             logging.info(f"Discovering all active scores using {class_name}...")
-            all_scores = discover_scores_by_class(class_name, use_yaml)
+            all_scores = discover_scores_by_class(
+                class_name,
+                use_yaml,
+                base_model_hf_id=base_model_hf_id
+            )
 
             if len(all_scores) == 0:
                 logging.warning(f"No active scores found using {class_name}")
@@ -521,7 +524,8 @@ def _load_scorecard_and_score(
 
 def discover_scores_by_class(
     target_class_name: str,
-    use_yaml: bool = False
+    use_yaml: bool = False,
+    base_model_hf_id: Optional[str] = None
 ) -> list:
     """
     Discover all active scores that use a specific classifier class.
@@ -542,11 +546,14 @@ def discover_scores_by_class(
         - score_name: Score name
         - score_key: Score key
         - score_config: Parsed score configuration dict
-        - adapter_s3_uri: S3 URI for the adapter (from provisioning section)
+        - adapter_s3_uri: S3 URI for the adapter (derived by convention)
 
     Note: For YAML mode, this searches local files. For API mode, it queries
     all scorecards and scores, which is O(n) but acceptable for 10s-100s of scores.
     """
+    if not base_model_hf_id:
+        raise ValueError("base_model_hf_id is required to derive adapter S3 paths")
+
     matching_scores = []
 
     if use_yaml:
@@ -585,16 +592,12 @@ def discover_scores_by_class(
                             logging.debug(f"Skipping disabled score: {scorecard_name}/{score_file.stem}")
                             continue
 
-                        # Extract adapter S3 URI from provisioning section
-                        provisioning = config.get('provisioning', {})
-                        adapter_s3_uri = provisioning.get('adapter_s3_uri')
-
-                        if not adapter_s3_uri:
-                            logging.warning(
-                                f"Score {scorecard_name}/{score_file.stem} uses {target_class_name} "
-                                f"but has no adapter_s3_uri in provisioning section. Skipping."
-                            )
-                            continue
+                        # Derive adapter S3 URI by convention
+                        adapter_s3_uri = get_adapter_s3_uri(
+                            scorecard_name=scorecard_name,
+                            score_config=config,
+                            base_model_hf_id=base_model_hf_id
+                        )
 
                         # Get keys for naming
                         scorecard_key = get_scorecard_key(scorecard_name=scorecard_name)
@@ -701,16 +704,9 @@ def discover_scores_by_class(
 
                             # Check if this score uses the target class
                             if config.get('class') == target_class_name:
-                                # Extract adapter S3 URI from provisioning section
-                                provisioning = config.get('provisioning', {})
-                                adapter_s3_uri = provisioning.get('adapter_s3_uri')
-
-                                if not adapter_s3_uri:
-                                    logging.warning(
-                                        f"Score {scorecard_name}/{score_name} uses {target_class_name} "
-                                        f"but has no adapter_s3_uri in provisioning section. Skipping."
-                                    )
-                                    continue
+                                # Attach version for convention-based adapter pathing
+                                if champion_version_id and not config.get('version'):
+                                    config['version'] = champion_version_id
 
                                 # Get score key for naming
                                 score_key = get_score_key(config)
@@ -718,6 +714,13 @@ def discover_scores_by_class(
                                 # Inject scorecard_name into config for use during prediction
                                 # This ensures naming consistency between provisioning and prediction
                                 config['scorecard_name'] = scorecard_name
+
+                                # Derive adapter S3 URI by convention
+                                adapter_s3_uri = get_adapter_s3_uri(
+                                    scorecard_name=scorecard_name,
+                                    score_config=config,
+                                    base_model_hf_id=base_model_hf_id
+                                )
 
                                 matching_scores.append({
                                     'scorecard_id': scorecard_id,

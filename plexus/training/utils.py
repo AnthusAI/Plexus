@@ -107,6 +107,50 @@ def get_score_key(score_config: Dict[str, Any]) -> str:
     raise ValueError("score_config must have either 'key' or 'name' field")
 
 
+def get_base_model_key(base_model_hf_id: str) -> str:
+    """
+    Normalize a HuggingFace model ID to a filesystem-safe base model key.
+
+    Mirrors infrastructure naming conventions without depending on CDK modules.
+    """
+    if not base_model_hf_id:
+        raise ValueError("base_model_hf_id is required to build adapter paths")
+    key = base_model_hf_id.lower()
+    key = key.replace('/', '-')
+    key = key.replace('.', '-')
+    key = key.replace('_', '-')
+    key = ''.join(c for c in key if c.isalnum() or c == '-')
+    return key
+
+
+def get_adapter_s3_uri(*,
+                       scorecard_name: str,
+                       score_config: Dict[str, Any],
+                       base_model_hf_id: str,
+                       bucket_name: Optional[str] = None,
+                       version: Optional[str] = None) -> str:
+    """
+    Build the convention-based S3 URI for a LoRA adapter artifact.
+
+    Convention:
+      s3://{bucket}/adapters/{base_model_key}/{scorecard_key}/{score_key}/{version}/adapter.tar.gz
+
+    Version defaults to score_config['version'] if present, otherwise "latest".
+    Bucket defaults to PLEXUS_S3_BUCKET.
+    """
+    bucket = bucket_name or os.getenv('PLEXUS_S3_BUCKET')
+    if not bucket:
+        raise ValueError("PLEXUS_S3_BUCKET is not set; cannot derive adapter S3 URI")
+
+    scorecard_key = get_scorecard_key(scorecard_name=scorecard_name)
+    score_key = get_score_key(score_config)
+    base_model_key = get_base_model_key(base_model_hf_id)
+    version_id = version or score_config.get('version') or "latest"
+
+    s3_key = f"adapters/{base_model_key}/{scorecard_key}/{score_key}/{version_id}/adapter.tar.gz"
+    return f"s3://{bucket}/{s3_key}"
+
+
 def get_output_dir(scorecard_name: Optional[str] = None,
                    score_name: Optional[str] = None,
                    scorecard_config: Optional[Dict[str, Any]] = None,
