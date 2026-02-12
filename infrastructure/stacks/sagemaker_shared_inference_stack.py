@@ -148,6 +148,11 @@ class SageMakerSharedInferenceStack(Stack):
         # Create adapter inference components (one per score)
         self.adapter_components = self._create_adapter_components()
 
+        # NOTE: Stack deletion may fail with "base inference component has associated components" error
+        # if adapters aren't deleted first. The custom resource handler should handle this automatically,
+        # but if manual cleanup is needed:
+        #   aws sagemaker list-inference-components --endpoint-name-equals <endpoint> | jq -r '.InferenceComponents[] | select(.InferenceComponentName | contains("adapter")) | .InferenceComponentName' | xargs -I {} aws sagemaker delete-inference-component --inference-component-name {}
+
         # Setup auto-scaling for scale-to-zero
         self._setup_autoscaling()
 
@@ -378,6 +383,7 @@ class SageMakerSharedInferenceStack(Stack):
                     "ArtifactUrl": adapter_s3_uri
                 }
             )
+            # Adapter depends on base for creation
             adapter_component.node.add_dependency(self.base_component)
 
             adapter_components.append(adapter_component)

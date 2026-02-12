@@ -224,16 +224,63 @@ class LoRAClassifier(Score):
         except ValueError as e:
             logging.warning(f"Deployment configuration validation failed: {e}")
 
-    @abstractmethod
+    def _get_endpoint_info(self) -> Dict[str, str]:
+        """
+        Get endpoint and adapter component names for this score.
+
+        Uses convention over configuration to determine names based on:
+        - Class deployment config (for base model and endpoint)
+        - Score parameters (for scorecard/score keys to find adapter)
+
+        Returns:
+            Dict with 'endpoint_name' and 'adapter_component_name'
+        """
+        import os
+        from infrastructure.stacks.shared.naming import (
+            get_base_model_key,
+            get_base_endpoint_name,
+            get_adapter_component_name
+        )
+        from plexus.training.utils import get_scorecard_key, get_score_key
+
+        # Get deployment config from class
+        config = self.__class__.get_deployment_config()
+        base_model_hf_id = config['base_model_hf_id']
+
+        # Generate base model key and endpoint name
+        environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
+        base_model_key = get_base_model_key(base_model_hf_id)
+        endpoint_name = get_base_endpoint_name(base_model_key, environment)
+
+        # Get scorecard and score names from parameters
+        scorecard_name = getattr(self.parameters, 'scorecard_name', None)
+        score_name = self.parameters.name
+
+        if not scorecard_name:
+            raise ValueError(
+                "Score parameters missing 'scorecard_name'. "
+                "LoRA classifiers require scorecard context for endpoint naming."
+            )
+
+        # Normalize names to keys for naming
+        scorecard_key = get_scorecard_key(scorecard_name=scorecard_name)
+        score_key = get_score_key({'name': score_name})
+
+        # Generate adapter component name
+        adapter_component_name = get_adapter_component_name(scorecard_key, score_key, environment)
+
+        return {
+            'endpoint_name': endpoint_name,
+            'adapter_component_name': adapter_component_name
+        }
+
     def predict(self, context, model_input: Score.Input) -> Score.Result:
         """
-        Make a prediction using the LoRA-tuned model.
+        Make a prediction using the LoRA-tuned model via SageMaker endpoint.
 
-        Subclasses must implement this method with their specific prediction logic.
-        The implementation should handle:
-        - Preparing input for the model (formatting, tokenization, etc.)
-        - Making the prediction (via SageMaker endpoint or local inference)
-        - Parsing and formatting the result
+        This implementation invokes the SageMaker endpoint with the LoRA adapter
+        component specified in the score's configuration. Subclasses can override
+        this method for custom prediction logic.
 
         Args:
             context: Execution context (may contain shared state, configuration, etc.)
@@ -241,25 +288,117 @@ class LoRAClassifier(Score):
 
         Returns:
             Score.Result: Prediction result with value, confidence, explanation, etc.
-
-        Example:
-            def predict(self, context, model_input: Score.Input) -> Score.Result:
-                text = model_input.text
-
-                # Prepare input for model
-                prompt = self._format_prompt(text)
-
-                # Make prediction via SageMaker endpoint
-                response = self._invoke_endpoint(prompt)
-
-                # Parse result
-                value = self._parse_response(response)
-
-                return Score.Result(
-                    parameters=self.parameters,
-                    value=value,
-                    confidence=response.get('confidence'),
-                    explanation=response.get('explanation')
-                )
         """
-        raise NotImplementedError(f"{self.__class__.__name__} must implement predict()")
+        import boto3
+        import json
+
+        # Get endpoint info using convention over configuration
+        endpoint_info = self._get_endpoint_info()
+        endpoint_name = endpoint_info['endpoint_name']
+        adapter_component_name = endpoint_info['adapter_component_name']
+
+        logging.info(f"Invoking endpoint: {endpoint_name}")
+        logging.info(f"Using adapter: {adapter_component_name}")
+
+        # Create SageMaker runtime client
+        runtime = boto3.client('sagemaker-runtime')
+
+        # Prepare input payload
+        # Note: Subclasses can override this method to customize the payload format
+        # The adapter is already selected via InferenceComponentName, no adapter_id needed
+        payload = {
+            'inputs': model_input.text
+        }
+
+        try:
+            # Invoke endpoint
+            response = runtime.invoke_endpoint(
+                EndpointName=endpoint_name,
+                ContentType='application/json',
+                Body=json.dumps(payload),
+                InferenceComponentName=adapter_component_name  # Route to specific adapter
+            )
+
+            # Parse response
+            result = json.loads(response['Body'].read().decode())
+
+            # Extract prediction value
+            # Note: Response format depends on the model/container, adjust as needed
+            value = result.get('prediction', result.get('output', result))
+
+            return Score.Result(
+                parameters=self.parameters,
+                value=value,
+                confidence=result.get('confidence'),
+                explanation=result.get('explanation')
+            )
+
+        except Exception as e:
+            logging.error(f"Prediction failed: {e}")
+            raise
+
+    def test_endpoint(self, endpoint_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Test the SageMaker endpoint with a simple prediction.
+
+        This method verifies that:
+        1. The endpoint exists and is in service
+        2. The adapter component is available
+        3. Basic predictions work
+
+        Args:
+            endpoint_name: Optional endpoint name override (uses convention if not provided)
+
+        Returns:
+            Dict with test results including success status, latency, and message
+        """
+        import boto3
+        import time
+
+        # Get endpoint info if not provided
+        if not endpoint_name:
+            endpoint_info = self._get_endpoint_info()
+            endpoint_name = endpoint_info['endpoint_name']
+
+        logging.info(f"Testing endpoint: {endpoint_name}")
+
+        # Check endpoint status
+        sagemaker = boto3.client('sagemaker')
+        try:
+            endpoint_desc = sagemaker.describe_endpoint(EndpointName=endpoint_name)
+            status = endpoint_desc['EndpointStatus']
+
+            if status != 'InService':
+                return {
+                    'success': False,
+                    'message': f'Endpoint is not in service (status: {status})'
+                }
+
+            # Try a simple prediction
+            test_input = Score.Input(text="Test input for endpoint validation")
+            start_time = time.time()
+
+            try:
+                result = self.predict(context=None, model_input=test_input)
+                latency_ms = (time.time() - start_time) * 1000
+
+                return {
+                    'success': True,
+                    'message': f'Endpoint test passed! Prediction returned: {result.value}',
+                    'latency_ms': latency_ms,
+                    'endpoint_status': status
+                }
+
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': f'Endpoint is in service but prediction failed: {str(e)}'
+                }
+
+        except sagemaker.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'ValidationException':
+                return {
+                    'success': False,
+                    'message': f'Endpoint not found: {endpoint_name}'
+                }
+            raise
