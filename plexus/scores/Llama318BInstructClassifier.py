@@ -104,35 +104,8 @@ class Llama318BInstructClassifier(LoRAClassifier):
             }
         }
 
-    def predict(self, context, model_input) -> Dict[str, Any]:
-        """
-        Make a prediction using the Llama 3.1 8B Instruct model with LoRA adapter.
-
-        This method will invoke the SageMaker endpoint with the input text and return
-        the classification result. The endpoint will automatically scale up from 0
-        if it's currently scaled down (cold start takes ~2-5 minutes).
-
-        Args:
-            context: Execution context (may contain shared state, configuration, etc.)
-            model_input (Score.Input): Input data with text and optional metadata
-
-        Returns:
-            Score.Result: Prediction result with value, confidence, explanation, etc.
-
-        Note:
-            Actual implementation will be added once the endpoint provisioning
-            infrastructure is complete. This will handle:
-            - Formatting the prompt for Llama 3.1 Instruct
-            - Invoking the SageMaker endpoint
-            - Parsing the model response
-            - Handling cold starts and retries
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__}.predict() not yet implemented. "
-            "This will invoke the SageMaker endpoint once provisioned. "
-            "The endpoint will use the LoRA adapter specified in the score's "
-            "provisioning.adapter_s3_uri configuration."
-        )
+    # predict() is inherited from LoRAClassifier base class
+    # Subclasses can override to customize prompt formatting or response parsing
 
 
 # Validation: Test that the deployment config is complete

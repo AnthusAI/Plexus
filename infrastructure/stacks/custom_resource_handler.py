@@ -50,6 +50,7 @@ def create_inference_component(properties):
             'Container': {
                 'ArtifactUrl': properties['ArtifactUrl']
             }
+            # No ComputeResourceRequirements - adapter automatically inherits from base
         }
     }
 

@@ -158,9 +158,27 @@ class ProvisioningDispatcher:
             test_result = None
             if hasattr(score_class, 'test_endpoint'):
                 try:
-                    # Create a score instance for testing
-                    from plexus.scores.Score import Score
-                    score_instance = score_class(Score.Parameters(**self.score_config))
+                    # Create a minimal score instance for testing
+                    # We need the score config to determine endpoint names
+                    score_instance = score_class()
+
+                    # Inject the score config as a simple namespace object for endpoint naming
+                    class SimpleNamespace:
+                        def __init__(self, **kwargs):
+                            self.__dict__.update(kwargs)
+
+                    # CRITICAL: Inject scorecard_name for LoRA classifier endpoint naming
+                    # LoRA classifiers need both scorecard_name and score name to compute adapter component names
+                    # IMPORTANT: Use the ACTUAL names from the GraphQL API (returned by provisioning)
+                    # NOT the CLI argument (which might be an identifier, not the canonical name)
+                    actual_scorecard_name = result.get('actual_scorecard_name', self.scorecard_name)
+                    actual_score_name = result.get('actual_score_name', self.score_name)
+
+                    test_config = dict(self.score_config)
+                    test_config['scorecard_name'] = actual_scorecard_name
+                    test_config['name'] = actual_score_name
+
+                    score_instance.parameters = SimpleNamespace(**test_config)
 
                     logger.info(f"Testing endpoint '{endpoint_name}'...")
                     test_result = score_instance.test_endpoint(endpoint_name=endpoint_name)

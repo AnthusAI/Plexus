@@ -180,6 +180,16 @@ def provision_endpoint_operation(
                 region=region
             )
 
+            # Find the matching score to get its actual scorecard_name from the API
+            # This is needed for endpoint testing (dispatcher needs the canonical name)
+            matching_score = next(
+                (s for s in all_scores if s['score_name'] == score_name),
+                None
+            )
+            if matching_score:
+                result['actual_scorecard_name'] = matching_score['scorecard_name']
+                result['actual_score_name'] = matching_score['score_name']
+
             return result
 
         # Legacy path: Non-LoRA classifiers (per-score stack architecture)
@@ -704,6 +714,10 @@ def discover_scores_by_class(
 
                                 # Get score key for naming
                                 score_key = get_score_key(config)
+
+                                # Inject scorecard_name into config for use during prediction
+                                # This ensures naming consistency between provisioning and prediction
+                                config['scorecard_name'] = scorecard_name
 
                                 matching_scores.append({
                                     'scorecard_id': scorecard_id,
