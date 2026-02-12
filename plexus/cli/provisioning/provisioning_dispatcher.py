@@ -219,16 +219,32 @@ class ProvisioningDispatcher:
                 score_names=[self.score_name]
             )
 
-        # Find score config (should be a dict in scorecard_class.scores)
+        # Find score config by ANY identifier (name, key, id, externalId, originalExternalId)
+        def matches_identifier(config: dict, identifier: str) -> bool:
+            if not identifier:
+                return False
+            identifier_str = str(identifier)
+            return (
+                config.get('name') == identifier or
+                config.get('key') == identifier or
+                str(config.get('id', '')) == identifier_str or
+                config.get('externalId') == identifier or
+                config.get('originalExternalId') == identifier
+            )
+
         for score_config in self.scorecard_class.scores:
-            if isinstance(score_config, dict):
-                score_name_in_config = score_config.get('name')
-                if score_name_in_config == self.score_name:
-                    self.score_config = score_config
-                    break
+            if isinstance(score_config, dict) and matches_identifier(score_config, self.score_name):
+                self.score_config = score_config
+                break
 
         if not self.score_config:
             raise ValueError(f"Score '{self.score_name}' not found in scorecard")
+
+        # Normalize to canonical score name for registry lookups
+        canonical_name = self.score_config.get('name')
+        if canonical_name and canonical_name != self.score_name:
+            logger.info(f"Resolved score identifier '{self.score_name}' to score name '{canonical_name}'")
+            self.score_name = canonical_name
 
     def _instantiate_score(self, score_class):
         """
