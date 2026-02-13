@@ -10,6 +10,7 @@ import os
 import json
 import logging
 import concurrent.futures
+import importlib
 from typing import Dict, Any, Optional, List
 from langchain_core.prompts import PromptTemplate
 
@@ -48,8 +49,8 @@ class LLMFineTuneTrainer(Trainer):
         - tuning/{scorecard_name}/{score_name}/validation_ids.txt
     """
 
-    def __init__(self, scorecard_class, score_config: dict,
-                 fresh: bool = False, **kwargs):
+    def __init__(self, scorecard_class, scorecard_name: str, score_config: dict,
+                 fresh: bool = False, use_yaml: bool = False, **kwargs):
         """
         Initialize LLM fine-tuning trainer.
 
@@ -60,7 +61,7 @@ class LLMFineTuneTrainer(Trainer):
             clean_existing (bool): Remove existing files first (default: False)
             verbose (bool): Enable verbose logging (default: False)
         """
-        super().__init__(scorecard_class, score_config, fresh, **kwargs)
+        super().__init__(scorecard_class, scorecard_name, score_config, fresh, use_yaml, **kwargs)
 
         # Extract LLM fine-tuning configuration
         finetune_config = score_config.get('training', {}).get('llm_finetune', {})
@@ -95,27 +96,51 @@ class LLMFineTuneTrainer(Trainer):
         """
         score_class_name = self.score_config['class']
 
-        # Check that Score has get_prompt_templates method
-        if not hasattr(self.score_instance, 'get_prompt_templates'):
+        prompt_nodes = self._get_prompt_nodes()
+        if not prompt_nodes:
             raise ValueError(
-                f"Score class '{score_class_name}' does not have 'get_prompt_templates' method. "
-                f"LLM fine-tuning requires LangGraphScore or similar with prompt templates."
-            )
-
-        # Check for completion_template in graph nodes
-        if 'graph' not in self.score_config or not self.score_config['graph']:
-            raise ValueError(
-                f"Score '{self.score_config.get('name')}' has no graph configuration. "
-                f"LLM fine-tuning requires graph nodes with completion_template."
+                f"Score '{self.score_config.get('name')}' has no prompt configuration. "
+                f"LLM fine-tuning requires training.prompt or graph nodes with completion_template."
             )
 
         # Check first node has completion_template
-        first_node = self.score_config['graph'][0]
+        first_node = prompt_nodes[0]
         if 'completion_template' not in first_node:
             raise ValueError(
                 f"Graph node '{first_node.get('name', 'Unknown')}' has no completion_template. "
                 f"LLM fine-tuning requires completion_template in graph nodes."
             )
+
+        # Check that Score class has get_prompt_templates method or is LangGraph-like
+        try:
+            class_module = importlib.import_module(f'plexus.scores.{score_class_name}')
+            score_class = getattr(class_module, score_class_name)
+        except Exception as e:
+            raise ValueError(
+                f"Could not import Score class '{score_class_name}'. Error: {e}"
+            )
+
+        if not hasattr(score_class, 'get_prompt_templates'):
+            raise ValueError(
+                f"Score class '{score_class_name}' does not have 'get_prompt_templates' method. "
+                f"LLM fine-tuning requires LangGraphScore or similar with prompt templates."
+            )
+
+    def _get_prompt_nodes(self) -> list:
+        """
+        Return prompt nodes for training data generation.
+
+        Prefers training.prompt (LoRA/LLM training), falls back to graph.
+        """
+        training_cfg = self.score_config.get('training', {}) if isinstance(self.score_config, dict) else {}
+        prompt_cfg = training_cfg.get('prompt')
+        if isinstance(prompt_cfg, dict):
+            return [prompt_cfg]
+
+        graph_cfg = self.score_config.get('graph')
+        if isinstance(graph_cfg, list):
+            return graph_cfg
+        return []
 
     def prepare_data(self):
         """
@@ -161,7 +186,7 @@ class LLMFineTuneTrainer(Trainer):
         logger.info(f"Generating {num_train} training + {num_val} validation examples")
 
         # Get prompt templates from Score
-        nodes = self.score_instance.get_prompt_templates()
+        nodes = self._get_prompt_nodes()
         if not nodes:
             raise ValueError("No prompt templates found in Score")
 
@@ -383,11 +408,11 @@ class LLMFineTuneTrainer(Trainer):
 
         # Save ID tracking files
         with open(train_ids_file, 'w') as f:
-            f.write('\n'.join(self.training_ids))
+            f.write('\n'.join([str(i) for i in self.training_ids]))
         logger.info(f"Saved training IDs: {train_ids_file}")
 
         with open(val_ids_file, 'w') as f:
-            f.write('\n'.join(self.validation_ids))
+            f.write('\n'.join([str(i) for i in self.validation_ids]))
         logger.info(f"Saved validation IDs: {val_ids_file}")
 
         return {

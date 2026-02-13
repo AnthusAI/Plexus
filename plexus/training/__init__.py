@@ -10,6 +10,8 @@ This module provides a unified training framework supporting multiple training w
 from plexus.training.trainer import Trainer, TrainingResult
 from plexus.training.ml_trainer_local import MLTrainerLocal
 from plexus.training.llm_finetune_trainer import LLMFineTuneTrainer
+from plexus.training.lora_finetune_trainer import LoraFineTuneTrainer
+from plexus.training.lora_trainer_sagemaker import LoraFineTuneTrainerSageMaker
 from plexus.training.training_dispatcher import TrainingDispatcher
 from plexus.training import utils
 

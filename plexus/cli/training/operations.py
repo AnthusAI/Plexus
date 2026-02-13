@@ -21,7 +21,7 @@ from rich.pretty import pprint
 @click.option('--version', help='Train a specific score version (by version ID) instead of champion.')
 @click.option('--data', help='DataSource identifier (ID, key, or name) to override the score\'s data configuration. Uses latest dataset from the source.')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
-@click.option('--training-type', type=click.Choice(['ml', 'llm-finetune']), help='Override training type (ml or llm-finetune).')
+@click.option('--training-type', type=click.Choice(['ml', 'llm-finetune', 'lora']), help='Override training type (ml, llm-finetune, or lora).')
 @click.option('--platform', type=click.Choice(['local', 'sagemaker']), help='Training platform: local or sagemaker. Overrides YAML configuration.')
 @click.option('--epochs', type=int, help='Number of training epochs (ML training only).')
 @click.option('--batch-size', type=int, help='Batch size (ML training only).')
@@ -35,7 +35,7 @@ def train(scorecard_name, score_name, yaml, version, data, fresh, training_type,
           epochs, batch_size, learning_rate,
           maximum_number, train_ratio, threads, clean_existing, verbose):
     """
-    Unified training command for ML models and LLM fine-tuning.
+    Unified training command for ML models, LoRA fine-tuning, and LLM fine-tuning.
 
     Auto-detects training type from Score configuration, with CLI overrides available.
     Supports multiple training workflows through Trainer abstraction.

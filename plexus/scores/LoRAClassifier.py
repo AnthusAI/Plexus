@@ -130,6 +130,13 @@ class LoRAClassifier(Score):
         return True
 
     @classmethod
+    def supports_training(cls) -> bool:
+        """
+        LoRA classifiers support training via the LoRA training pipeline.
+        """
+        return True
+
+    @classmethod
     def validate_deployment_config(cls) -> None:
         """
         Validate that the deployment configuration is complete and correct.
@@ -422,3 +429,15 @@ class LoRAClassifier(Score):
                     'message': f'Endpoint not found: {endpoint_name}'
                 }
             raise
+
+    def get_prompt_templates(self):
+        """
+        Return prompt templates for training data generation.
+
+        LoRA training reuses the LangGraph-style `graph` configuration
+        (with completion_template) to build JSONL training data.
+        """
+        graph = getattr(self.parameters, "graph", None)
+        if graph and isinstance(graph, list):
+            return graph
+        return []

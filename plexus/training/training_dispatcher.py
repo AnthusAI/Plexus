@@ -17,6 +17,8 @@ from plexus.training.trainer import TrainingResult
 from plexus.training.ml_trainer_local import MLTrainerLocal
 from plexus.training.ml_trainer_sagemaker import MLTrainerSageMaker
 from plexus.training.llm_finetune_trainer import LLMFineTuneTrainer
+from plexus.training.lora_finetune_trainer import LoraFineTuneTrainer
+from plexus.training.lora_trainer_sagemaker import LoraFineTuneTrainerSageMaker
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,8 @@ class TrainingDispatcher:
         ('ml', 'local'): MLTrainerLocal,
         ('ml', 'sagemaker'): MLTrainerSageMaker,
         ('llm-finetune', None): LLMFineTuneTrainer,
+        ('lora', 'local'): LoraFineTuneTrainer,
+        ('lora', 'sagemaker'): LoraFineTuneTrainerSageMaker,
     }
 
     # Score classes that support ML training
@@ -49,6 +53,12 @@ class TrainingDispatcher:
     # Score classes that support LLM fine-tuning
     LLM_FINETUNE_SCORE_CLASSES = [
         'LangGraphScore',
+    ]
+
+    # Score classes that support LoRA fine-tuning
+    LORA_SCORE_CLASSES = [
+        'LoRAClassifier',
+        'Llama318BInstructClassifier',
     ]
 
     def __init__(self,
@@ -109,7 +119,6 @@ class TrainingDispatcher:
                     return TrainingResult(
                         success=True,
                         training_type='none',
-                        target=None,
                         metadata={
                             'message': f"Score '{self.score_name}' does not support training",
                             'score_class': self.score_config['class'],
@@ -335,11 +344,26 @@ class TrainingDispatcher:
                 logger.info(f"Inferred training type 'llm-finetune' from LangGraphScore with completion_template")
                 return 'llm-finetune'
 
+        if score_class_name in self.LORA_SCORE_CLASSES:
+            logger.info(f"Inferred training type 'lora' from Score class '{score_class_name}'")
+            return 'lora'
+
+        # Fallback: detect LoRAClassifier subclass
+        try:
+            score_class = self.scorecard_class.score_registry.get(self.score_name)
+            if score_class:
+                from plexus.scores.LoRAClassifier import LoRAClassifier
+                if issubclass(score_class, LoRAClassifier):
+                    logger.info(f"Inferred training type 'lora' from LoRAClassifier subclass '{score_class.__name__}'")
+                    return 'lora'
+        except Exception:
+            pass
+
         # Cannot infer
         raise ValueError(
             f"Cannot infer training type for Score class '{score_class_name}'. "
             f"Please specify --training-type flag or add 'training.type' to Score YAML. "
-            f"Supported types: ml, llm-finetune"
+            f"Supported types: ml, llm-finetune, lora"
         )
 
     def _determine_platform(self, training_type: str) -> Optional[str]:
@@ -359,6 +383,13 @@ class TrainingDispatcher:
             ValueError: If platform cannot be determined for ML training
         """
         if training_type != 'ml':
+            if training_type == 'lora':
+                if self.platform_override:
+                    return self.platform_override
+                platform = self.score_config.get('training', {}).get('platform')
+                if platform in ['local', 'sagemaker']:
+                    return platform
+                return 'sagemaker'
             return None  # Platform not applicable for non-ML training
 
         # Priority 1: CLI flag override
@@ -401,9 +432,9 @@ class TrainingDispatcher:
         llm_flags = ['maximum_number', 'train_ratio', 'threads', 'clean_existing']
         llm_flags_provided = [flag for flag in llm_flags if flag in self.extra_params]
 
-        if training_type == 'ml' and llm_flags_provided:
+        if training_type in ['ml', 'lora'] and llm_flags_provided:
             raise ValueError(
-                f"LLM fine-tuning flags {llm_flags_provided} cannot be used with ML training. "
+                f"LLM fine-tuning flags {llm_flags_provided} cannot be used with ML/LoRA training. "
                 f"These flags only apply to --training-type llm-finetune"
             )
 

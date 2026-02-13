@@ -30,6 +30,8 @@ dependencies = [
     "pybind11",
     "tiktoken==0.7.0",
     "transformers",
+    "peft",
+    "accelerate",
     "seaborn",
     "pydot==2.0.0",
     "pydotplus==2.0.2",
