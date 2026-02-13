@@ -50,12 +50,48 @@ def train_lora_adapter(*,
         tokenizer.pad_token = tokenizer.eos_token
 
     torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model_hf_id,
-        torch_dtype=torch_dtype,
-        trust_remote_code=True,
-        token=hf_token
-    )
+    quantization = training_config.get("quantization")
+    if quantization == "4bit":
+        from transformers import BitsAndBytesConfig
+        compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=compute_dtype,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model_hf_id,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            token=hf_token
+        )
+    elif quantization == "8bit":
+        from transformers import BitsAndBytesConfig
+        bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model_hf_id,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            token=hf_token
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model_hf_id,
+            torch_dtype=torch_dtype,
+            trust_remote_code=True,
+            token=hf_token
+        )
+
+    # Optional memory-saving settings
+    if training_config.get('gradient_checkpointing'):
+        try:
+            model.gradient_checkpointing_enable()
+            model.config.use_cache = False
+        except Exception:
+            pass
 
     lora_cfg = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
@@ -135,7 +171,7 @@ def train_lora_adapter(*,
     grad_accum = training_config.get('gradient_accumulation_steps', 4)
 
     use_fp16 = torch.cuda.is_available()
-    training_args = TrainingArguments(
+    training_args_kwargs = dict(
         output_dir=output_dir,
         num_train_epochs=epochs,
         per_device_train_batch_size=batch_size,
@@ -145,12 +181,20 @@ def train_lora_adapter(*,
         logging_steps=training_config.get('logging_steps', 10),
         save_steps=training_config.get('save_steps', 200),
         save_total_limit=training_config.get('save_total_limit', 2),
-        evaluation_strategy="steps" if "validation" in tokenized else "no",
-        eval_steps=training_config.get('eval_steps', 200),
         fp16=use_fp16,
         bf16=False,
         report_to=[],
     )
+
+    has_validation = "validation" in tokenized
+    if "evaluation_strategy" in TrainingArguments.__init__.__code__.co_varnames:
+        training_args_kwargs["evaluation_strategy"] = "steps" if has_validation else "no"
+        training_args_kwargs["eval_steps"] = training_config.get('eval_steps', 200)
+    elif "eval_strategy" in TrainingArguments.__init__.__code__.co_varnames:
+        training_args_kwargs["eval_strategy"] = "steps" if has_validation else "no"
+        training_args_kwargs["eval_steps"] = training_config.get('eval_steps', 200)
+
+    training_args = TrainingArguments(**training_args_kwargs)
 
     trainer = HFTrainer(
         model=model,
