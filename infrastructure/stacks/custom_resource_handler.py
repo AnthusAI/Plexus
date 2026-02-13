@@ -28,7 +28,8 @@ def handler(event, context):
             cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physical_resource_id)
 
         elif request_type == 'Update':
-            # For now, updates require replacement
+            update_inference_component(properties)
+            wait_for_component(inference_component_name)
             cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physical_resource_id)
 
         elif request_type == 'Delete':
@@ -56,6 +57,36 @@ def create_inference_component(properties):
 
     print(f"Creating inference component: {json.dumps(params)}")
     sagemaker.create_inference_component(**params)
+
+
+def update_inference_component(properties):
+    """Update inference component artifact URL using boto3."""
+    params = {
+        'InferenceComponentName': properties['InferenceComponentName'],
+        'Specification': {
+            'BaseInferenceComponentName': properties['BaseInferenceComponentName'],
+            'Container': {
+                'ArtifactUrl': properties['ArtifactUrl']
+            }
+        }
+    }
+
+    print(f"Updating inference component: {json.dumps(params)}")
+    sagemaker.update_inference_component(**params)
+    # Verify the artifact URL updated
+    desired_url = properties['ArtifactUrl']
+    try:
+        response = sagemaker.describe_inference_component(
+            InferenceComponentName=properties['InferenceComponentName']
+        )
+        actual_url = response.get('Specification', {}).get('Container', {}).get('ArtifactUrl')
+        if actual_url != desired_url:
+            raise Exception(
+                f"ArtifactUrl did not update. Expected: {desired_url}, Actual: {actual_url}"
+            )
+    except Exception as e:
+        print(f"Update verification failed: {str(e)}")
+        raise
 
 
 def wait_for_component(component_name, timeout=600):

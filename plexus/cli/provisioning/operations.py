@@ -27,6 +27,7 @@ def provision_endpoint_operation(
     scorecard_name: str,
     score_name: str,
     use_yaml: bool = False,
+    score_version_id: Optional[str] = None,
     model_s3_uri: Optional[str] = None,
     # CLI overrides (None means use YAML config)
     deployment_type: Optional[str] = None,
@@ -49,6 +50,7 @@ def provision_endpoint_operation(
         scorecard_name: Name of the scorecard
         score_name: Name of the score
         use_yaml: Load from local YAML files
+        score_version_id: Specific score version ID to provision (API mode only)
         model_s3_uri: S3 URI to model (if None, finds local model)
         deployment_type: 'serverless' or 'realtime'
         memory_mb: Memory allocation for serverless
@@ -150,7 +152,9 @@ def provision_endpoint_operation(
             all_scores = discover_scores_by_class(
                 class_name,
                 use_yaml,
-                base_model_hf_id=base_model_hf_id
+                base_model_hf_id=base_model_hf_id,
+                target_score_id=score_config.get('id'),
+                version_override=score_version_id
             )
 
             if len(all_scores) == 0:
@@ -167,7 +171,7 @@ def provision_endpoint_operation(
                 logging.info(f"   - {score['scorecard_name']}/{score['score_name']} → {score['adapter_s3_uri']}")
 
             # Generate base model key for naming
-            from infrastructure.stacks.shared.naming import get_base_model_key
+            from plexus.training.utils import get_base_model_key
             base_model_key = get_base_model_key(base_model_hf_id)
 
             # Get environment
@@ -525,7 +529,9 @@ def _load_scorecard_and_score(
 def discover_scores_by_class(
     target_class_name: str,
     use_yaml: bool = False,
-    base_model_hf_id: Optional[str] = None
+    base_model_hf_id: Optional[str] = None,
+    target_score_id: Optional[str] = None,
+    version_override: Optional[str] = None
 ) -> list:
     """
     Discover all active scores that use a specific classifier class.
@@ -536,6 +542,8 @@ def discover_scores_by_class(
     Args:
         target_class_name: The classifier class name to search for (e.g., 'Llama318BInstructClassifier')
         use_yaml: Whether to use local YAML files (True) or API (False)
+        target_score_id: Score ID to apply version_override to (API mode only)
+        version_override: Specific score version ID to use for target score (API mode only)
 
     Returns:
         List of dicts containing:
@@ -621,12 +629,10 @@ def discover_scores_by_class(
     else:
         # For API mode, query all scorecards and scores
         from plexus.dashboard.api.client import PlexusDashboardClient
-        from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
         from ruamel.yaml import YAML
-        from gql import gql
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         client = PlexusDashboardClient()
-        yaml = YAML()
 
         # Query all scorecards for the account
         query = """
@@ -648,43 +654,75 @@ def discover_scores_by_class(
 
             logging.info(f"Discovering scores with class '{target_class_name}' across {len(scorecards)} scorecards...")
 
-            # For each scorecard, get its scores
-            for scorecard in scorecards:
+            scorecard_query = """
+            query GetScorecardStructure($id: ID!) {
+              getScorecard(id: $id) {
+                id
+                name
+                key
+                sections {
+                  items {
+                    id
+                    name
+                    scores {
+                      items {
+                        id
+                        name
+                        key
+                        externalId
+                        championVersionId
+                        isDisabled
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """
+
+            def scan_scorecard(scorecard: Dict[str, Any]) -> list:
+                local_yaml = YAML()
                 scorecard_id = scorecard['id']
                 scorecard_name = scorecard['name']
                 scorecard_key = scorecard['key']
 
-                # Fetch scorecard structure (includes all scores)
-                scorecard_structure = fetch_scorecard_structure(client, scorecard_id)
-                if not scorecard_structure:
-                    continue
+                try:
+                    result = client.execute(scorecard_query, {'id': scorecard_id})
+                    scorecard_structure = result.get('getScorecard', {})
+                except Exception as e:
+                    logging.warning(f"Error fetching scorecard {scorecard_name}: {str(e)}")
+                    return []
 
-                # Iterate through sections and scores
+                if not scorecard_structure:
+                    return []
+
+                matches = []
                 sections = scorecard_structure.get('sections', {}).get('items', [])
                 for section in sections:
                     scores = section.get('scores', {}).get('items', [])
-
                     for score in scores:
                         score_id = score['id']
                         score_name = score['name']
                         champion_version_id = score.get('championVersionId')
                         is_disabled = score.get('isDisabled', False)
 
-                        # Skip disabled scores
                         if is_disabled:
-                            logging.debug(f"Skipping disabled score: {scorecard_name}/{score_name}")
                             continue
 
-                        # Skip scores without champion version
-                        if not champion_version_id:
-                            logging.debug(f"Skipping score without champion version: {scorecard_name}/{score_name}")
+                        if not champion_version_id and not (target_score_id and version_override and score_id == target_score_id):
                             continue
 
-                        # Fetch the champion version configuration
                         try:
+                            version_id_to_use = champion_version_id
+                            if target_score_id and version_override and score_id == target_score_id:
+                                version_id_to_use = version_override
+                                logging.info(
+                                    f"Using specified score version for provisioning: {scorecard_name}/{score_name} -> {version_id_to_use}"
+                                )
+
                             version_query = f"""
                             query GetScoreVersion {{
-                                getScoreVersion(id: "{champion_version_id}") {{
+                                getScoreVersion(id: "{version_id_to_use}") {{
                                     id
                                     configuration
                                 }}
@@ -695,49 +733,69 @@ def discover_scores_by_class(
                             version_data = version_result.get('getScoreVersion', {})
 
                             if not version_data or not version_data.get('configuration'):
-                                logging.debug(f"No configuration for score: {scorecard_name}/{score_name}")
                                 continue
 
-                            # Parse YAML configuration
                             config_yaml = version_data['configuration']
-                            config = yaml.load(config_yaml)
+                            config = local_yaml.load(config_yaml)
 
-                            # Check if this score uses the target class
-                            if config.get('class') == target_class_name:
-                                # Attach version for convention-based adapter pathing
-                                if champion_version_id and not config.get('version'):
-                                    config['version'] = champion_version_id
+                            if config.get('class') != target_class_name:
+                                continue
 
-                                # Get score key for naming
-                                score_key = get_score_key(config)
+                            if version_id_to_use:
+                                # For API mode, always use the resolved version ID for adapter paths
+                                config['version'] = version_id_to_use
 
-                                # Inject scorecard_name into config for use during prediction
-                                # This ensures naming consistency between provisioning and prediction
-                                config['scorecard_name'] = scorecard_name
+                            score_key = get_score_key(config)
+                            config['scorecard_name'] = scorecard_name
 
-                                # Derive adapter S3 URI by convention
-                                adapter_s3_uri = get_adapter_s3_uri(
-                                    scorecard_name=scorecard_name,
-                                    score_config=config,
-                                    base_model_hf_id=base_model_hf_id
-                                )
+                            adapter_s3_uri = get_adapter_s3_uri(
+                                scorecard_name=scorecard_name,
+                                score_config=config,
+                                base_model_hf_id=base_model_hf_id
+                            )
 
-                                matching_scores.append({
-                                    'scorecard_id': scorecard_id,
-                                    'scorecard_name': scorecard_name,
-                                    'scorecard_key': scorecard_key,
-                                    'score_id': score_id,
-                                    'score_name': score_name,
-                                    'score_key': score_key,
-                                    'score_config': config,
-                                    'adapter_s3_uri': adapter_s3_uri
-                                })
-
-                                logging.info(f"Found matching score: {scorecard_name}/{score_name}")
+                            matches.append({
+                                'scorecard_id': scorecard_id,
+                                'scorecard_name': scorecard_name,
+                                'scorecard_key': scorecard_key,
+                                'score_id': score_id,
+                                'score_name': score_name,
+                                'score_key': score_key,
+                                'score_config': config,
+                                'adapter_s3_uri': adapter_s3_uri
+                            })
 
                         except Exception as e:
                             logging.warning(f"Error fetching config for {scorecard_name}/{score_name}: {str(e)}")
                             continue
+
+                for match in matches:
+                    logging.info(f"Found matching score: {match['scorecard_name']}/{match['score_name']}")
+
+                return matches
+
+            max_workers = min(50, max(1, len(scorecards)))
+            completed = 0
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_scorecard = {
+                    executor.submit(scan_scorecard, scorecard): scorecard
+                    for scorecard in scorecards
+                }
+
+                for future in as_completed(future_to_scorecard):
+                    completed += 1
+                    try:
+                        matches = future.result()
+                        matching_scores.extend(matches)
+                    except Exception as e:
+                        scorecard = future_to_scorecard[future]
+                        logging.warning(f"Error scanning scorecard {scorecard.get('name')}: {str(e)}")
+
+                    if completed % 5 == 0 or completed == len(scorecards):
+                        logging.info(
+                            f"Scanned {completed}/{len(scorecards)} scorecards "
+                            f"(matches so far: {len(matching_scores)})"
+                        )
 
         except Exception as e:
             logging.error(f"Error querying scorecards: {str(e)}")
@@ -1278,63 +1336,89 @@ def _provision_shared_stack_via_cdk(
     logging.info(f"Base model: {base_config.get('base_model_hf_id')}")
     logging.info(f"Number of adapters: {len(adapter_configs)}")
 
-    # Build Python code to pass dicts/lists to CDK
-    # Use repr() for safe serialization of dicts and lists
-    base_config_repr = repr(base_config)
-    adapter_configs_repr = repr(adapter_configs)
+    # Serialize configs to JSON files to avoid shell escaping issues
+    import json
+    import tempfile
 
-    # Build stack parameters
-    stack_params = [
-        f'base_config={base_config_repr}',
-        f'adapter_configs={adapter_configs_repr}',
-        f'environment=\\"{environment}\\"'
-    ]
-
-    # Build CDK deploy command
-    # The Python code constructs the CDK app inline and passes data structures directly
-    cmd = [
-        'cdk', 'deploy',
-        '--app', f'python3 -c "import sys; sys.path.insert(0, \\"{cdk_dir}\\"); from stacks.sagemaker_shared_inference_stack import SageMakerSharedInferenceStack; import aws_cdk as cdk; app = cdk.App(); SageMakerSharedInferenceStack(app, \\"{stack_name}\\", {", ".join(stack_params)}, env=cdk.Environment(region=\\"{aws_region}\\")); app.synth()"',
-        '--require-approval', 'never'
-    ]
-
-    logging.info(f"Running CDK deploy for shared stack: {stack_name}")
-    logging.debug(f"CDK command: {' '.join(cmd)}")
-
+    base_config_path = None
+    adapter_configs_path = None
     try:
-        # Run CDK deploy with real-time output streaming
-        result = subprocess.run(
-            cmd,
-            cwd=cdk_dir,
-            check=True
-        )
+        with tempfile.NamedTemporaryFile(mode='w', suffix='-base-config.json', delete=False) as f:
+            json.dump(base_config, f)
+            base_config_path = f.name
 
-        # Generate endpoint name using base model naming convention
-        from infrastructure.stacks.shared.naming import get_base_endpoint_name
-        endpoint_name = get_base_endpoint_name(base_model_key, environment)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='-adapter-configs.json', delete=False) as f:
+            json.dump(adapter_configs, f)
+            adapter_configs_path = f.name
 
-        logging.info(f"✅ Shared stack deployed successfully: {stack_name}")
-        logging.info(f"   Endpoint: {endpoint_name}")
-        logging.info(f"   Base model: {base_config.get('base_model_hf_id')}")
-        logging.info(f"   Adapters: {len(adapter_configs)}")
+        # Build stack parameters using JSON files
+        stack_params = [
+            f'base_config=json.load(open(\\"{base_config_path}\\"))',
+            f'adapter_configs=json.load(open(\\"{adapter_configs_path}\\"))',
+            f'environment=\\"{environment}\\"'
+        ]
 
-        return {
-            'success': True,
-            'endpoint_name': endpoint_name,
-            'stack_name': stack_name,
-            'base_model_key': base_model_key,
-            'adapter_count': len(adapter_configs),
-            'status': 'InService',
-            'message': f'Shared endpoint provisioned with {len(adapter_configs)} adapter(s)'
-        }
+        # Build CDK deploy command
+        # The Python code constructs the CDK app inline and loads JSON configs
+        cmd = [
+            'cdk', 'deploy',
+            '--app', (
+                'python3 -c "import sys, json; '
+                f'sys.path.insert(0, \\"{cdk_dir}\\"); '
+                'from stacks.sagemaker_shared_inference_stack import SageMakerSharedInferenceStack; '
+                'import aws_cdk as cdk; '
+                'app = cdk.App(); '
+                f'SageMakerSharedInferenceStack(app, \\"{stack_name}\\", {", ".join(stack_params)}, '
+                f'env=cdk.Environment(region=\\"{aws_region}\\")); '
+                'app.synth()"'
+            ),
+            '--require-approval', 'never'
+        ]
 
-    except subprocess.CalledProcessError as e:
-        logging.error(f"CDK deploy failed with exit code {e.returncode}")
-        return {
-            'success': False,
-            'error': f"CDK deploy failed with exit code {e.returncode}",
-            'stack_name': stack_name
-        }
+        logging.info(f"Running CDK deploy for shared stack: {stack_name}")
+        logging.debug(f"CDK command: {' '.join(cmd)}")
+
+        try:
+            # Run CDK deploy with real-time output streaming
+            subprocess.run(
+                cmd,
+                cwd=cdk_dir,
+                check=True
+            )
+
+            # Generate endpoint name using base model naming convention
+            from plexus.training.utils import get_base_endpoint_name
+            endpoint_name = get_base_endpoint_name(base_model_key, environment)
+
+            logging.info(f"✅ Shared stack deployed successfully: {stack_name}")
+            logging.info(f"   Endpoint: {endpoint_name}")
+            logging.info(f"   Base model: {base_config.get('base_model_hf_id')}")
+            logging.info(f"   Adapters: {len(adapter_configs)}")
+
+            return {
+                'success': True,
+                'endpoint_name': endpoint_name,
+                'stack_name': stack_name,
+                'base_model_key': base_model_key,
+                'adapter_count': len(adapter_configs),
+                'status': 'InService',
+                'message': f'Shared endpoint provisioned with {len(adapter_configs)} adapter(s)'
+            }
+
+        except subprocess.CalledProcessError as e:
+            logging.error(f"CDK deploy failed with exit code {e.returncode}")
+            return {
+                'success': False,
+                'error': f"CDK deploy failed with exit code {e.returncode}",
+                'stack_name': stack_name
+            }
+    finally:
+        for path in (base_config_path, adapter_configs_path):
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception as e:
+                    logging.warning(f"Could not remove temp file {path}: {e}")
 
 
 def _deprovision_via_cdk(

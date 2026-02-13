@@ -369,6 +369,7 @@ class SageMakerSharedInferenceStack(Stack):
             scorecard_key = adapter_config['scorecard_key']
             score_key = adapter_config['score_key']
             adapter_s3_uri = adapter_config['adapter_s3_uri']
+            adapter_s3_hash = hashlib.sha256(adapter_s3_uri.encode()).hexdigest()[:12]
 
             # Generate adapter component name
             adapter_component_name = get_adapter_component_name(
@@ -389,7 +390,8 @@ class SageMakerSharedInferenceStack(Stack):
                     "InferenceComponentName": adapter_component_name,
                     "EndpointName": self.endpoint_name,
                     "BaseInferenceComponentName": base_component_name,
-                    "ArtifactUrl": adapter_s3_uri
+                    "ArtifactUrl": adapter_s3_uri,
+                    "ArtifactUrlHash": adapter_s3_hash
                 }
             )
             # Adapter depends on base for creation
@@ -510,6 +512,43 @@ class SageMakerSharedInferenceStack(Stack):
         )
         base_alarm.add_dependency(step_scaling)
 
-        # 5. Adapter alarms intentionally omitted.
-        # Base component scale-out alarm is sufficient to bring capacity from 0->1
-        # for all adapters that share the base component.
+        # 5. Adapter alarms (trigger base scale-out when adapter has no capacity)
+        # These do NOT create per-adapter scaling policies; they only trigger
+        # the base component step-scaling policy from 0->1.
+        sorted_adapters = sorted(
+            self.adapter_configs,
+            key=lambda c: (c.get('scorecard_key', ''), c.get('score_key', ''))
+        )
+
+        for adapter_config in sorted_adapters:
+            scorecard_key = adapter_config['scorecard_key']
+            score_key = adapter_config['score_key']
+
+            adapter_component_name = get_adapter_component_name(
+                scorecard_key,
+                score_key,
+                self.deployment_environment
+            )
+
+            alarm_id = f"AdapterScaleOutAlarm{hashlib.sha256(adapter_component_name.encode()).hexdigest()[:8]}"
+            adapter_alarm = cloudwatch.CfnAlarm(
+                self, alarm_id,
+                alarm_name=f"{adapter_component_name}-scale-out",
+                alarm_description="Triggers base scale out from 0 when adapter requests fail due to no capacity",
+                comparison_operator="GreaterThanOrEqualToThreshold",
+                evaluation_periods=1,
+                metric_name="NoCapacityInvocationFailures",
+                namespace="AWS/SageMaker",
+                period=60,
+                statistic="Sum",
+                threshold=1,
+                treat_missing_data="notBreaching",
+                dimensions=[
+                    cloudwatch.CfnAlarm.DimensionProperty(
+                        name="InferenceComponentName",
+                        value=adapter_component_name
+                    )
+                ],
+                alarm_actions=[step_scaling.attr_arn]
+            )
+            adapter_alarm.add_dependency(step_scaling)
