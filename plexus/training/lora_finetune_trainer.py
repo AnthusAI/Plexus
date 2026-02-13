@@ -128,6 +128,7 @@ class LoraFineTuneTrainer(Trainer):
                 'learning_rate': learning_rate,
                 'gradient_accumulation_steps': grad_accum,
                 'max_seq_length': max_seq_length,
+                'quantization': lora_cfg.get('quantization'),
                 'logging_steps': lora_cfg.get('logging_steps', 10),
                 'save_steps': lora_cfg.get('save_steps', 200),
                 'save_total_limit': lora_cfg.get('save_total_limit', 2),

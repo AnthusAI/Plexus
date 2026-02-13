@@ -274,6 +274,7 @@ def main():
     parser.add_argument('--learning_rate', type=float, default=2e-4)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=4)
     parser.add_argument('--max_seq_length', type=int, default=2048)
+    parser.add_argument('--quantization', type=str, default='')
 
     parser.add_argument('--lora_r', type=int, default=64)
     parser.add_argument('--lora_alpha', type=int, default=16)
@@ -306,6 +307,7 @@ def main():
         'learning_rate': args.learning_rate,
         'gradient_accumulation_steps': args.gradient_accumulation_steps,
         'max_seq_length': args.max_seq_length,
+        'quantization': args.quantization or None,
     }
 
     metrics = train_lora_adapter(
@@ -330,11 +332,13 @@ if __name__ == '__main__':
 
     def _create_requirements_file(self, output_path: str):
         requirements = [
-            'torch>=2.1.0',
-            'transformers>=4.41.2,<5.0.0',
-            'datasets',
-            'peft>=0.10.0',
-            'accelerate>=0.26.0'
+            'torch==2.2.0',
+            'transformers==4.46.3',
+            'accelerate==0.34.2',
+            'peft==0.12.0',
+            'datasets==2.19.1',
+            'tokenizers==0.20.1',
+            'bitsandbytes==0.43.1'
         ]
         with open(output_path, 'w') as f:
             f.write('\n'.join(requirements))
@@ -367,12 +371,15 @@ if __name__ == '__main__':
             'lora_r': str(lora_cfg.get('r', 64)),
             'lora_alpha': str(lora_cfg.get('lora_alpha', 16)),
             'lora_dropout': str(lora_cfg.get('lora_dropout', 0.1)),
+            'quantization': str(lora_cfg.get('quantization', '') or ''),
             # Script mode entry point configuration
             'sagemaker_program': 'train.py',
             'sagemaker_submit_directory': training_code_s3_path,
         }
 
-        env = {}
+        env = {
+            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"
+        }
         hf_token = os.getenv('HF_TOKEN') or os.getenv('HUGGINGFACE_HUB_TOKEN')
         if hf_token:
             env['HF_TOKEN'] = hf_token
