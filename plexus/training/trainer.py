@@ -64,7 +64,7 @@ class Trainer(ABC):
         - save_artifacts(): Save outputs and return their locations
         - get_metrics(): Return training metrics
         - get_training_type(): Return training type identifier
-        - get_target(): Return target platform or None
+        - get_platform(): Return training platform or None
     """
 
     def __init__(self, scorecard_class, scorecard_name: str, score_config: dict,
@@ -295,3 +295,115 @@ class Trainer(ABC):
             Platform: 'local', 'sagemaker', etc., or None if not applicable
         """
         pass
+
+    def _push_score_version_if_yaml_mode(self) -> Optional[str]:
+        """
+        Push a new ScoreVersion to the API after successful training (YAML mode only).
+
+        This creates a version record in the API with:
+        - The current score configuration
+        - Parent version from the local YAML
+        - Training metrics in the version note
+
+        Returns:
+            New version ID if created, None if not in YAML mode or if creation failed
+        """
+        if not self.use_yaml:
+            logger.debug("Not in YAML mode, skipping version push")
+            return None
+
+        try:
+            from plexus.cli.score.version_management import (
+                create_score_version_with_parent,
+                get_version_from_local_yaml
+            )
+            from plexus.cli.shared.client_utils import create_client
+            import yaml as yaml_module
+
+            logger.info("Creating new score version in API...")
+
+            parent_version_id = get_version_from_local_yaml(self.score_config)
+
+            client = create_client()
+            if not client:
+                logger.warning("Could not create API client, skipping version push")
+                return None
+
+            score_id = self.score_config.get('id')
+            if not score_id:
+                logger.warning("No score ID in configuration, skipping version push")
+                return None
+
+            metrics = self.get_metrics()
+            note_parts = ["Model trained successfully"]
+            if metrics:
+                if 'accuracy' in metrics:
+                    note_parts.append(f"Accuracy: {metrics['accuracy']:.4f}")
+                if 'f1' in metrics:
+                    note_parts.append(f"F1: {metrics['f1']:.4f}")
+            note = " - ".join(note_parts)
+
+            branch = self.score_config.get('branch')
+            code_content = yaml_module.dump(self.score_config, default_flow_style=False, sort_keys=False)
+
+            result = create_score_version_with_parent(
+                score_id=score_id,
+                client=client,
+                code_content=code_content,
+                guidelines=None,
+                parent_version_id=parent_version_id,
+                note=note,
+                branch=branch
+            )
+
+            if result['success']:
+                if result.get('skipped'):
+                    logger.info(f"Score configuration unchanged, reusing version {result['version_id']}")
+                else:
+                    logger.info(f"✓ Created new score version: {result['version_id']}")
+                return result['version_id']
+
+            logger.error(f"Failed to create score version: {result.get('message')}")
+            return None
+
+        except ImportError as e:
+            logger.warning(f"Could not import required modules for version push: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error pushing score version: {e}", exc_info=True)
+            return None
+
+    def _update_local_yaml_version(self, new_version_id: str) -> None:
+        """
+        Update the local YAML file with the new version ID after training.
+
+        Args:
+            new_version_id: The new version ID created during training
+        """
+        try:
+            import yaml as yaml_module
+            from pathlib import Path
+
+            scorecard_name = self.scorecard_name if hasattr(self, 'scorecard_name') else 'Unknown Scorecard'
+            score_name = self.score_config.get('name', 'Unknown Score')
+            yaml_path = Path(f"scorecards/{scorecard_name}/{score_name}.yaml")
+
+            if not yaml_path.exists():
+                logger.warning(f"Local YAML file not found at {yaml_path}, skipping version update")
+                return
+
+            with open(yaml_path, 'r') as f:
+                yaml_content = yaml_module.safe_load(f)
+
+            old_version = yaml_content.get('version')
+            yaml_content['version'] = new_version_id
+
+            with open(yaml_path, 'w') as f:
+                yaml_module.dump(yaml_content, f, default_flow_style=False, sort_keys=False)
+
+            logger.info(f"✓ Updated local YAML version: {old_version} → {new_version_id}")
+            logger.info(f"  File: {yaml_path}")
+
+        except Exception as e:
+            logger.warning(f"Failed to update local YAML version: {e}")
+            logger.warning("Provisioning will need to specify --model-s3-uri explicitly")

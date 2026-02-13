@@ -93,6 +93,13 @@ def main():
     Plexus Command Line Interface.
     This function is the entry point when the `plexus` command is run.
     """
+    # Load .env if present to populate environment variables
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except Exception as e:
+        logging.warning(f"Failed to load .env: {e}")
+
     # Load YAML configuration first to set environment variables
     try:
         from plexus.config import load_config

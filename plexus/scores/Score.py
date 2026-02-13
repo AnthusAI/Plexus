@@ -129,6 +129,8 @@ class Score(ABC,
         number_of_classes: Optional[int] = None
         label_score_name: Optional[str] = None
         label_field: Optional[str] = None
+        graph: Optional[List[dict]] = None
+        training: Optional[dict] = None
 
         @field_validator('data')
         def convert_data_percentage(cls, value):
