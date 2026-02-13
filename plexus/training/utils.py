@@ -9,6 +9,7 @@ import re
 import os
 import logging
 import textwrap
+import hashlib
 from typing import Dict, Any, Optional, List
 from difflib import SequenceMatcher
 from langchain_core.prompts import PromptTemplate
@@ -121,6 +122,48 @@ def get_base_model_key(base_model_hf_id: str) -> str:
     key = key.replace('_', '-')
     key = ''.join(c for c in key if c.isalnum() or c == '-')
     return key
+
+
+def _abbreviate_environment(environment: str) -> str:
+    env_map = {
+        'development': 'dev',
+        'staging': 'staging',
+        'production': 'prod'
+    }
+    return env_map.get(environment, environment)
+
+
+def _generate_resource_hash(scorecard_key: str, score_key: str) -> str:
+    hash_input = f"{scorecard_key}-{score_key}"
+    return hashlib.sha256(hash_input.encode()).hexdigest()[:8]
+
+
+def _truncate_name(name: str, max_length: int = 10) -> str:
+    return name[:max_length]
+
+
+def get_base_endpoint_name(
+    base_model_key: str,
+    environment: str = 'development'
+) -> str:
+    env_abbrev = _abbreviate_environment(environment)
+    base_hash = hashlib.sha256(base_model_key.encode()).hexdigest()[:8]
+    base_model_trunc = _truncate_name(base_model_key, 20)
+    return f"plexus-{env_abbrev}-{base_hash}-{base_model_trunc}-realtime"
+
+
+def get_adapter_component_name(
+    scorecard_key: str,
+    score_key: str,
+    environment: str = 'development'
+) -> str:
+    scorecard_key = scorecard_key.replace('_', '-')
+    score_key = score_key.replace('_', '-')
+    env_abbrev = _abbreviate_environment(environment)
+    score_hash = _generate_resource_hash(scorecard_key, score_key)
+    scorecard_trunc = _truncate_name(scorecard_key, 10)
+    score_trunc = _truncate_name(score_key, 10)
+    return f"plexus-{env_abbrev}-{score_hash}-{scorecard_trunc}-{score_trunc}-adapter"
 
 
 def get_adapter_s3_uri(*,

@@ -131,6 +131,7 @@ class ProvisioningDispatcher:
                 scorecard_name=self.scorecard_name,
                 score_name=self.score_name,
                 use_yaml=self.yaml,
+                score_version_id=self.version,
                 model_s3_uri=self.model_s3_uri,
                 deployment_type=self.deployment_type,
                 memory_mb=self.memory_mb,
@@ -152,7 +153,12 @@ class ProvisioningDispatcher:
                     error=result.get('error', 'Unknown provisioning error')
                 )
 
-            endpoint_name = result['endpoint_name']
+            endpoint_name = result.get('endpoint_name')
+            if not endpoint_name:
+                return ProvisioningResult(
+                    success=True,
+                    message=result.get('message', 'Provisioning completed with no endpoint changes')
+                )
 
             # Step 5: Test the endpoint (only if score class supports test_endpoint)
             test_result = None

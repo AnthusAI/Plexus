@@ -241,12 +241,13 @@ class LoRAClassifier(Score):
             Dict with 'endpoint_name' and 'adapter_component_name'
         """
         import os
-        from infrastructure.stacks.shared.naming import (
+        from plexus.training.utils import (
             get_base_model_key,
             get_base_endpoint_name,
-            get_adapter_component_name
+            get_adapter_component_name,
+            get_scorecard_key,
+            get_score_key
         )
-        from plexus.training.utils import get_scorecard_key, get_score_key
 
         # Get deployment config from class
         config = self.__class__.get_deployment_config()
