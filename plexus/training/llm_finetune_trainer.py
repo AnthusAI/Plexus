@@ -365,13 +365,30 @@ class LLMFineTuneTrainer(Trainer):
             exec(f"def massage_labels(labels):\n{massage_labels_code}\n\nmassage_labels(labels)", exec_globals)
             labels = exec_globals['labels']
 
+        # Determine label score name for templates that use it
+        label_score_name = None
+        try:
+            if self.score_instance is not None:
+                label_score_name = self.score_instance.get_label_score_name()
+        except Exception:
+            label_score_name = None
+
         # Format completion template with labels
         completion = PromptTemplate.from_template(
             completion_template,
             template_format="jinja2"
-        ).format(labels=labels, **row)
+        ).format(labels=labels, label_score_name=label_score_name, **row)
 
-        return completion.strip()
+        completion = completion.strip()
+        if not completion:
+            available_keys = list(labels.keys())
+            raise ValueError(
+                "Completion template produced empty output. "
+                f"Check label field. label_score_name={label_score_name}. "
+                f"Available keys: {available_keys[:10]}{'...' if len(available_keys) > 10 else ''}"
+            )
+
+        return completion
 
     def save_artifacts(self) -> Dict[str, str]:
         """

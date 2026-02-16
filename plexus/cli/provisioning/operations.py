@@ -146,58 +146,67 @@ def provision_endpoint_operation(
             logging.info(f"Base model: {base_model_hf_id}")
             logging.info(f"Adapter S3 URI: {adapter_s3_uri}")
 
-            # Discover ALL active scores using this classifier class
-            class_name = score_class.__name__
-            logging.info(f"Discovering all active scores using {class_name}...")
-            all_scores = discover_scores_by_class(
-                class_name,
-                use_yaml,
-                base_model_hf_id=base_model_hf_id,
-                target_score_id=score_config.get('id'),
-                version_override=score_version_id
-            )
+        # Discover ALL active scores using this classifier class
+        class_name = score_class.__name__
+        logging.info(f"Discovering all active scores using {class_name}...")
+        update_token_override = None
+        if force:
+            import uuid
+            update_token_override = str(uuid.uuid4())
+            logging.info("Force update enabled: will trigger adapter recreation for target score")
+        elif score_version_id:
+            update_token_override = score_version_id
 
-            if len(all_scores) == 0:
-                logging.warning(f"No active scores found using {class_name}")
-                logging.info("Nothing to provision - all scores are disabled")
-                return {
-                    'success': True,
-                    'message': f'No active scores found using {class_name}',
-                    'adapter_count': 0
-                }
+        all_scores = discover_scores_by_class(
+            class_name,
+            use_yaml,
+            base_model_hf_id=base_model_hf_id,
+            target_score_id=score_config.get('id'),
+            version_override=score_version_id,
+            update_token_override=update_token_override
+        )
 
-            logging.info(f"✅ Discovered {len(all_scores)} active score(s) using {class_name}:")
-            for score in all_scores:
-                logging.info(f"   - {score['scorecard_name']}/{score['score_name']} → {score['adapter_s3_uri']}")
+        if len(all_scores) == 0:
+            logging.warning(f"No active scores found using {class_name}")
+            logging.info("Nothing to provision - all scores are disabled")
+            return {
+                'success': True,
+                'message': f'No active scores found using {class_name}',
+                'adapter_count': 0
+            }
 
-            # Generate base model key for naming
-            from plexus.training.utils import get_base_model_key
-            base_model_key = get_base_model_key(base_model_hf_id)
+        logging.info(f"✅ Discovered {len(all_scores)} active score(s) using {class_name}:")
+        for score in all_scores:
+            logging.info(f"   - {score['scorecard_name']}/{score['score_name']} → {score['adapter_s3_uri']}")
 
-            # Get environment
-            environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
+        # Generate base model key for naming
+        from plexus.training.utils import get_base_model_key
+        base_model_key = get_base_model_key(base_model_hf_id)
 
-            # Provision shared stack with base + all adapters
-            logging.info(f"Provisioning shared stack for base model: {base_model_key}")
-            result = _provision_shared_stack_via_cdk(
-                base_model_key=base_model_key,
-                base_config=deployment_config,
-                adapter_configs=all_scores,
-                environment=environment,
-                region=region
-            )
+        # Get environment
+        environment = os.getenv('PLEXUS_ENVIRONMENT', os.getenv('environment', 'development'))
 
-            # Find the matching score to get its actual scorecard_name from the API
-            # This is needed for endpoint testing (dispatcher needs the canonical name)
-            matching_score = next(
-                (s for s in all_scores if s['score_name'] == score_name),
-                None
-            )
-            if matching_score:
-                result['actual_scorecard_name'] = matching_score['scorecard_name']
-                result['actual_score_name'] = matching_score['score_name']
+        # Provision shared stack with base + all adapters
+        logging.info(f"Provisioning shared stack for base model: {base_model_key}")
+        result = _provision_shared_stack_via_cdk(
+            base_model_key=base_model_key,
+            base_config=deployment_config,
+            adapter_configs=all_scores,
+            environment=environment,
+            region=region
+        )
 
-            return result
+        # Find the matching score to get its actual scorecard_name from the API
+        # This is needed for endpoint testing (dispatcher needs the canonical name)
+        matching_score = next(
+            (s for s in all_scores if s['score_name'] == score_name),
+            None
+        )
+        if matching_score:
+            result['actual_scorecard_name'] = matching_score['scorecard_name']
+            result['actual_score_name'] = matching_score['score_name']
+
+        return result
 
         # Legacy path: Non-LoRA classifiers (per-score stack architecture)
         logging.info(f"Using legacy per-score stack architecture for {score_class.__name__}")
@@ -531,7 +540,8 @@ def discover_scores_by_class(
     use_yaml: bool = False,
     base_model_hf_id: Optional[str] = None,
     target_score_id: Optional[str] = None,
-    version_override: Optional[str] = None
+    version_override: Optional[str] = None,
+    update_token_override: Optional[str] = None
 ) -> list:
     """
     Discover all active scores that use a specific classifier class.
@@ -542,8 +552,9 @@ def discover_scores_by_class(
     Args:
         target_class_name: The classifier class name to search for (e.g., 'Llama318BInstructClassifier')
         use_yaml: Whether to use local YAML files (True) or API (False)
-        target_score_id: Score ID to apply version_override to (API mode only)
+        target_score_id: Score ID to apply overrides to (API mode only)
         version_override: Specific score version ID to use for target score (API mode only)
+        update_token_override: Update token to force adapter recreation for target score (API mode only)
 
     Returns:
         List of dicts containing:
@@ -745,6 +756,9 @@ def discover_scores_by_class(
                                 # For API mode, always use the resolved version ID for adapter paths
                                 config['version'] = version_id_to_use
 
+                            if target_score_id and update_token_override and score_id == target_score_id:
+                                config['adapter_update_token'] = update_token_override
+
                             score_key = get_score_key(config)
                             config['scorecard_name'] = scorecard_name
 
@@ -762,7 +776,8 @@ def discover_scores_by_class(
                                 'score_name': score_name,
                                 'score_key': score_key,
                                 'score_config': config,
-                                'adapter_s3_uri': adapter_s3_uri
+                                'adapter_s3_uri': adapter_s3_uri,
+                                'adapter_update_token': config.get('adapter_update_token')
                             })
 
                         except Exception as e:

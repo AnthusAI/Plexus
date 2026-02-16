@@ -370,6 +370,7 @@ class SageMakerSharedInferenceStack(Stack):
             score_key = adapter_config['score_key']
             adapter_s3_uri = adapter_config['adapter_s3_uri']
             adapter_s3_hash = hashlib.sha256(adapter_s3_uri.encode()).hexdigest()[:12]
+            adapter_update_token = adapter_config.get('adapter_update_token')
 
             # Generate adapter component name
             adapter_component_name = get_adapter_component_name(
@@ -391,7 +392,8 @@ class SageMakerSharedInferenceStack(Stack):
                     "EndpointName": self.endpoint_name,
                     "BaseInferenceComponentName": base_component_name,
                     "ArtifactUrl": adapter_s3_uri,
-                    "ArtifactUrlHash": adapter_s3_hash
+                    "ArtifactUrlHash": adapter_s3_hash,
+                    **({"UpdateToken": adapter_update_token} if adapter_update_token else {})
                 }
             )
             # Adapter depends on base for creation
@@ -426,15 +428,19 @@ class SageMakerSharedInferenceStack(Stack):
         All adapter components automatically scale with the base (no separate auto-scaling needed).
         """
         base_component_name = self.base_component.inference_component_name
+        sorted_adapters = sorted(
+            self.adapter_configs,
+            key=lambda c: (c.get('scorecard_key', ''), c.get('score_key', ''))
+        )
 
-        # 1. Register scalable target
+        # 1. Register scalable target for inference component copies (scale-to-zero)
         scalable_target = appscaling.CfnScalableTarget(
             self, "BaseScalableTarget",
             service_namespace="sagemaker",
             resource_id=f"inference-component/{base_component_name}",
             scalable_dimension="sagemaker:inference-component:DesiredCopyCount",
-            min_capacity=0,  # Can scale to 0
-            max_capacity=1,  # Can scale to 1
+            min_capacity=0,
+            max_capacity=1,
             role_arn=(
                 f"arn:aws:iam::{Aws.ACCOUNT_ID}:role/aws-service-role/"
                 f"sagemaker.application-autoscaling.amazonaws.com/"
@@ -443,7 +449,7 @@ class SageMakerSharedInferenceStack(Stack):
         )
         scalable_target.add_dependency(self.base_component)
 
-        # 2. Target tracking policy (scales IN to 0 after idle period)
+        # 2. Target tracking policy (AWS-recommended scale-to-zero)
         target_tracking = appscaling.CfnScalingPolicy(
             self, "TargetTrackingPolicy",
             policy_name=f"{base_component_name}-target-tracking",
@@ -489,7 +495,7 @@ class SageMakerSharedInferenceStack(Stack):
         )
         step_scaling.add_dependency(scalable_target)
 
-        # 4. CloudWatch alarms for base component
+        # 4. CloudWatch alarm for base component (scale out on capacity failures)
         base_alarm = cloudwatch.CfnAlarm(
             self, "BaseScaleOutAlarm",
             alarm_name=f"{base_component_name}-scale-out",
@@ -512,14 +518,9 @@ class SageMakerSharedInferenceStack(Stack):
         )
         base_alarm.add_dependency(step_scaling)
 
-        # 5. Adapter alarms (trigger base scale-out when adapter has no capacity)
+        # 5. Adapter alarms (trigger component scale-out when adapter has no capacity)
         # These do NOT create per-adapter scaling policies; they only trigger
-        # the base component step-scaling policy from 0->1.
-        sorted_adapters = sorted(
-            self.adapter_configs,
-            key=lambda c: (c.get('scorecard_key', ''), c.get('score_key', ''))
-        )
-
+        # the component step-scaling policy from 0->1.
         for adapter_config in sorted_adapters:
             scorecard_key = adapter_config['scorecard_key']
             score_key = adapter_config['score_key']

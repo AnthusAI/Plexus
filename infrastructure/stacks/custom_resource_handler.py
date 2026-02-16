@@ -72,7 +72,20 @@ def update_inference_component(properties):
     }
 
     print(f"Updating inference component: {json.dumps(params)}")
-    sagemaker.update_inference_component(**params)
+    try:
+        sagemaker.update_inference_component(**params)
+    except sagemaker.exceptions.ClientError as e:
+        message = str(e)
+        if "Could not find inference component" in message:
+            print("Component not found; creating inference component...")
+            create_inference_component(properties)
+        elif "Update operation is not supported" in message:
+            # Fall back to delete + recreate when update is not supported
+            print("Update not supported; deleting and recreating inference component...")
+            delete_inference_component(properties['InferenceComponentName'])
+            create_inference_component(properties)
+        else:
+            raise
     # Verify the artifact URL updated
     desired_url = properties['ArtifactUrl']
     try:
@@ -107,8 +120,13 @@ def wait_for_component(component_name, timeout=600):
                 raise Exception(f"Component failed: {response.get('FailureReason', 'Unknown')}")
 
         except sagemaker.exceptions.ClientError as e:
-            if e.response['Error']['Code'] != 'ResourceNotFound':
-                raise
+            code = e.response['Error'].get('Code')
+            message = str(e)
+            if code in ('ResourceNotFound', 'ValidationException') and 'Could not find inference component' in message:
+                # Component not created yet
+                time.sleep(10)
+                continue
+            raise
 
         time.sleep(10)
 
@@ -131,13 +149,17 @@ def delete_inference_component(component_name):
                 print(f"Component {component_name} deletion status: {status}")
                 time.sleep(5)
             except sagemaker.exceptions.ClientError as e:
-                if e.response['Error']['Code'] == 'ResourceNotFound':
+                code = e.response['Error'].get('Code')
+                message = str(e)
+                if code in ('ResourceNotFound', 'ValidationException') and 'Could not find inference component' in message:
                     print(f"Component {component_name} deleted successfully")
                     return
                 raise
 
     except sagemaker.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == 'ResourceNotFound':
+        code = e.response['Error'].get('Code')
+        message = str(e)
+        if code in ('ResourceNotFound', 'ValidationException') and 'Could not find inference component' in message:
             print(f"Component {component_name} already deleted")
             return
         raise
