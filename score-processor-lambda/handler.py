@@ -249,7 +249,8 @@ class LambdaJobProcessor:
                     raise Exception(f"No result returned for score {dynamo_score_id}")
 
                 value = str(result.value) if result.value is not None else None
-                explanation = result.metadata.get('explanation', '') if result.metadata else ''
+                explanation = (getattr(result, 'explanation', None) or
+                              (result.metadata.get('explanation', '') if result.metadata else ''))
 
                 # Check for ERROR result
                 if value and value.upper() == "ERROR":
