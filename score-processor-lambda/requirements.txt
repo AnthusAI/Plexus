@@ -12,7 +12,7 @@ langchain-aws==0.2.35
 langgraph-checkpoint-postgres==2.0.9
 
 # Tactus
-tactus==0.38.0
+tactus==0.43.1
 
 # AWS & Azure
 boto3
