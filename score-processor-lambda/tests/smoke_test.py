@@ -150,6 +150,52 @@ def test_writable_dirs(self):
     print(f"    - /tmp is writable")
 
 
+@suite.test("Verify tactus version")
+def test_tactus_version(self):
+    """Verify tactus package matches pinned version in requirements.txt"""
+    import tactus
+    expected_version = "0.43.1"
+    actual_version = tactus.__version__
+    assert actual_version == expected_version, \
+        f"Expected tactus {expected_version}, got {actual_version}"
+    print(f"    - tactus version matches: {actual_version}")
+
+
+@suite.test("Instantiate TactusRuntime and MemoryStorage")
+async def test_tactus_runtime_instantiation(self):
+    """Verify TactusRuntime and MemoryStorage can be instantiated"""
+    from tactus.core.runtime import TactusRuntime
+    from tactus.adapters.memory import MemoryStorage
+
+    storage = MemoryStorage()
+    assert storage is not None, "MemoryStorage failed to instantiate"
+
+    runtime = TactusRuntime(
+        procedure_id="smoke-test",
+        storage_backend=storage,
+        openai_api_key="test-key",
+    )
+    assert runtime is not None, "TactusRuntime failed to instantiate"
+    print(f"    - MemoryStorage instantiated successfully")
+    print(f"    - TactusRuntime instantiated successfully")
+
+
+@suite.test("Import TactusScore and scoring utilities")
+def test_tactus_score_import(self):
+    """Verify TactusScore and the full scoring import chain are available"""
+    from plexus.scores.TactusScore import TactusScore
+    from plexus.utils.scoring import create_scorecard_instance_for_single_score
+    from plexus.Scorecard import Scorecard
+
+    assert TactusScore is not None, "TactusScore not importable"
+    assert create_scorecard_instance_for_single_score is not None, \
+        "create_scorecard_instance_for_single_score not importable"
+    assert Scorecard is not None, "Scorecard not importable"
+    print(f"    - TactusScore imported successfully")
+    print(f"    - create_scorecard_instance_for_single_score imported successfully")
+    print(f"    - Scorecard imported successfully")
+
+
 if __name__ == "__main__":
     success = asyncio.run(suite.run())
     sys.exit(0 if success else 1)
