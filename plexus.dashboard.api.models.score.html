@@ -1,0 +1,530 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.dashboard.api.models.score module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.dashboard.api.models.score_result module" href="plexus.dashboard.api.models.score_result.html" />
+    <link rel="prev" title="plexus.dashboard.api.models.report_configuration module" href="plexus.dashboard.api.models.report_configuration.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.dashboard.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.dashboard.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.dashboard.api.html">plexus.dashboard.api package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.dashboard.api.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.commands.html">plexus.dashboard.commands package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.dashboard.html">plexus.dashboard package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.dashboard.api.html">plexus.dashboard.api package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.dashboard.api.models.html">plexus.dashboard.api.models package</a></li>
+      <li class="breadcrumb-item active">plexus.dashboard.api.models.score module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.dashboard.api.models.score.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.dashboard.api.models.score">
+<span id="plexus-dashboard-api-models-score-module"></span><h1>plexus.dashboard.api.models.score module<a class="headerlink" href="#module-plexus.dashboard.api.models.score" title="Link to this heading"></a></h1>
+<p>Score Model - Python representation of the GraphQL Score type.</p>
+<p>Represents a scoring method within a scorecard section, tracking:
+- Configuration and metadata
+- AI model details
+- Performance metrics
+- Version history</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.dashboard.api.models.score.</span></span><span class="sig-name descname"><span class="pre">Score</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">externalId</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sectionId</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accuracy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aiProvider</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aiModel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ForwardRef</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'_BaseAPIClient'</span></span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.dashboard.api.models.base.html#plexus.dashboard.api.models.base.BaseModel" title="plexus.dashboard.api.models.base.BaseModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">externalId</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sectionId</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accuracy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aiProvider</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aiModel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_BaseAPIClient</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.accuracy">
+<span class="sig-name descname"><span class="pre">accuracy</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.accuracy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.aiModel">
+<span class="sig-name descname"><span class="pre">aiModel</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.aiModel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.aiProvider">
+<span class="sig-name descname"><span class="pre">aiProvider</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.aiProvider" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.create_version_from_code">
+<span class="sig-name descname"><span class="pre">create_version_from_code</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">code_content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">note</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">guidelines</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.create_version_from_code" title="Link to this definition"></a></dt>
+<dd><p>Create a new score version from code and guidelines content.</p>
+<p>This is the foundational method that only creates a new version if the content 
+has changed from the current champion version.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>code_content: The YAML code content as a string
+note: Optional version note. Defaults to “Updated via Score.create_version_from_code()”
+guidelines: Optional guidelines content as a string</p>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict containing:</dt><dd><ul class="simple">
+<li><p>success: bool</p></li>
+<li><p>version_id: str (new version ID if created, existing if no changes)</p></li>
+<li><p>champion_updated: bool (whether champion version was updated)</p></li>
+<li><p>message: str (success/error message)</p></li>
+<li><p>skipped: bool (true if no changes detected)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.create_version_from_yaml">
+<span class="sig-name descname"><span class="pre">create_version_from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">note</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.create_version_from_yaml" title="Link to this definition"></a></dt>
+<dd><p>Create a new score version from YAML content string.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>yaml_content: The YAML configuration content as a string
+note: Optional version note.</p>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict containing:</dt><dd><ul class="simple">
+<li><p>success: bool</p></li>
+<li><p>version_id: str (new version ID if created, existing if no changes)</p></li>
+<li><p>champion_updated: bool (whether champion version was updated)</p></li>
+<li><p>skipped: bool (true if no changes detected)</p></li>
+<li><p>error: str (error message if failed)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.externalId">
+<span class="sig-name descname"><span class="pre">externalId</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.externalId" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.fields">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">fields</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.fields" title="Link to this definition"></a></dt>
+<dd><p>Return the GraphQL fields to query for this model</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.from_dict">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_BaseAPIClient</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.dashboard.api.models.score.Score" title="plexus.dashboard.api.models.score.Score"><span class="pre">Score</span></a></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.from_dict" title="Link to this definition"></a></dt>
+<dd><p>Create an instance from a dictionary of data</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_by_external_id">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_by_external_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">external_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_BaseAPIClient</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.dashboard.api.models.score.Score" title="plexus.dashboard.api.models.score.Score"><span class="pre">Score</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_by_external_id" title="Link to this definition"></a></dt>
+<dd><p>Get a score by its external ID</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_by_id">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_by_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_BaseAPIClient</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.dashboard.api.models.score.Score" title="plexus.dashboard.api.models.score.Score"><span class="pre">Score</span></a></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_by_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_by_key">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_by_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_BaseAPIClient</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.dashboard.api.models.score.Score" title="plexus.dashboard.api.models.score.Score"><span class="pre">Score</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_by_key" title="Link to this definition"></a></dt>
+<dd><p>Get a score by its key</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_by_name">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_by_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_BaseAPIClient</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.dashboard.api.models.score.Score" title="plexus.dashboard.api.models.score.Score"><span class="pre">Score</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_by_name" title="Link to this definition"></a></dt>
+<dd><p>Get a score by its name</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_by_scorecard_and_external_id">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_by_scorecard_and_external_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">external_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_BaseAPIClient</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_by_scorecard_and_external_id" title="Link to this definition"></a></dt>
+<dd><p>Get a score by scorecard ID and external ID using the GSI.</p>
+<p>This uses the byScorecardIdAndExternalId GSI for efficient lookup.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_id: The scorecard ID to filter by
+external_id: The score external ID to look up
+client: The API client instance</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dict with ‘id’ and ‘name’ keys if found, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_champion_code_yaml">
+<span class="sig-name descname"><span class="pre">get_champion_code_yaml</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_champion_code_yaml" title="Link to this definition"></a></dt>
+<dd><p>Get the raw YAML code string from the champion version.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>Optional[str]: The raw YAML code string, or None if not found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_champion_configuration_yaml">
+<span class="sig-name descname"><span class="pre">get_champion_configuration_yaml</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_champion_configuration_yaml" title="Link to this definition"></a></dt>
+<dd><p>Get the raw YAML configuration string from the champion version.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>Optional[str]: The raw YAML configuration string, or None if not found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_code">
+<span class="sig-name descname"><span class="pre">get_code</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_code" title="Link to this definition"></a></dt>
+<dd><p>Get the score’s code from its champion version.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>Optional[Dict[str, Any]]: The parsed YAML code, or None if not found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_local_code_path">
+<span class="sig-name descname"><span class="pre">get_local_code_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_local_code_path" title="Link to this definition"></a></dt>
+<dd><p>Get the local YAML file path for this score’s code.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_name: Optional scorecard name. If not provided, will lookup via API.</p>
+</dd>
+<dt>Returns:</dt><dd><p>Path: Path to the local YAML code file</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_local_configuration_path">
+<span class="sig-name descname"><span class="pre">get_local_configuration_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_local_configuration_path" title="Link to this definition"></a></dt>
+<dd><p>Get the local YAML file path for this score’s configuration.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_name: Optional scorecard name. If not provided, will lookup via API.</p>
+</dd>
+<dt>Returns:</dt><dd><p>Path: Path to the local YAML configuration file</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_local_guidelines_path">
+<span class="sig-name descname"><span class="pre">get_local_guidelines_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_local_guidelines_path" title="Link to this definition"></a></dt>
+<dd><p>Get the local file path for this score’s guidelines.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_name: Optional scorecard name. If not provided, will lookup via API.</p>
+</dd>
+<dt>Returns:</dt><dd><p>Path: Path to the local guidelines file</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_valid_classes">
+<span class="sig-name descname"><span class="pre">get_valid_classes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_valid_classes" title="Link to this definition"></a></dt>
+<dd><p>Get the list of valid classes from the score’s code.</p>
+<p>Looks for a ‘classes’ key in the score’s YAML configuration, where each class
+has at least a ‘name’ field and may have additional metadata like ‘positive’.</p>
+<p>Example YAML format:
+<a href="#id1"><span class="problematic" id="id2">``</span></a><a href="#id3"><span class="problematic" id="id4">`</span></a>yaml
+classes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>name: Yes
+positive: true</p></li>
+<li><p>name: No</p></li>
+</ul>
+</div></blockquote>
+<p><a href="#id5"><span class="problematic" id="id6">``</span></a><a href="#id7"><span class="problematic" id="id8">`</span></a></p>
+<dl class="simple">
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>List[Dict[str, Any]]: List of valid class dictionaries, each containing at least a ‘name’ key</dt><dd><p>and any additional metadata from the configuration.
+Returns empty list if not found or on error.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.get_valid_classes_count">
+<span class="sig-name descname"><span class="pre">get_valid_classes_count</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.get_valid_classes_count" title="Link to this definition"></a></dt>
+<dd><p>Get the number of valid classes from the score’s configuration.</p>
+<p>This method looks at:
+1. The explicit valid_classes list in the configuration
+2. Any output values specified in conditions that might add additional classes</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>int: Number of valid classes, defaulting to 2 (binary classification) if not found.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.key">
+<span class="sig-name descname"><span class="pre">key</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.key" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.list_by_section_id">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">list_by_section_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">section_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_BaseAPIClient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">next_token</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.list_by_section_id" title="Link to this definition"></a></dt>
+<dd><p>Get all scores for a section with pagination support</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict containing:</dt><dd><ul class="simple">
+<li><p>items: List of Score objects</p></li>
+<li><p>nextToken: Token for next page if more results exist</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.order">
+<span class="sig-name descname"><span class="pre">order</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.order" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.pull_code_and_guidelines">
+<span class="sig-name descname"><span class="pre">pull_code_and_guidelines</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.pull_code_and_guidelines" title="Link to this definition"></a></dt>
+<dd><p>Pull the champion version code and guidelines to local files.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_name: Optional scorecard name. If not provided, will lookup via API.</p>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict containing:</dt><dd><ul class="simple">
+<li><p>success: bool</p></li>
+<li><p>code_file_path: str (path where code was saved)</p></li>
+<li><p>guidelines_file_path: str (path where guidelines were saved)</p></li>
+<li><p>version_id: str (the champion version ID that was pulled)</p></li>
+<li><p>message: str (success/error message)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.pull_configuration">
+<span class="sig-name descname"><span class="pre">pull_configuration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.pull_configuration" title="Link to this definition"></a></dt>
+<dd><p>Pull the champion version configuration to local file.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_name: Optional scorecard name. If not provided, will lookup via API.</p>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict containing:</dt><dd><ul class="simple">
+<li><p>success: bool</p></li>
+<li><p>file_path: str (path where configuration was saved)</p></li>
+<li><p>version_id: str (the champion version ID that was pulled)</p></li>
+<li><p>error: str (error message if failed)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.push_code_and_guidelines">
+<span class="sig-name descname"><span class="pre">push_code_and_guidelines</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">note</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.push_code_and_guidelines" title="Link to this definition"></a></dt>
+<dd><p>Push local code and guidelines files as a new score version.</p>
+<p>Automatically detects which files have changed by comparing with the current champion version.
+Only creates a new version if either code or guidelines have changed.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_name: Optional scorecard name. If not provided, will lookup via API.
+note: Optional version note. Defaults to “Updated via Score.push_code_and_guidelines()”</p>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict containing:</dt><dd><ul class="simple">
+<li><p>success: bool</p></li>
+<li><p>version_id: str (new version ID if created, existing if no changes)</p></li>
+<li><p>champion_updated: bool (whether champion version was updated)</p></li>
+<li><p>message: str (success/error message)</p></li>
+<li><p>skipped: bool (true if no changes detected)</p></li>
+<li><p>changes_detected: dict with ‘code’ and ‘guidelines’ booleans indicating what changed</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.push_configuration">
+<span class="sig-name descname"><span class="pre">push_configuration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">note</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.push_configuration" title="Link to this definition"></a></dt>
+<dd><p>Push local configuration file as a new score version.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_name: Optional scorecard name. If not provided, will lookup via API.
+note: Optional version note.</p>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict containing:</dt><dd><ul class="simple">
+<li><p>success: bool</p></li>
+<li><p>version_id: str (new version ID if created, existing if no changes)</p></li>
+<li><p>champion_updated: bool (whether champion version was updated)</p></li>
+<li><p>skipped: bool (true if no changes detected)</p></li>
+<li><p>error: str (error message if failed)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.sectionId">
+<span class="sig-name descname"><span class="pre">sectionId</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.sectionId" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.type">
+<span class="sig-name descname"><span class="pre">type</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.dashboard.api.models.score.Score.version">
+<span class="sig-name descname"><span class="pre">version</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.dashboard.api.models.score.Score.version" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.dashboard.api.models.report_configuration.html" class="btn btn-neutral float-left" title="plexus.dashboard.api.models.report_configuration module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.dashboard.api.models.score_result.html" class="btn btn-neutral float-right" title="plexus.dashboard.api.models.score_result module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
