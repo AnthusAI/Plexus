@@ -27,8 +27,10 @@ class TestItemFeedbackIntegration:
         
         # Step 1: Create item with identifiers (simulating scorecard evaluation)
         with patch.object(Item, 'create') as mock_create, \
-             patch.object(Item, '_create_identifier_records') as mock_create_identifiers:
-            
+             patch.object(Item, '_create_identifier_records') as mock_create_identifiers, \
+             patch.object(Item, '_lookup_item_by_identifiers', return_value=None), \
+             patch.object(Item, '_lookup_item_by_external_id', return_value=None):
+
             # Mock created item
             mock_item = MagicMock()
             mock_item.id = 'test-item-12345'
