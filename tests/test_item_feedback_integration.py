@@ -8,8 +8,7 @@ This test suite validates the end-to-end functionality of:
 """
 
 import pytest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 import json
 
 
@@ -59,25 +58,8 @@ class TestItemFeedbackIntegration:
             # Verify identifier records were created
             mock_create_identifiers.assert_called_once()
         
-        # Step 2: Simulate feedback being created very recently
-        now = datetime.now(timezone.utc)
-        recent_feedback_time = now - timedelta(seconds=30)  # 30 seconds ago
-        
-        # Step 3: Search for feedback and verify it's found despite being very recent
-        
-        # Mock feedback item created very recently  
-        mock_feedback_data = {
-            'id': 'feedback-12345',
-            'itemId': 'test-item-12345',
-            'accountId': 'test-account',
-            'scorecardId': 'test-scorecard',
-            'scoreId': 'test-score',
-            'updatedAt': '2025-01-17T12:00:00Z',
-            'initialAnswerValue': 'Yes',
-            'finalAnswerValue': 'No',
-            'editCommentValue': 'This should be NO'
-        }
-        
+        # Step 2: Search for feedback and verify it's found despite being very recent
+
         # Mock FeedbackItem.list to return Mock objects directly
         with patch('plexus.dashboard.api.models.feedback_item.FeedbackItem.list') as mock_list:
             mock_feedback_obj = Mock()
@@ -123,7 +105,7 @@ class TestItemFeedbackIntegration:
         
         with patch.object(Item, '_lookup_item_by_identifiers') as mock_lookup, \
              patch.object(Item, 'get_by_id') as mock_get_by_id, \
-             patch.object(Item, 'update') as mock_update:
+             patch.object(Item, 'update'):
             
             # First score creates item
             mock_lookup.return_value = None  # No existing item
@@ -199,19 +181,7 @@ class TestItemFeedbackIntegration:
         from plexus.cli.feedback.feedback_service import FeedbackService
         
         mock_client = Mock()
-        
-        # Create a mock feedback item for testing time boundaries
-        mock_feedback_data = {
-            'id': 'boundary-feedback-id',
-            'itemId': 'test-item',
-            'accountId': 'test-account',
-            'scorecardId': 'test-scorecard',
-            'scoreId': 'test-score',
-            'updatedAt': '2025-01-17T12:00:00Z',
-            'initialAnswerValue': 'Yes',
-            'finalAnswerValue': 'No'
-        }
-        
+
         # Mock FeedbackItem.list to return Mock objects directly
         with patch('plexus.dashboard.api.models.feedback_item.FeedbackItem.list') as mock_list:
             mock_feedback_obj = Mock()
