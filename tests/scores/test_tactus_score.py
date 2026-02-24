@@ -15,8 +15,6 @@ NOTE: All test data is generic and does not contain any client-specific informat
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-import asyncio
-
 from plexus.scores.Score import Score
 
 
@@ -46,7 +44,7 @@ def mock_tactus_runtime():
 
 
 @pytest.fixture
-def basic_tactus_code():
+def basic_code():
     """Simple Tactus code that returns a classification."""
     return '''
     Procedure {
@@ -243,21 +241,45 @@ class TestTactusScoreBasicExecution:
     @pytest.mark.asyncio
     async def test_tactus_score_initialization(self):
         """Test that TactusScore initializes with required parameters."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch('plexus.scores.TactusScore.TactusRuntime'):
+            from plexus.scores.TactusScore import TactusScore
+
+            score = TactusScore(
+                name="test_score",
+                code="Procedure { function(input) return {value='Yes'} end }",
+                valid_classes=["Yes", "No", "NA"]
+            )
+
+            assert score.parameters.name == "test_score"
+            assert score.parameters.code is not None
+            assert score.parameters.valid_classes == ["Yes", "No", "NA"]
+
+    def test_tactus_code_fallback(self):
+        """Test that 'tactus_code' YAML key still works as fallback for 'code'."""
+        with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
 
             score = TactusScore(
                 name="test_score",
                 tactus_code="Procedure { function(input) return {value='Yes'} end }",
-                valid_classes=["Yes", "No", "NA"]
             )
+            assert score.parameters.code == "Procedure { function(input) return {value='Yes'} end }"
 
-            assert score.parameters.name == "test_score"
-            assert score.parameters.tactus_code is not None
-            assert score.parameters.valid_classes == ["Yes", "No", "NA"]
+    def test_code_preferred_over_tactus_code(self):
+        """Test that 'code' takes precedence when both 'code' and 'tactus_code' are provided."""
+        with patch('plexus.scores.TactusScore.TactusRuntime'):
+            from plexus.scores.TactusScore import TactusScore
+
+            score = TactusScore(
+                name="test_score",
+                code="Procedure { function(input) return {value='FromCode'} end }",
+                tactus_code="Procedure { function(input) return {value='FromTactusCode'} end }",
+            )
+            assert "FromCode" in score.parameters.code
+            assert "FromTactusCode" not in score.parameters.code
 
     @pytest.mark.asyncio
-    async def test_tactus_score_predict_returns_result(self, basic_tactus_code):
+    async def test_tactus_score_predict_returns_result(self, basic_code):
         """Test that predict() returns a Score.Result with proper fields."""
         with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
             mock_runtime_instance = AsyncMock()
@@ -270,7 +292,7 @@ class TestTactusScoreBasicExecution:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=basic_tactus_code,
+                code=basic_code,
                 valid_classes=["Yes", "No", "NA"]
             )
 
@@ -285,7 +307,7 @@ class TestTactusScoreBasicExecution:
             assert result.explanation == "Test passed"
 
     @pytest.mark.asyncio
-    async def test_tactus_score_passes_context_to_runtime(self, basic_tactus_code):
+    async def test_tactus_score_passes_context_to_runtime(self, basic_code):
         """Test that predict() passes text and metadata to Tactus runtime."""
         with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
             mock_runtime_instance = AsyncMock()
@@ -298,7 +320,7 @@ class TestTactusScoreBasicExecution:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=basic_tactus_code
+                code=basic_code
             )
 
             test_metadata = {'key': 'value', 'nested': {'data': 123}}
@@ -338,7 +360,7 @@ class TestClassificationParsing:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=classification_parsing_code
+                code=classification_parsing_code
             )
 
             result = await score.predict(Score.Input(text="YES. The criteria were met."))
@@ -358,7 +380,7 @@ class TestClassificationParsing:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=classification_parsing_code
+                code=classification_parsing_code
             )
 
             result = await score.predict(Score.Input(text="NO. The criteria were not met."))
@@ -378,7 +400,7 @@ class TestClassificationParsing:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=classification_parsing_code
+                code=classification_parsing_code
             )
 
             result = await score.predict(Score.Input(text="NA. Insufficient information."))
@@ -399,7 +421,7 @@ class TestClassificationParsing:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=classification_parsing_code
+                code=classification_parsing_code
             )
 
             result = await score.predict(Score.Input(text="NOT applicable in this case"))
@@ -420,7 +442,7 @@ class TestClassificationParsing:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=classification_parsing_code
+                code=classification_parsing_code
             )
 
             result = await score.predict(Score.Input(text="CLASSIFICATION: YES based on analysis"))
@@ -448,7 +470,7 @@ class TestMultiEntityAggregation:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=multi_entity_aggregation_code
+                code=multi_entity_aggregation_code
             )
 
             metadata = {
@@ -476,7 +498,7 @@ class TestMultiEntityAggregation:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=multi_entity_aggregation_code
+                code=multi_entity_aggregation_code
             )
 
             metadata = {
@@ -504,7 +526,7 @@ class TestMultiEntityAggregation:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=multi_entity_aggregation_code
+                code=multi_entity_aggregation_code
             )
 
             metadata = {'entities': []}
@@ -527,7 +549,7 @@ class TestMultiEntityAggregation:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=multi_entity_aggregation_code
+                code=multi_entity_aggregation_code
             )
 
             # No entities key at all
@@ -558,7 +580,7 @@ class TestPrerequisiteChecking:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=prerequisite_checking_code
+                code=prerequisite_checking_code
             )
 
             metadata = {
@@ -586,7 +608,7 @@ class TestPrerequisiteChecking:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=prerequisite_checking_code
+                code=prerequisite_checking_code
             )
 
             metadata = {
@@ -616,7 +638,7 @@ class TestPrerequisiteChecking:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=prerequisite_checking_code
+                code=prerequisite_checking_code
             )
 
             metadata = {
@@ -638,7 +660,7 @@ class TestErrorHandling:
     """Tests for error handling and edge cases."""
 
     @pytest.mark.asyncio
-    async def test_runtime_error_returns_error_result(self, basic_tactus_code):
+    async def test_runtime_error_returns_error_result(self, basic_code):
         """Test that runtime errors return an ERROR result."""
         with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
             mock_runtime_instance = AsyncMock()
@@ -651,7 +673,7 @@ class TestErrorHandling:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=basic_tactus_code
+                code=basic_code
             )
 
             result = await score.predict(Score.Input(text="Test"))
@@ -661,7 +683,7 @@ class TestErrorHandling:
             assert "Lua runtime error" in result.error
 
     @pytest.mark.asyncio
-    async def test_missing_value_in_output_raises_error(self, basic_tactus_code):
+    async def test_missing_value_in_output_raises_error(self, basic_code):
         """Test that missing 'value' in Tactus output causes an error."""
         with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
             mock_runtime_instance = AsyncMock()
@@ -675,7 +697,7 @@ class TestErrorHandling:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=basic_tactus_code
+                code=basic_code
             )
 
             result = await score.predict(Score.Input(text="Test"))
@@ -684,7 +706,7 @@ class TestErrorHandling:
             assert "must return 'value'" in result.error
 
     @pytest.mark.asyncio
-    async def test_invalid_class_warning(self, basic_tactus_code):
+    async def test_invalid_class_warning(self, basic_code):
         """Test that invalid classification value logs a warning."""
         with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
             mock_runtime_instance = AsyncMock()
@@ -698,7 +720,7 @@ class TestErrorHandling:
             with patch('plexus.scores.TactusScore.logger') as mock_logger:
                 score = TactusScore(
                     name="test_score",
-                    tactus_code=basic_tactus_code,
+                    code=basic_code,
                     valid_classes=["Yes", "No", "NA"]
                 )
 
@@ -709,7 +731,7 @@ class TestErrorHandling:
                 mock_logger.warning.assert_called()
 
     @pytest.mark.asyncio
-    async def test_empty_text_handled(self, basic_tactus_code):
+    async def test_empty_text_handled(self, basic_code):
         """Test that empty text input is handled gracefully."""
         with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
             mock_runtime_instance = AsyncMock()
@@ -722,7 +744,7 @@ class TestErrorHandling:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=basic_tactus_code
+                code=basic_code
             )
 
             result = await score.predict(Score.Input(text=""))
@@ -731,7 +753,7 @@ class TestErrorHandling:
             assert result.value is not None
 
     @pytest.mark.asyncio
-    async def test_missing_metadata_handled(self, basic_tactus_code):
+    async def test_missing_metadata_handled(self, basic_code):
         """Test that missing/empty metadata is handled gracefully."""
         with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
             mock_runtime_instance = AsyncMock()
@@ -744,7 +766,7 @@ class TestErrorHandling:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=basic_tactus_code
+                code=basic_code
             )
 
             # Test with empty metadata (Score.Input.metadata defaults to empty dict)
@@ -761,86 +783,86 @@ class TestErrorHandling:
 class TestConfidenceConversion:
     """Tests for the _convert_confidence method that maps confidence to float."""
 
-    def test_none_confidence_returns_none(self, basic_tactus_code):
+    def test_none_confidence_returns_none(self, basic_code):
         """Test that None confidence remains None."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence(None) is None
 
-    def test_float_confidence_passed_through(self, basic_tactus_code):
+    def test_float_confidence_passed_through(self, basic_code):
         """Test that float confidence is passed through."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence(0.75) == 0.75
 
-    def test_int_confidence_converted_to_float(self, basic_tactus_code):
+    def test_int_confidence_converted_to_float(self, basic_code):
         """Test that int confidence is converted to float."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence(1) == 1.0
             assert isinstance(score._convert_confidence(1), float)
 
-    def test_confidence_clamped_to_valid_range(self, basic_tactus_code):
+    def test_confidence_clamped_to_valid_range(self, basic_code):
         """Test that confidence values are clamped between 0.0 and 1.0."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence(1.5) == 1.0
             assert score._convert_confidence(-0.5) == 0.0
 
-    def test_string_numeric_confidence_converted(self, basic_tactus_code):
+    def test_string_numeric_confidence_converted(self, basic_code):
         """Test that numeric strings are converted to float."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("0.85") == 0.85
 
-    def test_string_label_high_converted(self, basic_tactus_code):
+    def test_string_label_high_converted(self, basic_code):
         """Test that 'high' confidence is converted to 0.9."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("high") == 0.9
             assert score._convert_confidence("HIGH") == 0.9
             assert score._convert_confidence("  High  ") == 0.9
 
-    def test_string_label_medium_converted(self, basic_tactus_code):
+    def test_string_label_medium_converted(self, basic_code):
         """Test that 'medium' confidence is converted to 0.6."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("medium") == 0.6
             assert score._convert_confidence("med") == 0.6
 
-    def test_string_label_low_converted(self, basic_tactus_code):
+    def test_string_label_low_converted(self, basic_code):
         """Test that 'low' confidence is converted to 0.3."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("low") == 0.3
 
-    def test_string_label_very_high_converted(self, basic_tactus_code):
+    def test_string_label_very_high_converted(self, basic_code):
         """Test that 'very high' confidence is converted to 0.95."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("very high") == 0.95
 
-    def test_string_label_very_low_converted(self, basic_tactus_code):
+    def test_string_label_very_low_converted(self, basic_code):
         """Test that 'very low' confidence is converted to 0.1."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("very low") == 0.1
 
-    def test_unknown_string_returns_none(self, basic_tactus_code):
+    def test_unknown_string_returns_none(self, basic_code):
         """Test that unknown string confidence returns None."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
             from plexus.scores.TactusScore import TactusScore
-            score = TactusScore(name="test", tactus_code=basic_tactus_code)
+            score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("unknown") is None
             assert score._convert_confidence("maybe") is None
 
@@ -853,7 +875,7 @@ class TestResultConversion:
     """Tests for converting previous Score.Results to Tactus format."""
 
     @pytest.mark.asyncio
-    async def test_previous_results_passed_to_runtime(self, basic_tactus_code):
+    async def test_previous_results_passed_to_runtime(self, basic_code):
         """Test that previous score results are converted and passed to runtime."""
         with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
             mock_runtime_instance = AsyncMock()
@@ -866,7 +888,7 @@ class TestResultConversion:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=basic_tactus_code
+                code=basic_code
             )
 
             # Create mock previous results
@@ -904,7 +926,7 @@ class TestComplexWorkflows:
     """Tests for complex real-world workflow patterns."""
 
     @pytest.mark.asyncio
-    async def test_nested_metadata_extraction(self, basic_tactus_code):
+    async def test_nested_metadata_extraction(self, basic_code):
         """Test extraction of deeply nested metadata fields."""
         with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
             mock_runtime_instance = AsyncMock()
@@ -917,7 +939,7 @@ class TestComplexWorkflows:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=basic_tactus_code
+                code=basic_code
             )
 
             # Complex nested metadata structure
@@ -943,7 +965,7 @@ class TestComplexWorkflows:
                 }
             }
 
-            result = await score.predict(Score.Input(text="Test", metadata=metadata))
+            await score.predict(Score.Input(text="Test", metadata=metadata))
 
             # Verify metadata was passed through correctly
             call_args = mock_runtime_instance.execute.call_args
@@ -965,7 +987,7 @@ class TestComplexWorkflows:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=multi_entity_aggregation_code
+                code=multi_entity_aggregation_code
             )
 
             # Flat metadata (no entities array)
@@ -980,7 +1002,7 @@ class TestComplexWorkflows:
             assert result.value is not None
 
     @pytest.mark.asyncio
-    async def test_confidence_field_mapping(self, basic_tactus_code):
+    async def test_confidence_field_mapping(self, basic_code):
         """Test that confidence field is properly mapped to Score.Result.
 
         TactusScore converts string confidence values to floats:
@@ -1003,7 +1025,7 @@ class TestComplexWorkflows:
 
             score = TactusScore(
                 name="test_score",
-                tactus_code=basic_tactus_code
+                code=basic_code
             )
 
             result = await score.predict(Score.Input(text="Test"))
@@ -1041,7 +1063,7 @@ class TestIntegrationPatterns:
             # Full configuration like a real score
             score = TactusScore(
                 name="integration_test_score",
-                tactus_code='''
+                code='''
                     Procedure {
                         input = {text = field.string{required = true}},
                         output = {value = field.string{required = true}},
@@ -1119,7 +1141,7 @@ class TestRealTactusRuntime:
 
         score = await TactusScore.create(
             name='test_simple_lua',
-            tactus_code=simple_code
+            code=simple_code
         )
 
         # Test positive case
@@ -1181,7 +1203,7 @@ class TestRealTactusRuntime:
 
         score = await TactusScore.create(
             name='test_metadata_lua',
-            tactus_code=metadata_code
+            code=metadata_code
         )
 
         # Test empty metadata
@@ -1260,7 +1282,7 @@ class TestRealTactusRuntime:
 
         score = await TactusScore.create(
             name='test_aggregation',
-            tactus_code=aggregation_code
+            code=aggregation_code
         )
 
         # All approved -> Yes
@@ -1329,7 +1351,7 @@ class TestRealTactusRuntime:
 
         score = await TactusScore.create(
             name='test_prereq',
-            tactus_code=prereq_code
+            code=prereq_code
         )
 
         # Missing prerequisites
@@ -1372,7 +1394,7 @@ class TestRealTactusRuntime:
 
         score = await TactusScore.create(
             name='test_confidence',
-            tactus_code=confidence_code
+            code=confidence_code
         )
 
         result = await score.predict(Score.Input(text='Test'))
@@ -1384,7 +1406,6 @@ class TestRealTactusRuntime:
     async def test_valid_classes_validation(self):
         """Test that valid_classes constraint is checked."""
         from plexus.scores.TactusScore import TactusScore
-        import logging
 
         # Code that returns a value not in valid_classes
         code = '''
@@ -1399,7 +1420,7 @@ class TestRealTactusRuntime:
 
         score = await TactusScore.create(
             name='test_valid_classes',
-            tactus_code=code,
+            code=code,
             valid_classes=['Yes', 'No', 'NA']
         )
 
