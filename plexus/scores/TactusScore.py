@@ -11,7 +11,7 @@ for high-volume Plexus scenarios with trusted code.
 import json
 import logging
 from typing import Optional, Union, List, Any, Dict
-from pydantic import ConfigDict
+from pydantic import ConfigDict, model_validator
 
 from plexus.scores.Score import Score
 from plexus.LangChainUser import LangChainUser
@@ -40,7 +40,7 @@ class TactusScore(Score, LangChainUser):
         class: TactusScore
         model_provider: ChatOpenAI
         model_name: gpt-4o-mini
-        tactus_code: |
+        code: |
           classifier = Agent {
             system_prompt = "Classify sentiment as positive, negative, or neutral..."
           }
@@ -67,13 +67,24 @@ class TactusScore(Score, LangChainUser):
         model_config = ConfigDict(protected_namespaces=())
 
         # Required: The Tactus DSL code to execute
-        tactus_code: str
+        code: str
 
         # Optional: Valid classification classes for validation
         valid_classes: Optional[List[str]] = None
 
         # Output mapping (optional - defaults to value/explanation)
         output: Optional[Dict[str, str]] = None
+
+        @model_validator(mode='before')
+        @classmethod
+        def handle_tactus_code_fallback(cls, data):
+            """Accept 'tactus_code' as a fallback for 'code' during transition."""
+            if isinstance(data, dict):
+                if 'tactus_code' in data and 'code' not in data:
+                    data['code'] = data.pop('tactus_code')
+                elif 'tactus_code' in data and 'code' in data:
+                    data.pop('tactus_code')
+            return data
 
     def __init__(self, **parameters):
         """Initialize TactusScore with Tactus code and model configuration."""
@@ -211,7 +222,7 @@ class TactusScore(Score, LangChainUser):
             # Execute the Tactus procedure
             logger.debug(f"Executing Tactus procedure with context keys: {list(tactus_context.keys())}")
             result = await runtime.execute(
-                self.parameters.tactus_code,
+                self.parameters.code,
                 context=tactus_context,
                 format="lua"
             )
