@@ -1190,7 +1190,7 @@ def register_score_tools(mcp: FastMCP):
                 return "Error: scorecard_identifier is required and cannot be empty"
             
             # Validate score_type
-            valid_types = ["SimpleLLMScore", "LangGraphScore", "ClassifierScore", "STANDARD"]
+            valid_types = ["SimpleLLMScore", "LangGraphScore", "ClassifierScore", "TactusScore", "STANDARD"]
             if score_type not in valid_types:
                 return f"Error: score_type must be one of: {', '.join(valid_types)}"
             
