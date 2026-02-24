@@ -239,7 +239,7 @@ class TestDeepgramFormatProcessor(unittest.TestCase):
         lines = result.text.split('\n')
         self.assertTrue(lines[0].startswith('Speaker 0:'))
         # Customer sentence
-        customer_lines = [l for l in lines if l.startswith('Speaker 1:')]
+        customer_lines = [line for line in lines if line.startswith('Speaker 1:')]
         self.assertGreater(len(customer_lines), 0)
 
     def test_sentences_with_timestamps(self):
