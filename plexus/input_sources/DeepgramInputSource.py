@@ -125,6 +125,10 @@ class DeepgramInputSource(TextFileInputSource):
             if time_range_duration is not None:
                 metadata['time_range_duration'] = time_range_duration
 
+        # Include raw Deepgram JSON data if requested (for tactus.deepgram stdlib access)
+        if self.options.get("include_raw_data", False):
+            metadata['deepgram'] = deepgram_result
+
         # Return ScoreInput
         return ScoreInput(text=formatted_text, metadata=metadata)
 

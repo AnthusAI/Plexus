@@ -11,3 +11,5 @@ from .DownsampleClassDatasetFilter import DownsampleClassDatasetFilter
 from .MergeColumnsDatasetFilter import MergeColumnsDatasetFilter
 from .ExpandContractionsProcessor import ExpandContractionsProcessor
 from .FilterCustomerOnlyProcessor import FilterCustomerOnlyProcessor
+from .DeepgramTimeSliceProcessor import DeepgramTimeSliceProcessor
+from .DeepgramFormatProcessor import DeepgramFormatProcessor
