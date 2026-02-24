@@ -3,10 +3,8 @@ import sys
 import json
 from unittest.mock import Mock, patch
 
+import plexus.input_sources.DeepgramInputSource  # noqa: F401 — ensure module in sys.modules
 
-
-# Import to ensure module is loaded
-from plexus.input_sources.DeepgramInputSource import DeepgramInputSource as _DGISClass
 
 class TestDeepgramInputSource:
     """Test cases for DeepgramInputSource with all format options"""
