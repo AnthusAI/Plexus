@@ -853,3 +853,51 @@ class TestDeepgramInputSource:
         assert "Hello" not in words  # Starts at 0.0s
         assert "thank" in words  # Starts at 0.5s (included)
         assert len(words) > 0
+
+    # ========================================================================
+    # include_raw_data Tests
+    # ========================================================================
+
+    @patch.object(sys.modules["plexus.input_sources.DeepgramInputSource"], "download_score_result_trace_file")
+    def test_include_raw_data_puts_json_in_metadata(self, mock_download):
+        """Test that include_raw_data=True puts raw Deepgram JSON in metadata['deepgram']"""
+        from plexus.input_sources.DeepgramInputSource import DeepgramInputSource
+
+        deepgram_data = self.load_fixture("deepgram_simple_conversation.json")
+        mock_download.return_value = (deepgram_data, None)
+
+        source = DeepgramInputSource(
+            pattern=r".*deepgram.*\.json$",
+            format="paragraphs",
+            include_raw_data=True,
+        )
+        item = Mock()
+        item.metadata = {}
+        item.attachedFiles = ["s3://bucket/path/deepgram_result.json"]
+
+        result = source.extract(item)
+
+        # Raw Deepgram JSON should be in metadata
+        assert 'deepgram' in result.metadata
+        assert result.metadata['deepgram'] == deepgram_data
+        # Text should still be formatted normally
+        assert isinstance(result.text, str)
+        assert len(result.text) > 0
+        assert "Hello, thank you for calling customer support" in result.text
+
+    @patch.object(sys.modules["plexus.input_sources.DeepgramInputSource"], "download_score_result_trace_file")
+    def test_raw_data_not_included_by_default(self, mock_download):
+        """Test that raw Deepgram JSON is NOT in metadata by default"""
+        from plexus.input_sources.DeepgramInputSource import DeepgramInputSource
+
+        deepgram_data = self.load_fixture("deepgram_simple_conversation.json")
+        mock_download.return_value = (deepgram_data, None)
+
+        source = DeepgramInputSource(pattern=r".*deepgram.*\.json$")
+        item = Mock()
+        item.metadata = {}
+        item.attachedFiles = ["s3://bucket/path/deepgram_result.json"]
+
+        result = source.extract(item)
+
+        assert 'deepgram' not in result.metadata
