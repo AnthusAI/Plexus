@@ -1,0 +1,676 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.utils package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.utils.dict_utils module" href="plexus.utils.dict_utils.html" />
+    <link rel="prev" title="plexus.storage.StorageBackend module" href="plexus.storage.StorageBackend.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.utils package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.batch_find_items_by_identifiers"><code class="docutils literal notranslate"><span class="pre">batch_find_items_by_identifiers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.capture_request_logs"><code class="docutils literal notranslate"><span class="pre">capture_request_logs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.check_if_score_is_disabled"><code class="docutils literal notranslate"><span class="pre">check_if_score_is_disabled()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.check_s3_bucket_access"><code class="docutils literal notranslate"><span class="pre">check_s3_bucket_access()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.create_identifiers_for_item"><code class="docutils literal notranslate"><span class="pre">create_identifiers_for_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.create_score_result"><code class="docutils literal notranslate"><span class="pre">create_score_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.create_scorecard_instance_for_single_score"><code class="docutils literal notranslate"><span class="pre">create_scorecard_instance_for_single_score()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.download_score_result_log_file"><code class="docutils literal notranslate"><span class="pre">download_score_result_log_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.download_score_result_trace_file"><code class="docutils literal notranslate"><span class="pre">download_score_result_trace_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.find_item_by_identifier"><code class="docutils literal notranslate"><span class="pre">find_item_by_identifier()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.find_item_by_typed_identifier"><code class="docutils literal notranslate"><span class="pre">find_item_by_typed_identifier()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.find_items_by_identifier_type"><code class="docutils literal notranslate"><span class="pre">find_items_by_identifier_type()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.get_existing_score_result"><code class="docutils literal notranslate"><span class="pre">get_existing_score_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.get_external_id_from_item"><code class="docutils literal notranslate"><span class="pre">get_external_id_from_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.get_item_identifiers"><code class="docutils literal notranslate"><span class="pre">get_item_identifiers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.get_metadata_from_item"><code class="docutils literal notranslate"><span class="pre">get_metadata_from_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.get_plexus_client"><code class="docutils literal notranslate"><span class="pre">get_plexus_client()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.get_text_from_item"><code class="docutils literal notranslate"><span class="pre">get_text_from_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.resolve_score_id"><code class="docutils literal notranslate"><span class="pre">resolve_score_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.resolve_scorecard_id"><code class="docutils literal notranslate"><span class="pre">resolve_scorecard_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.sanitize_metadata_for_graphql"><code class="docutils literal notranslate"><span class="pre">sanitize_metadata_for_graphql()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.send_message_to_standard_scoring_request_queue"><code class="docutils literal notranslate"><span class="pre">send_message_to_standard_scoring_request_queue()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.truncate_dict_strings"><code class="docutils literal notranslate"><span class="pre">truncate_dict_strings()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.truncate_dict_strings_inner"><code class="docutils literal notranslate"><span class="pre">truncate_dict_strings_inner()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.upload_score_result_log_file"><code class="docutils literal notranslate"><span class="pre">upload_score_result_log_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.utils.upload_score_result_trace_file"><code class="docutils literal notranslate"><span class="pre">upload_score_result_trace_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.utils package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.utils.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.utils">
+<span id="plexus-utils-package"></span><h1>plexus.utils package<a class="headerlink" href="#module-plexus.utils" title="Link to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.batch_find_items_by_identifiers">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">batch_find_items_by_identifiers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">identifier_values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Item" title="plexus.dashboard.api.models.Item"><span class="pre">Item</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.batch_find_items_by_identifiers" title="Link to this definition"></a></dt>
+<dd><p>Efficiently find multiple items by their identifier values.</p>
+<p>Uses batch lookup for optimal performance when searching for many items.</p>
+<dl>
+<dt>Args:</dt><dd><p>identifier_values: List of exact values to search for
+account_id: Account to search within
+client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dictionary mapping identifier_value -&gt; Item for found items.
+Missing identifier values will not appear in the result.</p>
+</dd>
+<dt>Example:</dt><dd><dl class="simple">
+<dt>items_dict = batch_find_items_by_identifiers(</dt><dd><p>[“CUST-123456”, “ORD-789012”, “TICKET-555”], 
+“account123”, 
+client</p>
+</dd>
+</dl>
+<p>)</p>
+<dl class="simple">
+<dt>for value, item in items_dict.items():</dt><dd><p>print(f”Identifier {value} -&gt; Item {item.id}”)</p>
+</dd>
+</dl>
+<p># Check if specific identifier was found
+if “CUST-123456” in items_dict:</p>
+<blockquote>
+<div><p>customer_item = items_dict[“CUST-123456”]</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.capture_request_logs">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">capture_request_logs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.capture_request_logs" title="Link to this definition"></a></dt>
+<dd><p>Context manager to capture logs for a specific request.</p>
+<dl class="simple">
+<dt>Usage:</dt><dd><dl class="simple">
+<dt>with capture_request_logs() as (request_id, get_logs):</dt><dd><p># Do work that generates logs
+logs = get_logs()</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.check_if_score_is_disabled">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">check_if_score_is_disabled</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_external_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_external_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.utils.check_if_score_is_disabled" title="Link to this definition"></a></dt>
+<dd><p>Check if a score is currently disabled by querying the API.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_external_id: The external ID of the scorecard
+score_external_id: The external ID of the score
+account_id: The DynamoDB ID of the account</p>
+</dd>
+<dt>Returns:</dt><dd><p>bool: True if the score is disabled, False otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.check_s3_bucket_access">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">check_s3_bucket_access</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bucket_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.check_s3_bucket_access" title="Link to this definition"></a></dt>
+<dd><p>Diagnostic function to check if the S3 bucket exists and is accessible.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>bucket_name: Name of the bucket to check, or None to use the default</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dict with diagnostic information</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.create_identifiers_for_item">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">create_identifiers_for_item</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">identifiers_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Identifier" title="plexus.dashboard.api.models.Identifier"><span class="pre">Identifier</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.create_identifiers_for_item" title="Link to this definition"></a></dt>
+<dd><p>Create identifier records for an item from JSON-style data.</p>
+<p>Converts from the old JSON format to separate Identifier records.
+Useful for migration and dual-write scenarios.</p>
+<dl>
+<dt>Args:</dt><dd><p>item_id: ID of the item these identifiers belong to
+account_id: Account ID for data isolation
+identifiers_data: List of identifier dicts in JSON format:</p>
+<blockquote>
+<div><p>[{“name”: “Customer ID”, “id”: “CUST-123”, “url”: “…”}]</p>
+</div></blockquote>
+<p>client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>List of created Identifier objects (may be empty if all fail)</p>
+</dd>
+<dt>Example:</dt><dd><p># Convert from JSON format to Identifier records
+json_identifiers = [</p>
+<blockquote>
+<div><p>{“name”: “Customer ID”, “id”: “CUST-123456”, “url”: “<a class="reference external" href="https://">https://</a>…”},
+{“name”: “Order ID”, “id”: “ORD-789012”}</p>
+</div></blockquote>
+<p>]</p>
+<dl class="simple">
+<dt>identifier_records = create_identifiers_for_item(</dt><dd><p>“item123”, “account123”, json_identifiers, client</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.create_score_result">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">create_score_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scoring_job_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">external_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">explanation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trace_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cost</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.create_score_result" title="Link to this definition"></a></dt>
+<dd><p>Create a ScoreResult in DynamoDB for caching worker results.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>item_id: The DynamoDB Item ID
+scorecard_id: The DynamoDB Scorecard ID
+score_id: The DynamoDB Score ID
+account_id: The DynamoDB Account ID
+scoring_job_id: The DynamoDB ScoringJob ID
+external_id: The externalId of the Item
+value: The score value
+explanation: The explanation for the score
+trace_data: Optional trace data to upload to S3
+log_content: Optional log content to upload to S3
+cost: Optional cost data
+client: The PlexusDashboardClient instance</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.create_scorecard_instance_for_single_score">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">create_scorecard_instance_for_single_score</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.dashboard.api.models.scorecard.html#plexus.dashboard.api.models.scorecard.Scorecard" title="plexus.dashboard.api.models.scorecard.Scorecard"><span class="pre">Scorecard</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.create_scorecard_instance_for_single_score" title="Link to this definition"></a></dt>
+<dd><p>Create a scorecard instance optimized for a single score request.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.download_score_result_log_file">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">download_score_result_log_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s3_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.download_score_result_log_file" title="Link to this definition"></a></dt>
+<dd><p>Download a log file from S3.</p>
+<p>Automatically detects the correct bucket based on the path:
+- Paths starting with ‘items/’ use the datasources bucket (item attachments)
+- Other paths use the score result attachments bucket</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>s3_path: S3 key path for the file (e.g., ‘items/123/transcript.txt’ or ‘scoreresults/123/log.txt’)
+local_path: Optional local path to save the file to</p>
+</dd>
+<dt>Returns:</dt><dd><p>The content of the file as a string, and the local path if saved</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.download_score_result_trace_file">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">download_score_result_trace_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s3_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.download_score_result_trace_file" title="Link to this definition"></a></dt>
+<dd><p>Download a trace file from S3.</p>
+<p>Automatically detects the correct bucket based on the path:
+- Paths starting with ‘items/’ use the datasources bucket (item attachments)
+- Other paths use the score result attachments bucket</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>s3_path: S3 key path for the file (e.g., ‘items/123/deepgram.json’ or ‘scoreresults/123/trace.json’)
+local_path: Optional local path to save the file to</p>
+</dd>
+<dt>Returns:</dt><dd><p>The content of the file as a dictionary (parsed JSON), and the local path if saved</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.find_item_by_identifier">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">find_item_by_identifier</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">identifier_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Item" title="plexus.dashboard.api.models.Item"><span class="pre">Item</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.find_item_by_identifier" title="Link to this definition"></a></dt>
+<dd><p>Find an item by exact identifier value within an account.</p>
+<p>This is the primary search function for exact-match lookups.
+Uses O(1) GSI lookup for consistent performance.</p>
+<dl>
+<dt>Args:</dt><dd><p>identifier_value: Exact value to search for (e.g., “CUST-123456”)
+account_id: Account to search within
+client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>Item object if found, None if not found</p>
+</dd>
+<dt>Example:</dt><dd><p>item = find_item_by_identifier(“CUST-123456”, “account123”, client)
+if item:</p>
+<blockquote>
+<div><p>print(f”Found item {item.id} with data: {item.data}”)</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.find_item_by_typed_identifier">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">find_item_by_typed_identifier</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">identifier_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">identifier_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Item" title="plexus.dashboard.api.models.Item"><span class="pre">Item</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.find_item_by_typed_identifier" title="Link to this definition"></a></dt>
+<dd><p>Find an item by identifier name and exact value.</p>
+<p>More specific than find_item_by_identifier when you know the identifier type.
+Useful when the same value might exist for different identifier types.</p>
+<dl>
+<dt>Args:</dt><dd><p>identifier_name: Name of identifier type (e.g., “Customer ID”)
+identifier_value: Exact value to search for (e.g., “123456”)
+account_id: Account to search within
+client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>Item object if found, None if not found</p>
+</dd>
+<dt>Example:</dt><dd><p># Find item with specifically a “Customer ID” of “123456”
+# (ignoring any “Order ID” or other types with same value)
+item = find_item_by_typed_identifier(</p>
+<blockquote>
+<div><p>“Customer ID”, “123456”, “account123”, client</p>
+</div></blockquote>
+<p>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.find_items_by_identifier_type">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">find_items_by_identifier_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">identifier_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Item" title="plexus.dashboard.api.models.Item"><span class="pre">Item</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.find_items_by_identifier_type" title="Link to this definition"></a></dt>
+<dd><p>Find all items that have identifiers of a specific type.</p>
+<dl>
+<dt>Args:</dt><dd><p>identifier_name: Name of identifier type (e.g., “Customer ID”, “Order ID”)
+account_id: Account to search within
+client: API client
+limit: Optional limit on number of results</p>
+</dd>
+<dt>Returns:</dt><dd><p>List of Item objects that have identifiers of the specified type</p>
+</dd>
+<dt>Example:</dt><dd><p># Find all items with “Customer ID” identifiers
+items = find_items_by_identifier_type(“Customer ID”, “account123”, client)
+for item in items:</p>
+<blockquote>
+<div><p>print(f”Item {item.id} has customer identifier”)</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.get_existing_score_result">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">get_existing_score_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">report_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.get_existing_score_result" title="Link to this definition"></a></dt>
+<dd><p>Check if a score result already exists for the given report, scorecard, and score.
+Now uses the new ScoreResult.find_by_cache_key method for cleaner, more maintainable code.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>report_id: The external ID of the report
+scorecard_id: The external ID of the scorecard
+score_id: The external ID of the score
+account_id: The DynamoDB ID of the account</p>
+</dd>
+<dt>Returns:</dt><dd><p>A dictionary with the cached result if found, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.get_external_id_from_item">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">get_external_id_from_item</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.get_external_id_from_item" title="Link to this definition"></a></dt>
+<dd><p>Get externalId from an Item in DynamoDB by its item_id.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>item_id: The DynamoDB ID of the Item
+client: The PlexusDashboardClient instance</p>
+</dd>
+<dt>Returns:</dt><dd><p>The externalId of the item, or None if not found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.get_item_identifiers">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">get_item_identifiers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.get_item_identifiers" title="Link to this definition"></a></dt>
+<dd><p>Get all identifiers for a specific item in a format compatible with the UI.</p>
+<p>Returns identifiers in the same format as the deprecated JSON field,
+ensuring compatibility with existing UI components.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>item_id: ID of the item to get identifiers for
+client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>List of identifier dictionaries with ‘name’, ‘id’ (value), and optional ‘url’</p>
+</dd>
+<dt>Example:</dt><dd><p>identifiers = get_item_identifiers(“item123”, client)
+# Returns: [
+#     {“name”: “Customer ID”, “id”: “CUST-123456”, “url”: “<a class="reference external" href="https://">https://</a>…”},
+#     {“name”: “Order ID”, “id”: “ORD-789012”}
+# ]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.get_metadata_from_item">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">get_metadata_from_item</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#plexus.utils.get_metadata_from_item" title="Link to this definition"></a></dt>
+<dd><p>Get metadata from an Item in DynamoDB by its item_id.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>item_id: The DynamoDB ID of the Item
+client: The PlexusDashboardClient instance</p>
+</dd>
+<dt>Returns:</dt><dd><p>The metadata dictionary, or empty dict if not found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.get_plexus_client">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">get_plexus_client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.get_plexus_client" title="Link to this definition"></a></dt>
+<dd><p>Get the Plexus Dashboard client for API operations.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.get_text_from_item">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">get_text_from_item</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.get_text_from_item" title="Link to this definition"></a></dt>
+<dd><p>Get text from an Item in DynamoDB by its item_id.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>item_id: The DynamoDB ID of the Item
+client: The PlexusDashboardClient instance</p>
+</dd>
+<dt>Returns:</dt><dd><p>The text content of the item, or None if not found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.resolve_score_id">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">resolve_score_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">external_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_dynamo_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.resolve_score_id" title="Link to this definition"></a></dt>
+<dd><p>Resolve a score external ID to its DynamoDB ID and name, scoped by its parent scorecard’s DynamoDB ID.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>external_id: The external ID of the score (e.g., “0”)
+scorecard_dynamo_id: The DynamoDB ID of the parent scorecard
+client: The dashboard client</p>
+</dd>
+<dt>Returns:</dt><dd><p>A dictionary with ‘id’ (DynamoDB ID) and ‘name’ of the score if found, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.resolve_scorecard_id">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">resolve_scorecard_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">external_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.resolve_scorecard_id" title="Link to this definition"></a></dt>
+<dd><p>Resolve a scorecard external ID to its DynamoDB ID using the GSI, scoped by accountId.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>external_id: The external ID of the scorecard
+account_id: The DynamoDB ID of the account
+client: The dashboard client</p>
+</dd>
+<dt>Returns:</dt><dd><p>The DynamoDB ID of the scorecard if found, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.sanitize_metadata_for_graphql">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">sanitize_metadata_for_graphql</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#plexus.utils.sanitize_metadata_for_graphql" title="Link to this definition"></a></dt>
+<dd><p>Sanitize metadata for GraphQL compatibility.</p>
+<p>Handles various data types to ensure the metadata can be safely stored in GraphQL/DynamoDB:
+- Removes problematic characters (null bytes, etc.)
+- Converts complex objects to JSON strings
+- Handles serialization errors gracefully</p>
+<p>Note: Does NOT truncate data - all metadata is preserved in full.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>metadata: Dictionary of metadata to sanitize</p>
+</dd>
+<dt>Returns:</dt><dd><p>Sanitized metadata dictionary safe for GraphQL operations</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.send_message_to_standard_scoring_request_queue">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">send_message_to_standard_scoring_request_queue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scoring_job_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.send_message_to_standard_scoring_request_queue" title="Link to this definition"></a></dt>
+<dd><p>Send message to AWS SQS queue with scoring_job_id</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.truncate_dict_strings">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">truncate_dict_strings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truncation_indicator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'...'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.truncate_dict_strings" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.truncate_dict_strings_inner">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">truncate_dict_strings_inner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truncation_indicator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'...'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.truncate_dict_strings_inner" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.upload_score_result_log_file">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">upload_score_result_log_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score_result_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.upload_score_result_log_file" title="Link to this definition"></a></dt>
+<dd><p>Upload a log file to S3 for a ScoreResult.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>score_result_id: The ScoreResult ID
+log_content: The log content to upload</p>
+</dd>
+<dt>Returns:</dt><dd><p>The S3 path (key) if successful, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.upload_score_result_trace_file">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.</span></span><span class="sig-name descname"><span class="pre">upload_score_result_trace_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score_result_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trace_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'trace.json'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.upload_score_result_trace_file" title="Link to this definition"></a></dt>
+<dd><p>Upload trace data as a JSON file to the score result attachments S3 bucket.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>score_result_id: ID of the score result this file belongs to
+trace_data: Dictionary or JSON-serializable data to upload
+file_name: Name of the file to create (default: “trace.json”)</p>
+</dd>
+<dt>Returns:</dt><dd><p>The S3 path (key) for the file, formatted for Amplify Gen2</p>
+</dd>
+</dl>
+</dd></dl>
+
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.utils.dict_utils.html">plexus.utils.dict_utils module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.dict_utils.html#plexus.utils.dict_utils.truncate_dict_strings"><code class="docutils literal notranslate"><span class="pre">truncate_dict_strings()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.dict_utils.html#plexus.utils.dict_utils.truncate_dict_strings_inner"><code class="docutils literal notranslate"><span class="pre">truncate_dict_strings_inner()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.utils.identifier_search.html">plexus.utils.identifier_search module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.identifier_search.html#plexus.utils.identifier_search.batch_find_items_by_identifiers"><code class="docutils literal notranslate"><span class="pre">batch_find_items_by_identifiers()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.identifier_search.html#plexus.utils.identifier_search.create_identifiers_for_item"><code class="docutils literal notranslate"><span class="pre">create_identifiers_for_item()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.identifier_search.html#plexus.utils.identifier_search.find_item_by_identifier"><code class="docutils literal notranslate"><span class="pre">find_item_by_identifier()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.identifier_search.html#plexus.utils.identifier_search.find_item_by_typed_identifier"><code class="docutils literal notranslate"><span class="pre">find_item_by_typed_identifier()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.identifier_search.html#plexus.utils.identifier_search.find_items_by_identifier_type"><code class="docutils literal notranslate"><span class="pre">find_items_by_identifier_type()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.identifier_search.html#plexus.utils.identifier_search.get_item_identifiers"><code class="docutils literal notranslate"><span class="pre">get_item_identifiers()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.utils.request_log_capture.html">plexus.utils.request_log_capture module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.AsyncLogCapture"><code class="docutils literal notranslate"><span class="pre">AsyncLogCapture</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.AsyncLogCapture.__init__"><code class="docutils literal notranslate"><span class="pre">AsyncLogCapture.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.AsyncLogCapture.capture_logs_async"><code class="docutils literal notranslate"><span class="pre">AsyncLogCapture.capture_logs_async()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.BufferingLogHandler"><code class="docutils literal notranslate"><span class="pre">BufferingLogHandler</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.BufferingLogHandler.__init__"><code class="docutils literal notranslate"><span class="pre">BufferingLogHandler.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.BufferingLogHandler.clear_buffer"><code class="docutils literal notranslate"><span class="pre">BufferingLogHandler.clear_buffer()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.BufferingLogHandler.emit"><code class="docutils literal notranslate"><span class="pre">BufferingLogHandler.emit()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.BufferingLogHandler.flush_to_target"><code class="docutils literal notranslate"><span class="pre">BufferingLogHandler.flush_to_target()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.BufferingLogHandler.get_buffered_logs"><code class="docutils literal notranslate"><span class="pre">BufferingLogHandler.get_buffered_logs()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.MemoryLogHandler"><code class="docutils literal notranslate"><span class="pre">MemoryLogHandler</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.MemoryLogHandler.__init__"><code class="docutils literal notranslate"><span class="pre">MemoryLogHandler.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.MemoryLogHandler.close"><code class="docutils literal notranslate"><span class="pre">MemoryLogHandler.close()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.MemoryLogHandler.emit"><code class="docutils literal notranslate"><span class="pre">MemoryLogHandler.emit()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.MemoryLogHandler.get_logs"><code class="docutils literal notranslate"><span class="pre">MemoryLogHandler.get_logs()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RequestLogCapture"><code class="docutils literal notranslate"><span class="pre">RequestLogCapture</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RequestLogCapture.__init__"><code class="docutils literal notranslate"><span class="pre">RequestLogCapture.__init__()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RequestLogManager"><code class="docutils literal notranslate"><span class="pre">RequestLogManager</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RequestLogManager.__init__"><code class="docutils literal notranslate"><span class="pre">RequestLogManager.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RequestLogManager.finish_request_capture"><code class="docutils literal notranslate"><span class="pre">RequestLogManager.finish_request_capture()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RequestLogManager.get_request_logs"><code class="docutils literal notranslate"><span class="pre">RequestLogManager.get_request_logs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RequestLogManager.start_request_capture"><code class="docutils literal notranslate"><span class="pre">RequestLogManager.start_request_capture()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RingBufferLogHandler"><code class="docutils literal notranslate"><span class="pre">RingBufferLogHandler</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RingBufferLogHandler.__init__"><code class="docutils literal notranslate"><span class="pre">RingBufferLogHandler.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RingBufferLogHandler.clear"><code class="docutils literal notranslate"><span class="pre">RingBufferLogHandler.clear()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RingBufferLogHandler.emit"><code class="docutils literal notranslate"><span class="pre">RingBufferLogHandler.emit()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.RingBufferLogHandler.get_recent_logs"><code class="docutils literal notranslate"><span class="pre">RingBufferLogHandler.get_recent_logs()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.SimpleRequestLogCapture"><code class="docutils literal notranslate"><span class="pre">SimpleRequestLogCapture</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.SimpleRequestLogCapture.__init__"><code class="docutils literal notranslate"><span class="pre">SimpleRequestLogCapture.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.SimpleRequestLogCapture.finish_request_capture"><code class="docutils literal notranslate"><span class="pre">SimpleRequestLogCapture.finish_request_capture()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.SimpleRequestLogCapture.get_request_logs"><code class="docutils literal notranslate"><span class="pre">SimpleRequestLogCapture.get_request_logs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.SimpleRequestLogCapture.start_request_capture"><code class="docutils literal notranslate"><span class="pre">SimpleRequestLogCapture.start_request_capture()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.ThreadLocalLogCapture"><code class="docutils literal notranslate"><span class="pre">ThreadLocalLogCapture</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.ThreadLocalLogCapture.__init__"><code class="docutils literal notranslate"><span class="pre">ThreadLocalLogCapture.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.ThreadLocalLogCapture.get_logs"><code class="docutils literal notranslate"><span class="pre">ThreadLocalLogCapture.get_logs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.ThreadLocalLogCapture.start_capture"><code class="docutils literal notranslate"><span class="pre">ThreadLocalLogCapture.start_capture()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.ThreadLocalLogCapture.stop_capture"><code class="docutils literal notranslate"><span class="pre">ThreadLocalLogCapture.stop_capture()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.capture_request_logs"><code class="docutils literal notranslate"><span class="pre">capture_request_logs()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.finish_request_logging"><code class="docutils literal notranslate"><span class="pre">finish_request_logging()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.get_request_logs"><code class="docutils literal notranslate"><span class="pre">get_request_logs()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.setup_request_logging"><code class="docutils literal notranslate"><span class="pre">setup_request_logging()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.request_log_capture.html#plexus.utils.request_log_capture.start_request_logging"><code class="docutils literal notranslate"><span class="pre">start_request_logging()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.utils.score_result_s3_utils.html">plexus.utils.score_result_s3_utils module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.score_result_s3_utils.html#plexus.utils.score_result_s3_utils.check_s3_bucket_access"><code class="docutils literal notranslate"><span class="pre">check_s3_bucket_access()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.score_result_s3_utils.html#plexus.utils.score_result_s3_utils.download_score_result_log_file"><code class="docutils literal notranslate"><span class="pre">download_score_result_log_file()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.score_result_s3_utils.html#plexus.utils.score_result_s3_utils.download_score_result_trace_file"><code class="docutils literal notranslate"><span class="pre">download_score_result_trace_file()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.score_result_s3_utils.html#plexus.utils.score_result_s3_utils.get_bucket_name"><code class="docutils literal notranslate"><span class="pre">get_bucket_name()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.score_result_s3_utils.html#plexus.utils.score_result_s3_utils.get_datasources_bucket_name"><code class="docutils literal notranslate"><span class="pre">get_datasources_bucket_name()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.score_result_s3_utils.html#plexus.utils.score_result_s3_utils.upload_score_result_log_file"><code class="docutils literal notranslate"><span class="pre">upload_score_result_log_file()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.score_result_s3_utils.html#plexus.utils.score_result_s3_utils.upload_score_result_trace_file"><code class="docutils literal notranslate"><span class="pre">upload_score_result_trace_file()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.utils.scoring.html">plexus.utils.scoring module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.check_if_score_is_disabled"><code class="docutils literal notranslate"><span class="pre">check_if_score_is_disabled()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.create_score_result"><code class="docutils literal notranslate"><span class="pre">create_score_result()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.create_scorecard_instance_for_single_score"><code class="docutils literal notranslate"><span class="pre">create_scorecard_instance_for_single_score()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.get_existing_score_result"><code class="docutils literal notranslate"><span class="pre">get_existing_score_result()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.get_external_id_from_item"><code class="docutils literal notranslate"><span class="pre">get_external_id_from_item()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.get_metadata_from_item"><code class="docutils literal notranslate"><span class="pre">get_metadata_from_item()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.get_plexus_client"><code class="docutils literal notranslate"><span class="pre">get_plexus_client()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.get_text_from_item"><code class="docutils literal notranslate"><span class="pre">get_text_from_item()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.resolve_score_id"><code class="docutils literal notranslate"><span class="pre">resolve_score_id()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.resolve_scorecard_id"><code class="docutils literal notranslate"><span class="pre">resolve_scorecard_id()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.sanitize_metadata_for_graphql"><code class="docutils literal notranslate"><span class="pre">sanitize_metadata_for_graphql()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.utils.scoring.html#plexus.utils.scoring.send_message_to_standard_scoring_request_queue"><code class="docutils literal notranslate"><span class="pre">send_message_to_standard_scoring_request_queue()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.storage.StorageBackend.html" class="btn btn-neutral float-left" title="plexus.storage.StorageBackend module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.utils.dict_utils.html" class="btn btn-neutral float-right" title="plexus.utils.dict_utils module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

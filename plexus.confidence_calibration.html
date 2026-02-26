@@ -1,0 +1,309 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.confidence_calibration module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.test_evaluation_metrics module" href="plexus.test_evaluation_metrics.html" />
+    <link rel="prev" title="plexus.ScorecardResultsAnalysis module" href="plexus.ScorecardResultsAnalysis.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.CustomLogging.html">plexus.CustomLogging module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Evaluation.html">plexus.Evaluation module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.LangChainUser.html">plexus.LangChainUser module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.PromptTemplateLoader.html">plexus.PromptTemplateLoader module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Registries.html">plexus.Registries module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Scorecard.html">plexus.Scorecard module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResults.html">plexus.ScorecardResults module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResultsAnalysis.html">plexus.ScorecardResultsAnalysis module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.confidence_calibration module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.apply_calibration_from_serialized"><code class="docutils literal notranslate"><span class="pre">apply_calibration_from_serialized()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.apply_temperature_scaling"><code class="docutils literal notranslate"><span class="pre">apply_temperature_scaling()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.compute_isotonic_regression_calibration"><code class="docutils literal notranslate"><span class="pre">compute_isotonic_regression_calibration()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.compute_two_stage_calibration"><code class="docutils literal notranslate"><span class="pre">compute_two_stage_calibration()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.detect_confidence_feature_enabled"><code class="docutils literal notranslate"><span class="pre">detect_confidence_feature_enabled()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.expected_calibration_error"><code class="docutils literal notranslate"><span class="pre">expected_calibration_error()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.extract_confidence_accuracy_pairs"><code class="docutils literal notranslate"><span class="pre">extract_confidence_accuracy_pairs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.find_optimal_temperature"><code class="docutils literal notranslate"><span class="pre">find_optimal_temperature()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.generate_calibration_report"><code class="docutils literal notranslate"><span class="pre">generate_calibration_report()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.plot_reliability_diagram"><code class="docutils literal notranslate"><span class="pre">plot_reliability_diagram()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.confidence_calibration.serialize_calibration_model"><code class="docutils literal notranslate"><span class="pre">serialize_calibration_model()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_evaluation_metrics.html">plexus.test_evaluation_metrics module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_prediction_commands.html">plexus.test_prediction_commands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_score.html">plexus.test_score module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.training_data_lake.html">plexus.training_data_lake module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.confidence_calibration module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.confidence_calibration.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.confidence_calibration">
+<span id="plexus-confidence-calibration-module"></span><h1>plexus.confidence_calibration module<a class="headerlink" href="#module-plexus.confidence_calibration" title="Link to this heading"></a></h1>
+<p>Confidence calibration utilities for Plexus evaluations.</p>
+<p>Implements isotonic regression calibration as described in:
+<a class="reference external" href="https://github.com/AnthusAI/Classification-with-Confidence">https://github.com/AnthusAI/Classification-with-Confidence</a></p>
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.apply_calibration_from_serialized">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">apply_calibration_from_serialized</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_confidence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#plexus.confidence_calibration.apply_calibration_from_serialized" title="Link to this definition"></a></dt>
+<dd><p>Apply calibration using serialized calibration data.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>raw_confidence: Raw confidence score (0.0 to 1.0)
+calibration_data: Serialized calibration data</p>
+</dd>
+<dt>Returns:</dt><dd><p>Calibrated confidence score</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.apply_temperature_scaling">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">apply_temperature_scaling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">confidence_scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.confidence_calibration.apply_temperature_scaling" title="Link to this definition"></a></dt>
+<dd><p>Apply temperature scaling to confidence scores.</p>
+<p>Temperature scaling applies a single parameter T to logits before applying softmax:
+P_calibrated = softmax(logit / T)</p>
+<p>For confidence scores (already probabilities), we convert back to logits,
+apply temperature scaling, then convert back to probabilities.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>confidence_scores: List of raw confidence scores (0.0 to 1.0)
+temperature: Temperature parameter (T &gt; 1 decreases confidence, T &lt; 1 increases)</p>
+</dd>
+<dt>Returns:</dt><dd><p>List of temperature-scaled confidence scores</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.compute_isotonic_regression_calibration">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">compute_isotonic_regression_calibration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">confidence_scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accuracy_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">IsotonicRegression</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.confidence_calibration.compute_isotonic_regression_calibration" title="Link to this definition"></a></dt>
+<dd><p>Compute isotonic regression calibration curve.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>confidence_scores: List of raw confidence scores (0.0 to 1.0)
+accuracy_labels: List of binary accuracy labels (1 for correct, 0 for incorrect)</p>
+</dd>
+<dt>Returns:</dt><dd><p>Fitted IsotonicRegression model, or None if insufficient data</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.compute_two_stage_calibration">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">compute_two_stage_calibration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">confidence_scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accuracy_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">IsotonicRegression</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.confidence_calibration.compute_two_stage_calibration" title="Link to this definition"></a></dt>
+<dd><p>Compute two-stage calibration: temperature scaling followed by isotonic regression.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>confidence_scores: List of raw confidence scores (0.0 to 1.0)
+accuracy_labels: List of binary accuracy labels (1 for correct, 0 for incorrect)</p>
+</dd>
+<dt>Returns:</dt><dd><p>Tuple of (optimal_temperature, isotonic_model, temperature_scaled_scores)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.detect_confidence_feature_enabled">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">detect_confidence_feature_enabled</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">evaluation_results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.confidence_calibration.detect_confidence_feature_enabled" title="Link to this definition"></a></dt>
+<dd><p>Detect if the confidence feature is enabled in evaluation results.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>evaluation_results: List of evaluation results</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if confidence values are present, False otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.expected_calibration_error">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">expected_calibration_error</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">confidences</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accuracies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#plexus.confidence_calibration.expected_calibration_error" title="Link to this definition"></a></dt>
+<dd><p>Calculate Expected Calibration Error (ECE).</p>
+<p>ECE measures the average difference between confidence and accuracy
+across different confidence bins. Lower is better (0 = perfect calibration).</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>confidences: Array of confidence scores [0, 1]
+accuracies: Array of binary correctness [0, 1]
+n_bins: Number of confidence bins to use</p>
+</dd>
+<dt>Returns:</dt><dd><p>ECE score (lower is better, 0 = perfect calibration)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.extract_confidence_accuracy_pairs">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">extract_confidence_accuracy_pairs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">evaluation_results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.confidence_calibration.extract_confidence_accuracy_pairs" title="Link to this definition"></a></dt>
+<dd><p>Extract confidence scores and accuracy labels from evaluation results.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>evaluation_results: List of evaluation results from Plexus</p>
+</dd>
+<dt>Returns:</dt><dd><p>Tuple of (confidence_scores, accuracy_labels) where:
+- confidence_scores: List of confidence values (0.0 to 1.0)
+- accuracy_labels: List of binary accuracy labels (1 for correct, 0 for incorrect)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.find_optimal_temperature">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">find_optimal_temperature</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">confidence_scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accuracy_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'minimize_scalar'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#plexus.confidence_calibration.find_optimal_temperature" title="Link to this definition"></a></dt>
+<dd><p>Find optimal temperature parameter to minimize Expected Calibration Error (ECE).</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>confidence_scores: List of raw confidence scores (0.0 to 1.0)
+accuracy_labels: List of binary accuracy labels (1 for correct, 0 for incorrect)
+method: Optimization method - “minimize_scalar” or “grid_search”</p>
+</dd>
+<dt>Returns:</dt><dd><p>Optimal temperature parameter</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.generate_calibration_report">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">generate_calibration_report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">confidence_scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accuracy_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IsotonicRegression</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.confidence_calibration.generate_calibration_report" title="Link to this definition"></a></dt>
+<dd><p>Generate a calibration analysis report.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>confidence_scores: Raw confidence scores
+accuracy_labels: Binary accuracy labels
+calibration_model: Optional fitted calibration model</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dictionary containing calibration metrics and analysis</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.plot_reliability_diagram">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">plot_reliability_diagram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">confidence_scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accuracy_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Confidence</span> <span class="pre">Calibration</span> <span class="pre">-</span> <span class="pre">Reliability</span> <span class="pre">Diagram'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature_scaled_scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibrated_confidence_scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.confidence_calibration.plot_reliability_diagram" title="Link to this definition"></a></dt>
+<dd><p>Plot reliability diagram showing calibration quality with confidence buckets.
+Can show raw, temperature-scaled, and final calibrated confidence scores for comparison.</p>
+<p>Perfect calibration appears as points on the diagonal line.
+Points above the line = overconfident, below = underconfident.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>confidence_scores: List of raw confidence scores (0.0 to 1.0)
+accuracy_labels: List of binary accuracy labels (1 for correct, 0 for incorrect)
+save_path: Path to save the plot image
+title: Plot title
+n_bins: Number of confidence bins (default 20 for 5% buckets)
+temperature_scaled_scores: Optional list of temperature-scaled confidence scores
+calibrated_confidence_scores: Optional list of final calibrated confidence scores</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.confidence_calibration.serialize_calibration_model">
+<span class="sig-prename descclassname"><span class="pre">plexus.confidence_calibration.</span></span><span class="sig-name descname"><span class="pre">serialize_calibration_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">calibration_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IsotonicRegression</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.confidence_calibration.serialize_calibration_model" title="Link to this definition"></a></dt>
+<dd><p>Serialize calibration model for storage in YAML/JSON.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>calibration_model: Fitted isotonic regression model</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dictionary containing serialized calibration data</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.ScorecardResultsAnalysis.html" class="btn btn-neutral float-left" title="plexus.ScorecardResultsAnalysis module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.test_evaluation_metrics.html" class="btn btn-neutral float-right" title="plexus.test_evaluation_metrics module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

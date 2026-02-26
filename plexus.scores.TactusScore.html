@@ -1,0 +1,298 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.scores.TactusScore module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.scores.test_langgraphscore_routing module" href="plexus.scores.test_langgraphscore_routing.html" />
+    <link rel="prev" title="plexus.scores.Score module" href="plexus.scores.Score.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.scores.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.scores.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.AWSComprehendEntityExtractor.html">plexus.scores.AWSComprehendEntityExtractor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.AWSComprehendSentimentScore.html">plexus.scores.AWSComprehendSentimentScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.AgenticExtractor.html">plexus.scores.AgenticExtractor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.AgenticValidator.html">plexus.scores.AgenticValidator module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.CompositeScore.html">plexus.scores.CompositeScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningOneStepSemanticClassifier.html">plexus.scores.DeepLearningOneStepSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html">plexus.scores.DeepLearningSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html">plexus.scores.DeepLearningSlidingWindowSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.ExplainableClassifier.html">plexus.scores.ExplainableClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.FastTextClassifier.html">plexus.scores.FastTextClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.KeywordClassifier.html">plexus.scores.KeywordClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.LLMGenerator.html">plexus.scores.LLMGenerator module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.LangGraphScore.html">plexus.scores.LangGraphScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.OpenAIEmbeddingsClassifier.html">plexus.scores.OpenAIEmbeddingsClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.SVMClassifier.html">plexus.scores.SVMClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html">plexus.scores.Score module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.scores.TactusScore module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.scores.TactusScore.TactusScore"><code class="docutils literal notranslate"><span class="pre">TactusScore</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.test_langgraphscore_routing.html">plexus.scores.test_langgraphscore_routing module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.scores.html">plexus.scores package</a></li>
+      <li class="breadcrumb-item active">plexus.scores.TactusScore module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.scores.TactusScore.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.scores.TactusScore">
+<span id="plexus-scores-tactusscore-module"></span><h1>plexus.scores.TactusScore module<a class="headerlink" href="#module-plexus.scores.TactusScore" title="Link to this heading"></a></h1>
+<p>TactusScore - Score implementation that executes Tactus DSL code.</p>
+<p>Tactus is a Lua-based DSL for defining AI agent workflows. This score type
+allows embedding Tactus code directly in YAML configuration for classification.</p>
+<p>Uses the Tactus runtime with in-process execution (no Docker containers)
+for high-volume Plexus scenarios with trusted code.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.scores.TactusScore.</span></span><span class="sig-name descname"><span class="pre">TactusScore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score" title="plexus.scores.Score.Score"><code class="xref py py-class docutils literal notranslate"><span class="pre">Score</span></code></a>, <a class="reference internal" href="plexus.LangChainUser.html#plexus.LangChainUser.LangChainUser" title="plexus.LangChainUser.LangChainUser"><code class="xref py py-class docutils literal notranslate"><span class="pre">LangChainUser</span></code></a></p>
+<p>Score that executes embedded Tactus DSL code for classification.</p>
+<p>Uses Tactus runtime with in-process execution (no containers) for
+high-volume Plexus scenarios with trusted code.</p>
+<dl>
+<dt>Data flow:</dt><dd><ol class="arabic simple">
+<li><p>Agent analyzes transcript and returns text response</p></li>
+<li><p>Lua code in Procedure parses/extracts what it needs</p></li>
+<li><p>Procedure returns {value, explanation, confidence}</p></li>
+<li><p>TactusScore maps Procedure output to Score.Result</p></li>
+</ol>
+</dd>
+<dt>Example YAML:</dt><dd><p>class: TactusScore
+model_provider: ChatOpenAI
+model_name: gpt-4o-mini
+code: |</p>
+<blockquote>
+<div><dl class="simple">
+<dt>classifier = Agent {</dt><dd><p>system_prompt = “Classify sentiment as positive, negative, or neutral…”</p>
+</dd>
+</dl>
+<p>}</p>
+<dl>
+<dt>Procedure {</dt><dd><p>input = {text = field.string{required = true}},
+output = {value = field.string{required = true}},
+function(input)</p>
+<blockquote>
+<div><p>local response = classifier({message = input.text})
+– Parse the agent’s response to extract classification
+local value = “neutral”
+if response:lower():find(“positive”) then</p>
+<blockquote>
+<div><p>value = “positive”</p>
+</div></blockquote>
+<dl class="simple">
+<dt>elseif response:lower():find(“negative”) then</dt><dd><p>value = “negative”</p>
+</dd>
+</dl>
+<p>end
+return {value = value, explanation = response}</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+</dd>
+</dl>
+<p>Initialize TactusScore with Tactus code and model configuration.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore.Parameters">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_provider</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'ChatOpenAI'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'AzureChatOpenAI'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'BedrockChat'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'ChatVertexAI'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'ChatOllama'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'AzureChatOpenAI'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reasoning_effort</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'low'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbosity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'medium'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_region</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_p</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.03</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_tokens</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logprobs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_logprobs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dependencies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">number_of_classes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_score_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">valid_classes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore.Parameters" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Parameters" title="plexus.scores.Score.Score.Parameters"><code class="xref py py-class docutils literal notranslate"><span class="pre">Parameters</span></code></a>, <a class="reference internal" href="plexus.LangChainUser.html#plexus.LangChainUser.LangChainUser.Parameters" title="plexus.LangChainUser.LangChainUser.Parameters"><code class="xref py py-class docutils literal notranslate"><span class="pre">Parameters</span></code></a></p>
+<p>Configuration parameters for TactusScore.</p>
+<p>Create a new model by parsing and validating input data from keyword arguments.</p>
+<p>Raises [<cite>ValidationError</cite>][pydantic_core.ValidationError] if the input data cannot be
+validated to form a valid model.</p>
+<p><cite>self</cite> is explicitly positional-only to allow <cite>self</cite> as a field name.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore.Parameters.code">
+<span class="sig-name descname"><span class="pre">code</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore.Parameters.code" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore.Parameters.handle_tactus_code_fallback">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">handle_tactus_code_fallback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore.Parameters.handle_tactus_code_fallback" title="Link to this definition"></a></dt>
+<dd><p>Accept ‘tactus_code’ as a fallback for ‘code’ during transition.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore.Parameters.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'protected_namespaces':</span> <span class="pre">()}</span></span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore.Parameters.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore.Parameters.output">
+<span class="sig-name descname"><span class="pre">output</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore.Parameters.output" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore.Parameters.valid_classes">
+<span class="sig-name descname"><span class="pre">valid_classes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore.Parameters.valid_classes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize TactusScore with Tactus code and model configuration.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore.create">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.scores.TactusScore.TactusScore" title="plexus.scores.TactusScore.TactusScore"><span class="pre">TactusScore</span></a></span></span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore.create" title="Link to this definition"></a></dt>
+<dd><p>Factory method for async initialization.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.TactusScore.TactusScore.predict">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.core.ScoreInput.html#plexus.core.ScoreInput.ScoreInput" title="plexus.core.ScoreInput.ScoreInput"><span class="pre">ScoreInput</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Result" title="plexus.scores.Score.Score.Result"><span class="pre">Result</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Result" title="plexus.scores.Score.Score.Result"><span class="pre">Result</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.scores.TactusScore.TactusScore.predict" title="Link to this definition"></a></dt>
+<dd><p>Execute Tactus procedure and return classification result.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>model_input<span class="classifier">Score.Input</span></dt><dd><p>The input data containing text and metadata</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h2>Returns<a class="headerlink" href="#returns" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>Score.Result</dt><dd><p>The prediction result with value and explanation</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.scores.Score.html" class="btn btn-neutral float-left" title="plexus.scores.Score module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.scores.test_langgraphscore_routing.html" class="btn btn-neutral float-right" title="plexus.scores.test_langgraphscore_routing module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,406 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.sop_agent_base module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.state_machine module" href="plexus.cli.procedure.state_machine.html" />
+    <link rel="prev" title="plexus.cli.procedure.service module" href="plexus.cli.procedure.service.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.sop_agent_base module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.sop_agent_base.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.sop_agent_base">
+<span id="plexus-cli-procedure-sop-agent-base-module"></span><h1>plexus.cli.procedure.sop_agent_base module<a class="headerlink" href="#module-plexus.cli.procedure.sop_agent_base" title="Link to this heading"></a></h1>
+<p>Base StandardOperatingProcedureAgent - General-purpose multi-agent orchestration.</p>
+<p>This module provides the core StandardOperatingProcedureAgent that can be used
+across different domains. It’s decoupled from experiment-specific logic and can
+orchestrate any procedure-driven multi-agent workflow.</p>
+<p>Key Design Principles:
+- Domain-agnostic: Works for experiments, reports, analysis, etc.
+- Configurable: Procedures defined through pluggable components
+- Reusable: Same agent can handle different types of structured workflows
+- Extensible: Easy to add new domains without changing core logic</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ChatRecorder">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.sop_agent_base.</span></span><span class="sig-name descname"><span class="pre">ChatRecorder</span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ChatRecorder" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
+<p>Abstract chat recorder for procedure-specific conversation recording.</p>
+<p>Different procedures may record conversations differently
+(e.g., procedure sessions, report generation logs, etc.)</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ChatRecorder.end_session">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">end_session</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ChatRecorder.end_session" title="Link to this definition"></a></dt>
+<dd><p>End the current recording session.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ChatRecorder.record_message">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">record_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ChatRecorder.record_message" title="Link to this definition"></a></dt>
+<dd><p>Record a message in the current session.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ChatRecorder.record_system_message">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">record_system_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ChatRecorder.record_system_message" title="Link to this definition"></a></dt>
+<dd><p>Record a system message.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ChatRecorder.start_session">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">start_session</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ChatRecorder.start_session" title="Link to this definition"></a></dt>
+<dd><p>Start a recording session for this procedure.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.FlowManager">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.sop_agent_base.</span></span><span class="sig-name descname"><span class="pre">FlowManager</span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.FlowManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
+<p>Abstract flow manager for procedure-specific conversation flow.</p>
+<p>Different procedures can implement their own flow logic
+(e.g., procedure phases, report generation steps, etc.)</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.FlowManager.get_completion_summary">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_completion_summary</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.FlowManager.get_completion_summary" title="Link to this definition"></a></dt>
+<dd><p>Get summary when flow is complete.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.FlowManager.get_next_guidance">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_next_guidance</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.FlowManager.get_next_guidance" title="Link to this definition"></a></dt>
+<dd><p>Get template guidance for the next step.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.FlowManager.should_continue">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">should_continue</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.FlowManager.should_continue" title="Link to this definition"></a></dt>
+<dd><p>Determine if the flow should continue.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.FlowManager.update_state">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">update_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tools_used</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">response_content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.FlowManager.update_state" title="Link to this definition"></a></dt>
+<dd><p>Update the flow state based on coding assistant actions.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ProcedureDefinition">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.sop_agent_base.</span></span><span class="sig-name descname"><span class="pre">ProcedureDefinition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></p>
+<p>Protocol defining how a specific procedure (like experiments) configures the SOP Agent.</p>
+<p>This allows different domains to provide their own procedure definitions
+while using the same core SOP Agent orchestration logic.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ProcedureDefinition.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_allowed_tools">
+<span class="sig-name descname"><span class="pre">get_allowed_tools</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">phase</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_allowed_tools" title="Link to this definition"></a></dt>
+<dd><p>Get the tools allowed in the given phase for this procedure.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_completion_summary">
+<span class="sig-name descname"><span class="pre">get_completion_summary</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_completion_summary" title="Link to this definition"></a></dt>
+<dd><p>Get a summary when the procedure is complete.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_sop_guidance_prompt">
+<span class="sig-name descname"><span class="pre">get_sop_guidance_prompt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_sop_guidance_prompt" title="Link to this definition"></a></dt>
+<dd><p>Get the SOP Agent guidance prompt for this procedure.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_system_prompt">
+<span class="sig-name descname"><span class="pre">get_system_prompt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_system_prompt" title="Link to this definition"></a></dt>
+<dd><p>Get the system prompt for the coding assistant in this procedure.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_user_prompt">
+<span class="sig-name descname"><span class="pre">get_user_prompt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition.get_user_prompt" title="Link to this definition"></a></dt>
+<dd><p>Get the initial user prompt for this procedure.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.ProcedureDefinition.should_continue">
+<span class="sig-name descname"><span class="pre">should_continue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition.should_continue" title="Link to this definition"></a></dt>
+<dd><p>Determine if the procedure should continue based on current state.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.sop_agent_base.</span></span><span class="sig-name descname"><span class="pre">StandardOperatingProcedureAgent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_definition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition" title="plexus.cli.procedure.sop_agent_base.ProcedureDefinition"><span class="pre">ProcedureDefinition</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mcp_server</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_manager</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.cli.procedure.sop_agent_base.FlowManager" title="plexus.cli.procedure.sop_agent_base.FlowManager"><span class="pre">FlowManager</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.cli.procedure.sop_agent_base.ChatRecorder" title="plexus.cli.procedure.sop_agent_base.ChatRecorder"><span class="pre">ChatRecorder</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">openai_api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>General-purpose Standard Operating Procedure Agent for multi-agent orchestration.</p>
+<p>This agent can orchestrate any procedure-driven multi-agent workflow by:
+1. Following configurable standard operating procedures
+2. Managing conversation flow through defined phases
+3. Providing contextual guidance to coding assistant agents
+4. Enforcing tool scoping and safety constraints
+5. Recording and reporting procedure execution results</p>
+<p>The agent is domain-agnostic and gets its procedure-specific behavior
+through injected ProcedureDefinition, FlowManager, and ChatRecorder components.</p>
+<p>Initialize the StandardOperatingProcedureAgent.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: Unique identifier for this procedure execution
+procedure_definition: Defines procedure-specific behavior (prompts, tools, etc.)
+mcp_server: MCP server providing tools to the coding assistant
+flow_manager: Optional flow manager for conversation state
+chat_recorder: Optional recorder for conversation logging
+openai_api_key: Optional OpenAI API key for SOP guidance LLM
+context: Optional procedure context with known information
+model_config: Optional model configuration dict for LLM parameters</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_definition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition" title="plexus.cli.procedure.sop_agent_base.ProcedureDefinition"><span class="pre">ProcedureDefinition</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mcp_server</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_manager</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.cli.procedure.sop_agent_base.FlowManager" title="plexus.cli.procedure.sop_agent_base.FlowManager"><span class="pre">FlowManager</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.cli.procedure.sop_agent_base.ChatRecorder" title="plexus.cli.procedure.sop_agent_base.ChatRecorder"><span class="pre">ChatRecorder</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">openai_api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the StandardOperatingProcedureAgent.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: Unique identifier for this procedure execution
+procedure_definition: Defines procedure-specific behavior (prompts, tools, etc.)
+mcp_server: MCP server providing tools to the coding assistant
+flow_manager: Optional flow manager for conversation state
+chat_recorder: Optional recorder for conversation logging
+openai_api_key: Optional OpenAI API key for SOP guidance LLM
+context: Optional procedure context with known information
+model_config: Optional model configuration dict for LLM parameters</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.execute_procedure">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">execute_procedure</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.execute_procedure" title="Link to this definition"></a></dt>
+<dd><p>Execute the SOP-guided procedure with coding assistant.</p>
+<p>This is the main execution method that orchestrates the multi-agent ReAct loop:
+1. SOP Agent provides procedural guidance
+2. Coding Assistant executes tools based on guidance
+3. SOP Agent evaluates progress and provides next guidance
+4. Loop continues until procedure completion criteria met</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>Dictionary with execution results</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.get_system_prompt">
+<span class="sig-name descname"><span class="pre">get_system_prompt</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.get_system_prompt" title="Link to this definition"></a></dt>
+<dd><p>Get the system prompt for the coding assistant.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.get_user_prompt">
+<span class="sig-name descname"><span class="pre">get_user_prompt</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.get_user_prompt" title="Link to this definition"></a></dt>
+<dd><p>Get the initial user prompt for the coding assistant.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.setup">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_yaml</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.StandardOperatingProcedureAgent.setup" title="Link to this definition"></a></dt>
+<dd><p>Set up the SOP Agent with procedure configuration.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_yaml: YAML configuration for this procedure</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if setup successful, False otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.sop_agent_base.execute_sop_procedure">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.sop_agent_base.</span></span><span class="sig-name descname"><span class="pre">execute_sop_procedure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_definition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.cli.procedure.sop_agent_base.ProcedureDefinition" title="plexus.cli.procedure.sop_agent_base.ProcedureDefinition"><span class="pre">ProcedureDefinition</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_yaml</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mcp_server</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_manager</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.cli.procedure.sop_agent_base.FlowManager" title="plexus.cli.procedure.sop_agent_base.FlowManager"><span class="pre">FlowManager</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.cli.procedure.sop_agent_base.ChatRecorder" title="plexus.cli.procedure.sop_agent_base.ChatRecorder"><span class="pre">ChatRecorder</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">openai_api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.sop_agent_base.execute_sop_procedure" title="Link to this definition"></a></dt>
+<dd><p>Execute a Standard Operating Procedure with the SOP Agent.</p>
+<p>This is the main entry point for executing any procedure using the
+general-purpose StandardOperatingProcedureAgent.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: Unique identifier for this procedure execution
+procedure_definition: Defines procedure-specific behavior
+procedure_yaml: YAML configuration for the procedure
+mcp_server: MCP server providing tools
+flow_manager: Optional flow manager for conversation state
+chat_recorder: Optional recorder for conversation logging
+openai_api_key: Optional OpenAI API key
+context: Optional procedure context
+model_config: Optional model configuration dict for LLM parameters</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dictionary with execution results</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.service.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.service module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.state_machine.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.state_machine module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

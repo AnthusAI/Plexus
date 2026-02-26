@@ -1,0 +1,572 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.shared.task_progress_tracker module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.shared.universal_code module" href="plexus.cli.shared.universal_code.html" />
+    <link rel="prev" title="plexus.cli.shared.stage_configurations module" href="plexus.cli.shared.stage_configurations.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.shared.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.shared.task_progress_tracker module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.shared.task_progress_tracker.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.shared.task_progress_tracker">
+<span id="plexus-cli-shared-task-progress-tracker-module"></span><h1>plexus.cli.shared.task_progress_tracker module<a class="headerlink" href="#module-plexus.cli.shared.task_progress_tracker" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.shared.task_progress_tracker.</span></span><span class="sig-name descname"><span class="pre">Stage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">processed_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'PENDING'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Internal representation of a task stage.</p>
+<p>This class tracks the state of a single stage in a task’s execution.
+Progress bars in the UI are only shown for stages that have total_items set.
+Typically, only the main processing stages should have total_items set,
+while setup and finalizing stages should not show progress bars.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">processed_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'PENDING'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.complete">
+<span class="sig-name descname"><span class="pre">complete</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.complete" title="Link to this definition"></a></dt>
+<dd><p>Complete this stage.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.end_time">
+<span class="sig-name descname"><span class="pre">end_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.end_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.order">
+<span class="sig-name descname"><span class="pre">order</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.order" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.processed_items">
+<span class="sig-name descname"><span class="pre">processed_items</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.processed_items" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.start">
+<span class="sig-name descname"><span class="pre">start</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.start" title="Link to this definition"></a></dt>
+<dd><p>Start this stage.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.start_time">
+<span class="sig-name descname"><span class="pre">start_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.start_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.status">
+<span class="sig-name descname"><span class="pre">status</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'PENDING'</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.status" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.status_message">
+<span class="sig-name descname"><span class="pre">status_message</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.status_message" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.total_items">
+<span class="sig-name descname"><span class="pre">total_items</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.total_items" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.Stage.update_processed_count">
+<span class="sig-name descname"><span class="pre">update_processed_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">current_count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.Stage.update_processed_count" title="Link to this definition"></a></dt>
+<dd><p>Update the processed items count with the current total count.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>current_count: The current total count of processed items</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.StageConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.shared.task_progress_tracker.</span></span><span class="sig-name descname"><span class="pre">StageConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.StageConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Configuration for a task stage.</p>
+<dl>
+<dt>Args:</dt><dd><p>order: The order of this stage in the task sequence
+total_items: Optional number of items to process in this stage.</p>
+<blockquote>
+<div><p>Only set this if you want the stage to show a progress bar in the UI.
+Typically only set for main processing stages, not for setup or finalizing stages.</p>
+</div></blockquote>
+<p>status_message: Optional status message to display for this stage</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.StageConfig.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.StageConfig.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.StageConfig.order">
+<span class="sig-name descname"><span class="pre">order</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.StageConfig.order" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.StageConfig.status_message">
+<span class="sig-name descname"><span class="pre">status_message</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.StageConfig.status_message" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.StageConfig.total_items">
+<span class="sig-name descname"><span class="pre">total_items</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.StageConfig.total_items" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.shared.task_progress_tracker.</span></span><span class="sig-name descname"><span class="pre">TaskProgressTracker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_configs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#plexus.cli.shared.task_progress_tracker.StageConfig" title="plexus.cli.shared.task_progress_tracker.StageConfig"><span class="pre">StageConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.models.task.html#plexus.dashboard.api.models.task.Task" title="plexus.dashboard.api.models.task.Task"><span class="pre">Task</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">command</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dispatch_status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prevent_new_task</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Tracks progress of a multi-stage task with optional API integration.</p>
+<p>This class manages the progress of a task through multiple stages, with proper
+UI integration for progress bars and status updates. Key concepts:</p>
+<ol class="arabic simple">
+<li><p>Stage Progress Bars:
+- Only stages with total_items set will show progress bars in the UI
+- Typically, only main processing stages should show progress
+- Setup and finalizing stages usually should not have total_items set</p></li>
+<li><p>Stage Types:
+- Setup stages: Quick preparation steps, usually no progress bar needed
+- Processing stages: Main work stages that show progress bars
+- Finalizing stages: Cleanup/completion steps, usually no progress bar needed</p></li>
+</ol>
+<dl>
+<dt>Example usage:</dt><dd><p># Configure stages - only Processing shows progress
+stages = {</p>
+<blockquote>
+<div><p>“Setup”: StageConfig(order=1, status_message=”Setting up…”),
+“Processing”: StageConfig(order=2, total_items=100),
+“Finalizing”: StageConfig(order=3, status_message=”Finishing…”)</p>
+</div></blockquote>
+<p>}</p>
+<p># Create tracker
+tracker = TaskProgressTracker(total_items=100, stage_configs=stages)</p>
+<p># Update progress (only affects stages with total_items set)
+tracker.update(current_items=50)</p>
+</dd>
+</dl>
+<p>Initialize progress tracker.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>stage_configs: Dict mapping stage names to their configs.
+task_object: Optional pre-fetched Task object to track.
+task_id: Optional API task ID (used if task_object is None).
+total_items: Total items (can be updated later).
+target: Target string for new task records
+command: Command string for new task records
+description: Description string for task status display
+dispatch_status: Dispatch status for new task records
+prevent_new_task: If True, don’t create new task records
+metadata: Optional metadata to store with the task
+account_id: Optional account ID to associate with the task
+client: Optional existing PlexusDashboardClient instance.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_configs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#plexus.cli.shared.task_progress_tracker.StageConfig" title="plexus.cli.shared.task_progress_tracker.StageConfig"><span class="pre">StageConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.models.task.html#plexus.dashboard.api.models.task.Task" title="plexus.dashboard.api.models.task.Task"><span class="pre">Task</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">command</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dispatch_status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prevent_new_task</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize progress tracker.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>stage_configs: Dict mapping stage names to their configs.
+task_object: Optional pre-fetched Task object to track.
+task_id: Optional API task ID (used if task_object is None).
+total_items: Total items (can be updated later).
+target: Target string for new task records
+command: Command string for new task records
+description: Description string for task status display
+dispatch_status: Dispatch status for new task records
+prevent_new_task: If True, don’t create new task records
+metadata: Optional metadata to store with the task
+account_id: Optional account ID to associate with the task
+client: Optional existing PlexusDashboardClient instance.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.advance_stage">
+<span class="sig-name descname"><span class="pre">advance_stage</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.advance_stage" title="Link to this definition"></a></dt>
+<dd><p>Advance to next stage and update API task if we have one.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.api_task">
+<span class="sig-name descname"><span class="pre">api_task</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="plexus.dashboard.api.models.task.html#plexus.dashboard.api.models.task.Task" title="plexus.dashboard.api.models.task.Task"><span class="pre">Task</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.api_task" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.complete">
+<span class="sig-name descname"><span class="pre">complete</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.complete" title="Link to this definition"></a></dt>
+<dd><p>Complete tracking and update API task if we have one.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.complete_with_message">
+<span class="sig-name descname"><span class="pre">complete_with_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.complete_with_message" title="Link to this definition"></a></dt>
+<dd><p>Complete tracking with a custom completion message.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>message: A custom message to display as completion status</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.create_for_evaluation">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">create_for_evaluation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker" title="plexus.cli.shared.task_progress_tracker.TaskProgressTracker"><span class="pre">TaskProgressTracker</span></a></span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.create_for_evaluation" title="Link to this definition"></a></dt>
+<dd><p>Create a TaskProgressTracker configured for evaluation operations.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_name: Name of the scorecard being evaluated
+total_items: Total number of items to evaluate
+task_id: Optional existing task ID
+account_id: Account ID for the task
+client: Optional API client
+<a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs: Additional arguments passed to TaskProgressTracker</p>
+</dd>
+<dt>Returns:</dt><dd><p>TaskProgressTracker: Configured tracker for evaluation</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.create_for_operation_type">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">create_for_operation_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operation_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">command</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker" title="plexus.cli.shared.task_progress_tracker.TaskProgressTracker"><span class="pre">TaskProgressTracker</span></a></span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.create_for_operation_type" title="Link to this definition"></a></dt>
+<dd><p>Create a TaskProgressTracker configured for a specific operation type.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>operation_type: Type of operation (‘evaluation’, ‘prediction’, etc.)
+total_items: Total number of items to process
+target: Target string for the task
+command: Command string for the task
+description: Description for the task
+task_id: Optional existing task ID
+account_id: Account ID for the task
+metadata: Optional metadata for the task
+client: Optional API client
+<a href="#id3"><span class="problematic" id="id4">**</span></a>kwargs: Additional arguments passed to TaskProgressTracker</p>
+</dd>
+<dt>Returns:</dt><dd><p>TaskProgressTracker: Configured tracker for the operation type</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.create_for_prediction">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">create_for_prediction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker" title="plexus.cli.shared.task_progress_tracker.TaskProgressTracker"><span class="pre">TaskProgressTracker</span></a></span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.create_for_prediction" title="Link to this definition"></a></dt>
+<dd><p>Create a TaskProgressTracker configured for prediction operations.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_identifier: Identifier of the scorecard
+score_names: List of score names being predicted
+total_items: Total number of predictions to run
+task_id: Optional existing task ID
+account_id: Account ID for the task
+client: Optional API client
+<a href="#id5"><span class="problematic" id="id6">**</span></a>kwargs: Additional arguments passed to TaskProgressTracker</p>
+</dd>
+<dt>Returns:</dt><dd><p>TaskProgressTracker: Configured tracker for prediction</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.current_stage">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">current_stage</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#plexus.cli.shared.task_progress_tracker.Stage" title="plexus.cli.shared.task_progress_tracker.Stage"><span class="pre">Stage</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.current_stage" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.elapsed_time">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">elapsed_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.elapsed_time" title="Link to this definition"></a></dt>
+<dd><p>Return elapsed time since task started, regardless of current stage.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.end_time">
+<span class="sig-name descname"><span class="pre">end_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.end_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.estimated_completion_time">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">estimated_completion_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.estimated_completion_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.estimated_time_remaining">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">estimated_time_remaining</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.estimated_time_remaining" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.fail">
+<span class="sig-name descname"><span class="pre">fail</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">error_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.fail" title="Link to this definition"></a></dt>
+<dd><p>Mark the task as failed and stop progress tracking.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.fail_current_stage">
+<span class="sig-name descname"><span class="pre">fail_current_stage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">error_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_details</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.fail_current_stage" title="Link to this definition"></a></dt>
+<dd><p>Mark the current stage as failed but don’t fail the entire task.</p>
+<p>This method only fails the current stage, allowing execution to potentially continue
+with other stages. To fail the entire task, use the fail() method instead.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>error_message: The error message to display
+error_details: Optional dictionary of additional error details
+current_items: The number of items processed when the failure occurred</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.fail_processing">
+<span class="sig-name descname"><span class="pre">fail_processing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">error_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_details</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.fail_processing" title="Link to this definition"></a></dt>
+<dd><p>Mark the task as failed with detailed error information.</p>
+<p>This is a comprehensive failure handling method that:
+1. Fails the current stage with the error message
+2. Fails the entire task with the same error
+3. Updates the API task if available</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>error_message: The error message to display
+error_details: Optional dictionary of additional error details
+current_items: The number of items processed when the failure occurred</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.get_all_stages">
+<span class="sig-name descname"><span class="pre">get_all_stages</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#plexus.cli.shared.task_progress_tracker.Stage" title="plexus.cli.shared.task_progress_tracker.Stage"><span class="pre">Stage</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.get_all_stages" title="Link to this definition"></a></dt>
+<dd><p>Get all stages in this tracker.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>Dict[str, Stage]: Dictionary mapping stage names to Stage objects</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.get_stage_by_name">
+<span class="sig-name descname"><span class="pre">get_stage_by_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.cli.shared.task_progress_tracker.Stage" title="plexus.cli.shared.task_progress_tracker.Stage"><span class="pre">Stage</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.get_stage_by_name" title="Link to this definition"></a></dt>
+<dd><p>Get a stage by its name.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>stage_name: Name of the stage to retrieve</p>
+</dd>
+<dt>Returns:</dt><dd><p>Stage: The stage object if found, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.items_per_second">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">items_per_second</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.items_per_second" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.progress">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">progress</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.progress" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.set_stage_message">
+<span class="sig-name descname"><span class="pre">set_stage_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.set_stage_message" title="Link to this definition"></a></dt>
+<dd><p>Set the status message for a specific stage.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>stage_name: Name of the stage
+message: Status message to set</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.set_total_items">
+<span class="sig-name descname"><span class="pre">set_total_items</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">total_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.set_total_items" title="Link to this definition"></a></dt>
+<dd><p>Set the total items count - this is our single source of truth for the total count.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.task">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">task</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="plexus.dashboard.api.models.task.html#plexus.dashboard.api.models.task.Task" title="plexus.dashboard.api.models.task.Task"><span class="pre">Task</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.task" title="Link to this definition"></a></dt>
+<dd><p>Return the API task instance if one exists.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.shared.task_progress_tracker.TaskProgressTracker.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">current_items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.update" title="Link to this definition"></a></dt>
+<dd><p>Update progress with current count and optional status message.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>current_items: Current number of items processed.
+status: Optional status message.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.shared.stage_configurations.html" class="btn btn-neutral float-left" title="plexus.cli.shared.stage_configurations module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.shared.universal_code.html" class="btn btn-neutral float-right" title="plexus.cli.shared.universal_code module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

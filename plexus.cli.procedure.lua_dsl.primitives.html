@@ -1,0 +1,1224 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.lua_dsl.primitives package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.lua_dsl.primitives.agent module" href="plexus.cli.procedure.lua_dsl.primitives.agent.html" />
+    <link rel="prev" title="plexus.cli.procedure.lua_dsl package" href="plexus.cli.procedure.lua_dsl.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.lua_dsl.html">plexus.cli.procedure.lua_dsl package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.lua_dsl.primitives package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.lua_dsl.primitives.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.lua_dsl.primitives">
+<span id="plexus-cli-procedure-lua-dsl-primitives-package"></span><h1>plexus.cli.procedure.lua_dsl.primitives package<a class="headerlink" href="#module-plexus.cli.procedure.lua_dsl.primitives" title="Link to this heading"></a></h1>
+<p>Lua Primitives - Python implementations of Lua-callable operations.</p>
+<p>These primitives provide high-level operations that hide LLM mechanics
+and enable declarative workflow orchestration.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.</span></span><span class="sig-name descname"><span class="pre">AgentPrimitive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">system_prompt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">llm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">available_tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_primitive</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop_primitive</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iterations_primitive</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Executes LLM agent turns with tool calling.</p>
+<p>Each agent has:
+- System prompt (instructions)
+- Initial message (kickoff)
+- Conversation history
+- Available tools
+- LLM instance</p>
+<p>Initialize an agent primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>name: Agent name (e.g., “worker”, “assistant”)
+system_prompt: System prompt for the agent
+initial_message: Initial user message to kickoff
+llm: LangChain LLM instance with tools bound
+available_tools: List of available tool objects
+tool_primitive: ToolPrimitive instance for recording calls
+stop_primitive: StopPrimitive instance for stop detection
+iterations_primitive: IterationsPrimitive for tracking turns
+chat_recorder: Optional ProcedureChatRecorder for logging conversations</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">system_prompt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">llm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">available_tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_primitive</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop_primitive</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iterations_primitive</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize an agent primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>name: Agent name (e.g., “worker”, “assistant”)
+system_prompt: System prompt for the agent
+initial_message: Initial user message to kickoff
+llm: LangChain LLM instance with tools bound
+available_tools: List of available tool objects
+tool_primitive: ToolPrimitive instance for recording calls
+stop_primitive: StopPrimitive instance for stop detection
+iterations_primitive: IterationsPrimitive for tracking turns
+chat_recorder: Optional ProcedureChatRecorder for logging conversations</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.flush_recordings">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">flush_recordings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.flush_recordings" title="Link to this definition"></a></dt>
+<dd><p>Flush queued recordings to chat session (called by runtime after workflow).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.get_conversation">
+<span class="sig-name descname"><span class="pre">get_conversation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.get_conversation" title="Link to this definition"></a></dt>
+<dd><p>Get the current conversation history.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.reset">
+<span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.reset" title="Link to this definition"></a></dt>
+<dd><p>Reset the agent (mainly for testing).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.turn">
+<span class="sig-name descname"><span class="pre">turn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.AgentPrimitive.turn" title="Link to this definition"></a></dt>
+<dd><p>Execute one agent turn.</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Optional dict with:</dt><dd><ul class="simple">
+<li><p>inject: Additional context message to inject for this turn</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>Dictionary with response information (for Lua access)</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local response = Worker.turn()
+Log.info(“Agent said: “ .. response.content)</p>
+<dl class="simple">
+<dt>for i, call in ipairs(response.tool_calls) do</dt><dd><p>Log.info(“Called tool: “ .. call.name)</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.</span></span><span class="sig-name descname"><span class="pre">GraphNodePrimitive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages graph node operations for procedure execution.</p>
+<p>Graph nodes provide tree-based data storage for procedures,
+useful for tree search, hypothesis tracking, etc.</p>
+<p>Initialize GraphNode primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: PlexusDashboardClient instance
+procedure_id: Procedure ID for node creation
+account_id: Account ID for node creation</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize GraphNode primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: PlexusDashboardClient instance
+procedure_id: Procedure ID for node creation
+account_id: Account ID for node creation</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.create">
+<span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parent_node_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.create" title="Link to this definition"></a></dt>
+<dd><p>Create a new graph node.</p>
+<dl>
+<dt>Args:</dt><dd><p>content: Text content for the node
+metadata: Optional metadata dict
+parent_node_id: Optional parent node ID (None for root)</p>
+</dd>
+<dt>Returns:</dt><dd><p>NodeWrapper with methods: children(), parent(), score(), metadata(), set_metadata()</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local node = GraphNode.create(“My limerick here”, {type = “poem”})
+Log.info(“Created node: “ .. node.id)</p>
+<p>– Node methods available:
+local children = node:children()
+local parent = node:parent()
+node:set_metadata(“status”, “reviewed”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.current">
+<span class="sig-name descname"><span class="pre">current</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.current" title="Link to this definition"></a></dt>
+<dd><p>Get the current working node.</p>
+<dl>
+<dt>Returns:</dt><dd><p>NodeWrapper or None if no current node set</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local node = GraphNode.current()
+if node then</p>
+<blockquote>
+<div><p>Log.info(“Current node: “ .. node.id)
+node:set_metadata(“visited”, true)  – Node methods available</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.root">
+<span class="sig-name descname"><span class="pre">root</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.root" title="Link to this definition"></a></dt>
+<dd><p>Get the root node for this procedure (if exists).</p>
+<dl>
+<dt>Returns:</dt><dd><p>NodeWrapper or None if no root node exists</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local root = GraphNode.root()
+if root then</p>
+<blockquote>
+<div><p>Log.info(“Root node exists: “ .. root.id)
+local children = root:children()  – Node methods available</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.set_current">
+<span class="sig-name descname"><span class="pre">set_current</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.GraphNodePrimitive.set_current" title="Link to this definition"></a></dt>
+<dd><p>Set the current working node (for internal use).</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>node_id: Node ID to set as current</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if successful</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.</span></span><span class="sig-name descname"><span class="pre">HumanPrimitive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_context</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hitl_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages human-in-the-loop operations for procedures.</p>
+<p>Enables procedures to:
+- Request approval from humans
+- Get input from humans
+- Send notifications
+- Escalate issues</p>
+<p>All blocking methods support timeouts and defaults.</p>
+<p>Initialize Human primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder for recording messages
+execution_context: ExecutionContext for blocking HITL operations
+hitl_config: Optional HITL declarations from YAML</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_context</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hitl_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize Human primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder for recording messages
+execution_context: ExecutionContext for blocking HITL operations
+hitl_config: Optional HITL declarations from YAML</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.approve">
+<span class="sig-name descname"><span class="pre">approve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.approve" title="Link to this definition"></a></dt>
+<dd><p>Request yes/no approval from human (BLOCKING).</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Message to show human</p></li>
+<li><p>context: Dict - Additional context</p></li>
+<li><p>timeout: int - Timeout in seconds (None = no timeout)</p></li>
+<li><p>default: bool - Default if timeout (default: False)</p></li>
+<li><p>config_key: str - Reference to hitl: declaration</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>bool - True if approved, False if rejected/timeout</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local approved = Human.approve({</dt><dd><p>message = “Deploy to production?”,
+context = {environment = “prod”},
+timeout = 3600,
+default = false</p>
+</dd>
+</dl>
+<p>})</p>
+<dl class="simple">
+<dt>if approved then</dt><dd><p>deploy()</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.escalate">
+<span class="sig-name descname"><span class="pre">escalate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.escalate" title="Link to this definition"></a></dt>
+<dd><p>Escalate to human (BLOCKING).</p>
+<p>Stops workflow execution until human resolves the issue.
+Unlike approve/input/review, escalate has NO timeout - it blocks
+indefinitely until a human manually resumes the procedure.</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Escalation message</p></li>
+<li><p>context: Dict - Error context</p></li>
+<li><p>severity: str - Severity level (info/warning/error/critical)</p></li>
+<li><p>config_key: str - Reference to hitl: declaration</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>None - Execution resumes when human resolves</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl>
+<dt>if attempts &gt; 3 then</dt><dd><dl class="simple">
+<dt>Human.escalate({</dt><dd><p>message = “Cannot resolve automatically”,
+context = {attempts = attempts, error = last_error},
+severity = “error”</p>
+</dd>
+</dl>
+<p>})
+– Workflow continues here after human resolves</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.flush_recordings">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">flush_recordings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.flush_recordings" title="Link to this definition"></a></dt>
+<dd><p>Flush all queued messages to chat recorder.</p>
+<p>This is called by the runtime after workflow execution to
+record all Human.notify() messages to the chat session.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.input">
+<span class="sig-name descname"><span class="pre">input</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.input" title="Link to this definition"></a></dt>
+<dd><p>Request free-form input from human (BLOCKING).</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Prompt for human</p></li>
+<li><p>placeholder: str - Input placeholder</p></li>
+<li><p>timeout: int - Timeout in seconds</p></li>
+<li><p>default: str - Default if timeout</p></li>
+<li><p>config_key: str - Reference to hitl: declaration</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>str or None - Human’s input, or None if timeout with no default</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local topic = Human.input({</dt><dd><p>message = “What topic?”,
+placeholder = “Enter topic…”,
+timeout = 600</p>
+</dd>
+</dl>
+<p>})</p>
+<dl class="simple">
+<dt>if topic then</dt><dd><p>State.set(“topic”, topic)</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.notify">
+<span class="sig-name descname"><span class="pre">notify</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.notify" title="Link to this definition"></a></dt>
+<dd><p>Send notification to human (NON-BLOCKING).</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Notification message (required)</p></li>
+<li><p>content: str - Rich markdown content (optional, overrides message in UI)</p></li>
+<li><p>details: List[Dict] - Collapsible sections with title and content</p></li>
+<li><p>level: str - info, warning, error (default: info)</p></li>
+<li><p>context: Dict - Additional context (deprecated, use details instead)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Example (Lua):</dt><dd><p>– Simple notification
+Human.notify({</p>
+<blockquote>
+<div><p>message = “Processing complete”</p>
+</div></blockquote>
+<p>})</p>
+<p>– Rich notification with details
+Human.notify({</p>
+<blockquote>
+<div><p>message = “Phase 2 complete”,
+content = “<strong>Status</strong>: Phase 2 processing finishednnProcessed 150 items successfully”,
+details = {</p>
+<blockquote>
+<div><p>{title = “Statistics”, content = “<strong>Success</strong>: 148n**Failed**: 2n**Duration**: 5 min”},
+{title = “Next Steps”, content = “Starting phase 3 validation”}</p>
+</div></blockquote>
+<p>}</p>
+</div></blockquote>
+<p>})</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.review">
+<span class="sig-name descname"><span class="pre">review</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.HumanPrimitive.review" title="Link to this definition"></a></dt>
+<dd><p>Request human review (BLOCKING).</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Review prompt</p></li>
+<li><p>artifact: Any - Thing to review</p></li>
+<li><p>artifact_type: str - Type of artifact</p></li>
+<li><p>options: List[str] - Available actions</p></li>
+<li><p>timeout: int - Timeout in seconds</p></li>
+<li><p>config_key: str - Reference to hitl: declaration</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict with:</dt><dd><ul class="simple">
+<li><p>decision: str - Selected option</p></li>
+<li><p>edited_artifact: Any - Modified artifact (if edited)</p></li>
+<li><p>feedback: str - Human feedback</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local review = Human.review({</dt><dd><p>message = “Review this document”,
+artifact = document,
+artifact_type = “document”,
+options = {“approve”, “edit”, “reject”}</p>
+</dd>
+</dl>
+<p>})</p>
+<dl class="simple">
+<dt>if review.decision == “approve” then</dt><dd><p>publish(review.artifact)</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.</span></span><span class="sig-name descname"><span class="pre">IterationsPrimitive</span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Tracks iteration count for procedure execution.</p>
+<p>Provides safety limits and iteration-based control flow.</p>
+<p>Initialize iteration counter.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize iteration counter.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.current">
+<span class="sig-name descname"><span class="pre">current</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.current" title="Link to this definition"></a></dt>
+<dd><p>Get the current iteration number.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>Current iteration count (0-indexed)</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local iter = Iterations.current()
+Log.info(“Iteration: “ .. iter)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.exceeded">
+<span class="sig-name descname"><span class="pre">exceeded</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.exceeded" title="Link to this definition"></a></dt>
+<dd><p>Check if current iteration has exceeded the maximum.</p>
+<dl>
+<dt>Args:</dt><dd><p>max_iterations: Maximum allowed iterations</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if current iteration &gt;= max_iterations</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>if Iterations.exceeded(100) then</dt><dd><p>return {success = false, reason = “Max iterations exceeded”}</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.increment">
+<span class="sig-name descname"><span class="pre">increment</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.increment" title="Link to this definition"></a></dt>
+<dd><p>Increment the iteration counter.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>New iteration count</p>
+</dd>
+</dl>
+<p>Note: This is called internally by the runtime, not from Lua</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.reset">
+<span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.IterationsPrimitive.reset" title="Link to this definition"></a></dt>
+<dd><p>Reset iteration counter (mainly for testing).</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StatePrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.</span></span><span class="sig-name descname"><span class="pre">StatePrimitive</span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages mutable state for procedure execution.</p>
+<p>State is preserved across agent turns and can be used to track
+progress, accumulate results, and coordinate between agents.</p>
+<p>Initialize state storage.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize state storage.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.all">
+<span class="sig-name descname"><span class="pre">all</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.all" title="Link to this definition"></a></dt>
+<dd><p>Get all state as a dictionary.</p>
+<dl>
+<dt>Returns:</dt><dd><p>Complete state dictionary</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local state = State.all()
+for k, v in pairs(state) do</p>
+<blockquote>
+<div><p>print(k, v)</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.append">
+<span class="sig-name descname"><span class="pre">append</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.append" title="Link to this definition"></a></dt>
+<dd><p>Append a value to a list in state.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>key: State key (will be created as list if doesn’t exist)
+value: Value to append</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>State.append(“nodes_created”, node_id)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.clear">
+<span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.clear" title="Link to this definition"></a></dt>
+<dd><p>Clear all state (mainly for testing).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.get" title="Link to this definition"></a></dt>
+<dd><p>Get a value from state.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>key: State key to retrieve
+default: Default value if key not found</p>
+</dd>
+<dt>Returns:</dt><dd><p>Stored value or default</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local count = State.get(“hypothesis_count”, 0)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.increment">
+<span class="sig-name descname"><span class="pre">increment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">amount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.increment" title="Link to this definition"></a></dt>
+<dd><p>Increment a numeric value in state.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>key: State key to increment
+amount: Amount to increment by (default 1)</p>
+</dd>
+<dt>Returns:</dt><dd><p>New value after increment</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>State.increment(“hypotheses_filed”)
+State.increment(“score”, 10)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.set">
+<span class="sig-name descname"><span class="pre">set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StatePrimitive.set" title="Link to this definition"></a></dt>
+<dd><p>Set a value in state.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>key: State key to set
+value: Value to store</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>State.set(“current_phase”, “exploration”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StopPrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.</span></span><span class="sig-name descname"><span class="pre">StopPrimitive</span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages procedure termination state.</p>
+<p>Tracks when a stop was requested and the reason/success status.</p>
+<p>Initialize stop state.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize stop state.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.reason">
+<span class="sig-name descname"><span class="pre">reason</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.reason" title="Link to this definition"></a></dt>
+<dd><p>Get the reason for stopping.</p>
+<dl>
+<dt>Returns:</dt><dd><p>Stop reason string or None if not stopped</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>if Stop.requested() then</dt><dd><p>Log.info(“Stopped because: “ .. Stop.reason())</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.request">
+<span class="sig-name descname"><span class="pre">request</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">reason</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">success</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.request" title="Link to this definition"></a></dt>
+<dd><p>Request a stop (called by tools or runtime).</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>reason: Reason for stopping
+success: Whether this is a successful completion</p>
+</dd>
+</dl>
+<p>Note: This is called internally, not from Lua</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.requested">
+<span class="sig-name descname"><span class="pre">requested</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.requested" title="Link to this definition"></a></dt>
+<dd><p>Check if a stop was requested.</p>
+<dl>
+<dt>Returns:</dt><dd><p>True if stop was requested</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>if Stop.requested() then</dt><dd><p>return {success = true, message = “Procedure stopped”}</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.reset">
+<span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.reset" title="Link to this definition"></a></dt>
+<dd><p>Reset stop state (mainly for testing).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.success">
+<span class="sig-name descname"><span class="pre">success</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.StopPrimitive.success" title="Link to this definition"></a></dt>
+<dd><p>Check if the stop was due to successful completion.</p>
+<dl>
+<dt>Returns:</dt><dd><p>True if stopped successfully, False if stopped due to error</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>if Stop.requested() and Stop.success() then</dt><dd><p>return {success = true}</p>
+</dd>
+<dt>else</dt><dd><p>return {success = false}</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.</span></span><span class="sig-name descname"><span class="pre">SystemPrimitive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages system-level operations and monitoring.</p>
+<p>Enables procedures and external systems to send alerts
+through the unified message infrastructure.</p>
+<p>Initialize System primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder for recording alerts</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize System primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder for recording alerts</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive.alert">
+<span class="sig-name descname"><span class="pre">alert</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive.alert" title="Link to this definition"></a></dt>
+<dd><p>Send system alert (NON-BLOCKING).</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Alert message</p></li>
+<li><p>level: str - info, warning, error, critical (default: info)</p></li>
+<li><p>source: str - Alert source identifier</p></li>
+<li><p>context: Dict - Additional context</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>System.alert({</dt><dd><p>message = “Memory threshold exceeded”,
+level = “warning”,
+source = “resource_monitor”,
+context = {memory_mb = 3500, threshold_mb = 3000}</p>
+</dd>
+</dl>
+<p>})</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive.flush_recordings">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">flush_recordings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.SystemPrimitive.flush_recordings" title="Link to this definition"></a></dt>
+<dd><p>Flush all queued messages to chat recorder.</p>
+<p>This is called by the runtime after workflow execution to
+record all System.alert() messages to the chat session.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.</span></span><span class="sig-name descname"><span class="pre">ToolPrimitive</span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Tracks tool calls and provides access to results.</p>
+<p>Maintains a history of tool calls and their results, allowing
+Lua code to check what tools were used and access their outputs.</p>
+<p>Initialize tool tracking.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize tool tracking.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.called">
+<span class="sig-name descname"><span class="pre">called</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tool_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.called" title="Link to this definition"></a></dt>
+<dd><p>Check if a tool was called at least once.</p>
+<dl>
+<dt>Args:</dt><dd><p>tool_name: Name of the tool to check</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if the tool was called</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>if Tool.called(“done”) then</dt><dd><p>Log.info(“Done tool was called”)</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.get_all_calls">
+<span class="sig-name descname"><span class="pre">get_all_calls</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolCall" title="plexus.cli.procedure.lua_dsl.primitives.tool.ToolCall"><span class="pre">ToolCall</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.get_all_calls" title="Link to this definition"></a></dt>
+<dd><p>Get all tool calls (for debugging/logging).</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>List of all ToolCall objects</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.get_call_count">
+<span class="sig-name descname"><span class="pre">get_call_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tool_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.get_call_count" title="Link to this definition"></a></dt>
+<dd><p>Get the number of times a tool was called.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>tool_name: Name of tool (or None for total count)</p>
+</dd>
+<dt>Returns:</dt><dd><p>Number of calls</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.last_call">
+<span class="sig-name descname"><span class="pre">last_call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tool_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.last_call" title="Link to this definition"></a></dt>
+<dd><p>Get full information about the last call to a tool.</p>
+<dl>
+<dt>Args:</dt><dd><p>tool_name: Name of the tool</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dictionary with ‘name’, ‘args’, ‘result’ or None if never called</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local call = Tool.last_call(“search”)
+if call then</p>
+<blockquote>
+<div><p>Log.info(“Search was called with: “ .. call.args.query)
+Log.info(“Result: “ .. call.result)</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.last_result">
+<span class="sig-name descname"><span class="pre">last_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tool_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.last_result" title="Link to this definition"></a></dt>
+<dd><p>Get the last result from a named tool.</p>
+<dl>
+<dt>Args:</dt><dd><p>tool_name: Name of the tool</p>
+</dd>
+<dt>Returns:</dt><dd><p>Last result from the tool, or None if never called</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local result = Tool.last_result(“search”)
+if result then</p>
+<blockquote>
+<div><p>Log.info(“Search found: “ .. result)</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.record_call">
+<span class="sig-name descname"><span class="pre">record_call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tool_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.record_call" title="Link to this definition"></a></dt>
+<dd><p>Record a tool call (called by runtime after tool execution).</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>tool_name: Name of the tool
+args: Arguments passed to the tool
+result: Result returned by the tool</p>
+</dd>
+</dl>
+<p>Note: This is called internally by the runtime, not from Lua</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.reset">
+<span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.ToolPrimitive.reset" title="Link to this definition"></a></dt>
+<dd><p>Reset tool tracking (mainly for testing).</p>
+</dd></dl>
+
+</dd></dl>
+
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html">plexus.cli.procedure.lua_dsl.primitives.agent module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentPrimitive"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentPrimitive.flush_recordings"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.flush_recordings()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentPrimitive.get_conversation"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.get_conversation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentPrimitive.reset"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.reset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentPrimitive.turn"><code class="docutils literal notranslate"><span class="pre">AgentPrimitive.turn()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentResponse"><code class="docutils literal notranslate"><span class="pre">AgentResponse</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentResponse.__init__"><code class="docutils literal notranslate"><span class="pre">AgentResponse.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.agent.html#plexus.cli.procedure.lua_dsl.primitives.agent.AgentResponse.to_dict"><code class="docutils literal notranslate"><span class="pre">AgentResponse.to_dict()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html">plexus.cli.procedure.lua_dsl.primitives.control module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.IterationsPrimitive"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.IterationsPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.IterationsPrimitive.current"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.current()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.IterationsPrimitive.exceeded"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.exceeded()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.IterationsPrimitive.increment"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.increment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.IterationsPrimitive.reset"><code class="docutils literal notranslate"><span class="pre">IterationsPrimitive.reset()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.StopPrimitive"><code class="docutils literal notranslate"><span class="pre">StopPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.StopPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.StopPrimitive.reason"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.reason()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.StopPrimitive.request"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.request()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.StopPrimitive.requested"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.requested()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.StopPrimitive.reset"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.reset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.control.html#plexus.cli.procedure.lua_dsl.primitives.control.StopPrimitive.success"><code class="docutils literal notranslate"><span class="pre">StopPrimitive.success()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.file.html">plexus.cli.procedure.lua_dsl.primitives.file module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.file.html#plexus.cli.procedure.lua_dsl.primitives.file.FilePrimitive"><code class="docutils literal notranslate"><span class="pre">FilePrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.file.html#plexus.cli.procedure.lua_dsl.primitives.file.FilePrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">FilePrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.file.html#plexus.cli.procedure.lua_dsl.primitives.file.FilePrimitive.exists"><code class="docutils literal notranslate"><span class="pre">FilePrimitive.exists()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.file.html#plexus.cli.procedure.lua_dsl.primitives.file.FilePrimitive.read"><code class="docutils literal notranslate"><span class="pre">FilePrimitive.read()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.file.html#plexus.cli.procedure.lua_dsl.primitives.file.FilePrimitive.size"><code class="docutils literal notranslate"><span class="pre">FilePrimitive.size()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.file.html#plexus.cli.procedure.lua_dsl.primitives.file.FilePrimitive.write"><code class="docutils literal notranslate"><span class="pre">FilePrimitive.write()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html">plexus.cli.procedure.lua_dsl.primitives.graph module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.GraphNodePrimitive"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.GraphNodePrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.GraphNodePrimitive.create"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.create()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.GraphNodePrimitive.current"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.current()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.GraphNodePrimitive.root"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.root()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.GraphNodePrimitive.set_current"><code class="docutils literal notranslate"><span class="pre">GraphNodePrimitive.set_current()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.NodeWrapper"><code class="docutils literal notranslate"><span class="pre">NodeWrapper</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.NodeWrapper.__init__"><code class="docutils literal notranslate"><span class="pre">NodeWrapper.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.NodeWrapper.children"><code class="docutils literal notranslate"><span class="pre">NodeWrapper.children()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.NodeWrapper.metadata"><code class="docutils literal notranslate"><span class="pre">NodeWrapper.metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.NodeWrapper.parent"><code class="docutils literal notranslate"><span class="pre">NodeWrapper.parent()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.NodeWrapper.score"><code class="docutils literal notranslate"><span class="pre">NodeWrapper.score()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.graph.html#plexus.cli.procedure.lua_dsl.primitives.graph.NodeWrapper.set_metadata"><code class="docutils literal notranslate"><span class="pre">NodeWrapper.set_metadata()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html">plexus.cli.procedure.lua_dsl.primitives.human module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.approve"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.approve()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.escalate"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.escalate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.flush_recordings"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.flush_recordings()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.input"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.input()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.notify"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.notify()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.human.html#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.review"><code class="docutils literal notranslate"><span class="pre">HumanPrimitive.review()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.json.html">plexus.cli.procedure.lua_dsl.primitives.json module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.json.html#plexus.cli.procedure.lua_dsl.primitives.json.JsonPrimitive"><code class="docutils literal notranslate"><span class="pre">JsonPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.json.html#plexus.cli.procedure.lua_dsl.primitives.json.JsonPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">JsonPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.json.html#plexus.cli.procedure.lua_dsl.primitives.json.JsonPrimitive.decode"><code class="docutils literal notranslate"><span class="pre">JsonPrimitive.decode()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.json.html#plexus.cli.procedure.lua_dsl.primitives.json.JsonPrimitive.encode"><code class="docutils literal notranslate"><span class="pre">JsonPrimitive.encode()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.log.html">plexus.cli.procedure.lua_dsl.primitives.log module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.log.html#plexus.cli.procedure.lua_dsl.primitives.log.LogPrimitive"><code class="docutils literal notranslate"><span class="pre">LogPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.log.html#plexus.cli.procedure.lua_dsl.primitives.log.LogPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">LogPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.log.html#plexus.cli.procedure.lua_dsl.primitives.log.LogPrimitive.debug"><code class="docutils literal notranslate"><span class="pre">LogPrimitive.debug()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.log.html#plexus.cli.procedure.lua_dsl.primitives.log.LogPrimitive.error"><code class="docutils literal notranslate"><span class="pre">LogPrimitive.error()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.log.html#plexus.cli.procedure.lua_dsl.primitives.log.LogPrimitive.info"><code class="docutils literal notranslate"><span class="pre">LogPrimitive.info()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.log.html#plexus.cli.procedure.lua_dsl.primitives.log.LogPrimitive.warn"><code class="docutils literal notranslate"><span class="pre">LogPrimitive.warn()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html">plexus.cli.procedure.lua_dsl.primitives.procedure module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.all_complete"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.all_complete()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.cancel"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.cancel()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.inject"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.inject()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.is_complete"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.is_complete()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.run"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.run()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.spawn"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.spawn()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.status"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.status()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.wait"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.wait()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.wait_all"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.wait_all()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.procedure.html#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.wait_any"><code class="docutils literal notranslate"><span class="pre">ProcedurePrimitive.wait_any()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.retry.html">plexus.cli.procedure.lua_dsl.primitives.retry module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.retry.html#plexus.cli.procedure.lua_dsl.primitives.retry.RetryPrimitive"><code class="docutils literal notranslate"><span class="pre">RetryPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.retry.html#plexus.cli.procedure.lua_dsl.primitives.retry.RetryPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">RetryPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.retry.html#plexus.cli.procedure.lua_dsl.primitives.retry.RetryPrimitive.with_backoff"><code class="docutils literal notranslate"><span class="pre">RetryPrimitive.with_backoff()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html">plexus.cli.procedure.lua_dsl.primitives.session module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.append"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive.append()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.clear"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive.clear()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.count"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive.count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.history"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive.history()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.inject_system"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive.inject_system()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.load_from_node"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive.load_from_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.save"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive.save()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.session.html#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.save_to_node"><code class="docutils literal notranslate"><span class="pre">SessionPrimitive.save_to_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html">plexus.cli.procedure.lua_dsl.primitives.stage module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive"><code class="docutils literal notranslate"><span class="pre">StagePrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">StagePrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive.advance"><code class="docutils literal notranslate"><span class="pre">StagePrimitive.advance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive.clear_history"><code class="docutils literal notranslate"><span class="pre">StagePrimitive.clear_history()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive.count"><code class="docutils literal notranslate"><span class="pre">StagePrimitive.count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive.current"><code class="docutils literal notranslate"><span class="pre">StagePrimitive.current()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive.history"><code class="docutils literal notranslate"><span class="pre">StagePrimitive.history()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive.is_current"><code class="docutils literal notranslate"><span class="pre">StagePrimitive.is_current()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.stage.html#plexus.cli.procedure.lua_dsl.primitives.stage.StagePrimitive.set"><code class="docutils literal notranslate"><span class="pre">StagePrimitive.set()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html">plexus.cli.procedure.lua_dsl.primitives.state module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html#plexus.cli.procedure.lua_dsl.primitives.state.StatePrimitive"><code class="docutils literal notranslate"><span class="pre">StatePrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html#plexus.cli.procedure.lua_dsl.primitives.state.StatePrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html#plexus.cli.procedure.lua_dsl.primitives.state.StatePrimitive.all"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.all()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html#plexus.cli.procedure.lua_dsl.primitives.state.StatePrimitive.append"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.append()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html#plexus.cli.procedure.lua_dsl.primitives.state.StatePrimitive.clear"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.clear()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html#plexus.cli.procedure.lua_dsl.primitives.state.StatePrimitive.get"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html#plexus.cli.procedure.lua_dsl.primitives.state.StatePrimitive.increment"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.increment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.state.html#plexus.cli.procedure.lua_dsl.primitives.state.StatePrimitive.set"><code class="docutils literal notranslate"><span class="pre">StatePrimitive.set()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html">plexus.cli.procedure.lua_dsl.primitives.step module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.CheckpointPrimitive"><code class="docutils literal notranslate"><span class="pre">CheckpointPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.CheckpointPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">CheckpointPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.CheckpointPrimitive.clear_after"><code class="docutils literal notranslate"><span class="pre">CheckpointPrimitive.clear_after()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.CheckpointPrimitive.clear_all"><code class="docutils literal notranslate"><span class="pre">CheckpointPrimitive.clear_all()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.CheckpointPrimitive.exists"><code class="docutils literal notranslate"><span class="pre">CheckpointPrimitive.exists()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.CheckpointPrimitive.get"><code class="docutils literal notranslate"><span class="pre">CheckpointPrimitive.get()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.StepPrimitive"><code class="docutils literal notranslate"><span class="pre">StepPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.StepPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">StepPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.step.html#plexus.cli.procedure.lua_dsl.primitives.step.StepPrimitive.run"><code class="docutils literal notranslate"><span class="pre">StepPrimitive.run()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.system.html">plexus.cli.procedure.lua_dsl.primitives.system module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.system.html#plexus.cli.procedure.lua_dsl.primitives.system.SystemPrimitive"><code class="docutils literal notranslate"><span class="pre">SystemPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.system.html#plexus.cli.procedure.lua_dsl.primitives.system.SystemPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">SystemPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.system.html#plexus.cli.procedure.lua_dsl.primitives.system.SystemPrimitive.alert"><code class="docutils literal notranslate"><span class="pre">SystemPrimitive.alert()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.system.html#plexus.cli.procedure.lua_dsl.primitives.system.SystemPrimitive.flush_recordings"><code class="docutils literal notranslate"><span class="pre">SystemPrimitive.flush_recordings()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html">plexus.cli.procedure.lua_dsl.primitives.tool module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolCall"><code class="docutils literal notranslate"><span class="pre">ToolCall</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolCall.__init__"><code class="docutils literal notranslate"><span class="pre">ToolCall.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolCall.to_dict"><code class="docutils literal notranslate"><span class="pre">ToolCall.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive.__init__"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive.called"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.called()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive.get_all_calls"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.get_all_calls()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive.get_call_count"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.get_call_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive.last_call"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.last_call()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive.last_result"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.last_result()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive.record_call"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.record_call()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.lua_dsl.primitives.tool.html#plexus.cli.procedure.lua_dsl.primitives.tool.ToolPrimitive.reset"><code class="docutils literal notranslate"><span class="pre">ToolPrimitive.reset()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.lua_dsl.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.lua_dsl package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.lua_dsl.primitives.agent.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.lua_dsl.primitives.agent module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

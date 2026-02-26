@@ -1,0 +1,245 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.data.test_feedback_sampling module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.input_sources package" href="plexus.input_sources.html" />
+    <link rel="prev" title="plexus.data.test_feedback_items module" href="plexus.data.test_feedback_items.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.data.html">plexus.data package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.data.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.data.html">plexus.data package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.data.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.AWSDataLakeCache.html">plexus.data.AWSDataLakeCache module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.DataCache.html">plexus.data.DataCache module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.FeedbackItems.html">plexus.data.FeedbackItems module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.HuggingFaceDataCache.html">plexus.data.HuggingFaceDataCache module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.TestDataCache.html">plexus.data.TestDataCache module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.session_manager.html">plexus.data.session_manager module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.test_feedback_items.html">plexus.data.test_feedback_items module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.data.test_feedback_sampling module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.data.test_feedback_sampling.MockFeedbackItem"><code class="docutils literal notranslate"><span class="pre">MockFeedbackItem</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.data.test_feedback_sampling.MockFeedbackItems"><code class="docutils literal notranslate"><span class="pre">MockFeedbackItems</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling"><code class="docutils literal notranslate"><span class="pre">TestFeedbackItemsSampling</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.data.test_feedback_sampling.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.data.html">plexus.data package</a></li>
+      <li class="breadcrumb-item active">plexus.data.test_feedback_sampling module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.data.test_feedback_sampling.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.data.test_feedback_sampling">
+<span id="plexus-data-test-feedback-sampling-module"></span><h1>plexus.data.test_feedback_sampling module<a class="headerlink" href="#module-plexus.data.test_feedback_sampling" title="Link to this heading"></a></h1>
+<p>Test cases for FeedbackItems sampling logic.
+Tests the different scenarios for prioritizing items with edit comments.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.MockFeedbackItem">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.data.test_feedback_sampling.</span></span><span class="sig-name descname"><span class="pre">MockFeedbackItem</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">final_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edit_comment</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.MockFeedbackItem" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Mock FeedbackItem for testing purposes.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.MockFeedbackItem.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">final_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edit_comment</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.MockFeedbackItem.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.MockFeedbackItems">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.data.test_feedback_sampling.</span></span><span class="sig-name descname"><span class="pre">MockFeedbackItems</span></span><a class="headerlink" href="#plexus.data.test_feedback_sampling.MockFeedbackItems" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Mock FeedbackItems class with just the sampling method for testing.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.TestFeedbackItemsSampling">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.data.test_feedback_sampling.</span></span><span class="sig-name descname"><span class="pre">TestFeedbackItemsSampling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">TestCase</span></code></p>
+<p>Test cases for FeedbackItems sampling logic.</p>
+<p>Create an instance of the class that will use the named test
+method when executed. Raises a ValueError if the instance does
+not have a method with the specified name.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.setUp" title="Link to this definition"></a></dt>
+<dd><p>Set up test fixtures.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_edge_case_empty_items">
+<span class="sig-name descname"><span class="pre">test_edge_case_empty_items</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_edge_case_empty_items" title="Link to this definition"></a></dt>
+<dd><p>Test Edge Case: No items provided.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_edge_case_limit_zero">
+<span class="sig-name descname"><span class="pre">test_edge_case_limit_zero</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_edge_case_limit_zero" title="Link to this definition"></a></dt>
+<dd><p>Test Edge Case: Limit is zero.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_1_fewer_items_than_limit">
+<span class="sig-name descname"><span class="pre">test_scenario_1_fewer_items_than_limit</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_1_fewer_items_than_limit" title="Link to this definition"></a></dt>
+<dd><p>Test Scenario 1: If there are fewer items than the limit, take them all.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_2_prioritize_edit_comments_with_room_for_others">
+<span class="sig-name descname"><span class="pre">test_scenario_2_prioritize_edit_comments_with_room_for_others</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_2_prioritize_edit_comments_with_room_for_others" title="Link to this definition"></a></dt>
+<dd><p>Test Scenario 2: More items than limit, but can fit all with edit comments plus some without.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_3_more_items_with_comments_than_limit">
+<span class="sig-name descname"><span class="pre">test_scenario_3_more_items_with_comments_than_limit</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_3_more_items_with_comments_than_limit" title="Link to this definition"></a></dt>
+<dd><p>Test Scenario 3: More items with edit comments than the limit - randomly sample from them.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_4_no_items_with_comments">
+<span class="sig-name descname"><span class="pre">test_scenario_4_no_items_with_comments</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_4_no_items_with_comments" title="Link to this definition"></a></dt>
+<dd><p>Test Scenario 4: No items have edit comments - randomly sample from all.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_5_all_items_have_comments">
+<span class="sig-name descname"><span class="pre">test_scenario_5_all_items_have_comments</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.TestFeedbackItemsSampling.test_scenario_5_all_items_have_comments" title="Link to this definition"></a></dt>
+<dd><p>Test Scenario 5: All items have edit comments - randomly sample from all.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.data.test_feedback_sampling.main">
+<span class="sig-prename descclassname"><span class="pre">plexus.data.test_feedback_sampling.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.data.test_feedback_sampling.main" title="Link to this definition"></a></dt>
+<dd><p>Run all test cases.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.data.test_feedback_items.html" class="btn btn-neutral float-left" title="plexus.data.test_feedback_items module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.input_sources.html" class="btn btn-neutral float-right" title="plexus.input_sources package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

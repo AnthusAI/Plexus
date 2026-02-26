@@ -1,0 +1,785 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.scores.Score module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.scores.TactusScore module" href="plexus.scores.TactusScore.html" />
+    <link rel="prev" title="plexus.scores.SVMClassifier module" href="plexus.scores.SVMClassifier.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.scores.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.scores.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.AWSComprehendEntityExtractor.html">plexus.scores.AWSComprehendEntityExtractor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.AWSComprehendSentimentScore.html">plexus.scores.AWSComprehendSentimentScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.AgenticExtractor.html">plexus.scores.AgenticExtractor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.AgenticValidator.html">plexus.scores.AgenticValidator module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.CompositeScore.html">plexus.scores.CompositeScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningOneStepSemanticClassifier.html">plexus.scores.DeepLearningOneStepSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html">plexus.scores.DeepLearningSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html">plexus.scores.DeepLearningSlidingWindowSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.ExplainableClassifier.html">plexus.scores.ExplainableClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.FastTextClassifier.html">plexus.scores.FastTextClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.KeywordClassifier.html">plexus.scores.KeywordClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.LLMGenerator.html">plexus.scores.LLMGenerator module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.LangGraphScore.html">plexus.scores.LangGraphScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.OpenAIEmbeddingsClassifier.html">plexus.scores.OpenAIEmbeddingsClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.SVMClassifier.html">plexus.scores.SVMClassifier module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.scores.Score module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.scores.Score.Score"><code class="docutils literal notranslate"><span class="pre">Score</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.TactusScore.html">plexus.scores.TactusScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.test_langgraphscore_routing.html">plexus.scores.test_langgraphscore_routing module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.scores.html">plexus.scores package</a></li>
+      <li class="breadcrumb-item active">plexus.scores.Score module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.scores.Score.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.scores.Score">
+<span id="plexus-scores-score-module"></span><h1>plexus.scores.Score module<a class="headerlink" href="#module-plexus.scores.Score" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.scores.Score.</span></span><span class="sig-name descname"><span class="pre">Score</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code>, <a class="reference internal" href="plexus.scores.core.ScoreData.html#plexus.scores.core.ScoreData.ScoreData" title="plexus.scores.core.ScoreData.ScoreData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScoreData</span></code></a>, <a class="reference internal" href="plexus.scores.core.ScoreVisualization.html#plexus.scores.core.ScoreVisualization.ScoreVisualization" title="plexus.scores.core.ScoreVisualization.ScoreVisualization"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScoreVisualization</span></code></a></p>
+<p>Abstract base class for implementing classification and scoring models in Plexus.</p>
+<p>Score is the fundamental building block of classification in Plexus. Each Score
+represents a specific classification task and can be implemented using various
+approaches:</p>
+<ul class="simple">
+<li><p>Machine learning models (e.g., DeepLearningSemanticClassifier)</p></li>
+<li><p>LLM-based classification (e.g., LangGraphScore)</p></li>
+<li><p>Rule-based systems (e.g., KeywordClassifier)</p></li>
+<li><p>Custom logic (by subclassing Score)</p></li>
+</ul>
+<p>The Score class provides:
+- Standard input/output interfaces using Pydantic models
+- Visualization tools for model performance
+- Cost tracking for API-based models
+- Metrics computation and logging</p>
+<p>Common usage patterns:
+1. Creating a custom classifier:</p>
+<blockquote>
+<div><dl>
+<dt>class MyClassifier(Score):</dt><dd><dl>
+<dt>def predict(self, context, model_input: Score.Input) -&gt; Score.Result:</dt><dd><p>text = model_input.text
+# Custom classification logic here
+return Score.Result(</p>
+<blockquote>
+<div><p>parameters=self.parameters,
+value=”Yes” if is_positive(text) else “No”</p>
+</div></blockquote>
+<p>)</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</div></blockquote>
+<ol class="arabic" start="2">
+<li><dl>
+<dt>Using in a Scorecard:</dt><dd><dl>
+<dt>scores:</dt><dd><dl>
+<dt>MyScore:</dt><dd><p>class: MyClassifier
+parameters:</p>
+<blockquote>
+<div><p>threshold: 0.8</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Training a model:</dt><dd><p>classifier = MyClassifier()
+classifier.train_model()
+classifier.evaluate_model()
+classifier.save_model()</p>
+</dd>
+</dl>
+</li>
+<li><dl>
+<dt>Making predictions:</dt><dd><dl class="simple">
+<dt>result = classifier.predict(context, Score.Input(</dt><dd><p>text=”content to classify”,
+metadata={“source”: “email”}</p>
+</dd>
+</dl>
+<p>))</p>
+</dd>
+</dl>
+</li>
+</ol>
+<p>The Score class is designed to be extended for different classification approaches
+while maintaining a consistent interface for use in Scorecards and Evaluations.</p>
+<p>Initialize the Score instance with the given parameters.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>parameters<span class="classifier">dict</span></dt><dd><p>Arbitrary keyword arguments that are used to initialize the Parameters instance.</p>
+</dd>
+</dl>
+</section>
+<section id="raises">
+<h2>Raises<a class="headerlink" href="#raises" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>ValidationError</dt><dd><p>If the provided parameters do not pass validation.</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Input">
+<span class="sig-name descname"><span class="pre">Input</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Input" title="Link to this definition"></a></dt>
+<dd><p>alias of <a class="reference internal" href="plexus.core.ScoreInput.html#plexus.core.ScoreInput.ScoreInput" title="plexus.core.ScoreInput.ScoreInput"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScoreInput</span></code></a></p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dependencies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">number_of_classes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_score_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Parameters required for scoring.</p>
+<section id="attributes">
+<h3>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>data<span class="classifier">dict</span></dt><dd><p>Dictionary containing data-related parameters.</p>
+</dd>
+</dl>
+<p>Create a new model by parsing and validating input data from keyword arguments.</p>
+<p>Raises [<cite>ValidationError</cite>][pydantic_core.ValidationError] if the input data cannot be
+validated to form a valid model.</p>
+<p><cite>self</cite> is explicitly positional-only to allow <cite>self</cite> as a field name.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.convert_data_percentage">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">convert_data_percentage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.convert_data_percentage" title="Link to this definition"></a></dt>
+<dd><p>Convert the percentage value in the data dictionary to a float.</p>
+<section id="id3">
+<h4>Parameters<a class="headerlink" href="#id3" title="Link to this heading"></a></h4>
+<dl class="simple">
+<dt>value<span class="classifier">dict</span></dt><dd><p>Dictionary containing data-related parameters.</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h4>Returns<a class="headerlink" href="#returns" title="Link to this heading"></a></h4>
+<dl class="simple">
+<dt>dict</dt><dd><p>Updated dictionary with the percentage value converted to float.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.data">
+<span class="sig-name descname"><span class="pre">data</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.data" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.dependencies">
+<span class="sig-name descname"><span class="pre">dependencies</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.dependencies" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.id">
+<span class="sig-name descname"><span class="pre">id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.key">
+<span class="sig-name descname"><span class="pre">key</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.key" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.label_field">
+<span class="sig-name descname"><span class="pre">label_field</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.label_field" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.label_score_name">
+<span class="sig-name descname"><span class="pre">label_score_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.label_score_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'protected_namespaces':</span> <span class="pre">()}</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.number_of_classes">
+<span class="sig-name descname"><span class="pre">number_of_classes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.number_of_classes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Parameters.scorecard_name">
+<span class="sig-name descname"><span class="pre">scorecard_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Parameters.scorecard_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.scores.Score.Score.Parameters" title="plexus.scores.Score.Score.Parameters"><span class="pre">Parameters</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">explanation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">confidence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.Result" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Standard output structure for all Score classifications in Plexus.</p>
+<p>The Result class provides a consistent way to represent classification
+outcomes, supporting both simple yes/no results and complex multi-class
+classifications with explanations. It’s used throughout Plexus for:
+- Individual Score results
+- Batch processing outputs
+- Evaluation metrics
+- Dashboard result tracking</p>
+<dl class="simple">
+<dt>Attributes:</dt><dd><p>parameters: Configuration used for this classification
+value: The classification result (e.g., “Yes”/”No” or class label)
+explanation: Detailed explanation of why this result was chosen
+confidence: Confidence score for the classification (0.0 to 1.0)
+metadata: Additional context about the classification
+error: Optional error message if classification failed</p>
+</dd>
+</dl>
+<p>The Result class provides helper methods for common operations:
+- is_yes(): Check if result is affirmative
+- is_no(): Check if result is negative
+- __eq__: Compare results (case-insensitive)</p>
+<p>Common usage:
+1. Basic classification with explanation:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>result = Score.Result(</dt><dd><p>parameters=self.parameters,
+value=”Yes”,
+explanation=”Clear greeting found at beginning of transcript”,
+confidence=0.95</p>
+</dd>
+</dl>
+<p>)</p>
+</div></blockquote>
+<ol class="arabic" start="2">
+<li><dl>
+<dt>Classification with metadata:</dt><dd><dl class="simple">
+<dt>result = Score.Result(</dt><dd><p>parameters=self.parameters,
+value=”No”,
+explanation=”No greeting found in transcript”,
+confidence=0.88,
+metadata={“source”: “phone_call”}</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
+</li>
+<li><dl>
+<dt>Error case:</dt><dd><dl class="simple">
+<dt>result = Score.Result(</dt><dd><p>parameters=self.parameters,
+value=”ERROR”,
+error=”API timeout”</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
+</li>
+</ol>
+<p>Create a new model by parsing and validating input data from keyword arguments.</p>
+<p>Raises [<cite>ValidationError</cite>][pydantic_core.ValidationError] if the input data cannot be
+validated to form a valid model.</p>
+<p><cite>self</cite> is explicitly positional-only to allow <cite>self</cite> as a field name.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.code">
+<span class="sig-name descname"><span class="pre">code</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.code" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.confidence">
+<span class="sig-name descname"><span class="pre">confidence</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.confidence" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.confidence_from_metadata">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">confidence_from_metadata</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.confidence_from_metadata" title="Link to this definition"></a></dt>
+<dd><p>Backwards compatibility: confidence from metadata</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.error">
+<span class="sig-name descname"><span class="pre">error</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.error" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.explanation">
+<span class="sig-name descname"><span class="pre">explanation</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.explanation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.explanation_from_metadata">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">explanation_from_metadata</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.explanation_from_metadata" title="Link to this definition"></a></dt>
+<dd><p>Backwards compatibility: explanation from metadata</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.is_no">
+<span class="sig-name descname"><span class="pre">is_no</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.Result.is_no" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.is_yes">
+<span class="sig-name descname"><span class="pre">is_yes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.Result.is_yes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.metadata">
+<span class="sig-name descname"><span class="pre">metadata</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.metadata" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'protected_namespaces':</span> <span class="pre">()}</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.parameters">
+<span class="sig-name descname"><span class="pre">parameters</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#plexus.scores.Score.Score.Parameters" title="plexus.scores.Score.Score.Parameters"><span class="pre">Score.Parameters</span></a></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.parameters" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.Result.value">
+<span class="sig-name descname"><span class="pre">value</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#plexus.scores.Score.Score.Result.value" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.SkippedScoreException">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">SkippedScoreException</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reason</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.SkippedScoreException" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Exception</span></code></p>
+<p>Raised when a score is skipped due to dependency conditions not being met.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.SkippedScoreException.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reason</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.SkippedScoreException.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the Score instance with the given parameters.</p>
+<section id="id4">
+<h3>Parameters<a class="headerlink" href="#id4" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><a href="#id5"><span class="problematic" id="id6">**</span></a>parameters<span class="classifier">dict</span></dt><dd><p>Arbitrary keyword arguments that are used to initialize the Parameters instance.</p>
+</dd>
+</dl>
+</section>
+<section id="id7">
+<h3>Raises<a class="headerlink" href="#id7" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>ValidationError</dt><dd><p>If the provided parameters do not pass validation.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.apply_processors_to_text">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">apply_processors_to_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">processors_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.scores.Score.Score.apply_processors_to_text" title="Link to this definition"></a></dt>
+<dd><p>Apply a list of processors to text for production predictions.</p>
+<p>This method applies the same processor pipeline used during training/evaluation
+to production prediction inputs. It creates a Score.Input, applies
+all configured processors, and returns the processed text.</p>
+<dl>
+<dt>Args:</dt><dd><p>text: Input text to process
+processors_config: List of processor configurations, each with ‘class’ and optional ‘parameters’</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Example: [{‘class’: ‘FilterCustomerOnlyProcessor’},</dt><dd><p>{‘class’: ‘RemoveSpeakerIdentifiersTranscriptFilter’}]</p>
+</dd>
+</dl>
+</div></blockquote>
+</dd>
+<dt>Returns:</dt><dd><p>Processed text after applying all processors</p>
+</dd>
+<dt>Example:</dt><dd><dl class="simple">
+<dt>processors = [</dt><dd><p>{‘class’: ‘FilterCustomerOnlyProcessor’},
+{‘class’: ‘RemoveSpeakerIdentifiersTranscriptFilter’}</p>
+</dd>
+</dl>
+<p>]
+processed_text = Score.apply_processors_to_text(raw_text, processors)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.evaluate_model">
+<span class="sig-name descname"><span class="pre">evaluate_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.evaluate_model" title="Link to this definition"></a></dt>
+<dd><p>Evaluate the model on the validation data.</p>
+<section id="id8">
+<h3>Returns<a class="headerlink" href="#id8" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>dict</dt><dd><p>Dictionary containing evaluation metrics.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.from_name">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.from_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.get_accumulated_costs">
+<span class="sig-name descname"><span class="pre">get_accumulated_costs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.get_accumulated_costs" title="Link to this definition"></a></dt>
+<dd><p>Get the expenses that have been accumulated over all the computed elements.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>dict: Aggregated cost information with totals and components</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.get_label_score_name">
+<span class="sig-name descname"><span class="pre">get_label_score_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.get_label_score_name" title="Link to this definition"></a></dt>
+<dd><p>Determine the appropriate score name based on the parameters.</p>
+<section id="id9">
+<h3>Returns<a class="headerlink" href="#id9" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>str</dt><dd><p>The determined score name.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.is_multi_class">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_multi_class</span></span><a class="headerlink" href="#plexus.scores.Score.Score.is_multi_class" title="Link to this definition"></a></dt>
+<dd><p>Determine if the classification problem is multi-class.</p>
+<p>This property checks the unique labels in the dataframe to determine if the problem is multi-class.</p>
+<section id="id10">
+<h3>Returns<a class="headerlink" href="#id10" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>bool</dt><dd><p>True if the problem is multi-class, False otherwise.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.is_relevant">
+<span class="sig-name descname"><span class="pre">is_relevant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.is_relevant" title="Link to this definition"></a></dt>
+<dd><p>Determine if the given text is relevant using the predict method.</p>
+<section id="id11">
+<h3>Parameters<a class="headerlink" href="#id11" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>text<span class="classifier">str</span></dt><dd><p>The text to be classified.</p>
+</dd>
+</dl>
+</section>
+<section id="id12">
+<h3>Returns<a class="headerlink" href="#id12" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>bool</dt><dd><p>True if the text is classified as relevant, False otherwise.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.load">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yaml_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.load" title="Link to this definition"></a></dt>
+<dd><p>Load a single score configuration with configurable caching behavior.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_identifier: A string that identifies the scorecard (ID, name, key, or external ID)
+score_name: Name of the specific score to load
+use_cache: If True (default), cache API data to local YAML files. If False, don’t cache.
+yaml_only: If True, load only from local YAML files without API calls.</p>
+</dd>
+<dt>Returns:</dt><dd><p>Score: An initialized Score instance</p>
+</dd>
+<dt>Raises:</dt><dd><p>ValueError: If the score cannot be loaded</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.log_validation_errors">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">log_validation_errors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">error</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ValidationError</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.log_validation_errors" title="Link to this definition"></a></dt>
+<dd><p>Log validation errors for the parameters.</p>
+<section id="id13">
+<h3>Parameters<a class="headerlink" href="#id13" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>error<span class="classifier">ValidationError</span></dt><dd><p>The validation error object containing details about the validation failures.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.model_directory_path">
+<span class="sig-name descname"><span class="pre">model_directory_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.model_directory_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.number_of_classes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">number_of_classes</span></span><a class="headerlink" href="#plexus.scores.Score.Score.number_of_classes" title="Link to this definition"></a></dt>
+<dd><p>Determine the number of classes for the classification problem.</p>
+<p>This property checks the unique labels in the dataframe to determine the number of classes.</p>
+<section id="id14">
+<h3>Returns<a class="headerlink" href="#id14" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>int</dt><dd><p>The number of unique classes.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.predict">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.core.ScoreInput.html#plexus.core.ScoreInput.ScoreInput" title="plexus.core.ScoreInput.ScoreInput"><span class="pre">ScoreInput</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.scores.Score.Score.Result" title="plexus.scores.Score.Score.Result"><span class="pre">Result</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#plexus.scores.Score.Score.Result" title="plexus.scores.Score.Score.Result"><span class="pre">Result</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.scores.Score.Score.predict" title="Link to this definition"></a></dt>
+<dd><p>Make predictions on the input data.</p>
+<section id="id15">
+<h3>Parameters<a class="headerlink" href="#id15" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>context<span class="classifier">Any</span></dt><dd><p>Context for the prediction</p>
+</dd>
+<dt>model_input<span class="classifier">Score.Input</span></dt><dd><p>The input data for making predictions.</p>
+</dd>
+</dl>
+</section>
+<section id="id16">
+<h3>Returns<a class="headerlink" href="#id16" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>Union[Score.Result, List[Score.Result]]</dt><dd><p>Either a single Score.Result or a list of Score.Results</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.predict_validation">
+<span class="sig-name descname"><span class="pre">predict_validation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.predict_validation" title="Link to this definition"></a></dt>
+<dd><p>Predict on the validation set.</p>
+<p>This method should be implemented by subclasses to provide the prediction logic on the validation set.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.record_configuration">
+<span class="sig-name descname"><span class="pre">record_configuration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">configuration</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.record_configuration" title="Link to this definition"></a></dt>
+<dd><p>Record the provided configuration dictionary as a JSON file in the appropriate report folder for this model.</p>
+<section id="id17">
+<h3>Parameters<a class="headerlink" href="#id17" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>configuration<span class="classifier">dict</span></dt><dd><p>Dictionary containing the configuration to be recorded.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.register_model">
+<span class="sig-name descname"><span class="pre">register_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.register_model" title="Link to this definition"></a></dt>
+<dd><p>Register the model with the model registry.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.report_directory_path">
+<span class="sig-name descname"><span class="pre">report_directory_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.report_directory_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.report_file_name">
+<span class="sig-name descname"><span class="pre">report_file_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.report_file_name" title="Link to this definition"></a></dt>
+<dd><p>Generate the full path for a report file within the report directory.</p>
+<p>Calling this function will implicitly trigger the function to ensure that the report directory exists.</p>
+<section id="id18">
+<h3>Parameters<a class="headerlink" href="#id18" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>file_name<span class="classifier">str</span></dt><dd><p>The name of the report file.</p>
+</dd>
+</dl>
+</section>
+<section id="id19">
+<h3>Returns<a class="headerlink" href="#id19" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>str</dt><dd><p>The full path to the report file with spaces replaced by underscores.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.save_model">
+<span class="sig-name descname"><span class="pre">save_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.save_model" title="Link to this definition"></a></dt>
+<dd><p>Save the model to the model registry.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.setup_label_map">
+<span class="sig-name descname"><span class="pre">setup_label_map</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.setup_label_map" title="Link to this definition"></a></dt>
+<dd><p>Set up a mapping from labels to integers.</p>
+<section id="id20">
+<h3>Parameters<a class="headerlink" href="#id20" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>labels<span class="classifier">list</span></dt><dd><p>List of unique labels.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.Score.Score.train_model">
+<span class="sig-name descname"><span class="pre">train_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_val</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.Score.Score.train_model" title="Link to this definition"></a></dt>
+<dd><p>Train the XGBoost model with the specified positive class weight.</p>
+<section id="id21">
+<h3>Parameters<a class="headerlink" href="#id21" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt>X_train<span class="classifier">numpy.ndarray</span></dt><dd><p>Training data features.</p>
+</dd>
+<dt>y_train<span class="classifier">numpy.ndarray</span></dt><dd><p>Training data labels.</p>
+</dd>
+<dt>X_val<span class="classifier">numpy.ndarray</span></dt><dd><p>Validation data features.</p>
+</dd>
+<dt>y_val<span class="classifier">numpy.ndarray</span></dt><dd><p>Validation data labels.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.scores.SVMClassifier.html" class="btn btn-neutral float-left" title="plexus.scores.SVMClassifier module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.scores.TactusScore.html" class="btn btn-neutral float-right" title="plexus.scores.TactusScore module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

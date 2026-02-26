@@ -1,0 +1,205 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.reports.s3_utils module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.reports.service module" href="plexus.reports.service.html" />
+    <link rel="prev" title="plexus.reports.parameter_utils module" href="plexus.reports.parameter_utils.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.reports.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.reports.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.reports.html">plexus.reports package</a></li>
+      <li class="breadcrumb-item active">plexus.reports.s3_utils module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.reports.s3_utils.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.reports.s3_utils">
+<span id="plexus-reports-s3-utils-module"></span><h1>plexus.reports.s3_utils module<a class="headerlink" href="#module-plexus.reports.s3_utils" title="Link to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.reports.s3_utils.add_file_to_report_block">
+<span class="sig-prename descclassname"><span class="pre">plexus.reports.s3_utils.</span></span><span class="sig-name descname"><span class="pre">add_file_to_report_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">report_block_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bytes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.s3_utils.add_file_to_report_block" title="Link to this definition"></a></dt>
+<dd><p>Upload a file to S3 and add its path to an existing report block’s attachedFiles array.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>report_block_id: ID of the existing report block
+file_name: Name of the file to create
+content: Bytes content to upload
+content_type: Optional MIME type for the file
+client: Optional PlexusDashboardClient instance</p>
+</dd>
+<dt>Returns:</dt><dd><p>Updated list of file paths in attachedFiles</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.reports.s3_utils.check_s3_bucket_access">
+<span class="sig-prename descclassname"><span class="pre">plexus.reports.s3_utils.</span></span><span class="sig-name descname"><span class="pre">check_s3_bucket_access</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bucket_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.s3_utils.check_s3_bucket_access" title="Link to this definition"></a></dt>
+<dd><p>Diagnostic function to check if the S3 bucket exists and is accessible.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>bucket_name: Name of the bucket to check, or None to use the default</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dict with diagnostic information</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.reports.s3_utils.download_report_block_file">
+<span class="sig-prename descclassname"><span class="pre">plexus.reports.s3_utils.</span></span><span class="sig-name descname"><span class="pre">download_report_block_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s3_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.s3_utils.download_report_block_file" title="Link to this definition"></a></dt>
+<dd><p>Download a file from the report block details S3 bucket.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>s3_path: S3 key path for the file (e.g., ‘reportblocks/123/log.txt’)
+local_path: Optional local path to save the file to</p>
+</dd>
+<dt>Returns:</dt><dd><p>The content of the file as a string, and the local path if saved</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.reports.s3_utils.get_bucket_name">
+<span class="sig-prename descclassname"><span class="pre">plexus.reports.s3_utils.</span></span><span class="sig-name descname"><span class="pre">get_bucket_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.s3_utils.get_bucket_name" title="Link to this definition"></a></dt>
+<dd><p>Get the S3 bucket name for report block details from environment variables
+or fall back to the default.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.reports.s3_utils.upload_report_block_file">
+<span class="sig-prename descclassname"><span class="pre">plexus.reports.s3_utils.</span></span><span class="sig-name descname"><span class="pre">upload_report_block_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">report_block_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.s3_utils.upload_report_block_file" title="Link to this definition"></a></dt>
+<dd><p>Upload a file to the report block details S3 bucket using the format expected by Amplify Gen2.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>report_block_id: ID of the report block this file belongs to
+file_name: Name of the file to create
+content: Bytes content to upload
+content_type: Optional MIME type for the file</p>
+</dd>
+<dt>Returns:</dt><dd><p>The S3 path (key) for the file, formatted for Amplify Gen2</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.reports.parameter_utils.html" class="btn btn-neutral float-left" title="plexus.reports.parameter_utils module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.reports.service.html" class="btn btn-neutral float-right" title="plexus.reports.service module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

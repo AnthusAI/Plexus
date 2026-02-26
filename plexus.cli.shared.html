@@ -1,0 +1,448 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.shared package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.shared.CommandDispatch module" href="plexus.cli.shared.CommandDispatch.html" />
+    <link rel="prev" title="plexus.cli.scorecard.scorecards module" href="plexus.cli.scorecard.scorecards.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.cli.shared package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.shared package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.shared.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.shared">
+<span id="plexus-cli-shared-package"></span><h1>plexus.cli.shared package<a class="headerlink" href="#module-plexus.cli.shared" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html">plexus.cli.shared.CommandDispatch module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.ItemCountColumn"><code class="docutils literal notranslate"><span class="pre">ItemCountColumn</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.ItemCountColumn.render"><code class="docutils literal notranslate"><span class="pre">ItemCountColumn.render()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.OrderCommands"><code class="docutils literal notranslate"><span class="pre">OrderCommands</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.OrderCommands.list_commands"><code class="docutils literal notranslate"><span class="pre">OrderCommands.list_commands()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.StatusColumn"><code class="docutils literal notranslate"><span class="pre">StatusColumn</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.StatusColumn.render"><code class="docutils literal notranslate"><span class="pre">StatusColumn.render()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.create_celery_app"><code class="docutils literal notranslate"><span class="pre">create_celery_app()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.create_cli"><code class="docutils literal notranslate"><span class="pre">create_cli()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.ensure_tasks_registered"><code class="docutils literal notranslate"><span class="pre">ensure_tasks_registered()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.get_celery_app"><code class="docutils literal notranslate"><span class="pre">get_celery_app()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.get_progress_status"><code class="docutils literal notranslate"><span class="pre">get_progress_status()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandDispatch.html#plexus.cli.shared.CommandDispatch.safequote"><code class="docutils literal notranslate"><span class="pre">safequote()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.CommandLineInterface.html">plexus.cli.shared.CommandLineInterface module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandLineInterface.html#plexus.cli.shared.CommandLineInterface.OrderCommands"><code class="docutils literal notranslate"><span class="pre">OrderCommands</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandLineInterface.html#plexus.cli.shared.CommandLineInterface.OrderCommands.list_commands"><code class="docutils literal notranslate"><span class="pre">OrderCommands.list_commands()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandLineInterface.html#plexus.cli.shared.CommandLineInterface.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html">plexus.cli.shared.CommandProgress module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.CommandProgress"><code class="docutils literal notranslate"><span class="pre">CommandProgress</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.CommandProgress.get_current_state"><code class="docutils literal notranslate"><span class="pre">CommandProgress.get_current_state()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.CommandProgress.set_update_callback"><code class="docutils literal notranslate"><span class="pre">CommandProgress.set_update_callback()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.CommandProgress.track"><code class="docutils literal notranslate"><span class="pre">CommandProgress.track()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.CommandProgress.update"><code class="docutils literal notranslate"><span class="pre">CommandProgress.update()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.ProgressState"><code class="docutils literal notranslate"><span class="pre">ProgressState</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.ProgressState.__init__"><code class="docutils literal notranslate"><span class="pre">ProgressState.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.ProgressState.current"><code class="docutils literal notranslate"><span class="pre">ProgressState.current</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.ProgressState.elapsed_time"><code class="docutils literal notranslate"><span class="pre">ProgressState.elapsed_time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.ProgressState.estimated_remaining"><code class="docutils literal notranslate"><span class="pre">ProgressState.estimated_remaining</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.ProgressState.start_time"><code class="docutils literal notranslate"><span class="pre">ProgressState.start_time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.ProgressState.status"><code class="docutils literal notranslate"><span class="pre">ProgressState.status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.CommandProgress.html#plexus.cli.shared.CommandProgress.ProgressState.total"><code class="docutils literal notranslate"><span class="pre">ProgressState.total</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.CommandTasks.html">plexus.cli.shared.CommandTasks module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandTasks.html#plexus.cli.shared.CommandTasks.register_tasks"><code class="docutils literal notranslate"><span class="pre">register_tasks()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.CommandTasks.html#plexus.cli.shared.CommandTasks.upload_file_to_s3"><code class="docutils literal notranslate"><span class="pre">upload_file_to_s3()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.TaskTargeting.html">plexus.cli.shared.TaskTargeting module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.TaskTargeting.html#plexus.cli.shared.TaskTargeting.TaskTargetMatcher"><code class="docutils literal notranslate"><span class="pre">TaskTargetMatcher</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.TaskTargeting.html#plexus.cli.shared.TaskTargeting.TaskTargetMatcher.__init__"><code class="docutils literal notranslate"><span class="pre">TaskTargetMatcher.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.TaskTargeting.html#plexus.cli.shared.TaskTargeting.TaskTargetMatcher.matches"><code class="docutils literal notranslate"><span class="pre">TaskTargetMatcher.matches()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.TaskTargeting.html#plexus.cli.shared.TaskTargeting.TaskTargetMatcher.validate_target"><code class="docutils literal notranslate"><span class="pre">TaskTargetMatcher.validate_target()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.TaskTargeting.html#plexus.cli.shared.TaskTargeting.TaskTargetPattern"><code class="docutils literal notranslate"><span class="pre">TaskTargetPattern</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.TaskTargeting.html#plexus.cli.shared.TaskTargeting.TaskTargetPattern.__init__"><code class="docutils literal notranslate"><span class="pre">TaskTargetPattern.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.TaskTargeting.html#plexus.cli.shared.TaskTargeting.TaskTargetPattern.matches"><code class="docutils literal notranslate"><span class="pre">TaskTargetPattern.matches()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.check_local_score_cache.html">plexus.cli.shared.check_local_score_cache module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.check_local_score_cache.html#plexus.cli.shared.check_local_score_cache.check_local_score_cache"><code class="docutils literal notranslate"><span class="pre">check_local_score_cache()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.cli_wrapper.html">plexus.cli.shared.cli_wrapper module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.client_utils.html">plexus.cli.shared.client_utils module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.client_utils.html#plexus.cli.shared.client_utils.create_client"><code class="docutils literal notranslate"><span class="pre">create_client()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.command_output.html">plexus.cli.shared.command_output module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.CommandOutputManager"><code class="docutils literal notranslate"><span class="pre">CommandOutputManager</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.CommandOutputManager.__init__"><code class="docutils literal notranslate"><span class="pre">CommandOutputManager.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.CommandOutputManager.cleanup"><code class="docutils literal notranslate"><span class="pre">CommandOutputManager.cleanup()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.CommandOutputManager.get_created_files"><code class="docutils literal notranslate"><span class="pre">CommandOutputManager.get_created_files()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.CommandOutputManager.get_output_file_path"><code class="docutils literal notranslate"><span class="pre">CommandOutputManager.get_output_file_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.CommandOutputManager.write_json_output"><code class="docutils literal notranslate"><span class="pre">CommandOutputManager.write_json_output()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.CommandOutputManager.write_text_output"><code class="docutils literal notranslate"><span class="pre">CommandOutputManager.write_text_output()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.get_format_type"><code class="docutils literal notranslate"><span class="pre">get_format_type()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.get_output_manager"><code class="docutils literal notranslate"><span class="pre">get_output_manager()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.set_output_manager"><code class="docutils literal notranslate"><span class="pre">set_output_manager()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.should_write_json_output"><code class="docutils literal notranslate"><span class="pre">should_write_json_output()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.write_json_output"><code class="docutils literal notranslate"><span class="pre">write_json_output()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.command_output.html#plexus.cli.shared.command_output.write_text_output"><code class="docutils literal notranslate"><span class="pre">write_text_output()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.console.html">plexus.cli.shared.console module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.dependency_discovery.html">plexus.cli.shared.dependency_discovery module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.dependency_discovery.html#plexus.cli.shared.dependency_discovery.build_name_id_mappings"><code class="docutils literal notranslate"><span class="pre">build_name_id_mappings()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.dependency_discovery.html#plexus.cli.shared.dependency_discovery.discover_dependencies"><code class="docutils literal notranslate"><span class="pre">discover_dependencies()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.dependency_discovery.html#plexus.cli.shared.dependency_discovery.extract_dependencies_from_config"><code class="docutils literal notranslate"><span class="pre">extract_dependencies_from_config()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.direct_identifier_resolution.html">plexus.cli.shared.direct_identifier_resolution module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.direct_identifier_resolution.html#plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier"><code class="docutils literal notranslate"><span class="pre">direct_resolve_score_identifier()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.direct_identifier_resolution.html#plexus.cli.shared.direct_identifier_resolution.direct_resolve_scorecard_identifier"><code class="docutils literal notranslate"><span class="pre">direct_resolve_scorecard_identifier()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.direct_memoized_resolvers.html">plexus.cli.shared.direct_memoized_resolvers module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.direct_memoized_resolvers.html#plexus.cli.shared.direct_memoized_resolvers.clear_direct_resolver_caches"><code class="docutils literal notranslate"><span class="pre">clear_direct_resolver_caches()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.direct_memoized_resolvers.html#plexus.cli.shared.direct_memoized_resolvers.direct_memoized_resolve_score_identifier"><code class="docutils literal notranslate"><span class="pre">direct_memoized_resolve_score_identifier()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.direct_memoized_resolvers.html#plexus.cli.shared.direct_memoized_resolvers.direct_memoized_resolve_scorecard_identifier"><code class="docutils literal notranslate"><span class="pre">direct_memoized_resolve_scorecard_identifier()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.evaluation_runner.html">plexus.cli.shared.evaluation_runner module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.evaluation_runner.html#plexus.cli.shared.evaluation_runner.create_tracker_and_evaluation"><code class="docutils literal notranslate"><span class="pre">create_tracker_and_evaluation()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.evaluation_runner.html#plexus.cli.shared.evaluation_runner.run_accuracy_evaluation"><code class="docutils literal notranslate"><span class="pre">run_accuracy_evaluation()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.experiment_runner.html">plexus.cli.shared.experiment_runner module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.experiment_runner.html#plexus.cli.shared.experiment_runner.create_tracker_and_experiment_task"><code class="docutils literal notranslate"><span class="pre">create_tracker_and_experiment_task()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.experiment_runner.html#plexus.cli.shared.experiment_runner.run_experiment_with_task_tracking"><code class="docutils literal notranslate"><span class="pre">run_experiment_with_task_tracking()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.fetch_score_configurations.html">plexus.cli.shared.fetch_score_configurations module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.fetch_score_configurations.html#plexus.cli.shared.fetch_score_configurations.fetch_score_configurations"><code class="docutils literal notranslate"><span class="pre">fetch_score_configurations()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.fetch_score_configurations.html#plexus.cli.shared.fetch_score_configurations.load_cached_configurations"><code class="docutils literal notranslate"><span class="pre">load_cached_configurations()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.fetch_scorecard_structure.html">plexus.cli.shared.fetch_scorecard_structure module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.fetch_scorecard_structure.html#plexus.cli.shared.fetch_scorecard_structure.fetch_scorecard_structure"><code class="docutils literal notranslate"><span class="pre">fetch_scorecard_structure()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.file_editor.html">plexus.cli.shared.file_editor module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.file_editor.html#plexus.cli.shared.file_editor.FileEditor"><code class="docutils literal notranslate"><span class="pre">FileEditor</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.file_editor.html#plexus.cli.shared.file_editor.FileEditor.__init__"><code class="docutils literal notranslate"><span class="pre">FileEditor.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.file_editor.html#plexus.cli.shared.file_editor.FileEditor.create"><code class="docutils literal notranslate"><span class="pre">FileEditor.create()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.file_editor.html#plexus.cli.shared.file_editor.FileEditor.insert"><code class="docutils literal notranslate"><span class="pre">FileEditor.insert()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.file_editor.html#plexus.cli.shared.file_editor.FileEditor.str_replace"><code class="docutils literal notranslate"><span class="pre">FileEditor.str_replace()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.file_editor.html#plexus.cli.shared.file_editor.FileEditor.undo_edit"><code class="docutils literal notranslate"><span class="pre">FileEditor.undo_edit()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.file_editor.html#plexus.cli.shared.file_editor.FileEditor.view"><code class="docutils literal notranslate"><span class="pre">FileEditor.view()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.identifier_resolution.html">plexus.cli.shared.identifier_resolution module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.identifier_resolution.html#plexus.cli.shared.identifier_resolution.resolve_data_source"><code class="docutils literal notranslate"><span class="pre">resolve_data_source()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.identifier_resolution.html#plexus.cli.shared.identifier_resolution.resolve_item_identifier"><code class="docutils literal notranslate"><span class="pre">resolve_item_identifier()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.identifier_resolution.html#plexus.cli.shared.identifier_resolution.resolve_score_identifier"><code class="docutils literal notranslate"><span class="pre">resolve_score_identifier()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.identifier_resolution.html#plexus.cli.shared.identifier_resolution.resolve_scorecard_identifier"><code class="docutils literal notranslate"><span class="pre">resolve_scorecard_identifier()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.identify_target_scores.html">plexus.cli.shared.identify_target_scores module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.identify_target_scores.html#plexus.cli.shared.identify_target_scores.identify_target_scores"><code class="docutils literal notranslate"><span class="pre">identify_target_scores()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.iterative_config_fetching.html">plexus.cli.shared.iterative_config_fetching module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.iterative_config_fetching.html#plexus.cli.shared.iterative_config_fetching.iteratively_fetch_configurations"><code class="docutils literal notranslate"><span class="pre">iteratively_fetch_configurations()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.memoized_resolvers.html">plexus.cli.shared.memoized_resolvers module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.memoized_resolvers.html#plexus.cli.shared.memoized_resolvers.clear_resolver_caches"><code class="docutils literal notranslate"><span class="pre">clear_resolver_caches()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.memoized_resolvers.html#plexus.cli.shared.memoized_resolvers.memoized_resolve_item_identifier"><code class="docutils literal notranslate"><span class="pre">memoized_resolve_item_identifier()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.memoized_resolvers.html#plexus.cli.shared.memoized_resolvers.memoized_resolve_score_identifier"><code class="docutils literal notranslate"><span class="pre">memoized_resolve_score_identifier()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.memoized_resolvers.html#plexus.cli.shared.memoized_resolvers.memoized_resolve_scorecard_identifier"><code class="docutils literal notranslate"><span class="pre">memoized_resolve_scorecard_identifier()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.plexus_tool.html">plexus.cli.shared.plexus_tool module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.plexus_tool.html#plexus.cli.shared.plexus_tool.PlexusTool"><code class="docutils literal notranslate"><span class="pre">PlexusTool</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.plexus_tool.html#plexus.cli.shared.plexus_tool.PlexusTool.__init__"><code class="docutils literal notranslate"><span class="pre">PlexusTool.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.plexus_tool.html#plexus.cli.shared.plexus_tool.PlexusTool.list_scorecards"><code class="docutils literal notranslate"><span class="pre">PlexusTool.list_scorecards()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.plexus_tool.html#plexus.cli.shared.plexus_tool.PlexusTool.list_scores_by_scorecard"><code class="docutils literal notranslate"><span class="pre">PlexusTool.list_scores_by_scorecard()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.plexus_tool.html#plexus.cli.shared.plexus_tool.PlexusTool.pull_score"><code class="docutils literal notranslate"><span class="pre">PlexusTool.pull_score()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.plexus_tool.html#plexus.cli.shared.plexus_tool.PlexusTool.push_score"><code class="docutils literal notranslate"><span class="pre">PlexusTool.push_score()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.report.html">plexus.cli.shared.report module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.score_config_fetching.html">plexus.cli.shared.score_config_fetching module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.score_config_fetching.html#plexus.cli.shared.score_config_fetching.fetch_and_cache_single_score"><code class="docutils literal notranslate"><span class="pre">fetch_and_cache_single_score()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.shared.html">plexus.cli.shared.shared module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.shared.html#plexus.cli.shared.shared.get_score_guidelines_path"><code class="docutils literal notranslate"><span class="pre">get_score_guidelines_path()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.shared.html#plexus.cli.shared.shared.get_score_yaml_path"><code class="docutils literal notranslate"><span class="pre">get_score_yaml_path()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.shared.html#plexus.cli.shared.shared.get_scoring_jobs_for_batch"><code class="docutils literal notranslate"><span class="pre">get_scoring_jobs_for_batch()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.shared.html#plexus.cli.shared.shared.sanitize_path_name"><code class="docutils literal notranslate"><span class="pre">sanitize_path_name()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.shared.html#plexus.cli.shared.shared.select_sample_csv"><code class="docutils literal notranslate"><span class="pre">select_sample_csv()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.shared.html#plexus.cli.shared.shared.select_sample_data_driven"><code class="docutils literal notranslate"><span class="pre">select_sample_data_driven()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.stage_configurations.html">plexus.cli.shared.stage_configurations module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.stage_configurations.html#plexus.cli.shared.stage_configurations.get_evaluation_stage_configs"><code class="docutils literal notranslate"><span class="pre">get_evaluation_stage_configs()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.stage_configurations.html#plexus.cli.shared.stage_configurations.get_evaluation_stages"><code class="docutils literal notranslate"><span class="pre">get_evaluation_stages()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.stage_configurations.html#plexus.cli.shared.stage_configurations.get_experiment_stage_configs"><code class="docutils literal notranslate"><span class="pre">get_experiment_stage_configs()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.stage_configurations.html#plexus.cli.shared.stage_configurations.get_feedback_evaluation_stage_configs"><code class="docutils literal notranslate"><span class="pre">get_feedback_evaluation_stage_configs()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.stage_configurations.html#plexus.cli.shared.stage_configurations.get_prediction_stage_configs"><code class="docutils literal notranslate"><span class="pre">get_prediction_stage_configs()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.stage_configurations.html#plexus.cli.shared.stage_configurations.get_prediction_stages"><code class="docutils literal notranslate"><span class="pre">get_prediction_stages()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.stage_configurations.html#plexus.cli.shared.stage_configurations.get_procedure_stage_configs"><code class="docutils literal notranslate"><span class="pre">get_procedure_stage_configs()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.stage_configurations.html#plexus.cli.shared.stage_configurations.get_stage_configs_for_operation_type"><code class="docutils literal notranslate"><span class="pre">get_stage_configs_for_operation_type()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html">plexus.cli.shared.task_progress_tracker module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage"><code class="docutils literal notranslate"><span class="pre">Stage</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.__init__"><code class="docutils literal notranslate"><span class="pre">Stage.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.complete"><code class="docutils literal notranslate"><span class="pre">Stage.complete()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.end_time"><code class="docutils literal notranslate"><span class="pre">Stage.end_time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.name"><code class="docutils literal notranslate"><span class="pre">Stage.name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.order"><code class="docutils literal notranslate"><span class="pre">Stage.order</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.processed_items"><code class="docutils literal notranslate"><span class="pre">Stage.processed_items</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.start"><code class="docutils literal notranslate"><span class="pre">Stage.start()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.start_time"><code class="docutils literal notranslate"><span class="pre">Stage.start_time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.status"><code class="docutils literal notranslate"><span class="pre">Stage.status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.status_message"><code class="docutils literal notranslate"><span class="pre">Stage.status_message</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.total_items"><code class="docutils literal notranslate"><span class="pre">Stage.total_items</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.Stage.update_processed_count"><code class="docutils literal notranslate"><span class="pre">Stage.update_processed_count()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.StageConfig"><code class="docutils literal notranslate"><span class="pre">StageConfig</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.StageConfig.__init__"><code class="docutils literal notranslate"><span class="pre">StageConfig.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.StageConfig.order"><code class="docutils literal notranslate"><span class="pre">StageConfig.order</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.StageConfig.status_message"><code class="docutils literal notranslate"><span class="pre">StageConfig.status_message</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.StageConfig.total_items"><code class="docutils literal notranslate"><span class="pre">StageConfig.total_items</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.__init__"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.advance_stage"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.advance_stage()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.api_task"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.api_task</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.complete"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.complete()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.complete_with_message"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.complete_with_message()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.create_for_evaluation"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.create_for_evaluation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.create_for_operation_type"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.create_for_operation_type()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.create_for_prediction"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.create_for_prediction()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.current_stage"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.current_stage</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.elapsed_time"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.elapsed_time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.end_time"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.end_time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.estimated_completion_time"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.estimated_completion_time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.estimated_time_remaining"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.estimated_time_remaining</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.fail"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.fail()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.fail_current_stage"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.fail_current_stage()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.fail_processing"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.fail_processing()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.get_all_stages"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.get_all_stages()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.get_stage_by_name"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.get_stage_by_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.items_per_second"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.items_per_second</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.progress"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.progress</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.set_stage_message"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.set_stage_message()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.set_total_items"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.set_total_items()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.task"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.task</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.task_progress_tracker.html#plexus.cli.shared.task_progress_tracker.TaskProgressTracker.update"><code class="docutils literal notranslate"><span class="pre">TaskProgressTracker.update()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.universal_code.html">plexus.cli.shared.universal_code module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.universal_code.html#plexus.cli.shared.universal_code.detect_task_type_from_command"><code class="docutils literal notranslate"><span class="pre">detect_task_type_from_command()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.universal_code.html#plexus.cli.shared.universal_code.extract_score_from_command"><code class="docutils literal notranslate"><span class="pre">extract_score_from_command()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.universal_code.html#plexus.cli.shared.universal_code.extract_scorecard_from_command"><code class="docutils literal notranslate"><span class="pre">extract_scorecard_from_command()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.universal_code.html#plexus.cli.shared.universal_code.generate_evaluation_universal_code"><code class="docutils literal notranslate"><span class="pre">generate_evaluation_universal_code()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.universal_code.html#plexus.cli.shared.universal_code.generate_prediction_universal_code"><code class="docutils literal notranslate"><span class="pre">generate_prediction_universal_code()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.universal_code.html#plexus.cli.shared.universal_code.generate_universal_code_yaml"><code class="docutils literal notranslate"><span class="pre">generate_universal_code_yaml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.shared.utils.html">plexus.cli.shared.utils module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.shared.utils.html#plexus.cli.shared.utils.parse_kv_pairs"><code class="docutils literal notranslate"><span class="pre">parse_kv_pairs()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.scorecard.scorecards.html" class="btn btn-neutral float-left" title="plexus.cli.scorecard.scorecards module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.shared.CommandDispatch.html" class="btn btn-neutral float-right" title="plexus.cli.shared.CommandDispatch module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

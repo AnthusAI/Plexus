@@ -1,0 +1,1168 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.state_machine module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.state_machine_stages module" href="plexus.cli.procedure.state_machine_stages.html" />
+    <link rel="prev" title="plexus.cli.procedure.sop_agent_base module" href="plexus.cli.procedure.sop_agent_base.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.state_machine module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.state_machine.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.state_machine">
+<span id="plexus-cli-procedure-state-machine-module"></span><h1>plexus.cli.procedure.state_machine module<a class="headerlink" href="#module-plexus.cli.procedure.state_machine" title="Link to this heading"></a></h1>
+<p>Procedure State Machine</p>
+<p>Defines the state machine for Procedure workflow using python-statemachine library.
+This provides clean, validated state transitions and prevents invalid state changes.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.state_machine.</span></span><span class="sig-name descname"><span class="pre">ProcedureStateMachine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">StateMachine</span></code></p>
+<p>State machine for Procedure workflow.</p>
+<dl class="simple">
+<dt>States:</dt><dd><ul class="simple">
+<li><p>start: Initial state when procedure is created</p></li>
+<li><p>evaluation: Running initial evaluation to gather metrics</p></li>
+<li><p>hypothesis: Analyzing evaluation results and generating hypotheses</p></li>
+<li><p>test: Testing hypothesis by generating and evaluating score version</p></li>
+<li><p>insights: Analyzing test results and generating insights</p></li>
+<li><p>completed: All work finished successfully</p></li>
+<li><p>error: Procedure encountered an error</p></li>
+</ul>
+</dd>
+<dt>Transitions:</dt><dd><ul class="simple">
+<li><p>begin: start → evaluation (start initial evaluation)</p></li>
+<li><p>analyze: evaluation → hypothesis (begin hypothesis generation)</p></li>
+<li><p>start_testing: hypothesis → test (begin testing hypothesis)</p></li>
+<li><p>analyze_results: test → insights (analyze test results)</p></li>
+<li><p>continue_iteration: insights → hypothesis (loop back for next round)</p></li>
+<li><p>finish_from_insights: insights → completed (insights complete, no more iterations)</p></li>
+<li><p>finish_from_hypothesis: hypothesis → completed (decided no testing needed)</p></li>
+<li><p>fail_*: any state → error (error occurred)</p></li>
+<li><p>retry_from_error: error → evaluation (retry after error)</p></li>
+<li><p>restart_from_error: error → start (full restart after error)</p></li>
+</ul>
+</dd>
+</dl>
+<p>Initialize state machine for a procedure.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: The procedure ID
+current_state: The current state (if resuming), or None for new procedure
+client: Optional PlexusDashboardClient for updating TaskStages</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize state machine for a procedure.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: The procedure ID
+current_state: The current state (if resuming), or None for new procedure
+client: Optional PlexusDashboardClient for updating TaskStages</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.analyze">
+<span class="sig-name descname"><span class="pre">analyze</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.analyze" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.analyze_results">
+<span class="sig-name descname"><span class="pre">analyze_results</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.analyze_results" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.begin">
+<span class="sig-name descname"><span class="pre">begin</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.begin" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.completed">
+<span class="sig-name descname"><span class="pre">completed</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.completed" title="Link to this definition"></a></dt>
+<dd><p>A State in a <span class="xref std std-ref">StateMachine</span> describes a particular behavior of the machine.
+When we say that a machine is “in” a state, it means that the machine behaves
+in the way that state describes.</p>
+<dl>
+<dt>Args:</dt><dd><dl>
+<dt>name: A human-readable representation of the state. Default is derived</dt><dd><p>from the name of the variable assigned to the state machine class.
+The name is derived from the id using this logic:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">name</span> <span class="o">=</span> <span class="nb">id</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd>
+<dt>value: A specific value to the storage and retrieval of states.</dt><dd><p>If specified, you can use It to map a more friendly representation to a low-level
+value.</p>
+</dd>
+<dt>initial: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if the <code class="docutils literal notranslate"><span class="pre">State</span></code> is the initial one. There must be one and only</dt><dd><p>one initial state in a statemachine. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+If not specified, the default initial state is the first child state in document order.</p>
+</dd>
+<dt>final: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if represents a final state. A machine can have</dt><dd><p>optionally many final states. Final states have no <span class="xref std std-ref">transition</span> starting from It.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt>enter: One or more callbacks assigned to be executed when the state is entered.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+<dt>exit: One or more callbacks assigned to be executed when the state is exited.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>State is a core component on how this library implements an expressive API to declare
+StateMachines.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">statemachine</span><span class="w"> </span><span class="kn">import</span> <span class="n">State</span>
+</pre></div>
+</div>
+<p>Given a few states…</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Draft&quot;</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">producing</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;Producing&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">closed</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s1">&#39;Closed&#39;</span><span class="p">,</span> <span class="n">final</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Transitions are declared using the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.to()</span></code> or <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> (reversed) methods.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">producing</span><span class="p">)</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Producing&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>The result is a <span class="xref std std-ref">TransitionList</span>.
+Don’t worry about this internal class.
+But the good thing is that it implements the <code class="docutils literal notranslate"><span class="pre">OR</span></code> operator to combine transitions,
+so you can use the <code class="docutils literal notranslate"><span class="pre">|</span></code> syntax to compound a list of transitions and assign
+to the same event.</p>
+<p>You can declare all transitions for a state in one single line …</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span> <span class="o">|</span> <span class="n">producing</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>… and you can append additional transitions for a state to previous definitions.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">|=</span> <span class="n">closed</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Draft&#39;)]</span>
+</pre></div>
+</div>
+<p>There are handy shortcuts that you can use to express this same set of transitions.</p>
+<p>The first one, <code class="docutils literal notranslate"><span class="pre">draft.to(draft)</span></code>, is also called a <span class="xref std std-ref">self-transition</span>, and can be
+expressed using an alternative syntax:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="o">.</span><span class="n">itself</span><span class="p">()</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Draft&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>You can even pass a list of target states to declare at once all transitions starting
+from the same state.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Draft&#39;, &#39;Producing&#39;), (&#39;Draft&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+<p>Sometimes it’s easier to use the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> method:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">closed</span><span class="o">.</span><span class="n">from_</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Closed&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.continue_iteration">
+<span class="sig-name descname"><span class="pre">continue_iteration</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.continue_iteration" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.error">
+<span class="sig-name descname"><span class="pre">error</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.error" title="Link to this definition"></a></dt>
+<dd><p>A State in a <span class="xref std std-ref">StateMachine</span> describes a particular behavior of the machine.
+When we say that a machine is “in” a state, it means that the machine behaves
+in the way that state describes.</p>
+<dl>
+<dt>Args:</dt><dd><dl>
+<dt>name: A human-readable representation of the state. Default is derived</dt><dd><p>from the name of the variable assigned to the state machine class.
+The name is derived from the id using this logic:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">name</span> <span class="o">=</span> <span class="nb">id</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd>
+<dt>value: A specific value to the storage and retrieval of states.</dt><dd><p>If specified, you can use It to map a more friendly representation to a low-level
+value.</p>
+</dd>
+<dt>initial: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if the <code class="docutils literal notranslate"><span class="pre">State</span></code> is the initial one. There must be one and only</dt><dd><p>one initial state in a statemachine. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+If not specified, the default initial state is the first child state in document order.</p>
+</dd>
+<dt>final: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if represents a final state. A machine can have</dt><dd><p>optionally many final states. Final states have no <span class="xref std std-ref">transition</span> starting from It.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt>enter: One or more callbacks assigned to be executed when the state is entered.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+<dt>exit: One or more callbacks assigned to be executed when the state is exited.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>State is a core component on how this library implements an expressive API to declare
+StateMachines.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">statemachine</span><span class="w"> </span><span class="kn">import</span> <span class="n">State</span>
+</pre></div>
+</div>
+<p>Given a few states…</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Draft&quot;</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">producing</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;Producing&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">closed</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s1">&#39;Closed&#39;</span><span class="p">,</span> <span class="n">final</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Transitions are declared using the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.to()</span></code> or <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> (reversed) methods.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">producing</span><span class="p">)</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Producing&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>The result is a <span class="xref std std-ref">TransitionList</span>.
+Don’t worry about this internal class.
+But the good thing is that it implements the <code class="docutils literal notranslate"><span class="pre">OR</span></code> operator to combine transitions,
+so you can use the <code class="docutils literal notranslate"><span class="pre">|</span></code> syntax to compound a list of transitions and assign
+to the same event.</p>
+<p>You can declare all transitions for a state in one single line …</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span> <span class="o">|</span> <span class="n">producing</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>… and you can append additional transitions for a state to previous definitions.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">|=</span> <span class="n">closed</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Draft&#39;)]</span>
+</pre></div>
+</div>
+<p>There are handy shortcuts that you can use to express this same set of transitions.</p>
+<p>The first one, <code class="docutils literal notranslate"><span class="pre">draft.to(draft)</span></code>, is also called a <span class="xref std std-ref">self-transition</span>, and can be
+expressed using an alternative syntax:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="o">.</span><span class="n">itself</span><span class="p">()</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Draft&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>You can even pass a list of target states to declare at once all transitions starting
+from the same state.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Draft&#39;, &#39;Producing&#39;), (&#39;Draft&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+<p>Sometimes it’s easier to use the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> method:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">closed</span><span class="o">.</span><span class="n">from_</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Closed&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.evaluation">
+<span class="sig-name descname"><span class="pre">evaluation</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.evaluation" title="Link to this definition"></a></dt>
+<dd><p>A State in a <span class="xref std std-ref">StateMachine</span> describes a particular behavior of the machine.
+When we say that a machine is “in” a state, it means that the machine behaves
+in the way that state describes.</p>
+<dl>
+<dt>Args:</dt><dd><dl>
+<dt>name: A human-readable representation of the state. Default is derived</dt><dd><p>from the name of the variable assigned to the state machine class.
+The name is derived from the id using this logic:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">name</span> <span class="o">=</span> <span class="nb">id</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd>
+<dt>value: A specific value to the storage and retrieval of states.</dt><dd><p>If specified, you can use It to map a more friendly representation to a low-level
+value.</p>
+</dd>
+<dt>initial: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if the <code class="docutils literal notranslate"><span class="pre">State</span></code> is the initial one. There must be one and only</dt><dd><p>one initial state in a statemachine. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+If not specified, the default initial state is the first child state in document order.</p>
+</dd>
+<dt>final: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if represents a final state. A machine can have</dt><dd><p>optionally many final states. Final states have no <span class="xref std std-ref">transition</span> starting from It.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt>enter: One or more callbacks assigned to be executed when the state is entered.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+<dt>exit: One or more callbacks assigned to be executed when the state is exited.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>State is a core component on how this library implements an expressive API to declare
+StateMachines.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">statemachine</span><span class="w"> </span><span class="kn">import</span> <span class="n">State</span>
+</pre></div>
+</div>
+<p>Given a few states…</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Draft&quot;</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">producing</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;Producing&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">closed</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s1">&#39;Closed&#39;</span><span class="p">,</span> <span class="n">final</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Transitions are declared using the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.to()</span></code> or <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> (reversed) methods.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">producing</span><span class="p">)</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Producing&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>The result is a <span class="xref std std-ref">TransitionList</span>.
+Don’t worry about this internal class.
+But the good thing is that it implements the <code class="docutils literal notranslate"><span class="pre">OR</span></code> operator to combine transitions,
+so you can use the <code class="docutils literal notranslate"><span class="pre">|</span></code> syntax to compound a list of transitions and assign
+to the same event.</p>
+<p>You can declare all transitions for a state in one single line …</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span> <span class="o">|</span> <span class="n">producing</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>… and you can append additional transitions for a state to previous definitions.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">|=</span> <span class="n">closed</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Draft&#39;)]</span>
+</pre></div>
+</div>
+<p>There are handy shortcuts that you can use to express this same set of transitions.</p>
+<p>The first one, <code class="docutils literal notranslate"><span class="pre">draft.to(draft)</span></code>, is also called a <span class="xref std std-ref">self-transition</span>, and can be
+expressed using an alternative syntax:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="o">.</span><span class="n">itself</span><span class="p">()</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Draft&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>You can even pass a list of target states to declare at once all transitions starting
+from the same state.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Draft&#39;, &#39;Producing&#39;), (&#39;Draft&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+<p>Sometimes it’s easier to use the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> method:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">closed</span><span class="o">.</span><span class="n">from_</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Closed&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_evaluation">
+<span class="sig-name descname"><span class="pre">fail_from_evaluation</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_evaluation" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_hypothesis">
+<span class="sig-name descname"><span class="pre">fail_from_hypothesis</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_hypothesis" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_insights">
+<span class="sig-name descname"><span class="pre">fail_from_insights</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_insights" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_start">
+<span class="sig-name descname"><span class="pre">fail_from_start</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_start" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_test">
+<span class="sig-name descname"><span class="pre">fail_from_test</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.fail_from_test" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.final_states">
+<span class="sig-name descname"><span class="pre">final_states</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[State('Completed',</span> <span class="pre">id='completed',</span> <span class="pre">value='completed',</span> <span class="pre">initial=False,</span> <span class="pre">final=True,</span> <span class="pre">parallel=False)]</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.final_states" title="Link to this definition"></a></dt>
+<dd><p>List of top-level <span class="xref std std-ref">State</span> objects marked as <code class="docutils literal notranslate"><span class="pre">final</span></code>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.finish_from_hypothesis">
+<span class="sig-name descname"><span class="pre">finish_from_hypothesis</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.finish_from_hypothesis" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.finish_from_insights">
+<span class="sig-name descname"><span class="pre">finish_from_insights</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.finish_from_insights" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.hypothesis">
+<span class="sig-name descname"><span class="pre">hypothesis</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.hypothesis" title="Link to this definition"></a></dt>
+<dd><p>A State in a <span class="xref std std-ref">StateMachine</span> describes a particular behavior of the machine.
+When we say that a machine is “in” a state, it means that the machine behaves
+in the way that state describes.</p>
+<dl>
+<dt>Args:</dt><dd><dl>
+<dt>name: A human-readable representation of the state. Default is derived</dt><dd><p>from the name of the variable assigned to the state machine class.
+The name is derived from the id using this logic:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">name</span> <span class="o">=</span> <span class="nb">id</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd>
+<dt>value: A specific value to the storage and retrieval of states.</dt><dd><p>If specified, you can use It to map a more friendly representation to a low-level
+value.</p>
+</dd>
+<dt>initial: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if the <code class="docutils literal notranslate"><span class="pre">State</span></code> is the initial one. There must be one and only</dt><dd><p>one initial state in a statemachine. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+If not specified, the default initial state is the first child state in document order.</p>
+</dd>
+<dt>final: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if represents a final state. A machine can have</dt><dd><p>optionally many final states. Final states have no <span class="xref std std-ref">transition</span> starting from It.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt>enter: One or more callbacks assigned to be executed when the state is entered.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+<dt>exit: One or more callbacks assigned to be executed when the state is exited.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>State is a core component on how this library implements an expressive API to declare
+StateMachines.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">statemachine</span><span class="w"> </span><span class="kn">import</span> <span class="n">State</span>
+</pre></div>
+</div>
+<p>Given a few states…</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Draft&quot;</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">producing</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;Producing&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">closed</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s1">&#39;Closed&#39;</span><span class="p">,</span> <span class="n">final</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Transitions are declared using the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.to()</span></code> or <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> (reversed) methods.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">producing</span><span class="p">)</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Producing&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>The result is a <span class="xref std std-ref">TransitionList</span>.
+Don’t worry about this internal class.
+But the good thing is that it implements the <code class="docutils literal notranslate"><span class="pre">OR</span></code> operator to combine transitions,
+so you can use the <code class="docutils literal notranslate"><span class="pre">|</span></code> syntax to compound a list of transitions and assign
+to the same event.</p>
+<p>You can declare all transitions for a state in one single line …</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span> <span class="o">|</span> <span class="n">producing</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>… and you can append additional transitions for a state to previous definitions.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">|=</span> <span class="n">closed</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Draft&#39;)]</span>
+</pre></div>
+</div>
+<p>There are handy shortcuts that you can use to express this same set of transitions.</p>
+<p>The first one, <code class="docutils literal notranslate"><span class="pre">draft.to(draft)</span></code>, is also called a <span class="xref std std-ref">self-transition</span>, and can be
+expressed using an alternative syntax:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="o">.</span><span class="n">itself</span><span class="p">()</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Draft&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>You can even pass a list of target states to declare at once all transitions starting
+from the same state.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Draft&#39;, &#39;Producing&#39;), (&#39;Draft&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+<p>Sometimes it’s easier to use the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> method:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">closed</span><span class="o">.</span><span class="n">from_</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Closed&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.id">
+<span class="sig-name descname"><span class="pre">id</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'procedurestatemachine'</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.id" title="Link to this definition"></a></dt>
+<dd><p>Lowercase version of <a class="reference internal" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.name" title="plexus.cli.procedure.state_machine.ProcedureStateMachine.name"><code class="xref py py-attr docutils literal notranslate"><span class="pre">name</span></code></a> (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;trafficlightmachine&quot;</span></code>).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.initial_state">
+<span class="sig-name descname"><span class="pre">initial_state</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.initial_state" title="Link to this definition"></a></dt>
+<dd><p>The single top-level initial <span class="xref std std-ref">State</span>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> for abstract classes.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.insights">
+<span class="sig-name descname"><span class="pre">insights</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.insights" title="Link to this definition"></a></dt>
+<dd><p>A State in a <span class="xref std std-ref">StateMachine</span> describes a particular behavior of the machine.
+When we say that a machine is “in” a state, it means that the machine behaves
+in the way that state describes.</p>
+<dl>
+<dt>Args:</dt><dd><dl>
+<dt>name: A human-readable representation of the state. Default is derived</dt><dd><p>from the name of the variable assigned to the state machine class.
+The name is derived from the id using this logic:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">name</span> <span class="o">=</span> <span class="nb">id</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd>
+<dt>value: A specific value to the storage and retrieval of states.</dt><dd><p>If specified, you can use It to map a more friendly representation to a low-level
+value.</p>
+</dd>
+<dt>initial: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if the <code class="docutils literal notranslate"><span class="pre">State</span></code> is the initial one. There must be one and only</dt><dd><p>one initial state in a statemachine. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+If not specified, the default initial state is the first child state in document order.</p>
+</dd>
+<dt>final: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if represents a final state. A machine can have</dt><dd><p>optionally many final states. Final states have no <span class="xref std std-ref">transition</span> starting from It.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt>enter: One or more callbacks assigned to be executed when the state is entered.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+<dt>exit: One or more callbacks assigned to be executed when the state is exited.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>State is a core component on how this library implements an expressive API to declare
+StateMachines.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">statemachine</span><span class="w"> </span><span class="kn">import</span> <span class="n">State</span>
+</pre></div>
+</div>
+<p>Given a few states…</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Draft&quot;</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">producing</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;Producing&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">closed</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s1">&#39;Closed&#39;</span><span class="p">,</span> <span class="n">final</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Transitions are declared using the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.to()</span></code> or <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> (reversed) methods.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">producing</span><span class="p">)</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Producing&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>The result is a <span class="xref std std-ref">TransitionList</span>.
+Don’t worry about this internal class.
+But the good thing is that it implements the <code class="docutils literal notranslate"><span class="pre">OR</span></code> operator to combine transitions,
+so you can use the <code class="docutils literal notranslate"><span class="pre">|</span></code> syntax to compound a list of transitions and assign
+to the same event.</p>
+<p>You can declare all transitions for a state in one single line …</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span> <span class="o">|</span> <span class="n">producing</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>… and you can append additional transitions for a state to previous definitions.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">|=</span> <span class="n">closed</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Draft&#39;)]</span>
+</pre></div>
+</div>
+<p>There are handy shortcuts that you can use to express this same set of transitions.</p>
+<p>The first one, <code class="docutils literal notranslate"><span class="pre">draft.to(draft)</span></code>, is also called a <span class="xref std std-ref">self-transition</span>, and can be
+expressed using an alternative syntax:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="o">.</span><span class="n">itself</span><span class="p">()</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Draft&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>You can even pass a list of target states to declare at once all transitions starting
+from the same state.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Draft&#39;, &#39;Producing&#39;), (&#39;Draft&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+<p>Sometimes it’s easier to use the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> method:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">closed</span><span class="o">.</span><span class="n">from_</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Closed&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ProcedureStateMachine'</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.name" title="Link to this definition"></a></dt>
+<dd><p>The class name of the state machine (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;TrafficLightMachine&quot;</span></code>).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_analyze">
+<span class="sig-name descname"><span class="pre">on_analyze</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_analyze" title="Link to this definition"></a></dt>
+<dd><p>Called when transitioning evaluation → hypothesis</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_analyze_results">
+<span class="sig-name descname"><span class="pre">on_analyze_results</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_analyze_results" title="Link to this definition"></a></dt>
+<dd><p>Called when transitioning test → insights</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_begin">
+<span class="sig-name descname"><span class="pre">on_begin</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_begin" title="Link to this definition"></a></dt>
+<dd><p>Called when transitioning start → evaluation</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_continue_iteration">
+<span class="sig-name descname"><span class="pre">on_continue_iteration</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_continue_iteration" title="Link to this definition"></a></dt>
+<dd><p>Called when transitioning insights → hypothesis (looping back for next round)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_enter_error">
+<span class="sig-name descname"><span class="pre">on_enter_error</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_enter_error" title="Link to this definition"></a></dt>
+<dd><p>Called when entering error state</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_finish_from_hypothesis">
+<span class="sig-name descname"><span class="pre">on_finish_from_hypothesis</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_finish_from_hypothesis" title="Link to this definition"></a></dt>
+<dd><p>Called when transitioning hypothesis → completed</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_finish_from_insights">
+<span class="sig-name descname"><span class="pre">on_finish_from_insights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_finish_from_insights" title="Link to this definition"></a></dt>
+<dd><p>Called when transitioning insights → completed</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_restart_from_error">
+<span class="sig-name descname"><span class="pre">on_restart_from_error</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_restart_from_error" title="Link to this definition"></a></dt>
+<dd><p>Called when transitioning error → start</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_retry_from_error">
+<span class="sig-name descname"><span class="pre">on_retry_from_error</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_retry_from_error" title="Link to this definition"></a></dt>
+<dd><p>Called when transitioning error → evaluation</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.on_start_testing">
+<span class="sig-name descname"><span class="pre">on_start_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.on_start_testing" title="Link to this definition"></a></dt>
+<dd><p>Called when transitioning hypothesis → test</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.prepare">
+<span class="sig-name descname"><span class="pre">prepare</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;statemachine.callbacks.SpecListGrouper</span> <span class="pre">object&gt;</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.prepare" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.restart_from_error">
+<span class="sig-name descname"><span class="pre">restart_from_error</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.restart_from_error" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.retry_from_error">
+<span class="sig-name descname"><span class="pre">retry_from_error</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.retry_from_error" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.start">
+<span class="sig-name descname"><span class="pre">start</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.start" title="Link to this definition"></a></dt>
+<dd><p>A State in a <span class="xref std std-ref">StateMachine</span> describes a particular behavior of the machine.
+When we say that a machine is “in” a state, it means that the machine behaves
+in the way that state describes.</p>
+<dl>
+<dt>Args:</dt><dd><dl>
+<dt>name: A human-readable representation of the state. Default is derived</dt><dd><p>from the name of the variable assigned to the state machine class.
+The name is derived from the id using this logic:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">name</span> <span class="o">=</span> <span class="nb">id</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd>
+<dt>value: A specific value to the storage and retrieval of states.</dt><dd><p>If specified, you can use It to map a more friendly representation to a low-level
+value.</p>
+</dd>
+<dt>initial: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if the <code class="docutils literal notranslate"><span class="pre">State</span></code> is the initial one. There must be one and only</dt><dd><p>one initial state in a statemachine. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+If not specified, the default initial state is the first child state in document order.</p>
+</dd>
+<dt>final: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if represents a final state. A machine can have</dt><dd><p>optionally many final states. Final states have no <span class="xref std std-ref">transition</span> starting from It.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt>enter: One or more callbacks assigned to be executed when the state is entered.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+<dt>exit: One or more callbacks assigned to be executed when the state is exited.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>State is a core component on how this library implements an expressive API to declare
+StateMachines.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">statemachine</span><span class="w"> </span><span class="kn">import</span> <span class="n">State</span>
+</pre></div>
+</div>
+<p>Given a few states…</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Draft&quot;</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">producing</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;Producing&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">closed</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s1">&#39;Closed&#39;</span><span class="p">,</span> <span class="n">final</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Transitions are declared using the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.to()</span></code> or <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> (reversed) methods.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">producing</span><span class="p">)</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Producing&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>The result is a <span class="xref std std-ref">TransitionList</span>.
+Don’t worry about this internal class.
+But the good thing is that it implements the <code class="docutils literal notranslate"><span class="pre">OR</span></code> operator to combine transitions,
+so you can use the <code class="docutils literal notranslate"><span class="pre">|</span></code> syntax to compound a list of transitions and assign
+to the same event.</p>
+<p>You can declare all transitions for a state in one single line …</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span> <span class="o">|</span> <span class="n">producing</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>… and you can append additional transitions for a state to previous definitions.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">|=</span> <span class="n">closed</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Draft&#39;)]</span>
+</pre></div>
+</div>
+<p>There are handy shortcuts that you can use to express this same set of transitions.</p>
+<p>The first one, <code class="docutils literal notranslate"><span class="pre">draft.to(draft)</span></code>, is also called a <span class="xref std std-ref">self-transition</span>, and can be
+expressed using an alternative syntax:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="o">.</span><span class="n">itself</span><span class="p">()</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Draft&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>You can even pass a list of target states to declare at once all transitions starting
+from the same state.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Draft&#39;, &#39;Producing&#39;), (&#39;Draft&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+<p>Sometimes it’s easier to use the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> method:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">closed</span><span class="o">.</span><span class="n">from_</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Closed&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.start_testing">
+<span class="sig-name descname"><span class="pre">start_testing</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.start_testing" title="Link to this definition"></a></dt>
+<dd><p>An event triggers a signal that something has happened.</p>
+<p>They are sent to a state machine and allow the state machine to react.</p>
+<p>An event starts a <span class="xref std std-ref">Transition</span>, which can be thought of as a “cause” that initiates a
+change in the state of the system.</p>
+<p>See also <span class="xref std std-ref">events</span>.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.state_value">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">state_value</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.state_value" title="Link to this definition"></a></dt>
+<dd><p>Get the current state value as a string</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.states">
+<span class="sig-name descname"><span class="pre">states</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[State('Start',</span> <span class="pre">id='start',</span> <span class="pre">value='start',</span> <span class="pre">initial=True,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">State('Evaluation',</span> <span class="pre">id='evaluation',</span> <span class="pre">value='evaluation',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">State('Hypothesis',</span> <span class="pre">id='hypothesis',</span> <span class="pre">value='hypothesis',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">State('Test',</span> <span class="pre">id='test',</span> <span class="pre">value='test',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">State('Insights',</span> <span class="pre">id='insights',</span> <span class="pre">value='insights',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">State('Completed',</span> <span class="pre">id='completed',</span> <span class="pre">value='completed',</span> <span class="pre">initial=False,</span> <span class="pre">final=True,</span> <span class="pre">parallel=False),</span> <span class="pre">State('Error',</span> <span class="pre">id='error',</span> <span class="pre">value='error',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False)]</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.states" title="Link to this definition"></a></dt>
+<dd><p>Collection of top-level <span class="xref std std-ref">State</span> objects declared on this class.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.states_map">
+<span class="sig-name descname"><span class="pre">states_map</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'completed':</span> <span class="pre">State('Completed',</span> <span class="pre">id='completed',</span> <span class="pre">value='completed',</span> <span class="pre">initial=False,</span> <span class="pre">final=True,</span> <span class="pre">parallel=False),</span> <span class="pre">'error':</span> <span class="pre">State('Error',</span> <span class="pre">id='error',</span> <span class="pre">value='error',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">'evaluation':</span> <span class="pre">State('Evaluation',</span> <span class="pre">id='evaluation',</span> <span class="pre">value='evaluation',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">'hypothesis':</span> <span class="pre">State('Hypothesis',</span> <span class="pre">id='hypothesis',</span> <span class="pre">value='hypothesis',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">'insights':</span> <span class="pre">State('Insights',</span> <span class="pre">id='insights',</span> <span class="pre">value='insights',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">'start':</span> <span class="pre">State('Start',</span> <span class="pre">id='start',</span> <span class="pre">value='start',</span> <span class="pre">initial=True,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False),</span> <span class="pre">'test':</span> <span class="pre">State('Test',</span> <span class="pre">id='test',</span> <span class="pre">value='test',</span> <span class="pre">initial=False,</span> <span class="pre">final=False,</span> <span class="pre">parallel=False)}</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.states_map" title="Link to this definition"></a></dt>
+<dd><p>Mapping from each state’s <code class="docutils literal notranslate"><span class="pre">value</span></code> to the corresponding <span class="xref std std-ref">State</span> instance.
+Includes states at all nesting levels (compound children, parallel regions, etc.).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.ProcedureStateMachine.test">
+<span class="sig-name descname"><span class="pre">test</span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine.test" title="Link to this definition"></a></dt>
+<dd><p>A State in a <span class="xref std std-ref">StateMachine</span> describes a particular behavior of the machine.
+When we say that a machine is “in” a state, it means that the machine behaves
+in the way that state describes.</p>
+<dl>
+<dt>Args:</dt><dd><dl>
+<dt>name: A human-readable representation of the state. Default is derived</dt><dd><p>from the name of the variable assigned to the state machine class.
+The name is derived from the id using this logic:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">name</span> <span class="o">=</span> <span class="nb">id</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd>
+<dt>value: A specific value to the storage and retrieval of states.</dt><dd><p>If specified, you can use It to map a more friendly representation to a low-level
+value.</p>
+</dd>
+<dt>initial: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if the <code class="docutils literal notranslate"><span class="pre">State</span></code> is the initial one. There must be one and only</dt><dd><p>one initial state in a statemachine. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+If not specified, the default initial state is the first child state in document order.</p>
+</dd>
+<dt>final: Set <code class="docutils literal notranslate"><span class="pre">True</span></code> if represents a final state. A machine can have</dt><dd><p>optionally many final states. Final states have no <span class="xref std std-ref">transition</span> starting from It.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt>enter: One or more callbacks assigned to be executed when the state is entered.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+<dt>exit: One or more callbacks assigned to be executed when the state is exited.</dt><dd><p>See <span class="xref std std-ref">actions</span>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>State is a core component on how this library implements an expressive API to declare
+StateMachines.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">statemachine</span><span class="w"> </span><span class="kn">import</span> <span class="n">State</span>
+</pre></div>
+</div>
+<p>Given a few states…</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Draft&quot;</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">producing</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;Producing&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">closed</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s1">&#39;Closed&#39;</span><span class="p">,</span> <span class="n">final</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Transitions are declared using the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.to()</span></code> or <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> (reversed) methods.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">producing</span><span class="p">)</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Producing&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>The result is a <span class="xref std std-ref">TransitionList</span>.
+Don’t worry about this internal class.
+But the good thing is that it implements the <code class="docutils literal notranslate"><span class="pre">OR</span></code> operator to combine transitions,
+so you can use the <code class="docutils literal notranslate"><span class="pre">|</span></code> syntax to compound a list of transitions and assign
+to the same event.</p>
+<p>You can declare all transitions for a state in one single line …</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span> <span class="o">|</span> <span class="n">producing</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>… and you can append additional transitions for a state to previous definitions.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">|=</span> <span class="n">closed</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Draft&#39;)]</span>
+</pre></div>
+</div>
+<p>There are handy shortcuts that you can use to express this same set of transitions.</p>
+<p>The first one, <code class="docutils literal notranslate"><span class="pre">draft.to(draft)</span></code>, is also called a <span class="xref std std-ref">self-transition</span>, and can be
+expressed using an alternative syntax:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="o">.</span><span class="n">itself</span><span class="p">()</span>
+<span class="go">TransitionList([Transition(&#39;Draft&#39;, &#39;Draft&#39;, event=[], internal=False, initial=False)])</span>
+</pre></div>
+</div>
+<p>You can even pass a list of target states to declare at once all transitions starting
+from the same state.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">draft</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Draft&#39;), (&#39;Draft&#39;, &#39;Producing&#39;), (&#39;Draft&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+<p>Sometimes it’s easier to use the <code class="xref py py-func docutils literal notranslate"><span class="pre">State.from_()</span></code> method:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transitions</span> <span class="o">=</span> <span class="n">closed</span><span class="o">.</span><span class="n">from_</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">producing</span><span class="p">,</span> <span class="n">closed</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transitions</span><span class="p">]</span>
+<span class="go">[(&#39;Draft&#39;, &#39;Closed&#39;), (&#39;Producing&#39;, &#39;Closed&#39;), (&#39;Closed&#39;, &#39;Closed&#39;)]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.create_state_machine">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.state_machine.</span></span><span class="sig-name descname"><span class="pre">create_state_machine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.cli.procedure.state_machine.ProcedureStateMachine" title="plexus.cli.procedure.state_machine.ProcedureStateMachine"><span class="pre">ProcedureStateMachine</span></a></span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.create_state_machine" title="Link to this definition"></a></dt>
+<dd><p>Create a state machine for a procedure.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: The procedure ID
+current_state: The current state (if resuming), or None for new procedure
+client: Optional PlexusDashboardClient for TaskStage updates</p>
+</dd>
+<dt>Returns:</dt><dd><p>ProcedureStateMachine instance</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.get_valid_transitions">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.state_machine.</span></span><span class="sig-name descname"><span class="pre">get_valid_transitions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">current_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.get_valid_transitions" title="Link to this definition"></a></dt>
+<dd><p>Get list of valid transitions from a given state.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>current_state: The current state value</p>
+</dd>
+<dt>Returns:</dt><dd><p>List of valid next state values</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.state_machine.is_valid_transition">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.state_machine.</span></span><span class="sig-name descname"><span class="pre">is_valid_transition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">from_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.state_machine.is_valid_transition" title="Link to this definition"></a></dt>
+<dd><p>Check if a state transition is valid.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>from_state: The current state (or None for initial state)
+to_state: The target state</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if transition is valid, False otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.sop_agent_base.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.sop_agent_base module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.state_machine_stages.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.state_machine_stages module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

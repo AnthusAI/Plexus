@@ -1,0 +1,604 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.scores.nodes package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.scores.nodes.AgenticExtractor module" href="plexus.scores.nodes.AgenticExtractor.html" />
+    <link rel="prev" title="plexus.scores.core.utils module" href="plexus.scores.core.utils.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.scores.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.scores.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.composite.html">plexus.scores.composite package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.core.html">plexus.scores.core package</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.scores.nodes package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.scores.html">plexus.scores package</a></li>
+      <li class="breadcrumb-item active">plexus.scores.nodes package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.scores.nodes.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.scores.nodes">
+<span id="plexus-scores-nodes-package"></span><h1>plexus.scores.nodes package<a class="headerlink" href="#module-plexus.scores.nodes" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html">plexus.scores.nodes.AgenticExtractor module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.ExtractionOutputParser"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.ExtractionOutputParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.ExtractionOutputParser.model_config"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.ExtractionOutputParser.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.ExtractionOutputParser.parse"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.ExtractionOutputParser.parse()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.GraphState"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.GraphState.entity"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.GraphState.entity</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.GraphState.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.GraphState.quote"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.GraphState.quote</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.GraphState.text"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.GraphState.text</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.Parameters"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.Parameters.input"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.Parameters.input</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.Parameters.output"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.Parameters.output</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.Parameters.system_message"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.Parameters.system_message</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.Parameters.user_message"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.Parameters.user_message</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.__init__"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.clean_quote"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.clean_quote()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.AgenticExtractor.html#plexus.scores.nodes.AgenticExtractor.AgenticExtractor.get_extractor_node"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor.get_extractor_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html">plexus.scores.nodes.BaseNode module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode"><code class="docutils literal notranslate"><span class="pre">BaseNode</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.GraphState"><code class="docutils literal notranslate"><span class="pre">BaseNode.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">BaseNode.GraphState.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.Parameters"><code class="docutils literal notranslate"><span class="pre">BaseNode.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.Parameters.example_refinement_message"><code class="docutils literal notranslate"><span class="pre">BaseNode.Parameters.example_refinement_message</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.Parameters.input"><code class="docutils literal notranslate"><span class="pre">BaseNode.Parameters.input</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">BaseNode.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.Parameters.name"><code class="docutils literal notranslate"><span class="pre">BaseNode.Parameters.name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.Parameters.output"><code class="docutils literal notranslate"><span class="pre">BaseNode.Parameters.output</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.Parameters.single_line_messages"><code class="docutils literal notranslate"><span class="pre">BaseNode.Parameters.single_line_messages</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.Parameters.system_message"><code class="docutils literal notranslate"><span class="pre">BaseNode.Parameters.system_message</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.Parameters.user_message"><code class="docutils literal notranslate"><span class="pre">BaseNode.Parameters.user_message</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.__init__"><code class="docutils literal notranslate"><span class="pre">BaseNode.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">BaseNode.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.build_compiled_workflow"><code class="docutils literal notranslate"><span class="pre">BaseNode.build_compiled_workflow()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.get_example_refinement_template"><code class="docutils literal notranslate"><span class="pre">BaseNode.get_example_refinement_template()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.get_prompt_templates"><code class="docutils literal notranslate"><span class="pre">BaseNode.get_prompt_templates()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.log_state"><code class="docutils literal notranslate"><span class="pre">BaseNode.log_state()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.node_name"><code class="docutils literal notranslate"><span class="pre">BaseNode.node_name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BaseNode.html#plexus.scores.nodes.BaseNode.BaseNode.normalize_text_output"><code class="docutils literal notranslate"><span class="pre">BaseNode.normalize_text_output()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html">plexus.scores.nodes.BeforeAfterSlicer module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.GraphState"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.GraphState.after"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.GraphState.after</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.GraphState.before"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.GraphState.before</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.GraphState.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.SlicingOutputParser"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.SlicingOutputParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.SlicingOutputParser.Config"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.SlicingOutputParser.Config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.SlicingOutputParser.FUZZY_MATCH_SCORE_CUTOFF"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.SlicingOutputParser.FUZZY_MATCH_SCORE_CUTOFF</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.SlicingOutputParser.__init__"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.SlicingOutputParser.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.SlicingOutputParser.model_config"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.SlicingOutputParser.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.SlicingOutputParser.model_post_init"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.SlicingOutputParser.model_post_init()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.SlicingOutputParser.parse"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.SlicingOutputParser.parse()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.SlicingOutputParser.text"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.SlicingOutputParser.text</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.SlicingOutputParser.tokenize"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.SlicingOutputParser.tokenize()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.__init__"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.BeforeAfterSlicer.html#plexus.scores.nodes.BeforeAfterSlicer.BeforeAfterSlicer.get_slicer_node"><code class="docutils literal notranslate"><span class="pre">BeforeAfterSlicer.get_slicer_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.Classifier.html">plexus.scores.nodes.Classifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier"><code class="docutils literal notranslate"><span class="pre">Classifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.ClassificationOutputParser"><code class="docutils literal notranslate"><span class="pre">Classifier.ClassificationOutputParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.ClassificationOutputParser.__init__"><code class="docutils literal notranslate"><span class="pre">Classifier.ClassificationOutputParser.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.ClassificationOutputParser.find_matches_in_text"><code class="docutils literal notranslate"><span class="pre">Classifier.ClassificationOutputParser.find_matches_in_text()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.ClassificationOutputParser.model_config"><code class="docutils literal notranslate"><span class="pre">Classifier.ClassificationOutputParser.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.ClassificationOutputParser.normalize_text"><code class="docutils literal notranslate"><span class="pre">Classifier.ClassificationOutputParser.normalize_text()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.ClassificationOutputParser.parse"><code class="docutils literal notranslate"><span class="pre">Classifier.ClassificationOutputParser.parse()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.ClassificationOutputParser.parse_from_start"><code class="docutils literal notranslate"><span class="pre">Classifier.ClassificationOutputParser.parse_from_start</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.ClassificationOutputParser.select_match"><code class="docutils literal notranslate"><span class="pre">Classifier.ClassificationOutputParser.select_match()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.ClassificationOutputParser.valid_classes"><code class="docutils literal notranslate"><span class="pre">Classifier.ClassificationOutputParser.valid_classes</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.GraphState"><code class="docutils literal notranslate"><span class="pre">Classifier.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.GraphState.confidence"><code class="docutils literal notranslate"><span class="pre">Classifier.GraphState.confidence</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">Classifier.GraphState.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.GraphState.raw_logprobs"><code class="docutils literal notranslate"><span class="pre">Classifier.GraphState.raw_logprobs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.GraphState.reasoning"><code class="docutils literal notranslate"><span class="pre">Classifier.GraphState.reasoning</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.Parameters"><code class="docutils literal notranslate"><span class="pre">Classifier.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.Parameters.confidence"><code class="docutils literal notranslate"><span class="pre">Classifier.Parameters.confidence</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.Parameters.explanation_message"><code class="docutils literal notranslate"><span class="pre">Classifier.Parameters.explanation_message</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.Parameters.maximum_retry_count"><code class="docutils literal notranslate"><span class="pre">Classifier.Parameters.maximum_retry_count</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">Classifier.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.Parameters.parse_from_start"><code class="docutils literal notranslate"><span class="pre">Classifier.Parameters.parse_from_start</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.Parameters.valid_classes"><code class="docutils literal notranslate"><span class="pre">Classifier.Parameters.valid_classes</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.__init__"><code class="docutils literal notranslate"><span class="pre">Classifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">Classifier.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.batch"><code class="docutils literal notranslate"><span class="pre">Classifier.batch</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.get_confidence_node"><code class="docutils literal notranslate"><span class="pre">Classifier.get_confidence_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.get_llm_call_node"><code class="docutils literal notranslate"><span class="pre">Classifier.get_llm_call_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.get_llm_prompt_node"><code class="docutils literal notranslate"><span class="pre">Classifier.get_llm_prompt_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.get_max_retries_node"><code class="docutils literal notranslate"><span class="pre">Classifier.get_max_retries_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.get_parser_node"><code class="docutils literal notranslate"><span class="pre">Classifier.get_parser_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.get_retry_node"><code class="docutils literal notranslate"><span class="pre">Classifier.get_retry_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.handle_max_retries"><code class="docutils literal notranslate"><span class="pre">Classifier.handle_max_retries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.llm_call"><code class="docutils literal notranslate"><span class="pre">Classifier.llm_call()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.llm_request"><code class="docutils literal notranslate"><span class="pre">Classifier.llm_request()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Classifier.html#plexus.scores.nodes.Classifier.Classifier.should_retry"><code class="docutils literal notranslate"><span class="pre">Classifier.should_retry()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html">plexus.scores.nodes.ContextExtractor module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor"><code class="docutils literal notranslate"><span class="pre">ContextExtractor</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.Config"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.Config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.FUZZY_MATCH_THRESHOLD"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.FUZZY_MATCH_THRESHOLD</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.__init__"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.context_after"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.context_after</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.context_before"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.context_before</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.model_config"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.model_post_init"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.model_post_init()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.parse"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.parse()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.text"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.text</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.tokenize"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.tokenize()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.ExtractionOutputParser.use_sentence_boundaries"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.ExtractionOutputParser.use_sentence_boundaries</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.GraphState"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.GraphState.context_chunk"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.GraphState.context_chunk</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.GraphState.match_end_index"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.GraphState.match_end_index</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.GraphState.match_start_index"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.GraphState.match_start_index</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.GraphState.matched_sequence"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.GraphState.matched_sequence</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.GraphState.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.Parameters"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.Parameters.context_after"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.Parameters.context_after</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.Parameters.context_before"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.Parameters.context_before</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.Parameters.fuzzy_match_threshold"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.Parameters.fuzzy_match_threshold</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.Parameters.system_message"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.Parameters.system_message</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.Parameters.use_sentence_boundaries"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.Parameters.use_sentence_boundaries</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.Parameters.user_message"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.Parameters.user_message</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.__init__"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.ContextExtractor.html#plexus.scores.nodes.ContextExtractor.ContextExtractor.get_extractor_node"><code class="docutils literal notranslate"><span class="pre">ContextExtractor.get_extractor_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.Extractor.html">plexus.scores.nodes.Extractor module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor"><code class="docutils literal notranslate"><span class="pre">Extractor</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.Config"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.Config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.FUZZY_MATCH_SCORE_CUTOFF"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.FUZZY_MATCH_SCORE_CUTOFF</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.__init__"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.model_config"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.model_post_init"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.model_post_init()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.parse"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.parse()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.text"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.text</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.tokenize"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.tokenize()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.trust_model_output"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.trust_model_output</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.ExtractionOutputParser.use_exact_matching"><code class="docutils literal notranslate"><span class="pre">Extractor.ExtractionOutputParser.use_exact_matching</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.GraphState"><code class="docutils literal notranslate"><span class="pre">Extractor.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.GraphState.extracted_text"><code class="docutils literal notranslate"><span class="pre">Extractor.GraphState.extracted_text</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">Extractor.GraphState.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.GraphState.reasoning"><code class="docutils literal notranslate"><span class="pre">Extractor.GraphState.reasoning</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.Parameters"><code class="docutils literal notranslate"><span class="pre">Extractor.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.Parameters.fuzzy_match_score_cutoff"><code class="docutils literal notranslate"><span class="pre">Extractor.Parameters.fuzzy_match_score_cutoff</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">Extractor.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.Parameters.trust_model_output"><code class="docutils literal notranslate"><span class="pre">Extractor.Parameters.trust_model_output</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.Parameters.use_exact_matching"><code class="docutils literal notranslate"><span class="pre">Extractor.Parameters.use_exact_matching</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.__init__"><code class="docutils literal notranslate"><span class="pre">Extractor.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">Extractor.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.execute"><code class="docutils literal notranslate"><span class="pre">Extractor.execute()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Extractor.html#plexus.scores.nodes.Extractor.Extractor.get_extractor_node"><code class="docutils literal notranslate"><span class="pre">Extractor.get_extractor_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html">plexus.scores.nodes.FuzzyMatchClassifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.GraphState"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.GraphState.match_found"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.GraphState.match_found</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.GraphState.matches"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.GraphState.matches</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.GraphState.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.Parameters"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.Parameters.classification_mapping"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.Parameters.classification_mapping</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.Parameters.data_paths"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.Parameters.data_paths</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.Parameters.default_classification"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.Parameters.default_classification</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.Parameters.targets"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.Parameters.targets</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.__init__"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchClassifier.html#plexus.scores.nodes.FuzzyMatchClassifier.FuzzyMatchClassifier.get_classifier_node"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchClassifier.get_classifier_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html">plexus.scores.nodes.FuzzyMatchExtractor module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.GraphState"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.GraphState.match_found"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.GraphState.match_found</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.GraphState.matches"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.GraphState.matches</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.GraphState.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.Parameters"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.Parameters.targets"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.Parameters.targets</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.__init__"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.FuzzyMatchExtractor.html#plexus.scores.nodes.FuzzyMatchExtractor.FuzzyMatchExtractor.get_matcher_node"><code class="docutils literal notranslate"><span class="pre">FuzzyMatchExtractor.get_matcher_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.Generator.html">plexus.scores.nodes.Generator module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator"><code class="docutils literal notranslate"><span class="pre">Generator</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.GraphState"><code class="docutils literal notranslate"><span class="pre">Generator.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.GraphState.completion"><code class="docutils literal notranslate"><span class="pre">Generator.GraphState.completion</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.GraphState.explanation"><code class="docutils literal notranslate"><span class="pre">Generator.GraphState.explanation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">Generator.GraphState.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.GraphState.retry_count"><code class="docutils literal notranslate"><span class="pre">Generator.GraphState.retry_count</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.Parameters"><code class="docutils literal notranslate"><span class="pre">Generator.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.Parameters.maximum_retry_count"><code class="docutils literal notranslate"><span class="pre">Generator.Parameters.maximum_retry_count</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">Generator.Parameters.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.__init__"><code class="docutils literal notranslate"><span class="pre">Generator.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">Generator.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.batch"><code class="docutils literal notranslate"><span class="pre">Generator.batch</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.get_llm_call_node"><code class="docutils literal notranslate"><span class="pre">Generator.get_llm_call_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.get_llm_prompt_node"><code class="docutils literal notranslate"><span class="pre">Generator.get_llm_prompt_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.get_max_retries_node"><code class="docutils literal notranslate"><span class="pre">Generator.get_max_retries_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.get_retry_node"><code class="docutils literal notranslate"><span class="pre">Generator.get_retry_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.Generator.html#plexus.scores.nodes.Generator.Generator.should_retry"><code class="docutils literal notranslate"><span class="pre">Generator.should_retry()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html">plexus.scores.nodes.LogicalClassifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.GraphState"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.GraphState.classification"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.GraphState.classification</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.GraphState.criteria_met"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.GraphState.criteria_met</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.GraphState.explanation"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.GraphState.explanation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.GraphState.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.Parameters"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.Parameters.code"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.Parameters.code</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.Parameters.conditions"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.Parameters.conditions</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.Parameters.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.__init__"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalClassifier.html#plexus.scores.nodes.LogicalClassifier.LogicalClassifier.get_score_node"><code class="docutils literal notranslate"><span class="pre">LogicalClassifier.get_score_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html">plexus.scores.nodes.LogicalNode module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode"><code class="docutils literal notranslate"><span class="pre">LogicalNode</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.GraphState"><code class="docutils literal notranslate"><span class="pre">LogicalNode.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">LogicalNode.GraphState.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.Parameters"><code class="docutils literal notranslate"><span class="pre">LogicalNode.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.Parameters.code"><code class="docutils literal notranslate"><span class="pre">LogicalNode.Parameters.code</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.Parameters.function_name"><code class="docutils literal notranslate"><span class="pre">LogicalNode.Parameters.function_name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">LogicalNode.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.Parameters.output_mapping"><code class="docutils literal notranslate"><span class="pre">LogicalNode.Parameters.output_mapping</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.__init__"><code class="docutils literal notranslate"><span class="pre">LogicalNode.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">LogicalNode.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.build_compiled_workflow"><code class="docutils literal notranslate"><span class="pre">LogicalNode.build_compiled_workflow()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.LogicalNode.html#plexus.scores.nodes.LogicalNode.LogicalNode.get_execute_node"><code class="docutils literal notranslate"><span class="pre">LogicalNode.get_execute_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html">plexus.scores.nodes.MultiClassClassifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.ClassificationOutputParser"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.ClassificationOutputParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.ClassificationOutputParser.__init__"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.ClassificationOutputParser.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.ClassificationOutputParser.fuzzy_match"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.ClassificationOutputParser.fuzzy_match</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.ClassificationOutputParser.fuzzy_match_threshold"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.ClassificationOutputParser.fuzzy_match_threshold</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.ClassificationOutputParser.model_config"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.ClassificationOutputParser.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.ClassificationOutputParser.parse"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.ClassificationOutputParser.parse()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.ClassificationOutputParser.parse_from_start"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.ClassificationOutputParser.parse_from_start</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.ClassificationOutputParser.valid_classes"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.ClassificationOutputParser.valid_classes</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.GraphState"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.GraphState.classification"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.GraphState.classification</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.GraphState.explanation"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.GraphState.explanation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.GraphState.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.GraphState.retry_count"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.GraphState.retry_count</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.Parameters"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.Parameters.explanation_message"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.Parameters.explanation_message</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.Parameters.explanation_model"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.Parameters.explanation_model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.Parameters.fuzzy_match"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.Parameters.fuzzy_match</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.Parameters.fuzzy_match_threshold"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.Parameters.fuzzy_match_threshold</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.Parameters.maximum_retry_count"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.Parameters.maximum_retry_count</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.Parameters.parse_from_start"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.Parameters.parse_from_start</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.Parameters.valid_classes"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.Parameters.valid_classes</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.__init__"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.MultiClassClassifier.html#plexus.scores.nodes.MultiClassClassifier.MultiClassClassifier.get_classifier_node"><code class="docutils literal notranslate"><span class="pre">MultiClassClassifier.get_classifier_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html">plexus.scores.nodes.NumericClassifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier"><code class="docutils literal notranslate"><span class="pre">NumericClassifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.GraphState"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.GraphState.classification"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.GraphState.classification</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.GraphState.explanation"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.GraphState.explanation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.GraphState.model_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.NumericOutputParser"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.NumericOutputParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.NumericOutputParser.__init__"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.NumericOutputParser.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.NumericOutputParser.model_config"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.NumericOutputParser.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.NumericOutputParser.numeric_max"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.NumericOutputParser.numeric_max</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.NumericOutputParser.numeric_min"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.NumericOutputParser.numeric_min</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.NumericOutputParser.parse"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.NumericOutputParser.parse()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.Parameters"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.Parameters.numeric_max"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.Parameters.numeric_max</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.Parameters.numeric_min"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.Parameters.numeric_min</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.__init__"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.NumericClassifier.html#plexus.scores.nodes.NumericClassifier.NumericClassifier.get_classifier_node"><code class="docutils literal notranslate"><span class="pre">NumericClassifier.get_classifier_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html">plexus.scores.nodes.YesOrNoClassifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.ClassificationOutputParser"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.ClassificationOutputParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.ClassificationOutputParser.model_config"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.ClassificationOutputParser.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.ClassificationOutputParser.parse"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.ClassificationOutputParser.parse()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.ClassificationOutputParser.parse_from_start"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.ClassificationOutputParser.parse_from_start</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.GraphState"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.GraphState</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.GraphState.classification"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.GraphState.classification</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.GraphState.explanation"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.GraphState.explanation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.GraphState.model_config"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.GraphState.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.GraphState.retry_count"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.GraphState.retry_count</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.Parameters"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.Parameters.explanation_message"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.Parameters.explanation_message</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.Parameters.explanation_model"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.Parameters.explanation_model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.Parameters.maximum_retry_count"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.Parameters.maximum_retry_count</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.Parameters.parse_from_start"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.Parameters.parse_from_start</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.__init__"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.add_core_nodes"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.add_core_nodes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.nodes.YesOrNoClassifier.html#plexus.scores.nodes.YesOrNoClassifier.YesOrNoClassifier.get_classifier_node"><code class="docutils literal notranslate"><span class="pre">YesOrNoClassifier.get_classifier_node()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_harmonized.html">plexus.scores.nodes.test_classifier_confidence_harmonized module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_harmonized.html#plexus.scores.nodes.test_classifier_confidence_harmonized.create_mock_logprobs_response"><code class="docutils literal notranslate"><span class="pre">create_mock_logprobs_response()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_harmonized.html#plexus.scores.nodes.test_classifier_confidence_harmonized.test_confidence_multiple_matches_same_class"><code class="docutils literal notranslate"><span class="pre">test_confidence_multiple_matches_same_class()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_harmonized.html#plexus.scores.nodes.test_classifier_confidence_harmonized.test_confidence_no_matching_tokens"><code class="docutils literal notranslate"><span class="pre">test_confidence_no_matching_tokens()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_harmonized.html#plexus.scores.nodes.test_classifier_confidence_harmonized.test_confidence_parse_from_start_false"><code class="docutils literal notranslate"><span class="pre">test_confidence_parse_from_start_false()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_harmonized.html#plexus.scores.nodes.test_classifier_confidence_harmonized.test_confidence_parse_from_start_true"><code class="docutils literal notranslate"><span class="pre">test_confidence_parse_from_start_true()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_harmonized.html#plexus.scores.nodes.test_classifier_confidence_harmonized.test_confidence_single_token_response"><code class="docutils literal notranslate"><span class="pre">test_confidence_single_token_response()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_integration.html">plexus.scores.nodes.test_classifier_confidence_integration module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_integration.html#plexus.scores.nodes.test_classifier_confidence_integration.openai_confidence_config"><code class="docutils literal notranslate"><span class="pre">openai_confidence_config()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_integration.html#plexus.scores.nodes.test_classifier_confidence_integration.test_confidence_with_real_openai_api"><code class="docutils literal notranslate"><span class="pre">test_confidence_with_real_openai_api()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_classifier_confidence_integration.html#plexus.scores.nodes.test_classifier_confidence_integration.test_confidence_workflow_integration"><code class="docutils literal notranslate"><span class="pre">test_confidence_workflow_integration()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.test_logprobs_uncertainty.html">plexus.scores.nodes.test_logprobs_uncertainty module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_logprobs_uncertainty.html#plexus.scores.nodes.test_logprobs_uncertainty.test_multiple_cases_for_uncertainty"><code class="docutils literal notranslate"><span class="pre">test_multiple_cases_for_uncertainty()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.test_raw_openai_logprobs.html">plexus.scores.nodes.test_raw_openai_logprobs module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_raw_openai_logprobs.html#plexus.scores.nodes.test_raw_openai_logprobs.test_raw_openai_logprobs"><code class="docutils literal notranslate"><span class="pre">test_raw_openai_logprobs()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.nodes.test_simple_confidence.html">plexus.scores.nodes.test_simple_confidence module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.nodes.test_simple_confidence.html#plexus.scores.nodes.test_simple_confidence.test_simple_confidence"><code class="docutils literal notranslate"><span class="pre">test_simple_confidence()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.scores.core.utils.html" class="btn btn-neutral float-left" title="plexus.scores.core.utils module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.scores.nodes.AgenticExtractor.html" class="btn btn-neutral float-right" title="plexus.scores.nodes.AgenticExtractor module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

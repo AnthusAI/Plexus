@@ -1,0 +1,324 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.reports.test_service_integration module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.scores package" href="plexus.scores.html" />
+    <link rel="prev" title="plexus.reports.test_basic_integration module" href="plexus.reports.test_basic_integration.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.reports.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.reports.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.reports.html">plexus.reports package</a></li>
+      <li class="breadcrumb-item active">plexus.reports.test_service_integration module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.reports.test_service_integration.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.reports.test_service_integration">
+<span id="plexus-reports-test-service-integration-module"></span><h1>plexus.reports.test_service_integration module<a class="headerlink" href="#module-plexus.reports.test_service_integration" title="Link to this heading"></a></h1>
+<p>Comprehensive integration tests for core report service functionality.
+Focuses on testing the critical high-level service integration missing coverage.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCeleryTask">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.reports.test_service_integration.</span></span><span class="sig-name descname"><span class="pre">TestGenerateReportCeleryTask</span></span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCeleryTask" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the main generate_report Celery task function.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_invalid_metadata">
+<span class="sig-name descname"><span class="pre">test_generate_report_invalid_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_tracker_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_task_get</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_client_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_invalid_metadata" title="Link to this definition"></a></dt>
+<dd><p>Test Celery task with invalid metadata.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_success">
+<span class="sig-name descname"><span class="pre">test_generate_report_success</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_core</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_tracker_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_task_get</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_client_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_success" title="Link to this definition"></a></dt>
+<dd><p>Test successful Celery task execution.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_task_not_found">
+<span class="sig-name descname"><span class="pre">test_generate_report_task_not_found</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_task_get</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_client_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_task_not_found" title="Link to this definition"></a></dt>
+<dd><p>Test Celery task when Task record not found.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_tracker_init_failure">
+<span class="sig-name descname"><span class="pre">test_generate_report_tracker_init_failure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_tracker_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_task_get</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_client_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_tracker_init_failure" title="Link to this definition"></a></dt>
+<dd><p>Test Celery task when tracker initialization fails.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_with_block_errors">
+<span class="sig-name descname"><span class="pre">test_generate_report_with_block_errors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_core</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_tracker_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_task_get</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_client_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCeleryTask.test_generate_report_with_block_errors" title="Link to this definition"></a></dt>
+<dd><p>Test Celery task when blocks fail but core succeeds.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCore">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.reports.test_service_integration.</span></span><span class="sig-name descname"><span class="pre">TestGenerateReportCore</span></span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCore" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the _generate_report_core function integration.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCore.test_generate_report_core_block_execution_failure">
+<span class="sig-name descname"><span class="pre">test_generate_report_core_block_execution_failure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_run_block</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_block_create</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_parse</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_report_create</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_load_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCore.test_generate_report_core_block_execution_failure" title="Link to this definition"></a></dt>
+<dd><p>Test core function when block execution fails.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCore.test_generate_report_core_config_not_found">
+<span class="sig-name descname"><span class="pre">test_generate_report_core_config_not_found</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_load_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCore.test_generate_report_core_config_not_found" title="Link to this definition"></a></dt>
+<dd><p>Test core function when config is not found.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCore.test_generate_report_core_report_creation_failure">
+<span class="sig-name descname"><span class="pre">test_generate_report_core_report_creation_failure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_report_create</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_load_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCore.test_generate_report_core_report_creation_failure" title="Link to this definition"></a></dt>
+<dd><p>Test core function when report creation fails.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestGenerateReportCore.test_generate_report_core_success">
+<span class="sig-name descname"><span class="pre">test_generate_report_core_success</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_run_block</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_block_create</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_parse</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_report_create</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_load_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestGenerateReportCore.test_generate_report_core_success" title="Link to this definition"></a></dt>
+<dd><p>Test successful core report generation.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestInstantiateAndRunBlock">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.reports.test_service_integration.</span></span><span class="sig-name descname"><span class="pre">TestInstantiateAndRunBlock</span></span><a class="headerlink" href="#plexus.reports.test_service_integration.TestInstantiateAndRunBlock" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the _instantiate_and_run_block function.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestInstantiateAndRunBlock.test_instantiate_and_run_block_class_not_found">
+<span class="sig-name descname"><span class="pre">test_instantiate_and_run_block_class_not_found</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestInstantiateAndRunBlock.test_instantiate_and_run_block_class_not_found" title="Link to this definition"></a></dt>
+<dd><p>Test block instantiation when class not found.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestInstantiateAndRunBlock.test_instantiate_and_run_block_execution_failure">
+<span class="sig-name descname"><span class="pre">test_instantiate_and_run_block_execution_failure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_asyncio_run</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestInstantiateAndRunBlock.test_instantiate_and_run_block_execution_failure" title="Link to this definition"></a></dt>
+<dd><p>Test block execution failure.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestInstantiateAndRunBlock.test_instantiate_and_run_block_success">
+<span class="sig-name descname"><span class="pre">test_instantiate_and_run_block_success</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_asyncio_run</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestInstantiateAndRunBlock.test_instantiate_and_run_block_success" title="Link to this definition"></a></dt>
+<dd><p>Test successful block instantiation and execution.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestLoadReportConfiguration">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.reports.test_service_integration.</span></span><span class="sig-name descname"><span class="pre">TestLoadReportConfiguration</span></span><a class="headerlink" href="#plexus.reports.test_service_integration.TestLoadReportConfiguration" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the _load_report_configuration function.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestLoadReportConfiguration.test_load_report_configuration_exception">
+<span class="sig-name descname"><span class="pre">test_load_report_configuration_exception</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_get_by_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestLoadReportConfiguration.test_load_report_configuration_exception" title="Link to this definition"></a></dt>
+<dd><p>Test configuration loading with exception.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestLoadReportConfiguration.test_load_report_configuration_not_found">
+<span class="sig-name descname"><span class="pre">test_load_report_configuration_not_found</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_get_by_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestLoadReportConfiguration.test_load_report_configuration_not_found" title="Link to this definition"></a></dt>
+<dd><p>Test configuration loading when not found.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestLoadReportConfiguration.test_load_report_configuration_success">
+<span class="sig-name descname"><span class="pre">test_load_report_configuration_success</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_get_by_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestLoadReportConfiguration.test_load_report_configuration_success" title="Link to this definition"></a></dt>
+<dd><p>Test successful configuration loading.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestParseReportConfiguration">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.reports.test_service_integration.</span></span><span class="sig-name descname"><span class="pre">TestParseReportConfiguration</span></span><a class="headerlink" href="#plexus.reports.test_service_integration.TestParseReportConfiguration" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the _parse_report_configuration function.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestParseReportConfiguration.test_parse_report_configuration_invalid_yaml">
+<span class="sig-name descname"><span class="pre">test_parse_report_configuration_invalid_yaml</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestParseReportConfiguration.test_parse_report_configuration_invalid_yaml" title="Link to this definition"></a></dt>
+<dd><p>Test parsing configuration with invalid YAML.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestParseReportConfiguration.test_parse_report_configuration_no_blocks">
+<span class="sig-name descname"><span class="pre">test_parse_report_configuration_no_blocks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestParseReportConfiguration.test_parse_report_configuration_no_blocks" title="Link to this definition"></a></dt>
+<dd><p>Test parsing configuration with no blocks.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestParseReportConfiguration.test_parse_report_configuration_with_blocks">
+<span class="sig-name descname"><span class="pre">test_parse_report_configuration_with_blocks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestParseReportConfiguration.test_parse_report_configuration_with_blocks" title="Link to this definition"></a></dt>
+<dd><p>Test parsing configuration with report blocks.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestParseReportConfiguration.test_parse_report_configuration_with_named_blocks">
+<span class="sig-name descname"><span class="pre">test_parse_report_configuration_with_named_blocks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestParseReportConfiguration.test_parse_report_configuration_with_named_blocks" title="Link to this definition"></a></dt>
+<dd><p>Test parsing configuration with named blocks.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestReportBlockExtractor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.reports.test_service_integration.</span></span><span class="sig-name descname"><span class="pre">TestReportBlockExtractor</span></span><a class="headerlink" href="#plexus.reports.test_service_integration.TestReportBlockExtractor" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the ReportBlockExtractor class integration.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestReportBlockExtractor.test_extract_block_with_attributes">
+<span class="sig-name descname"><span class="pre">test_extract_block_with_attributes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestReportBlockExtractor.test_extract_block_with_attributes" title="Link to this definition"></a></dt>
+<dd><p>Test extracting block with attributes in language info.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestReportBlockExtractor.test_extract_invalid_block_yaml">
+<span class="sig-name descname"><span class="pre">test_extract_invalid_block_yaml</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestReportBlockExtractor.test_extract_invalid_block_yaml" title="Link to this definition"></a></dt>
+<dd><p>Test extracting block with invalid YAML.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestReportBlockExtractor.test_extract_multiple_blocks_with_markdown">
+<span class="sig-name descname"><span class="pre">test_extract_multiple_blocks_with_markdown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestReportBlockExtractor.test_extract_multiple_blocks_with_markdown" title="Link to this definition"></a></dt>
+<dd><p>Test extracting multiple blocks with interspersed markdown.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.test_service_integration.TestReportBlockExtractor.test_extract_single_block">
+<span class="sig-name descname"><span class="pre">test_extract_single_block</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.test_service_integration.TestReportBlockExtractor.test_extract_single_block" title="Link to this definition"></a></dt>
+<dd><p>Test extracting a single report block.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.reports.test_basic_integration.html" class="btn btn-neutral float-left" title="plexus.reports.test_basic_integration module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.scores.html" class="btn btn-neutral float-right" title="plexus.scores package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

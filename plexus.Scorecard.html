@@ -1,0 +1,389 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.Scorecard module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.ScorecardResults module" href="plexus.ScorecardResults.html" />
+    <link rel="prev" title="plexus.Registries module" href="plexus.Registries.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.CustomLogging.html">plexus.CustomLogging module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Evaluation.html">plexus.Evaluation module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.LangChainUser.html">plexus.LangChainUser module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.PromptTemplateLoader.html">plexus.PromptTemplateLoader module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Registries.html">plexus.Registries module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.Scorecard module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.Scorecard.Scorecard"><code class="docutils literal notranslate"><span class="pre">Scorecard</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResults.html">plexus.ScorecardResults module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResultsAnalysis.html">plexus.ScorecardResultsAnalysis module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.confidence_calibration.html">plexus.confidence_calibration module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_evaluation_metrics.html">plexus.test_evaluation_metrics module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_prediction_commands.html">plexus.test_prediction_commands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_score.html">plexus.test_score module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.training_data_lake.html">plexus.training_data_lake module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.Scorecard module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.Scorecard.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.Scorecard">
+<span id="plexus-scorecard-module"></span><h1>plexus.Scorecard module<a class="headerlink" href="#module-plexus.Scorecard" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.Scorecard.</span></span><span class="sig-name descname"><span class="pre">Scorecard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scores_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Represents a collection of scores and manages the computation of these scores for given inputs.</p>
+<p>A Scorecard is the primary way to organize and run classifications in Plexus. Each scorecard
+is typically defined in a YAML file and contains multiple Score instances that work together
+to analyze content. Scorecards support:</p>
+<ul class="simple">
+<li><p>Hierarchical organization of scores with dependencies</p></li>
+<li><p>Parallel execution of independent scores</p></li>
+<li><p>Cost tracking for API-based scores</p></li>
+<li><p>Integration with MLFlow for experiment tracking</p></li>
+<li><p>Integration with the Plexus dashboard for monitoring</p></li>
+</ul>
+<p>Common usage patterns:
+1. Loading from YAML:</p>
+<blockquote>
+<div><p>scorecard = Scorecard.create_from_yaml(‘scorecards/qa.yaml’)</p>
+</div></blockquote>
+<ol class="arabic" start="2">
+<li><dl>
+<dt>Scoring content:</dt><dd><dl class="simple">
+<dt>results = await scorecard.score_entire_text(</dt><dd><p>text=”content to analyze”,
+metadata={“source”: “phone_call”}</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
+</li>
+<li><dl>
+<dt>Batch processing:</dt><dd><dl>
+<dt>for text in texts:</dt><dd><dl class="simple">
+<dt>results = await scorecard.score_entire_text(</dt><dd><p>text=text,
+metadata={“batch_id”: “123”}</p>
+</dd>
+</dl>
+<p>)
+costs = scorecard.get_accumulated_costs()</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</li>
+<li><dl>
+<dt>Subset scoring:</dt><dd><dl class="simple">
+<dt>results = await scorecard.score_entire_text(</dt><dd><p>text=”content to analyze”,
+subset_of_score_names=[“IVR_Score”, “Compliance_Score”]</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
+</li>
+</ol>
+<p>The Scorecard class is commonly used with Evaluation for measuring accuracy
+and with the dashboard for monitoring production deployments.</p>
+<p>Initializes a new instance of the Scorecard class.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard (str): The name or identifier of the scorecard.
+api_data (dict, optional): API-sourced data for the scorecard when using API-first loading.
+scores_config (dict, optional): Dictionary of score configurations when using API-first loading.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scores_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initializes a new instance of the Scorecard class.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard (str): The name or identifier of the scorecard.
+api_data (dict, optional): API-sourced data for the scorecard when using API-first loading.
+scores_config (dict, optional): Dictionary of score configurations when using API-first loading.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.build_dependency_graph">
+<span class="sig-name descname"><span class="pre">build_dependency_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">subset_of_score_names</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.build_dependency_graph" title="Link to this definition"></a></dt>
+<dd><p>Build a dependency graph for the specified subset of scores.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>subset_of_score_names: List of score names to include in the graph</p>
+</dd>
+<dt>Returns:</dt><dd><p>Tuple of (graph, name_to_id) where:
+- graph is a dictionary mapping score IDs to dependency information
+- name_to_id is a dictionary mapping score names to IDs</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.check_dependency_conditions">
+<span class="sig-name descname"><span class="pre">check_dependency_conditions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dependency_graph</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">results_by_score_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.Scorecard.Scorecard.check_dependency_conditions" title="Link to this definition"></a></dt>
+<dd><p>Check if all conditions for a score’s dependencies are met.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>score_id: The ID of the score to check
+dependency_graph: The dependency graph containing conditions
+results_by_score_id: Dictionary of score results</p>
+</dd>
+<dt>Returns:</dt><dd><p>bool: True if all conditions are met, False otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.create_from_yaml">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">create_from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_file_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.create_from_yaml" title="Link to this definition"></a></dt>
+<dd><p>Creates a Scorecard class dynamically from a YAML file.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>yaml_file_path (str): The file path to the YAML file containing the scorecard properties.</p>
+</dd>
+<dt>Returns:</dt><dd><p>type: A dynamically created Scorecard class.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.create_instance_from_api_data">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">create_instance_from_api_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scores_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.Scorecard.Scorecard" title="plexus.Scorecard.Scorecard"><span class="pre">Scorecard</span></a></span></span><a class="headerlink" href="#plexus.Scorecard.Scorecard.create_instance_from_api_data" title="Link to this definition"></a></dt>
+<dd><p>Create a Scorecard instance directly from API data.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_id: The ID of the scorecard
+api_data: Dictionary containing scorecard metadata from the API
+scores_config: List of score configurations</p>
+</dd>
+<dt>Returns:</dt><dd><p>A Scorecard instance populated with the API data</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.get_accumulated_costs">
+<span class="sig-name descname"><span class="pre">get_accumulated_costs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.get_accumulated_costs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.get_model_name">
+<span class="sig-name descname"><span class="pre">get_model_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.get_model_name" title="Link to this definition"></a></dt>
+<dd><p>Return the model name used for a specific score or the scorecard.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.get_score_names">
+<span class="sig-name descname"><span class="pre">get_score_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.get_score_names" title="Link to this definition"></a></dt>
+<dd><p>Instance method to get score names. Works for instances created via create_instance_from_api_data.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.get_score_result">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_score_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modality</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">results</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.get_score_result" title="Link to this definition"></a></dt>
+<dd><p>Get a result for a score by looking up a Score instance for that score name and calling its
+predict method with the provided input.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard (str): The scorecard identifier.
+score (str): The score identifier.
+text (str): The text content to analyze.
+metadata (dict): Additional metadata for the score.
+modality (str, optional): The modality of the content (e.g., ‘Development’, ‘Production’).
+results (list): Previous score results that may be needed for dependent scores.
+item (Item, optional): Item object with attachedFiles for input sources.</p>
+</dd>
+<dt>Returns:</dt><dd><p>Union[List[Score.Result], Score.Result]: Either a single Result object or a list of Result objects.
+The Result object contains the score value and any associated metadata.</p>
+</dd>
+<dt>Raises:</dt><dd><p>BatchProcessingPause: When scoring needs to be suspended for batch processing.
+ValueError: When required environment variables are missing.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.initialize_from_api_data">
+<span class="sig-name descname"><span class="pre">initialize_from_api_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.initialize_from_api_data" title="Link to this definition"></a></dt>
+<dd><p>Initialize scores from API data and register them in the instance’s score registry.</p>
+<p>This method handles score instantiation when data is loaded directly from the API
+rather than from YAML files.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.initialize_registry">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">initialize_registry</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.initialize_registry" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.load_and_register_scorecards">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">load_and_register_scorecards</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.load_and_register_scorecards" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.name" title="Link to this definition"></a></dt>
+<dd><p>Returns the name of this scorecard instance.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>str: The name of the scorecard, from properties if available, otherwise the class name.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.normalize_score_name">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">normalize_score_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.normalize_score_name" title="Link to this definition"></a></dt>
+<dd><p>Normalizes a score name by removing whitespace and non-word characters.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>score_name (str): The original score name.</p>
+</dd>
+<dt>Returns:</dt><dd><p>str: A normalized score name suitable for file names or dictionary keys.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.score_entire_text">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">score_entire_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.core.ScoreInput.html#plexus.core.ScoreInput.ScoreInput" title="plexus.core.ScoreInput.ScoreInput"><span class="pre">ScoreInput</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modality</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset_of_score_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Result" title="plexus.scores.Score.Score.Result"><span class="pre">Result</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.Scorecard.Scorecard.score_entire_text" title="Link to this definition"></a></dt>
+<dd><p>Score text content using the scorecard’s scores.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>score_input: Score.Input object (NEW PREFERRED METHOD)
+text: Text to score (DEPRECATED - use score_input instead)
+metadata: Additional metadata (DEPRECATED - use score_input instead)
+modality: Optional modality specification
+subset_of_score_names: Optional list of specific scores to run
+item: Optional Item object</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dictionary mapping score names to Score.Result objects</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.score_names">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">score_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.score_names" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.score_names_to_process">
+<span class="sig-name descname"><span class="pre">score_names_to_process</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.Scorecard.Scorecard.score_names_to_process" title="Link to this definition"></a></dt>
+<dd><p>Instance method for filtering score names that need to be processed directly.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>list of str: Names of scores that need direct processing.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.Scorecard.Scorecard.score_registry">
+<span class="sig-name descname"><span class="pre">score_registry</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.Scorecard.Scorecard.score_registry" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.Registries.html" class="btn btn-neutral float-left" title="plexus.Registries module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.ScorecardResults.html" class="btn btn-neutral float-right" title="plexus.ScorecardResults module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

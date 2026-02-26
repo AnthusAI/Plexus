@@ -1,0 +1,355 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.utils.identifier_search module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.utils.request_log_capture module" href="plexus.utils.request_log_capture.html" />
+    <link rel="prev" title="plexus.utils.dict_utils module" href="plexus.utils.dict_utils.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.batch_find_items_by_identifiers"><code class="docutils literal notranslate"><span class="pre">batch_find_items_by_identifiers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.capture_request_logs"><code class="docutils literal notranslate"><span class="pre">capture_request_logs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.check_if_score_is_disabled"><code class="docutils literal notranslate"><span class="pre">check_if_score_is_disabled()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.check_s3_bucket_access"><code class="docutils literal notranslate"><span class="pre">check_s3_bucket_access()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.create_identifiers_for_item"><code class="docutils literal notranslate"><span class="pre">create_identifiers_for_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.create_score_result"><code class="docutils literal notranslate"><span class="pre">create_score_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.create_scorecard_instance_for_single_score"><code class="docutils literal notranslate"><span class="pre">create_scorecard_instance_for_single_score()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.download_score_result_log_file"><code class="docutils literal notranslate"><span class="pre">download_score_result_log_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.download_score_result_trace_file"><code class="docutils literal notranslate"><span class="pre">download_score_result_trace_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.find_item_by_identifier"><code class="docutils literal notranslate"><span class="pre">find_item_by_identifier()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.find_item_by_typed_identifier"><code class="docutils literal notranslate"><span class="pre">find_item_by_typed_identifier()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.find_items_by_identifier_type"><code class="docutils literal notranslate"><span class="pre">find_items_by_identifier_type()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_existing_score_result"><code class="docutils literal notranslate"><span class="pre">get_existing_score_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_external_id_from_item"><code class="docutils literal notranslate"><span class="pre">get_external_id_from_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_item_identifiers"><code class="docutils literal notranslate"><span class="pre">get_item_identifiers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_metadata_from_item"><code class="docutils literal notranslate"><span class="pre">get_metadata_from_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_plexus_client"><code class="docutils literal notranslate"><span class="pre">get_plexus_client()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_text_from_item"><code class="docutils literal notranslate"><span class="pre">get_text_from_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.resolve_score_id"><code class="docutils literal notranslate"><span class="pre">resolve_score_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.resolve_scorecard_id"><code class="docutils literal notranslate"><span class="pre">resolve_scorecard_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.sanitize_metadata_for_graphql"><code class="docutils literal notranslate"><span class="pre">sanitize_metadata_for_graphql()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.send_message_to_standard_scoring_request_queue"><code class="docutils literal notranslate"><span class="pre">send_message_to_standard_scoring_request_queue()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.truncate_dict_strings"><code class="docutils literal notranslate"><span class="pre">truncate_dict_strings()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.truncate_dict_strings_inner"><code class="docutils literal notranslate"><span class="pre">truncate_dict_strings_inner()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.upload_score_result_log_file"><code class="docutils literal notranslate"><span class="pre">upload_score_result_log_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.upload_score_result_trace_file"><code class="docutils literal notranslate"><span class="pre">upload_score_result_trace_file()</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.utils.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.utils.html">plexus.utils package</a></li>
+      <li class="breadcrumb-item active">plexus.utils.identifier_search module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.utils.identifier_search.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.utils.identifier_search">
+<span id="plexus-utils-identifier-search-module"></span><h1>plexus.utils.identifier_search module<a class="headerlink" href="#module-plexus.utils.identifier_search" title="Link to this heading"></a></h1>
+<p>Identifier Search Utilities - High-level functions for finding items by identifier values.</p>
+<p>This module provides convenient functions for exact-match identifier searches,
+building on the low-level Identifier model to provide common use cases.</p>
+<p>Key Functions:
+- find_item_by_identifier: Find a single item by exact identifier value
+- find_items_by_identifier_type: Find all items with identifiers of a specific type
+- batch_find_items_by_identifiers: Efficiently find multiple items by identifier values</p>
+<p>Performance Characteristics:
+- All functions use O(1) exact-match GSI lookups, not scans
+- Account-scoped for security and performance
+- Efficient batch operations for bulk lookups
+- No cross-account data leakage</p>
+<dl>
+<dt>Usage Examples:</dt><dd><p>from plexus.utils.identifier_search import find_item_by_identifier
+from plexus.dashboard.api.client import ‘PlexusDashboardClient’</p>
+<p>client = ‘PlexusDashboardClient’.for_account(“my-account”)</p>
+<p># Find single item by exact identifier value
+item = find_item_by_identifier(“CUST-123456”, “my-account”, client)
+if item:</p>
+<blockquote>
+<div><p>print(f”Found item: {item.id}”)</p>
+</div></blockquote>
+<p># Find all items with “Customer ID” identifiers
+items = find_items_by_identifier_type(“Customer ID”, “my-account”, client)</p>
+<p># Batch lookup multiple items
+items_dict = batch_find_items_by_identifiers(</p>
+<blockquote>
+<div><p>[“CUST-123456”, “ORD-789012”], “my-account”, client</p>
+</div></blockquote>
+<p>)</p>
+</dd>
+</dl>
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.identifier_search.batch_find_items_by_identifiers">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.identifier_search.</span></span><span class="sig-name descname"><span class="pre">batch_find_items_by_identifiers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">identifier_values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Item" title="plexus.dashboard.api.models.Item"><span class="pre">Item</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.identifier_search.batch_find_items_by_identifiers" title="Link to this definition"></a></dt>
+<dd><p>Efficiently find multiple items by their identifier values.</p>
+<p>Uses batch lookup for optimal performance when searching for many items.</p>
+<dl>
+<dt>Args:</dt><dd><p>identifier_values: List of exact values to search for
+account_id: Account to search within
+client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dictionary mapping identifier_value -&gt; Item for found items.
+Missing identifier values will not appear in the result.</p>
+</dd>
+<dt>Example:</dt><dd><dl class="simple">
+<dt>items_dict = batch_find_items_by_identifiers(</dt><dd><p>[“CUST-123456”, “ORD-789012”, “TICKET-555”], 
+“account123”, 
+client</p>
+</dd>
+</dl>
+<p>)</p>
+<dl class="simple">
+<dt>for value, item in items_dict.items():</dt><dd><p>print(f”Identifier {value} -&gt; Item {item.id}”)</p>
+</dd>
+</dl>
+<p># Check if specific identifier was found
+if “CUST-123456” in items_dict:</p>
+<blockquote>
+<div><p>customer_item = items_dict[“CUST-123456”]</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.identifier_search.create_identifiers_for_item">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.identifier_search.</span></span><span class="sig-name descname"><span class="pre">create_identifiers_for_item</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">identifiers_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Identifier" title="plexus.dashboard.api.models.Identifier"><span class="pre">Identifier</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.identifier_search.create_identifiers_for_item" title="Link to this definition"></a></dt>
+<dd><p>Create identifier records for an item from JSON-style data.</p>
+<p>Converts from the old JSON format to separate Identifier records.
+Useful for migration and dual-write scenarios.</p>
+<dl>
+<dt>Args:</dt><dd><p>item_id: ID of the item these identifiers belong to
+account_id: Account ID for data isolation
+identifiers_data: List of identifier dicts in JSON format:</p>
+<blockquote>
+<div><p>[{“name”: “Customer ID”, “id”: “CUST-123”, “url”: “…”}]</p>
+</div></blockquote>
+<p>client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>List of created Identifier objects (may be empty if all fail)</p>
+</dd>
+<dt>Example:</dt><dd><p># Convert from JSON format to Identifier records
+json_identifiers = [</p>
+<blockquote>
+<div><p>{“name”: “Customer ID”, “id”: “CUST-123456”, “url”: “<a class="reference external" href="https://">https://</a>…”},
+{“name”: “Order ID”, “id”: “ORD-789012”}</p>
+</div></blockquote>
+<p>]</p>
+<dl class="simple">
+<dt>identifier_records = create_identifiers_for_item(</dt><dd><p>“item123”, “account123”, json_identifiers, client</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.identifier_search.find_item_by_identifier">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.identifier_search.</span></span><span class="sig-name descname"><span class="pre">find_item_by_identifier</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">identifier_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Item" title="plexus.dashboard.api.models.Item"><span class="pre">Item</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.identifier_search.find_item_by_identifier" title="Link to this definition"></a></dt>
+<dd><p>Find an item by exact identifier value within an account.</p>
+<p>This is the primary search function for exact-match lookups.
+Uses O(1) GSI lookup for consistent performance.</p>
+<dl>
+<dt>Args:</dt><dd><p>identifier_value: Exact value to search for (e.g., “CUST-123456”)
+account_id: Account to search within
+client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>Item object if found, None if not found</p>
+</dd>
+<dt>Example:</dt><dd><p>item = find_item_by_identifier(“CUST-123456”, “account123”, client)
+if item:</p>
+<blockquote>
+<div><p>print(f”Found item {item.id} with data: {item.data}”)</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.identifier_search.find_item_by_typed_identifier">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.identifier_search.</span></span><span class="sig-name descname"><span class="pre">find_item_by_typed_identifier</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">identifier_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">identifier_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Item" title="plexus.dashboard.api.models.Item"><span class="pre">Item</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.identifier_search.find_item_by_typed_identifier" title="Link to this definition"></a></dt>
+<dd><p>Find an item by identifier name and exact value.</p>
+<p>More specific than find_item_by_identifier when you know the identifier type.
+Useful when the same value might exist for different identifier types.</p>
+<dl>
+<dt>Args:</dt><dd><p>identifier_name: Name of identifier type (e.g., “Customer ID”)
+identifier_value: Exact value to search for (e.g., “123456”)
+account_id: Account to search within
+client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>Item object if found, None if not found</p>
+</dd>
+<dt>Example:</dt><dd><p># Find item with specifically a “Customer ID” of “123456”
+# (ignoring any “Order ID” or other types with same value)
+item = find_item_by_typed_identifier(</p>
+<blockquote>
+<div><p>“Customer ID”, “123456”, “account123”, client</p>
+</div></blockquote>
+<p>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.identifier_search.find_items_by_identifier_type">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.identifier_search.</span></span><span class="sig-name descname"><span class="pre">find_items_by_identifier_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">identifier_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Item" title="plexus.dashboard.api.models.Item"><span class="pre">Item</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.identifier_search.find_items_by_identifier_type" title="Link to this definition"></a></dt>
+<dd><p>Find all items that have identifiers of a specific type.</p>
+<dl>
+<dt>Args:</dt><dd><p>identifier_name: Name of identifier type (e.g., “Customer ID”, “Order ID”)
+account_id: Account to search within
+client: API client
+limit: Optional limit on number of results</p>
+</dd>
+<dt>Returns:</dt><dd><p>List of Item objects that have identifiers of the specified type</p>
+</dd>
+<dt>Example:</dt><dd><p># Find all items with “Customer ID” identifiers
+items = find_items_by_identifier_type(“Customer ID”, “account123”, client)
+for item in items:</p>
+<blockquote>
+<div><p>print(f”Item {item.id} has customer identifier”)</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.identifier_search.get_item_identifiers">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.identifier_search.</span></span><span class="sig-name descname"><span class="pre">get_item_identifiers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.identifier_search.get_item_identifiers" title="Link to this definition"></a></dt>
+<dd><p>Get all identifiers for a specific item in a format compatible with the UI.</p>
+<p>Returns identifiers in the same format as the deprecated JSON field,
+ensuring compatibility with existing UI components.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>item_id: ID of the item to get identifiers for
+client: API client</p>
+</dd>
+<dt>Returns:</dt><dd><p>List of identifier dictionaries with ‘name’, ‘id’ (value), and optional ‘url’</p>
+</dd>
+<dt>Example:</dt><dd><p>identifiers = get_item_identifiers(“item123”, client)
+# Returns: [
+#     {“name”: “Customer ID”, “id”: “CUST-123456”, “url”: “<a class="reference external" href="https://">https://</a>…”},
+#     {“name”: “Order ID”, “id”: “ORD-789012”}
+# ]</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.utils.dict_utils.html" class="btn btn-neutral float-left" title="plexus.utils.dict_utils module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.utils.request_log_capture.html" class="btn btn-neutral float-right" title="plexus.utils.request_log_capture module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

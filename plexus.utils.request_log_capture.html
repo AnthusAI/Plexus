@@ -1,0 +1,479 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.utils.request_log_capture module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.utils.score_result_s3_utils module" href="plexus.utils.score_result_s3_utils.html" />
+    <link rel="prev" title="plexus.utils.identifier_search module" href="plexus.utils.identifier_search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.batch_find_items_by_identifiers"><code class="docutils literal notranslate"><span class="pre">batch_find_items_by_identifiers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.capture_request_logs"><code class="docutils literal notranslate"><span class="pre">capture_request_logs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.check_if_score_is_disabled"><code class="docutils literal notranslate"><span class="pre">check_if_score_is_disabled()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.check_s3_bucket_access"><code class="docutils literal notranslate"><span class="pre">check_s3_bucket_access()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.create_identifiers_for_item"><code class="docutils literal notranslate"><span class="pre">create_identifiers_for_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.create_score_result"><code class="docutils literal notranslate"><span class="pre">create_score_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.create_scorecard_instance_for_single_score"><code class="docutils literal notranslate"><span class="pre">create_scorecard_instance_for_single_score()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.download_score_result_log_file"><code class="docutils literal notranslate"><span class="pre">download_score_result_log_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.download_score_result_trace_file"><code class="docutils literal notranslate"><span class="pre">download_score_result_trace_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.find_item_by_identifier"><code class="docutils literal notranslate"><span class="pre">find_item_by_identifier()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.find_item_by_typed_identifier"><code class="docutils literal notranslate"><span class="pre">find_item_by_typed_identifier()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.find_items_by_identifier_type"><code class="docutils literal notranslate"><span class="pre">find_items_by_identifier_type()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_existing_score_result"><code class="docutils literal notranslate"><span class="pre">get_existing_score_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_external_id_from_item"><code class="docutils literal notranslate"><span class="pre">get_external_id_from_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_item_identifiers"><code class="docutils literal notranslate"><span class="pre">get_item_identifiers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_metadata_from_item"><code class="docutils literal notranslate"><span class="pre">get_metadata_from_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_plexus_client"><code class="docutils literal notranslate"><span class="pre">get_plexus_client()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.get_text_from_item"><code class="docutils literal notranslate"><span class="pre">get_text_from_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.resolve_score_id"><code class="docutils literal notranslate"><span class="pre">resolve_score_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.resolve_scorecard_id"><code class="docutils literal notranslate"><span class="pre">resolve_scorecard_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.sanitize_metadata_for_graphql"><code class="docutils literal notranslate"><span class="pre">sanitize_metadata_for_graphql()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.send_message_to_standard_scoring_request_queue"><code class="docutils literal notranslate"><span class="pre">send_message_to_standard_scoring_request_queue()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.truncate_dict_strings"><code class="docutils literal notranslate"><span class="pre">truncate_dict_strings()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.truncate_dict_strings_inner"><code class="docutils literal notranslate"><span class="pre">truncate_dict_strings_inner()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.upload_score_result_log_file"><code class="docutils literal notranslate"><span class="pre">upload_score_result_log_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.utils.html#plexus.utils.upload_score_result_trace_file"><code class="docutils literal notranslate"><span class="pre">upload_score_result_trace_file()</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.utils.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.utils.html">plexus.utils package</a></li>
+      <li class="breadcrumb-item active">plexus.utils.request_log_capture module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.utils.request_log_capture.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.utils.request_log_capture">
+<span id="plexus-utils-request-log-capture-module"></span><h1>plexus.utils.request_log_capture module<a class="headerlink" href="#module-plexus.utils.request_log_capture" title="Link to this heading"></a></h1>
+<p>Request-scoped log capture utilities for FastAPI applications.</p>
+<p>This module provides several approaches to capture logs per request:
+1. MemoryHandler - Buffers logs and flushes on completion
+2. StringIO handler - Captures logs to a string buffer
+3. Context variable approach - Tracks logs per request context</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.AsyncLogCapture">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">AsyncLogCapture</span></span><a class="headerlink" href="#plexus.utils.request_log_capture.AsyncLogCapture" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Async-friendly log capture that works with FastAPI</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.AsyncLogCapture.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.AsyncLogCapture.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.AsyncLogCapture.capture_logs_async">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">capture_logs_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coro</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.AsyncLogCapture.capture_logs_async" title="Link to this definition"></a></dt>
+<dd><p>Capture logs during the execution of an async coroutine</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.BufferingLogHandler">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">BufferingLogHandler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_handler</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Handler</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.BufferingLogHandler" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Handler</span></code></p>
+<p>Handler that buffers logs in memory and can flush them conditionally.
+Based on Python’s MemoryHandler but with more control.</p>
+<p>Initializes the instance - basically setting the formatter to None
+and the filter list to empty.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.BufferingLogHandler.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_handler</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Handler</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.BufferingLogHandler.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initializes the instance - basically setting the formatter to None
+and the filter list to empty.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.BufferingLogHandler.clear_buffer">
+<span class="sig-name descname"><span class="pre">clear_buffer</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.BufferingLogHandler.clear_buffer" title="Link to this definition"></a></dt>
+<dd><p>Clear the buffer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.BufferingLogHandler.emit">
+<span class="sig-name descname"><span class="pre">emit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.BufferingLogHandler.emit" title="Link to this definition"></a></dt>
+<dd><p>Do whatever it takes to actually log the specified logging record.</p>
+<p>This version is intended to be implemented by subclasses and so
+raises a NotImplementedError.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.BufferingLogHandler.flush_to_target">
+<span class="sig-name descname"><span class="pre">flush_to_target</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.BufferingLogHandler.flush_to_target" title="Link to this definition"></a></dt>
+<dd><p>Flush buffered records to target handler.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.BufferingLogHandler.get_buffered_logs">
+<span class="sig-name descname"><span class="pre">get_buffered_logs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.BufferingLogHandler.get_buffered_logs" title="Link to this definition"></a></dt>
+<dd><p>Get formatted logs from buffer.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.MemoryLogHandler">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">MemoryLogHandler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.MemoryLogHandler" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Handler</span></code></p>
+<p>Simple memory-based log handler that captures all logs to a string buffer.
+This doesn’t filter by request ID, it just captures everything during its lifetime.</p>
+<p>Initializes the instance - basically setting the formatter to None
+and the filter list to empty.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.MemoryLogHandler.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.MemoryLogHandler.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initializes the instance - basically setting the formatter to None
+and the filter list to empty.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.MemoryLogHandler.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.MemoryLogHandler.close" title="Link to this definition"></a></dt>
+<dd><p>Tidy up any resources used by the handler.</p>
+<p>This version removes the handler from an internal map of handlers,
+_handlers, which is used for handler lookup by name. Subclasses
+should ensure that this gets called from overridden close()
+methods.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.MemoryLogHandler.emit">
+<span class="sig-name descname"><span class="pre">emit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.MemoryLogHandler.emit" title="Link to this definition"></a></dt>
+<dd><p>Do whatever it takes to actually log the specified logging record.</p>
+<p>This version is intended to be implemented by subclasses and so
+raises a NotImplementedError.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.MemoryLogHandler.get_logs">
+<span class="sig-name descname"><span class="pre">get_logs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.MemoryLogHandler.get_logs" title="Link to this definition"></a></dt>
+<dd><p>Get all captured logs as a string.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RequestLogCapture">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">RequestLogCapture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.RequestLogCapture" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Captures logs for a specific request using various methods.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RequestLogCapture.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.RequestLogCapture.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RequestLogManager">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">RequestLogManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logger_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.RequestLogManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>High-level manager for request-scoped log capture.
+Now uses the simpler approach that doesn’t interfere with existing logging.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RequestLogManager.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logger_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.RequestLogManager.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RequestLogManager.finish_request_capture">
+<span class="sig-name descname"><span class="pre">finish_request_capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.RequestLogManager.finish_request_capture" title="Link to this definition"></a></dt>
+<dd><p>Finish capturing logs for a request and clean up.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RequestLogManager.get_request_logs">
+<span class="sig-name descname"><span class="pre">get_request_logs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.RequestLogManager.get_request_logs" title="Link to this definition"></a></dt>
+<dd><p>Get captured logs for a specific request.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RequestLogManager.start_request_capture">
+<span class="sig-name descname"><span class="pre">start_request_capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.RequestLogManager.start_request_capture" title="Link to this definition"></a></dt>
+<dd><p>Start capturing logs for a request.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RingBufferLogHandler">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">RingBufferLogHandler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.RingBufferLogHandler" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Handler</span></code></p>
+<p>Log handler that maintains a ring buffer of recent log messages.
+Similar to spdlog’s backtrace feature.</p>
+<p>Initializes the instance - basically setting the formatter to None
+and the filter list to empty.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RingBufferLogHandler.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.RingBufferLogHandler.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initializes the instance - basically setting the formatter to None
+and the filter list to empty.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RingBufferLogHandler.clear">
+<span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.RingBufferLogHandler.clear" title="Link to this definition"></a></dt>
+<dd><p>Clear the ring buffer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RingBufferLogHandler.emit">
+<span class="sig-name descname"><span class="pre">emit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.RingBufferLogHandler.emit" title="Link to this definition"></a></dt>
+<dd><p>Do whatever it takes to actually log the specified logging record.</p>
+<p>This version is intended to be implemented by subclasses and so
+raises a NotImplementedError.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.RingBufferLogHandler.get_recent_logs">
+<span class="sig-name descname"><span class="pre">get_recent_logs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.RingBufferLogHandler.get_recent_logs" title="Link to this definition"></a></dt>
+<dd><p>Get all logs from the ring buffer.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.SimpleRequestLogCapture">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">SimpleRequestLogCapture</span></span><a class="headerlink" href="#plexus.utils.request_log_capture.SimpleRequestLogCapture" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Simple request-scoped log capture that doesn’t interfere with existing logging.
+Uses a memory handler approach to capture logs without modifying the root logger.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.SimpleRequestLogCapture.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.SimpleRequestLogCapture.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.SimpleRequestLogCapture.finish_request_capture">
+<span class="sig-name descname"><span class="pre">finish_request_capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.SimpleRequestLogCapture.finish_request_capture" title="Link to this definition"></a></dt>
+<dd><p>Finish capturing logs for a request and clean up.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>request_id: The request ID to finish</p>
+</dd>
+<dt>Returns:</dt><dd><p>Final captured logs</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.SimpleRequestLogCapture.get_request_logs">
+<span class="sig-name descname"><span class="pre">get_request_logs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.SimpleRequestLogCapture.get_request_logs" title="Link to this definition"></a></dt>
+<dd><p>Get captured logs for a specific request.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>request_id: The request ID to get logs for</p>
+</dd>
+<dt>Returns:</dt><dd><p>Captured logs as a string</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.SimpleRequestLogCapture.start_request_capture">
+<span class="sig-name descname"><span class="pre">start_request_capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.SimpleRequestLogCapture.start_request_capture" title="Link to this definition"></a></dt>
+<dd><p>Start capturing logs for a request using a memory buffer approach.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>request_id: Optional request ID, generates UUID if not provided</p>
+</dd>
+<dt>Returns:</dt><dd><p>The request ID being used</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.ThreadLocalLogCapture">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">ThreadLocalLogCapture</span></span><a class="headerlink" href="#plexus.utils.request_log_capture.ThreadLocalLogCapture" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Thread-safe log capture that uses thread-local storage to avoid conflicts
+between concurrent requests.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.ThreadLocalLogCapture.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.ThreadLocalLogCapture.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.ThreadLocalLogCapture.get_logs">
+<span class="sig-name descname"><span class="pre">get_logs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.ThreadLocalLogCapture.get_logs" title="Link to this definition"></a></dt>
+<dd><p>Get captured logs for a request</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.ThreadLocalLogCapture.start_capture">
+<span class="sig-name descname"><span class="pre">start_capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.ThreadLocalLogCapture.start_capture" title="Link to this definition"></a></dt>
+<dd><p>Start capturing logs for a specific request</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.ThreadLocalLogCapture.stop_capture">
+<span class="sig-name descname"><span class="pre">stop_capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.ThreadLocalLogCapture.stop_capture" title="Link to this definition"></a></dt>
+<dd><p>Stop capturing logs for a request and clean up</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.capture_request_logs">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">capture_request_logs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.utils.request_log_capture.capture_request_logs" title="Link to this definition"></a></dt>
+<dd><p>Context manager to capture logs for a specific request.</p>
+<dl class="simple">
+<dt>Usage:</dt><dd><dl class="simple">
+<dt>with capture_request_logs() as (request_id, get_logs):</dt><dd><p># Do work that generates logs
+logs = get_logs()</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.finish_request_logging">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">finish_request_logging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.finish_request_logging" title="Link to this definition"></a></dt>
+<dd><p>Global function to finish request logging.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.get_request_logs">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">get_request_logs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.get_request_logs" title="Link to this definition"></a></dt>
+<dd><p>Global function to get request logs.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.setup_request_logging">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">setup_request_logging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logger_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Logger</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.setup_request_logging" title="Link to this definition"></a></dt>
+<dd><p>Set up a logger with request-scoped capturing capabilities.
+Note: This function is deprecated. Use RequestLogManager directly instead.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>logger_name: Name of the logger, defaults to calling module</p>
+</dd>
+<dt>Returns:</dt><dd><p>Configured logger instance</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.utils.request_log_capture.start_request_logging">
+<span class="sig-prename descclassname"><span class="pre">plexus.utils.request_log_capture.</span></span><span class="sig-name descname"><span class="pre">start_request_logging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.utils.request_log_capture.start_request_logging" title="Link to this definition"></a></dt>
+<dd><p>Global function to start request logging.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.utils.identifier_search.html" class="btn btn-neutral float-left" title="plexus.utils.identifier_search module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.utils.score_result_s3_utils.html" class="btn btn-neutral float-right" title="plexus.utils.score_result_s3_utils module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

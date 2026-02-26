@@ -1,0 +1,350 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.evaluation.evaluations module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.feedback package" href="plexus.cli.feedback.html" />
+    <link rel="prev" title="plexus.cli.evaluation package" href="plexus.cli.evaluation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.evaluation.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.evaluation.evaluations module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.evaluation.evaluations.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.evaluation.evaluations">
+<span id="plexus-cli-evaluation-evaluations-module"></span><h1>plexus.cli.evaluation.evaluations module<a class="headerlink" href="#module-plexus.cli.evaluation.evaluations" title="Link to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.await_run_single_feedback_evaluation">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">await_run_single_feedback_evaluation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">days</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_date</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_date</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.await_run_single_feedback_evaluation" title="Link to this definition"></a></dt>
+<dd><p>Helper function to run a single feedback evaluation.</p>
+<p>This is used by both the ‘feedback’ and ‘feedback-all’ commands.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: API client
+account_id: Account ID
+scorecard_id: Scorecard ID
+scorecard_name: Scorecard name (for display)
+score_id: Score ID
+score_name: Score name (for display)
+days: Number of days to look back
+start_date: Start date for filtering (UTC aware)
+end_date: End date for filtering (UTC aware)
+task_id: Optional task ID for progress tracking</p>
+</dd>
+<dt>Returns:</dt><dd><p>Evaluation record if successful, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.check_dict_serializability">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">check_dict_serializability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.check_dict_serializability" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.create_client">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">create_client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.create_client" title="Link to this definition"></a></dt>
+<dd><p>Create a client and log its configuration</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.format_confusion_matrix_summary">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">format_confusion_matrix_summary</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">final_metrics</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.format_confusion_matrix_summary" title="Link to this definition"></a></dt>
+<dd><p>Format confusion matrix and detailed metrics for the evaluation summary.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.get_amplify_bucket">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">get_amplify_bucket</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.get_amplify_bucket" title="Link to this definition"></a></dt>
+<dd><p>Get the S3 bucket name from environment variables or fall back to reading amplify_outputs.json.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.get_csv_samples">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">get_csv_samples</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">csv_filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.get_csv_samples" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.get_data_driven_samples">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">get_data_driven_samples</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_instance</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fresh</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reload</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content_ids_to_sample_set</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress_callback</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">number_of_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.get_data_driven_samples" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.get_dataset_by_id">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">get_dataset_by_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.get_dataset_by_id" title="Link to this definition"></a></dt>
+<dd><p>Get a specific DataSet by ID</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.get_latest_dataset_for_data_source">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">get_latest_dataset_for_data_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_source_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.get_latest_dataset_for_data_source" title="Link to this definition"></a></dt>
+<dd><p>Get the most recent DataSet for a DataSource by finding its current version</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.get_latest_score_version">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">get_latest_score_version</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.get_latest_score_version" title="Link to this definition"></a></dt>
+<dd><p>Get the most recent ScoreVersion ID for a given score using the scoreId index sorted by createdAt.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: GraphQL API client
+score_id: The score ID to get the latest version for</p>
+</dd>
+<dt>Returns:</dt><dd><p>The latest ScoreVersion ID, or None if no versions found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.is_json_serializable">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">is_json_serializable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.is_json_serializable" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.load_configuration_from_yaml_file">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">load_configuration_from_yaml_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">configuration_file_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.load_configuration_from_yaml_file" title="Link to this definition"></a></dt>
+<dd><p>Load configuration from a YAML file.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.load_samples_from_cloud_dataset">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">load_samples_from_cloud_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">number_of_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress_callback</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.load_samples_from_cloud_dataset" title="Link to this definition"></a></dt>
+<dd><p>Load samples from a cloud dataset (Parquet file) and convert to evaluation format</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.load_scorecard_from_api">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">load_scorecard_from_api</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specific_version</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.load_scorecard_from_api" title="Link to this definition"></a></dt>
+<dd><p>Load a scorecard from the Plexus Dashboard API.</p>
+<dl>
+<dt>Args:</dt><dd><p>scorecard_identifier: A string that can identify the scorecard (id, key, name, etc.)
+score_names: Optional list of specific score names to load
+use_cache: Whether to prefer local cache files over API (default: False)</p>
+<blockquote>
+<div><p>When False, will always fetch from API but still write cache files
+When True, will check local cache first and only fetch missing configs</p>
+</div></blockquote>
+<p>specific_version: Optional specific score version ID to use instead of champion version</p>
+</dd>
+<dt>Returns:</dt><dd><p>Scorecard: An initialized Scorecard instance with required scores loaded</p>
+</dd>
+<dt>Raises:</dt><dd><p>ValueError: If the scorecard cannot be found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.load_scorecard_from_yaml_files">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">load_scorecard_from_yaml_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specific_version</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.load_scorecard_from_yaml_files" title="Link to this definition"></a></dt>
+<dd><p>Load a scorecard from individual YAML configuration files saved by fetch_score_configurations.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard_identifier: A string that identifies the scorecard (ID, name, key, or external ID)
+score_names: Optional list of specific score names to load
+specific_version: Optional specific score version ID (Note: YAML files contain champion versions only)</p>
+</dd>
+<dt>Returns:</dt><dd><p>Scorecard: An initialized Scorecard instance with required scores loaded from YAML files</p>
+</dd>
+<dt>Raises:</dt><dd><p>ValueError: If the scorecard cannot be constructed from YAML files</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.log_scorecard_configurations">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">log_scorecard_configurations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_instance</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.log_scorecard_configurations" title="Link to this definition"></a></dt>
+<dd><p>Log the actual configurations being used by the scorecard instance.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.lookup_data_source">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">lookup_data_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.lookup_data_source" title="Link to this definition"></a></dt>
+<dd><p>Look up a DataSource by name, key, or ID</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.resolve_score_external_id_to_uuid">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">resolve_score_external_id_to_uuid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">external_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.resolve_score_external_id_to_uuid" title="Link to this definition"></a></dt>
+<dd><p>Resolve a score external ID to its DynamoDB UUID using GraphQL API.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: PlexusDashboardClient instance
+external_id: The external ID to resolve (e.g., “45925”)
+scorecard_id: Optional scorecard ID to narrow the search</p>
+</dd>
+<dt>Returns:</dt><dd><p>str: DynamoDB UUID for the score, or None if not found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.score_text_wrapper">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">score_text_wrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_instance</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">executor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.score_text_wrapper" title="Link to this definition"></a></dt>
+<dd><p>Wrapper to handle the scoring of text with proper error handling and logging.</p>
+<p>This function is called from within an async context (_run_accuracy), 
+so we expect an event loop to be running. We use ThreadPoolExecutor to run 
+the async score_entire_text method in a separate thread to avoid nested loop issues.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.evaluation.evaluations.truncate_dict_strings">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.evaluation.evaluations.</span></span><span class="sig-name descname"><span class="pre">truncate_dict_strings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_length</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.evaluation.evaluations.truncate_dict_strings" title="Link to this definition"></a></dt>
+<dd><p>Recursively truncate long string values in a dictionary.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.evaluation.html" class="btn btn-neutral float-left" title="plexus.cli.evaluation package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.feedback.html" class="btn btn-neutral float-right" title="plexus.cli.feedback package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
