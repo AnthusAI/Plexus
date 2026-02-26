@@ -1,0 +1,24 @@
+{
+  "id": "plx-906bf3dc-fd2e-4b9b-9c5a-b423d76fd5c6",
+  "title": "[Snyk] SNYK-DEBIAN13-TAR-5696683 in tar@1.35+dfsg-3.1",
+  "description": "## CVE-2005-2541\n\n**Severity:** low\n**Package:** tar@1.35+dfsg-3.1\n**File:** `score-processor-lambda/Dockerfile`\n\n**CVSS Score:** 9.8  \n**Snyk Priority Score:** 150/1000\n\n### CVEs\n- [CVE-2005-2541](https://nvd.nist.gov/vuln/detail/CVE-2005-2541)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `tar` package and not the `tar` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nTar 1.15.1 does not properly warn the user when extracting setuid or setgid files, which may allow local users or remote attackers to gain privileges.\n## Remediation\nThere is no fixed version for `Debian:13` `tar`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2005-2541](https://security-tracker.debian.org/tracker/CVE-2005-2541)\n- [http://marc.info/?l=bugtraq&m=112327628230258&w=2](http://marc.info/?l=bugtraq&m=112327628230258&w=2)\n- [https://lists.apache.org/thread.html/rc713534b10f9daeee2e0990239fa407e2118e4aa9e88a7041177497c@%3Cissues.guacamole.apache.org%3E](https://lists.apache.org/thread.html/rc713534b10f9daeee2e0990239fa407e2118e4aa9e88a7041177497c@%3Cissues.guacamole.apache.org%3E)\n- [https://lists.apache.org/thread.html/rc713534b10f9daeee2e0990239fa407e2118e4aa9e88a7041177497c%40%3Cissues.guacamole.apache.org%3E](https://lists.apache.org/thread.html/rc713534b10f9daeee2e0990239fa407e2118e4aa9e88a7041177497c%40%3Cissues.guacamole.apache.org%3E)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-TAR-5696683)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.244280985Z",
+  "updated_at": "2026-02-26T00:13:56.244280985Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-TAR-5696683",
+    "snyk_severity": "low"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "plx-f246d086-cbe3-4ec6-9e6a-7a1af7749b6a",
+  "title": "[Snyk] SNYK-PYTHON-AZUREIDENTITY-7246764 in azure-identity@1.15.0",
+  "description": "## Concurrent Execution using Shared Resource with Improper Synchronization ('Race Condition')\n\n**Severity:** medium\n**Package:** azure-identity@1.15.0\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 5.5  \n**Snyk Priority Score:** 489/1000\n\n### CVEs\n- [CVE-2024-35255](https://nvd.nist.gov/vuln/detail/CVE-2024-35255)\n\n**Fix:** Pin `azure-identity` to version 1.16.1 or later.\n\n### Details\n## Overview\n[azure-identity](https://pypi.org/project/azure-identity) is a Microsoft Azure Identity Library for Python\n\nAffected versions of this package are vulnerable to Concurrent Execution using Shared Resource with Improper Synchronization ('Race Condition') in the authentication process. An attacker can elevate privileges by exploiting race conditions during the token validation steps. This is only exploitable if the application is configured to use multiple threads or processes for handling authentication requests.\r\n\r\n**Notes:**\r\n\r\n1) An attacker who successfully exploited the vulnerability could elevate privileges and read any file on the file system with SYSTEM access permissions;\r\n\r\n2) An attacker who successfully exploits this vulnerability can only obtain read access to the system files by exploiting this vulnerability. The attacker cannot perform write or delete operations on the files;\r\n\r\n3) The vulnerability exists in the following credential types: `DefaultAzureCredential` and `ManagedIdentityCredential`;\r\n\r\n4) The vulnerability exists in the following credential types:\r\n\r\n`ManagedIdentityApplication` (.NET)\r\n\r\n`ManagedIdentityApplication` (Java)\r\n\r\n`ManagedIdentityApplication` (Node.js)\n## Remediation\nUpgrade `azure-identity` to version 1.16.1 or higher.\n## References\n- [GitHub Commit](https://github.com/AzureAD/microsoft-authentication-library-for-dotnet/commit/fddb2c4011c79a7efda2df053ca05b87b8a1303c)\n- [GitHub Commit](https://github.com/AzureAD/microsoft-authentication-library-for-java/commit/9a07472cedbde7a1013a6fc81da91f2a2c6d67a1)\n- [GitHub Commit](https://github.com/AzureAD/microsoft-authentication-library-for-js/commit/3ee9c68d1a80bf7652e41b58ae1bf87ff64a727e)\n- [GitHub Commit](https://github.com/Azure/azure-sdk-for-go/commit/50774cd9709905523136fb05e8c85a50e8984499)\n- [GitHub Commit](https://github.com/Azure/azure-sdk-for-js/commit/c6aa75d312ae463e744163cedfd8fc480cc8d492)\n- [GitHub Commit](https://github.com/Azure/azure-sdk-for-net/commit/2db9a0f33668ae9cf0331613e1cd612bee105e1c)\n- [GitHub Commit](https://github.com/Azure/azure-sdk-for-python/commit/cb065acd7d0f957327dc4f02d1646d4e51a94178)\n- [Microsoft Advisory](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2024-35255)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-AZUREIDENTITY-7246764)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.246302541Z",
+  "updated_at": "2026-02-26T00:13:56.246302541Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-AZUREIDENTITY-7246764",
+    "snyk_severity": "medium"
+  }
+}

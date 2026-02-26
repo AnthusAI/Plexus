@@ -1,0 +1,21 @@
+{
+  "id": "plx-dce57ac5-051d-4a53-abd0-04dff69e7ca2",
+  "title": "Snyk Vulnerabilities",
+  "description": "Security vulnerabilities imported from Snyk.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.238807574Z",
+  "updated_at": "2026-02-26T00:13:56.238807574Z",
+  "closed_at": null,
+  "custom": {}
+}

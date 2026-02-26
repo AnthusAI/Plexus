@@ -1,0 +1,24 @@
+{
+  "id": "plx-18395526-e975-4433-ae5f-6c50095db91e",
+  "title": "[Snyk] SNYK-PYTHON-ZIPP-7430899 in zipp@3.15.0",
+  "description": "## Infinite loop\n\n**Severity:** medium\n**Package:** zipp@3.15.0\n**File:** `dashboard/amplify/functions/taskDispatcher/requirements.txt`\n\n**CVSS Score:** 6.9  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 666/1000\n\n### CVEs\n- [CVE-2024-5569](https://nvd.nist.gov/vuln/detail/CVE-2024-5569)\n\n**Fix:** Pin `zipp` to version 3.19.1 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Infinite loop where an attacker can cause the application to stop responding by initiating a loop through functions affecting the `Path` module, such as `joinpath`, the overloaded division operator, and `iterdir`.\n\n## Details\n\nDenial of Service (DoS) describes a family of attacks, all aimed at making a system inaccessible to its intended and legitimate users.\n\nUnlike other vulnerabilities, DoS attacks usually do not aim at breaching security. Rather, they are focused on making websites and services unavailable to genuine users resulting in downtime.\n\nOne popular Denial of Service vulnerability is DDoS (a Distributed Denial of Service), an attack that attempts to clog network pipes to the system by generating a large volume of traffic from many machines.\n\nWhen it comes to open source libraries, DoS vulnerabilities allow attackers to trigger such a crash or crippling of the service by using a flaw either in the application code or from the use of open source libraries.\n\nTwo common types of DoS vulnerabilities:\n\n* High CPU/Memory Consumption- An attacker sending crafted requests that could cause the system to take a disproportionate amount of time to process. For example, [commons-fileupload:commons-fileupload](https://security.snyk.io/vuln/SNYK-JAVA-COMMONSFILEUPLOAD-30082).\n\n* Crash - An attacker sending crafted requests that could cause the system to crash. For Example,  [npm `ws` package](https://snyk.io/vuln/npm:ws:20171108)\n\n## Remediation\nUpgrade `zipp` to version 3.19.1 or higher.\n## References\n- [GitHub Commit](https://github.com/jaraco/zipp/commit/fd604bd34f0343472521a36da1fbd22e793e14fd)\n- [GitHub Issue](https://github.com/jaraco/zipp/issues/119)\n- [GitHub PR](https://github.com/jaraco/zipp/pull/120)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-ZIPP-7430899)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6672ecb7-d1f6-4ce9-bca0-cb7df84ca941",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.239881987Z",
+  "updated_at": "2026-02-26T00:13:56.239881987Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-ZIPP-7430899",
+    "snyk_severity": "medium"
+  }
+}

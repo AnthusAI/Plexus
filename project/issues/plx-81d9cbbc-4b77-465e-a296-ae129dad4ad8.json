@@ -1,0 +1,24 @@
+{
+  "id": "plx-81d9cbbc-4b77-465e-a296-ae129dad4ad8",
+  "title": "[Snyk] SNYK-PYTHON-CRYPTOGRAPHY-15263096 in cryptography@45.0.7",
+  "description": "## Insufficient Verification of Data Authenticity\n\n**Severity:** high\n**Package:** cryptography@45.0.7\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 8.9  \n**Snyk Priority Score:** 731/1000\n\n### CVEs\n- [CVE-2026-26007](https://nvd.nist.gov/vuln/detail/CVE-2026-26007)\n\n**Fix:** Pin `cryptography` to version 46.0.5 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Insufficient Verification of Data Authenticity in public key functions `public_key_from_numbers`, `EllipticCurvePublicNumbers.public_key`, `load_der_public_key`, and `load_pem_public_key`, which may reveal bits from a private key when provided with a malicious public key as input. When the application is using `sect*` binary curves for verification - which is a rare use case - these functions do not verify that the provided point belongs to the expected prime-order subgroup of the curve. An attacker can thus expose partial private keys or forge signatures.\n## Remediation\nUpgrade `cryptography` to version 46.0.5 or higher.\n## References\n- [GitHub Commit](https://github.com/pyca/cryptography/commit/0eebb9dbb6343d9bc1d91e5a2482ed4e054a6d8c)\n- [GitHub Release](https://github.com/pyca/cryptography/releases/tag/46.0.5)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-CRYPTOGRAPHY-15263096)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.245969716Z",
+  "updated_at": "2026-02-26T00:13:56.245969716Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-CRYPTOGRAPHY-15263096",
+    "snyk_severity": "high"
+  }
+}

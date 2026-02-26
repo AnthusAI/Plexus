@@ -1,0 +1,24 @@
+{
+  "id": "plx-7f5149f7-f99b-450b-be1e-91689e326386",
+  "title": "[Snyk] SNYK-PYTHON-REQUESTS-6928867 in requests@2.31.0",
+  "description": "## Always-Incorrect Control Flow Implementation\n\n**Severity:** medium\n**Package:** requests@2.31.0\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 5.6  \n**Snyk Priority Score:** 494/1000\n\n### CVEs\n- [CVE-2024-35195](https://nvd.nist.gov/vuln/detail/CVE-2024-35195)\n\n**Fix:** Pin `requests` to version 2.32.2 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Always-Incorrect Control Flow Implementation when making requests through a Requests `Session`. An attacker can bypass certificate verification by making the first request with `verify=False`, causing all subsequent requests to ignore certificate verification regardless of changes to the `verify` value.\r\n\r\n**Notes:**\r\n\r\n1) For requests <2.32.0, avoid setting `verify=False` for the first request to a host while using a Requests Session.\r\n\r\n2) For requests <2.32.0, call `close()` on Session objects to clear existing connections if `verify=False` is used.\r\n\r\n3) This vulnerability was initially fixed in version [2.32.0](https://pypi.org/project/requests/2.32.0/), which was yanked. Therefore, the next available fixed version is 2.32.2.\n## Remediation\nUpgrade `requests` to version 2.32.2 or higher.\n## References\n- [GitHub Commit](https://github.com/psf/requests/commit/a58d7f2ffb4d00b46dca2d70a3932a0b37e22fac)\n- [GitHub PR](https://github.com/psf/requests/pull/6655)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-REQUESTS-6928867)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.246234488Z",
+  "updated_at": "2026-02-26T00:13:56.246234488Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-REQUESTS-6928867",
+    "snyk_severity": "medium"
+  }
+}

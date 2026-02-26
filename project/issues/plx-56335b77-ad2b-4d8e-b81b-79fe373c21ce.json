@@ -1,0 +1,24 @@
+{
+  "id": "plx-56335b77-ad2b-4d8e-b81b-79fe373c21ce",
+  "title": "[Snyk] SNYK-DEBIAN13-GLIBC-5681058 in glibc/libc-bin@2.41-12+deb13u1",
+  "description": "## Resource Management Errors\n\n**Severity:** low\n**Package:** glibc/libc-bin@2.41-12+deb13u1\n**File:** `score-processor-lambda/Dockerfile`\n\n**CVSS Score:** 4.3  \n**Snyk Priority Score:** 150/1000\n\n### CVEs\n- [CVE-2010-4756](https://nvd.nist.gov/vuln/detail/CVE-2010-4756)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `glibc` package and not the `glibc` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nThe glob implementation in the GNU C Library (aka glibc or libc6) allows remote authenticated users to cause a denial of service (CPU and memory consumption) via crafted glob expressions that do not match any pathnames, as demonstrated by glob expressions in STAT commands to an FTP daemon, a different vulnerability than CVE-2010-2632.\n## Remediation\nThere is no fixed version for `Debian:13` `glibc`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2010-4756](https://security-tracker.debian.org/tracker/CVE-2010-4756)\n- [http://cxib.net/stuff/glob-0day.c](http://cxib.net/stuff/glob-0day.c)\n- [http://securityreason.com/achievement_securityalert/89](http://securityreason.com/achievement_securityalert/89)\n- [http://securityreason.com/exploitalert/9223](http://securityreason.com/exploitalert/9223)\n- [https://bugzilla.redhat.com/show_bug.cgi?id=681681](https://bugzilla.redhat.com/show_bug.cgi?id=681681)\n- [https://bugzilla.redhat.com/show_bug.cgi?id=CVE-2010-4756](https://bugzilla.redhat.com/show_bug.cgi?id=CVE-2010-4756)\n- [https://security.netapp.com/advisory/ntap-20241108-0002/](https://security.netapp.com/advisory/ntap-20241108-0002/)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-GLIBC-5681058)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.244854634Z",
+  "updated_at": "2026-02-26T00:13:56.244854634Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-GLIBC-5681058",
+    "snyk_severity": "low"
+  }
+}

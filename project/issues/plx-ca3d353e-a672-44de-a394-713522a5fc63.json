@@ -1,0 +1,23 @@
+{
+  "id": "plx-ca3d353e-a672-44de-a394-713522a5fc63",
+  "title": "score-processor-fanout-lambda/requirements.txt",
+  "description": "Snyk vulnerabilities found in `score-processor-fanout-lambda/requirements.txt`.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dce57ac5-051d-4a53-abd0-04dff69e7ca2",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.243039097Z",
+  "updated_at": "2026-02-26T00:13:56.243039097Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_target_file": "score-processor-fanout-lambda/requirements.txt"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "title": "dashboard/package.json",
+  "description": "Snyk vulnerabilities found in `dashboard/package.json`.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dce57ac5-051d-4a53-abd0-04dff69e7ca2",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.239956971Z",
+  "updated_at": "2026-02-26T00:13:56.239956971Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_target_file": "dashboard/package.json"
+  }
+}

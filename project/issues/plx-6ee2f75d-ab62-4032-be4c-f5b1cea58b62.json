@@ -1,0 +1,24 @@
+{
+  "id": "plx-6ee2f75d-ab62-4032-be4c-f5b1cea58b62",
+  "title": "[Snyk] SNYK-DEBIAN13-APT-5675173 in apt@3.0.3",
+  "description": "## Improper Verification of Cryptographic Signature\n\n**Severity:** low\n**Package:** apt@3.0.3\n**File:** `score-processor-lambda/Dockerfile`\n\n**CVSS Score:** 3.7  \n**Snyk Priority Score:** 150/1000\n\n### CVEs\n- [CVE-2011-3374](https://nvd.nist.gov/vuln/detail/CVE-2011-3374)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `apt` package and not the `apt` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nIt was found that apt-key in apt, all versions, do not correctly validate gpg keys with the master keyring, leading to a potential man-in-the-middle attack.\n## Remediation\nThere is no fixed version for `Debian:13` `apt`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2011-3374](https://security-tracker.debian.org/tracker/CVE-2011-3374)\n- [https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=642480](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=642480)\n- [https://people.canonical.com/~ubuntu-security/cve/2011/CVE-2011-3374.html](https://people.canonical.com/~ubuntu-security/cve/2011/CVE-2011-3374.html)\n- [https://seclists.org/fulldisclosure/2011/Sep/221](https://seclists.org/fulldisclosure/2011/Sep/221)\n- [https://snyk.io/vuln/SNYK-LINUX-APT-116518](https://snyk.io/vuln/SNYK-LINUX-APT-116518)\n- [https://ubuntu.com/security/CVE-2011-3374](https://ubuntu.com/security/CVE-2011-3374)\n- [https://access.redhat.com/security/cve/cve-2011-3374](https://access.redhat.com/security/cve/cve-2011-3374)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-APT-5675173)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.244220688Z",
+  "updated_at": "2026-02-26T00:13:56.244220688Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-APT-5675173",
+    "snyk_severity": "low"
+  }
+}

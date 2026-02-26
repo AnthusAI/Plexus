@@ -1,0 +1,24 @@
+{
+  "id": "plx-148a7dd2-0439-45fa-8aed-47ccac83750c",
+  "title": "[Snyk] SNYK-JS-NEXT-12265451 in next@14.2.29",
+  "description": "## Missing Source Correlation of Multiple Independent Data\n\n**Severity:** low\n**Package:** next@14.2.29\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 2.3  \n**Snyk Priority Score:** 329/1000\n\n### CVEs\n- [CVE-2025-55173](https://nvd.nist.gov/vuln/detail/CVE-2025-55173)\n\n**Fix:** Upgrade `next` to version 14.2.31, 15.4.2-canary.19, 15.4.5 or later.\n\n### Details\n## Overview\n[next](https://www.npmjs.com/package/next) is a react framework.\n\nAffected versions of this package are vulnerable to Missing Source Correlation of Multiple Independent Data in `image-optimizer`. An attacker can cause arbitrary files to be downloaded with attacker-controlled content and filenames by supplying malicious external image sources. \r\n\r\n**Note:** This is only exploitable if the application is configured to allow external image sources via the `images.domains` or `images.remotePatterns` configuration.\n## Remediation\nUpgrade `next` to version 14.2.31, 15.4.2-canary.19, 15.4.5 or higher.\n## References\n- [GitHub Commit](https://github.com/vercel/next.js/commit/5dd68a5853effd435bca664c443211e99f9e6554)\n- [GitHub Commit](https://github.com/vercel/next.js/commit/c49b7b11e85d64e5cefa79dc3372437fab451e4f)\n- [GitHub Commit](https://github.com/vercel/next.js/commit/ed2a6c754831406f8cd724eb52a562bb124c1504)\n- [Vercel Security Advisory](http://vercel.com/changelog/cve-2025-55173)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-NEXT-12265451)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.241648834Z",
+  "updated_at": "2026-02-26T00:13:56.241648834Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-NEXT-12265451",
+    "snyk_severity": "low"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "plx-6672ecb7-d1f6-4ce9-bca0-cb7df84ca941",
+  "title": "dashboard/amplify/functions/taskDispatcher/requirements.txt",
+  "description": "Snyk vulnerabilities found in `dashboard/amplify/functions/taskDispatcher/requirements.txt`.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dce57ac5-051d-4a53-abd0-04dff69e7ca2",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.239451087Z",
+  "updated_at": "2026-02-26T00:13:56.239451087Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_target_file": "dashboard/amplify/functions/taskDispatcher/requirements.txt"
+  }
+}
