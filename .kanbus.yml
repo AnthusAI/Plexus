@@ -1,0 +1,138 @@
+project_directory: project
+virtual_projects: {}
+new_issue_project: null
+ignore_paths: []
+console_port: null
+project_key: plx
+project_management_template: null
+hierarchy:
+- initiative
+- epic
+- task
+- sub-task
+types:
+- bug
+- story
+- chore
+workflows:
+  default:
+    backlog:
+    - open
+    - closed
+    blocked:
+    - in_progress
+    - closed
+    closed:
+    - open
+    in_progress:
+    - open
+    - blocked
+    - closed
+    open:
+    - in_progress
+    - closed
+    - backlog
+  epic:
+    closed:
+    - open
+    in_progress:
+    - open
+    - closed
+    open:
+    - in_progress
+    - closed
+transition_labels:
+  default:
+    backlog:
+      closed: Drop
+      open: Start discovery
+    blocked:
+      closed: Drop
+      in_progress: Unblock
+    closed:
+      open: Reopen
+    in_progress:
+      blocked: Block
+      closed: Complete
+      open: Pause
+    open:
+      backlog: Back to backlog
+      closed: Drop
+      in_progress: Start work
+  epic:
+    closed:
+      open: Reopen
+    in_progress:
+      closed: Complete
+      open: Pause
+    open:
+      closed: Complete
+      in_progress: Start
+initial_status: open
+priorities:
+  0:
+    name: critical
+    color: red
+  1:
+    name: high
+    color: bright_red
+  2:
+    name: medium
+    color: yellow
+  3:
+    name: low
+    color: blue
+  4:
+    name: trivial
+    color: white
+default_priority: 2
+assignee: null
+time_zone: null
+statuses:
+- key: backlog
+  name: Backlog
+  category: To do
+  color: null
+  collapsed: true
+- key: open
+  name: Discovery
+  category: To do
+  color: null
+  collapsed: false
+- key: in_progress
+  name: In Progress
+  category: In progress
+  color: null
+  collapsed: false
+- key: blocked
+  name: Blocked
+  category: In progress
+  color: null
+  collapsed: true
+- key: closed
+  name: Done
+  category: Done
+  color: null
+  collapsed: true
+categories:
+- name: To do
+  color: grey
+- name: In progress
+  color: blue
+- name: Done
+  color: green
+type_colors:
+  bug: red
+  chore: green
+  epic: magenta
+  event: bright_blue
+  initiative: bright_blue
+  story: yellow
+  sub-task: bright_cyan
+  task: blue
+beads_compatibility: false
+jira: null
+snyk:
+  org_id: dbec85a8-d7a0-482a-b5c4-eb609a451b53
+  min_severity: low
+  parent_epic: null

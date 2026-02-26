@@ -1,0 +1,56 @@
+prefix: plx
+hierarchy:
+- initiative
+- epic
+- task
+- sub-task
+types:
+- bug
+- story
+- chore
+workflows:
+  default:
+    open:
+    - in_progress
+    - closed
+    - backlog
+    in_progress:
+    - open
+    - blocked
+    - closed
+    blocked:
+    - in_progress
+    - closed
+    closed:
+    - open
+    backlog:
+    - open
+    - closed
+  epic:
+    open:
+    - in_progress
+    - closed
+    in_progress:
+    - open
+    - closed
+    closed:
+    - open
+initial_status: open
+priorities:
+  0:
+    name: critical
+    color: red
+  1:
+    name: high
+    color: bright_red
+  2:
+    name: medium
+    color: yellow
+  3:
+    name: low
+    color: blue
+  4:
+    name: trivial
+    color: white
+default_priority: 2
+beads_compatibility: false
