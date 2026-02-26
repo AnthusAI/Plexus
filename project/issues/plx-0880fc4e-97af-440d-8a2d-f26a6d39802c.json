@@ -1,0 +1,24 @@
+{
+  "id": "plx-0880fc4e-97af-440d-8a2d-f26a6d39802c",
+  "title": "[Snyk] SNYK-JS-GLOB-14040952 in glob@10.4.5",
+  "description": "## Command Injection\n\n**Severity:** high\n**Package:** glob@10.4.5\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 7.7  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 492/1000\n\n### CVEs\n- [CVE-2025-64756](https://nvd.nist.gov/vuln/detail/CVE-2025-64756)\n\n**Fix:** Pin `glob` to version 10.5.0, 11.1.0 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Command Injection in the CLI, via the `-c/--cmd` option. The processing of commandline options in `src/bin.mts` calls the `foregroundChild()` on them, which defaults to setting `shell: true`. An attacker who can control the filenames being matched can execute arbitrary commands with the privileges of the user running the process by writing files with malicious names containing shell metacharacters - e.g. `$(touch injected_poc)`.\r\n\r\nThe malicious filename must be the target of a match by the `glob -c` command. Such filenames would not trigger this exploit when invoking `glob()` or related functions via the library API.\n## Remediation\nUpgrade `glob` to version 10.5.0, 11.1.0 or higher.\n## References\n- [Changelog](https://github.com/isaacs/node-glob/blob/main/changelog.md#111)\n- [GitHub Commit](https://github.com/isaacs/node-glob/commit/47473c046b91c67269df7a66eab782a6c2716146)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-GLOB-14040952)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.240203182Z",
+  "updated_at": "2026-02-26T00:13:56.240203182Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-GLOB-14040952",
+    "snyk_severity": "high"
+  }
+}

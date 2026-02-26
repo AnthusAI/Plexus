@@ -1,0 +1,24 @@
+{
+  "id": "plx-a8b0b3ca-f376-425f-807a-e8807b30ea47",
+  "title": "[Snyk] SNYK-PYTHON-URLLIB3-14896210 in urllib3@2.0.7",
+  "description": "## Improper Handling of Highly Compressed Data (Data Amplification)\n\n**Severity:** high\n**Package:** urllib3@2.0.7\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 8.9  \n**Snyk Priority Score:** 659/1000\n\n### CVEs\n- [CVE-2026-21441](https://nvd.nist.gov/vuln/detail/CVE-2026-21441)\n\n**Fix:** Pin `urllib3` to version 2.6.3 or later.\n\n### Details\n## Overview\n[urllib3](https://pypi.org/project/urllib3/) is a HTTP library with thread-safe connection pooling, file post, and more.\n\nAffected versions of this package are vulnerable to Improper Handling of Highly Compressed Data (Data Amplification) via the streaming API when handling HTTP redirects. An attacker can cause excessive resource consumption by serving a specially crafted compressed response that triggers decompression of large amounts of data before any read limits are enforced.\r\n\r\n**Note:**\r\nThis is only exploitable if content is streamed from untrusted sources with redirects enabled.\r\n\r\n## Workaround \r\nThis vulnerability can be mitigated by disabling redirects by setting `redirect=False` for requests to untrusted sources.\n## Remediation\nUpgrade `urllib3` to version 2.6.3 or higher.\n## References\n- [GitHub Commit](https://github.com/urllib3/urllib3/commit/8864ac407bba8607950025e0979c4c69bc7abc7b)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-URLLIB3-14896210)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.245706594Z",
+  "updated_at": "2026-02-26T00:13:56.245706594Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-URLLIB3-14896210",
+    "snyk_severity": "high"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "plx-c24404c9-7faf-4010-b419-f51a3da01577",
+  "title": "[Snyk] SNYK-DEBIAN13-SYSTEMD-5696564 in systemd/libsystemd0@257.9-1~deb13u1",
+  "description": "## Link Following\n\n**Severity:** low\n**Package:** systemd/libsystemd0@257.9-1~deb13u1\n**File:** `score-processor-lambda/Dockerfile`\n\n**CVSS Score:** 4.4  \n**Snyk Priority Score:** 150/1000\n\n### CVEs\n- [CVE-2013-4392](https://nvd.nist.gov/vuln/detail/CVE-2013-4392)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `systemd` package and not the `systemd` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nsystemd, when updating file permissions, allows local users to change the permissions and SELinux security contexts for arbitrary files via a symlink attack on unspecified files.\n## Remediation\nThere is no fixed version for `Debian:13` `systemd`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2013-4392](https://security-tracker.debian.org/tracker/CVE-2013-4392)\n- [http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=725357](http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=725357)\n- [http://www.openwall.com/lists/oss-security/2013/10/01/9](http://www.openwall.com/lists/oss-security/2013/10/01/9)\n- [https://bugzilla.redhat.com/show_bug.cgi?id=859060](https://bugzilla.redhat.com/show_bug.cgi?id=859060)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-SYSTEMD-5696564)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.244793062Z",
+  "updated_at": "2026-02-26T00:13:56.244793062Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-SYSTEMD-5696564",
+    "snyk_severity": "low"
+  }
+}

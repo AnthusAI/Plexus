@@ -1,0 +1,24 @@
+{
+  "id": "plx-e77795ac-d9b8-47da-aa40-7071ea8869e1",
+  "title": "[Snyk] SNYK-JS-FASTXMLPARSER-15307668 in fast-xml-parser@4.4.1",
+  "description": "## XML Entity Expansion\n\n**Severity:** high\n**Package:** fast-xml-parser@4.4.1\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 8.7  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 828/1000\n\n### CVEs\n- [CVE-2026-26278](https://nvd.nist.gov/vuln/detail/CVE-2026-26278)\n\n**Fix:** Pin `fast-xml-parser` to version 5.3.6 or later.\n\n### Details\n## Overview\n[fast-xml-parser](https://www.npmjs.org/package/fast-xml-parser) is a Validate XML, Parse XML, Build XML without C/C++ based libraries\n\nAffected versions of this package are vulnerable to XML Entity Expansion in `replaceEntitiesValue()` when handling excessive `DOCTYPE` input. An attacker can cause excessive resource consumption and make the application unresponsive by submitting malicious XML input with large text entities referenced multiple times. This is a bypass for Billion Laughs protection in `DocTypeReader.js`, which prevents excessive referencing within and entity, but doesn't prevent repeated expansion of large entities.\r\n\r\n## Workaround \r\nThis vulnerability can be mitigated by disabling `DOCTYPE` parsing using the `processEntities: false` option.\n## PoC\n```js\r\nconst { XMLParser } = require('fast-xml-parser');\r\n\r\nconst entity = 'A'.repeat(1000);\r\nconst refs = '&big;'.repeat(100);\r\nconst xml = `<!DOCTYPE foo [<!ENTITY big \"${entity}\">]><root>${refs}</root>`;\r\n\r\nconsole.time('parse');\r\nnew XMLParser().parse(xml);\r\nconsole.timeEnd('parse');\r\n```\n\n## Details\n\nDenial of Service (DoS) describes a family of attacks, all aimed at making a system inaccessible to its intended and legitimate users.\n\nUnlike other vulnerabilities, DoS attacks usually do not aim at breaching security. Rather, they are focused on making websites and services unavailable to genuine users resulting in downtime.\n\nOne popular Denial of Service vulnerability is DDoS (a Distributed Denial of Service), an attack that attempts to clog network pipes to the system by generating a large volume of traffic from many machines.\n\nWhen it comes to open source libraries, DoS vulnerabilities allow attackers to trigger such a crash or crippling of the service by using a flaw either in the application code or from the use of open source libraries.\n\nTwo common types of DoS vulnerabilities:\n\n* High CPU/Memory Consumption- An attacker sending crafted requests that could cause the system to take a disproportionate amount of time to process. For example, [commons-fileupload:commons-fileupload](https://security.snyk.io/vuln/SNYK-JAVA-COMMONSFILEUPLOAD-30082).\n\n* Crash - An attacker sending crafted requests that could cause the system to crash. For Example,  [npm `ws` package](https://snyk.io/vuln/npm:ws:20171108)\n\n## Remediation\nUpgrade `fast-xml-parser` to version 5.3.6 or higher.\n## References\n- [GitHub Commit](https://github.com/NaturalIntelligence/fast-xml-parser/commit/910dae5be2de2955e968558fadf6e8f74f117a77)\n- [GitHub Release](https://github.com/NaturalIntelligence/fast-xml-parser/releases/tag/v5.3.6)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-FASTXMLPARSER-15307668)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.240141054Z",
+  "updated_at": "2026-02-26T00:13:56.240141054Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-FASTXMLPARSER-15307668",
+    "snyk_severity": "high"
+  }
+}

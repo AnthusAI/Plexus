@@ -1,0 +1,24 @@
+{
+  "id": "plx-a37578a9-7c01-404d-86a9-d84e2e8bfa25",
+  "title": "[Snyk] SNYK-PYTHON-SCIKITLEARN-7217830 in scikit-learn@1.0.2",
+  "description": "## Storage of Sensitive Data in a Mechanism without Access Control\n\n**Severity:** medium\n**Package:** scikit-learn@1.0.2\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 5.3  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 586/1000\n\n### CVEs\n- [CVE-2024-5206](https://nvd.nist.gov/vuln/detail/CVE-2024-5206)\n\n**Fix:** Pin `scikit-learn` to version 1.5.0 or later.\n\n### Details\n## Overview\n[scikit-learn](https://pypi.org/project/scikit-learn/) is a Python module for machine learning built on top of SciPy and is distributed under the 3-Clause BSD license.\n\nAffected versions of this package are vulnerable to Storage of Sensitive Data in a Mechanism without Access Control due to the unexpected storage of all tokens present in the training data within the `stop_words_` attribute. An attacker can access sensitive information, such as passwords or keys, by exploiting this behavior.\n## PoC\nLimiting vocabulary is a very common setting hence provided by the library. The expected behaviour is that the object stores the frequent tokens, and discards the rest after the fitting process. In theory and practice, the vectorizer only needs the vocabulary and the rest of the possible tokens will be simply non needed, hence should be discarded.\r\n\r\nWhile the object correctly forms the required vocabulary, it stores the rest of the tokens in the `stop_words_ attribute. Therefore stores the entire unique tokens that have been passed in the fitting operation. Below it's demonstrated this:\r\n\r\n```py\r\n# ╰─$ pip freeze | grep pandas\r\n# pandas==2.2.1\r\nimport pandas as pd\r\n# ╰─$ pip freeze | grep scikit-learn\r\n# scikit-learn==1.4.1.post1\r\nfrom sklearn.feature_extraction.text import TfidfVectorizer\r\n\r\nif __name__ == '__main__':\r\n    # Fitting the vectorizer will save every token presented\r\n    vectorizer = TfidfVectorizer(\r\n        max_features=2,\r\n        # min_df=2/6  # Same results occur with different ways of limiting the vocabulary\r\n    ).fit(\r\n        pd.Series([\r\n            \"hello\", \"world\", \"hello\", \"world\", \"secretkey\", \"password123\"\r\n        ])\r\n    )\r\n    # Expected storage for frequent tokens\r\n    print(vectorizer.vocabulary_)  # {'hello': 0, 'server': 1}\r\n    # Unexpected data leak\r\n    print(vectorizer.stop_words_)  # {'password123', 'secretkey'}\r\n```\r\n\r\nIt is demonstrated below that the storage in the stop_words_ attribute is unnecessary. Nullifying the attribute will give the same results:\r\n\r\n```py\r\n# ╰─$ pip freeze | grep pandas\r\n# pandas==2.2.1\r\nimport pandas as pd\r\n# ╰─$ pip freeze | grep scikit-learn\r\n# scikit-learn==1.4.1.post1\r\nfrom sklearn.feature_extraction.text import TfidfVectorizer\r\n\r\nif __name__ == '__main__':\r\n    # Fitting the vectorizer will save every token presented\r\n    vectorizer = TfidfVectorizer(\r\n        max_features=2,\r\n        # min_df=2/6  # Same results occur with different ways of limiting the vocabulary\r\n    ).fit(\r\n        pd.Series([\r\n            \"hello\", \"world\", \"hello\", \"world\", \"secretkey\", \"password123\"\r\n        ])\r\n    )\r\n    # Expected storage for frequent tokens\r\n    print(vectorizer.vocabulary_)  # {'hello': 0, 'server': 1}\r\n    # Unexpected data leak\r\n    print(vectorizer.stop_words_)  # {'password123', 'secretkey'}\r\n\r\n    # Wiping-out the stop_words_ attribute does not change the behaviour\r\n    print(vectorizer.transform([\"hello world\"]).toarray())  # [[0.70710678 0.70710678]]\r\n    vectorizer.stop_words_ = None\r\n    assert vectorizer.stop_words_ is None\r\n    print(vectorizer.transform([\"hello world\"]).toarray())  # [[0.70710678 0.70710678]]\r\n```\n## Remediation\nUpgrade `scikit-learn` to version 1.5.0 or higher.\n## References\n- [GitHub Commit](https://github.com/scikit-learn/scikit-learn/commit/70ca21f106b603b611da73012c9ade7cd8e438b8)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-SCIKITLEARN-7217830)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.246162255Z",
+  "updated_at": "2026-02-26T00:13:56.246162255Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-SCIKITLEARN-7217830",
+    "snyk_severity": "medium"
+  }
+}

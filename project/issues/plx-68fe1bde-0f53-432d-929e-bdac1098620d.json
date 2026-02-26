@@ -1,0 +1,24 @@
+{
+  "id": "plx-68fe1bde-0f53-432d-929e-bdac1098620d",
+  "title": "[Snyk] SNYK-JS-NEXT-12301496 in next@14.2.29",
+  "description": "## Use of Cache Containing Sensitive Information\n\n**Severity:** medium\n**Package:** next@14.2.29\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 6.3  \n**Snyk Priority Score:** 529/1000\n\n### CVEs\n- [CVE-2025-57752](https://nvd.nist.gov/vuln/detail/CVE-2025-57752)\n\n**Fix:** Upgrade `next` to version 14.2.31, 15.4.2-canary.19, 15.4.5 or later.\n\n### Details\n## Overview\n[next](https://www.npmjs.com/package/next) is a react framework.\n\nAffected versions of this package are vulnerable to Use of Cache Containing Sensitive Information in the image optimization process, when responses from API routes vary based on request headers such as `Cookie` or `Authorization`. An attacker can gain unauthorized access to sensitive image data by exploiting cache key confusion, causing responses intended for authenticated users to be served to unauthorized users.\r\n\r\n**Note:** Exploitation requires a prior authorized request to populate the cache.\n## Remediation\nUpgrade `next` to version 14.2.31, 15.4.2-canary.19, 15.4.5 or higher.\n## References\n- [GitHub Commit](https://github.com/vercel/next.js/commit/6b12c60c61ee80cb0443ccd20de82ca9b4422ddd)\n- [GitHub Commit](https://github.com/vercel/next.js/commit/bcc7c65c5abef84c1c977a85fc392e589b74d8f7)\n- [GitHub Commit](https://github.com/vercel/next.js/commit/f00fcc9011e7d0ef027021fc8424f51b8ac97880)\n- [GitHub PR](https://github.com/vercel/next.js/pull/82114)\n- [Vercel Security Advisory](https://vercel.com/changelog/cve-2025-57752)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-NEXT-12301496)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.241067742Z",
+  "updated_at": "2026-02-26T00:13:56.241067742Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-NEXT-12301496",
+    "snyk_severity": "medium"
+  }
+}

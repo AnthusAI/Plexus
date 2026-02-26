@@ -1,0 +1,24 @@
+{
+  "id": "plx-18a3a988-6e08-4252-8c79-7c6c47851fb3",
+  "title": "[Snyk] SNYK-JS-MDASTUTILTOHAST-14157221 in mdast-util-to-hast@13.2.0",
+  "description": "## Improperly Controlled Modification of Dynamically-Determined Object Attributes\n\n**Severity:** medium\n**Package:** mdast-util-to-hast@13.2.0\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 6.9  \n**Snyk Priority Score:** 345/1000\n\n### CVEs\n- [CVE-2025-66400](https://nvd.nist.gov/vuln/detail/CVE-2025-66400)\n\n**Fix:** Upgrade `mdast-util-to-hast` to version 13.2.1 or later.\n\n### Details\n## Overview\n[mdast-util-to-hast](https://www.npmjs.org/package/mdast-util-to-hast) is a mdast utility to transform to hast\n\nAffected versions of this package are vulnerable to Improperly Controlled Modification of Dynamically-Determined Object Attributes in the `class` attribute in rendered markdown `code` elements. An attacker can cause arbitrary CSS classes to be applied to elements by injecting specially crafted character references, altering the appearance or behavior of rendered content.\n## Remediation\nUpgrade `mdast-util-to-hast` to version 13.2.1 or higher.\n## References\n- [GitHub Commit](https://github.com/syntax-tree/mdast-util-to-hast/commit/6fc783ae6abdeb798fd5a68e7f3f21411dde7403)\n- [GitHub Commit](https://github.com/syntax-tree/mdast-util-to-hast/commit/ab3a79570a1afbfa7efef5d4a0cd9b5caafbc5d7)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-MDASTUTILTOHAST-14157221)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.241385450Z",
+  "updated_at": "2026-02-26T00:13:56.241385450Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-MDASTUTILTOHAST-14157221",
+    "snyk_severity": "medium"
+  }
+}
