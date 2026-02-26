@@ -1,0 +1,24 @@
+{
+  "id": "plx-0eb9c5ee-c4e9-4ac1-bb0d-6baffc3ad240",
+  "title": "[Snyk] SNYK-JS-NEXT-10259370 in next@14.2.29",
+  "description": "## Missing Origin Validation in WebSockets\n\n**Severity:** low\n**Package:** next@14.2.29\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 2.3  \n**Snyk Priority Score:** 329/1000\n\n### CVEs\n- [CVE-2025-48068](https://nvd.nist.gov/vuln/detail/CVE-2025-48068)\n\n**Fix:** Upgrade `next` to version 14.2.30, 15.2.2 or later.\n\n### Details\n## Overview\n[next](https://www.npmjs.com/package/next) is a react framework.\n\nAffected versions of this package are vulnerable to Missing Origin Validation in WebSockets when running next dev and the project uses the App Router. An attacker can access the source code of client components by exploiting the Cross-site WebSocket hijacking (CSWSH) attack when a user visits a malicious link while having the server running locally. \r\n\r\n## Workarounds\r\n\r\n1. Avoid browsing untrusted websites while running the local development server.\r\n\r\n2. Implement local firewall or proxy rules to block unauthorized WebSocket access to localhost.\n## Remediation\nUpgrade `next` to version 14.2.30, 15.2.2 or higher.\n## References\n- [GitHub Commit](https://github.com/vercel/next.js/commit/d928709b7494bc0e296bea9148dd803e9d9599b1)\n- [GitHub PR](https://github.com/vercel/next.js/pull/76880)\n- [Vercel](https://vercel.com/changelog/cve-2025-48068)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-NEXT-10259370)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.241780775Z",
+  "updated_at": "2026-02-26T00:13:56.241780775Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-NEXT-10259370",
+    "snyk_severity": "low"
+  }
+}

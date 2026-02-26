@@ -1,0 +1,24 @@
+{
+  "id": "plx-b6809ada-0463-45a8-b3e5-f2f38b0d1f28",
+  "title": "[Snyk] SNYK-PYTHON-PILLOW-6514866 in pillow@9.5.0",
+  "description": "## Buffer Overflow\n\n**Severity:** medium\n**Package:** pillow@9.5.0\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 5.9  \n**Snyk Priority Score:** 509/1000\n\n### CVEs\n- [CVE-2024-28219](https://nvd.nist.gov/vuln/detail/CVE-2024-28219)\n\n**Fix:** Pin `pillow` to version 10.3.0 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Buffer Overflow via the `strcpy` function in `_imagingcms.c`, due to two calls that were able to copy too much data into fixed length strings.\n## Remediation\nUpgrade `pillow` to version 10.3.0 or higher.\n## References\n- [GitHub Commit](https://github.com/python-pillow/Pillow/commit/2776126aa9af322b416eaca247f4f8ebefd08128)\n- [GitHub PR](https://github.com/python-pillow/Pillow/pull/7928)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-PILLOW-6514866)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.246629804Z",
+  "updated_at": "2026-02-26T00:13:56.246629804Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-PILLOW-6514866",
+    "snyk_severity": "medium"
+  }
+}

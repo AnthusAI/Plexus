@@ -1,0 +1,24 @@
+{
+  "id": "plx-78a89cd2-c315-4c1b-b9b9-f0724a8d936f",
+  "title": "[Snyk] SNYK-DEBIAN13-SYSTEMD-5733401 in systemd/libudev1@257.9-1~deb13u1",
+  "description": "## Improper Validation of Integrity Check Value\n\n**Severity:** low\n**Package:** systemd/libudev1@257.9-1~deb13u1\n**File:** `score-processor-lambda/Dockerfile`\n\n**CVSS Score:** 5.3  \n**Snyk Priority Score:** 150/1000\n\n### CVEs\n- [CVE-2023-31437](https://nvd.nist.gov/vuln/detail/CVE-2023-31437)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `systemd` package and not the `systemd` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nAn issue was discovered in systemd 253. An attacker can modify a sealed log file such that, in some views, not all existing and sealed log messages are displayed. NOTE: the vendor reportedly sent &#34;a reply denying that any of the finding was a security vulnerability.&#34;\n## Remediation\nThere is no fixed version for `Debian:13` `systemd`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2023-31437](https://security-tracker.debian.org/tracker/CVE-2023-31437)\n- [https://github.com/kastel-security/Journald](https://github.com/kastel-security/Journald)\n- [https://github.com/kastel-security/Journald/blob/main/journald-publication.pdf](https://github.com/kastel-security/Journald/blob/main/journald-publication.pdf)\n- [https://github.com/systemd/systemd/releases](https://github.com/systemd/systemd/releases)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-SYSTEMD-5733401)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.243651662Z",
+  "updated_at": "2026-02-26T00:13:56.243651662Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-SYSTEMD-5733401",
+    "snyk_severity": "low"
+  }
+}
