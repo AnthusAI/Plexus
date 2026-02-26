@@ -1,0 +1,24 @@
+{
+  "id": "plx-8ef84bc3-5594-4194-b7b7-67275d0471bd",
+  "title": "[Snyk] SNYK-DEBIAN13-GLIBC-15010811 in glibc/libc-bin@2.41-12+deb13u1",
+  "description": "## CVE-2026-0861\n\n**Severity:** low\n**Package:** glibc/libc-bin@2.41-12+deb13u1\n**File:** `score-processor-lambda/Dockerfile`\n\n**Snyk Priority Score:** 150/1000\n\n### CVEs\n- [CVE-2026-0861](https://nvd.nist.gov/vuln/detail/CVE-2026-0861)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `glibc` package and not the `glibc` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nPassing too large an alignment to the memalign suite of functions (memalign, posix_memalign, aligned_alloc) in the GNU C Library version 2.30 to 2.42 may result in an integer overflow, which could consequently result in a heap corruption.\n\nNote that the attacker must have control over both, the size as well as the alignment arguments of the memalign function to be able to exploit this.  The size parameter must be close enough to PTRDIFF_MAX so as to overflow size_t along with the large alignment argument.  This limits the malicious inputs for the alignment for memalign to the range [1&lt;&lt;62+ 1, 1&lt;&lt;63] and exactly 1&lt;&lt;63 for posix_memalign and aligned_alloc.\n\nTypically the alignment argument passed to such functions is a known constrained quantity (e.g. page size, block size, struct sizes) and is not attacker controlled, because of which this may not be easily exploitable in practice.  An application bug could potentially result in the input alignment being too large, e.g. due to a different buffer overflow or integer overflow in the application or its dependent libraries, but that is again an uncommon usage pattern given typical sources of alignments.\n## Remediation\nThere is no fixed version for `Debian:13` `glibc`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2026-0861](https://security-tracker.debian.org/tracker/CVE-2026-0861)\n- [https://sourceware.org/bugzilla/show_bug.cgi?id=33796](https://sourceware.org/bugzilla/show_bug.cgi?id=33796)\n- [https://sourceware.org/git/?p=glibc.git;a=blob_plain;f=advisories/GLIBC-SA-2026-0001](https://sourceware.org/git/?p=glibc.git;a=blob_plain;f=advisories/GLIBC-SA-2026-0001)\n- [http://www.openwall.com/lists/oss-security/2026/01/16/5](http://www.openwall.com/lists/oss-security/2026/01/16/5)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-GLIBC-15010811)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.244731481Z",
+  "updated_at": "2026-02-26T00:13:56.244731481Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-GLIBC-15010811",
+    "snyk_severity": "low"
+  }
+}

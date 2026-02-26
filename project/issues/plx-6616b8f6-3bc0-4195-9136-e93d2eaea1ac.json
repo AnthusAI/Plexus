@@ -1,0 +1,24 @@
+{
+  "id": "plx-6616b8f6-3bc0-4195-9136-e93d2eaea1ac",
+  "title": "[Snyk] SNYK-JS-NANOID-8492085 in nanoid@4.0.2",
+  "description": "## Improper Input Validation\n\n**Severity:** medium\n**Package:** nanoid@4.0.2\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 6.3  \n**Snyk Priority Score:** 315/1000\n\n### CVEs\n- [CVE-2024-55565](https://nvd.nist.gov/vuln/detail/CVE-2024-55565)\n\n**Fix:** Pin `nanoid` to version 3.3.8, 5.0.9 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Improper Input Validation due to the mishandling of fractional values in the `nanoid` function. By exploiting this vulnerability, an attacker can achieve an infinite loop.\n## Remediation\nUpgrade `nanoid` to version 3.3.8, 5.0.9 or higher.\n## References\n- [GitHub Commit](https://github.com/ai/nanoid/commit/d643045f40d6dc8afa000a644d857da1436ed08c)\n- [GitHub PR](https://github.com/ai/nanoid/pull/510)\n- [GitHub Release](https://github.com/ai/nanoid/releases/tag/5.0.9)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-NANOID-8492085)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.241327828Z",
+  "updated_at": "2026-02-26T00:13:56.241327828Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-NANOID-8492085",
+    "snyk_severity": "medium"
+  }
+}

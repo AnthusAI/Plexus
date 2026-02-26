@@ -1,0 +1,24 @@
+{
+  "id": "plx-2f202e80-4e1f-41b0-9256-9a80fa247d60",
+  "title": "[Snyk] SNYK-JS-NEXT-15104645 in next@14.2.29",
+  "description": "## Allocation of Resources Without Limits or Throttling\n\n**Severity:** high\n**Package:** next@14.2.29\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 8.2  \n**Snyk Priority Score:** 624/1000\n\n### CVEs\n- [CVE-2025-59471](https://nvd.nist.gov/vuln/detail/CVE-2025-59471)\n\n**Fix:** Upgrade `next` to version 15.5.10, 16.1.1-canary.15, 16.1.5 or later.\n\n### Details\n## Overview\n[next](https://www.npmjs.com/package/next) is a react framework.\n\nAffected versions of this package are vulnerable to Allocation of Resources Without Limits or Throttling via the `fetchExternalImage()` function, which is used for image optimization and loads external images into memory without a maximum size limit. An attacker can exhaust system memory and disrupt service availability by requesting optimization of very large images from external domains. \r\n\r\n**Note:**\r\n\r\nThis is only exploitable if `remotePatterns` is configured to allow image optimization from external domains and the attacker can serve or control a large image on an allowed domain.\n## Remediation\nUpgrade `next` to version 15.5.10, 16.1.1-canary.15, 16.1.5 or higher.\n## References\n- [GitHub Commit](https://github.com/vercel/next.js/commit/00e92280d212f0056f63e8ff30617b48d41f1c7c)\n- [GitHub Commit](https://github.com/vercel/next.js/commit/1caaca3cdbd2da76698bb9e60ff07d21a6fb6e77)\n- [GitHub Commit](https://github.com/vercel/next.js/commit/39a2f6a8d13dfa50cee843f93241c8c1dbaf801e)\n- [GitHub Commit](https://github.com/vercel/next.js/commit/54476c9c645a482e6363406cd9c8849bec0805a2)\n- [Nextjs Release Notes](https://vercel.com/changelog/summaries-of-cve-2025-59471-and-cve-2025-59472)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-NEXT-15104645)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.240389258Z",
+  "updated_at": "2026-02-26T00:13:56.240389258Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-NEXT-15104645",
+    "snyk_severity": "high"
+  }
+}

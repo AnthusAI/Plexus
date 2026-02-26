@@ -1,0 +1,24 @@
+{
+  "id": "plx-7f7720e6-8226-42a3-ab0b-c858d35adb63",
+  "title": "[Snyk] SNYK-JS-FASTXMLPARSER-15155603 in fast-xml-parser@4.4.1",
+  "description": "## Uncaught Exception\n\n**Severity:** high\n**Package:** fast-xml-parser@4.4.1\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 8.7  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 756/1000\n\n### CVEs\n- [CVE-2026-25128](https://nvd.nist.gov/vuln/detail/CVE-2026-25128)\n\n**Fix:** Pin `fast-xml-parser` to version 5.3.4 or later.\n\n### Details\n## Overview\n[fast-xml-parser](https://www.npmjs.org/package/fast-xml-parser) is a Validate XML, Parse XML, Build XML without C/C++ based libraries\n\nAffected versions of this package are vulnerable to Uncaught Exception in the numeric entity processing when parsing XML containing out-of-range entity code points. An attacker can cause the application to crash by submitting specially crafted XML input that triggers an uncaught exception.\n## Remediation\nUpgrade `fast-xml-parser` to version 5.3.4 or higher.\n## References\n- [GitHub Commit](https://github.com/NaturalIntelligence/fast-xml-parser/commit/4e387f61c4a5cef792f6a2f42467013290bf95dc)\n- [GitHub Release](https://github.com/NaturalIntelligence/fast-xml-parser/releases/tag/v5.3.4)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-FASTXMLPARSER-15155603)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.240083397Z",
+  "updated_at": "2026-02-26T00:13:56.240083397Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-FASTXMLPARSER-15155603",
+    "snyk_severity": "high"
+  }
+}

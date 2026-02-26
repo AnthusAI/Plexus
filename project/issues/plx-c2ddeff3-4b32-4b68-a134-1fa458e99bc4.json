@@ -1,0 +1,24 @@
+{
+  "id": "plx-c2ddeff3-4b32-4b68-a134-1fa458e99bc4",
+  "title": "[Snyk] SNYK-JS-ONHEADERS-10773729 in on-headers@1.0.2",
+  "description": "## Improper Handling of Unexpected Data Type\n\n**Severity:** medium\n**Package:** on-headers@1.0.2\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 4.6  \n**Snyk Priority Score:** 230/1000\n\n### CVEs\n- [CVE-2025-7339](https://nvd.nist.gov/vuln/detail/CVE-2025-7339)\n\n**Fix:** Upgrade `on-headers` to version 1.1.0 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Improper Handling of Unexpected Data Type via the `response.writeHead` function. An attacker can manipulate HTTP response headers by passing an array to this function, potentially leading to unintended disclosure or modification of header information.\r\n\r\n## Workaround\r\n\r\nThis vulnerability can be mitigated by passing an object to `response.writeHead()` instead of an array.\n## Remediation\nUpgrade `on-headers` to version 1.1.0 or higher.\n## References\n- [GitHub Commit](https://github.com/jshttp/on-headers/commit/c6e384908c9c6127d18831d16ab0bd96e1231867)\n- [GitHub Issue](https://github.com/expressjs/morgan/issues/315)\n- [GitHub Issue](https://github.com/jshttp/on-headers/issues/15)\n- [OpenJS Advisories](https://cna.openjsf.org/security-advisories.html)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-ONHEADERS-10773729)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.241582912Z",
+  "updated_at": "2026-02-26T00:13:56.241582912Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-ONHEADERS-10773729",
+    "snyk_severity": "medium"
+  }
+}
