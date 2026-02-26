@@ -1,0 +1,24 @@
+{
+  "id": "plx-c6f5a11c-0665-4eb6-93e8-a85551e54751",
+  "title": "[Snyk] SNYK-JS-NEXT-12299318 in next@14.2.29",
+  "description": "## Server-side Request Forgery (SSRF)\n\n**Severity:** high\n**Package:** next@14.2.29\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 8.3  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 736/1000\n\n### CVEs\n- [CVE-2025-57822](https://nvd.nist.gov/vuln/detail/CVE-2025-57822)\n\n**Fix:** Upgrade `next` to version 14.2.32, 15.4.2-canary.43, 15.4.7 or later.\n\n### Details\n## Overview\n[next](https://www.npmjs.com/package/next) is a react framework.\n\nAffected versions of this package are vulnerable to Server-side Request Forgery (SSRF) via the `resolve-routes`. An attacker can access internal resources and potentially exfiltrate sensitive information by crafting requests containing user-controlled headers (e.g.,\r\nLocation) that are forwarded or interpreted without validation.\r\n\r\n**Note:** This is only exploitable if custom middleware logic is implemented in a self-hosted deployment. The project maintainers recommend using the documented `NextResponse.next({request})` to explicitly pass the request object.\n## Remediation\nUpgrade `next` to version 14.2.32, 15.4.2-canary.43, 15.4.7 or higher.\n## References\n- [GitHub Commit](https://github.com/vercel/next.js/commit/1a026e338d2b8c977c8949a134168952338d6d01)\n- [GitHub Commit](https://github.com/vercel/next.js/commit/6a974adc455776b335b0db094d4c2e5349d97c97)\n- [GitHub Commit](https://github.com/vercel/next.js/commit/9c9aaed5bb9338ef31b0517ccf0ab4414f2093d8)\n- [Vercel Security Advisory](https://vercel.com/changelog/cve-2025-57822)\n- [Nuclei Templates](https://github.com/projectdiscovery/nuclei-templates/blob/main/http/cves/2025/CVE-2025-57822.yaml)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-NEXT-12299318)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.240445974Z",
+  "updated_at": "2026-02-26T00:13:56.240445974Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-NEXT-12299318",
+    "snyk_severity": "high"
+  }
+}

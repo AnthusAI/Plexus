@@ -1,0 +1,24 @@
+{
+  "id": "plx-d1ca5313-47cf-4295-a0b9-4c860b8af011",
+  "title": "[Snyk] SNYK-PYTHON-NLTK-15317401 in nltk@3.8.1",
+  "description": "## Arbitrary Code Injection\n\n**Severity:** high\n**Package:** nltk@3.8.1\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 7.9  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 788/1000\n\n### CVEs\n- [CVE-2025-14009](https://nvd.nist.gov/vuln/detail/CVE-2025-14009)\n\n**Fix:** Pin `nltk` to version 3.9.3 or later.\n\n### Details\n## Overview\n[nltk](http://www.nltk.org) is a Natural Language Toolkit (NLTK) is a Python package for natural language processing.\n\nAffected versions of this package are vulnerable to Arbitrary Code Injection via the `_unzip_iter()` function due to the lack of validation before unpacking untrusted downloaded packages. An attacker can execute arbitrary code by supplying a specially crafted zip file.\n## Remediation\nUpgrade `nltk` to version 3.9.3 or higher.\n## References\n- [GitHub Commit](https://github.com/nltk/nltk/commit/1056b323af6462455571302e766b67cf300aea18)\n- [GitHub PR](https://github.com/nltk/nltk/pull/3468)\n- [Huntr Report](https://huntr.com/bounties/49ecbc02-054e-4470-b2e0-b267936cc4e4)\n- [Red Hat Bugzilla Bug](https://bugzilla.redhat.com/show_bug.cgi?id=2440724)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-NLTK-15317401)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.245435836Z",
+  "updated_at": "2026-02-26T00:13:56.245435836Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-NLTK-15317401",
+    "snyk_severity": "high"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "plx-56d83d40-7d3e-4f51-bb10-1ab707973e8f",
+  "title": "[Snyk] SNYK-PYTHON-PILLOW-5918878 in pillow@9.5.0",
+  "description": "## Heap-based Buffer Overflow\n\n**Severity:** critical\n**Package:** pillow@9.5.0\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 9.6  \n**Exploit Maturity:** mature  \n**Snyk Priority Score:** 909/1000\n\n### CVEs\n- [CVE-2023-4863](https://nvd.nist.gov/vuln/detail/CVE-2023-4863)\n\n**Fix:** Pin `pillow` to version 10.0.1 or later.\n\n### Details\n## Overview\n[Pillow](https://python-pillow.org/) is a PIL (Python Imaging Library) fork.\n\nAffected versions of this package are vulnerable to Heap-based Buffer Overflow when the `ReadHuffmanCodes()` function is used. An attacker can craft a special `WebP` lossless file that triggers the `ReadHuffmanCodes()` function to allocate the HuffmanCode buffer with a size that comes from an array of precomputed sizes: `kTableSize`. The `color_cache_bits` value defines which size to use. The `kTableSize` array only takes into account sizes for 8-bit first-level table lookups but not second-level table lookups. libwebp allows codes that are up to 15-bit (`MAX_ALLOWED_CODE_LENGTH`). When BuildHuffmanTable() attempts to fill the second-level tables it may write data out-of-bounds. The OOB write to the undersized array happens in ReplicateValue.\r\n\r\n**Notes:**\r\n\r\nThis is only exploitable if the `color_cache_bits` value defines which size to use.\r\n\r\nThis vulnerability was also published on libwebp [CVE-2023-5129](https://security.snyk.io/vuln/SNYK-UNMANAGED-WEBMPROJECTLIBWEBP-5918283)\r\n\r\n**Changelog:**\r\n\r\n2023-09-12: Initial advisory publication\r\n\r\n2023-09-27: Advisory details updated, including CVSS, references\r\n\r\n2023-09-27: CVE-2023-5129 rejected as a duplicate of CVE-2023-4863\r\n\r\n2023-09-28: Research and addition of additional affected libraries\r\n\r\n2024-01-28: Additional fix information\n## Remediation\nUpgrade `Pillow` to version 10.0.1 or higher.\n## References\n- [Chrome Releases](https://chromereleases.googleblog.com/2023/09/stable-channel-update-for-desktop_11.html)\n- [Github Commit](https://github.com/cefsharp/CefSharp/commit/f2890ba66170afb0bf742839febe4d20449f758c)\n- [GitHub PR](https://github.com/electron/electron/pull/39823)\n- [GitHub PR](https://github.com/electron/electron/pull/39824)\n- [GitHub PR](https://github.com/electron/electron/pull/39825)\n- [GitHub PR](https://github.com/electron/electron/pull/39826)\n- [GitHub PR](https://github.com/electron/electron/pull/39827)\n- [Imagemagick Commit](https://github.com/dlemstra/Magick.NET/commit/d8673e7690007d8c73a37f3a5c8104fa9321a8da)\n- [Mozilla Advisory](https://www.mozilla.org/en-US/security/advisories/mfsa2023-40/)\n- [PoC](https://blog.isosceles.com/the-webp-0day/)\n- [Security Advisory](https://chromium.googlesource.com/webm/libwebp/+/2af26267cdfcb63a88e5c74a85927a12d6ca1d76)\n- [Security Advisory](https://chromium.googlesource.com/webm/libwebp/+/902bc9190331343b2017211debcec8d2ab87e17a)\n- [Snyk Blog](https://snyk.io/blog/critical-webp-0-day-cve-2023-4863/)\n- [CISA - Known Exploited Vulnerabilities](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)\n- [PoC in GitHub](https://github.com/caoweiquan322/NotEnough)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-PILLOW-5918878)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.245243674Z",
+  "updated_at": "2026-02-26T00:13:56.245243674Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-PILLOW-5918878",
+    "snyk_severity": "critical"
+  }
+}

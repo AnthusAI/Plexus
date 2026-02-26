@@ -1,0 +1,24 @@
+{
+  "id": "plx-72e96051-79b4-492b-b0ef-6f2059ce51c8",
+  "title": "[Snyk] SNYK-DEBIAN13-ZLIB-15307854 in zlib/zlib1g@1:1.3.dfsg+really1.3.1-1+b1",
+  "description": "## Improper Validation of Specified Quantity in Input\n\n**Severity:** low\n**Package:** zlib/zlib1g@1:1.3.dfsg+really1.3.1-1+b1\n**File:** `score-processor-lambda/Dockerfile`\n\n**CVSS Score:** 5.5  \n**Snyk Priority Score:** 221/1000\n\n### CVEs\n- [CVE-2026-27171](https://nvd.nist.gov/vuln/detail/CVE-2026-27171)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `zlib` package and not the `zlib` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nzlib before 1.3.2 allows CPU consumption via crc32_combine64 and crc32_combine_gen64 because x2nmodp can do right shifts within a loop that has no termination condition.\n## Remediation\nThere is no fixed version for `Debian:13` `zlib`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2026-27171](https://security-tracker.debian.org/tracker/CVE-2026-27171)\n- [https://7asecurity.com/blog/2026/02/zlib-7asecurity-audit/](https://7asecurity.com/blog/2026/02/zlib-7asecurity-audit/)\n- [https://github.com/madler/zlib/issues/904](https://github.com/madler/zlib/issues/904)\n- [https://github.com/madler/zlib/releases/tag/v1.3.2](https://github.com/madler/zlib/releases/tag/v1.3.2)\n- [https://ostif.org/zlib-audit-complete/](https://ostif.org/zlib-audit-complete/)\n- [https://7asecurity.com/reports/pentest-report-zlib-RC1.1.pdf](https://7asecurity.com/reports/pentest-report-zlib-RC1.1.pdf)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-ZLIB-15307854)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.243527799Z",
+  "updated_at": "2026-02-26T00:13:56.243527799Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-ZLIB-15307854",
+    "snyk_severity": "low"
+  }
+}

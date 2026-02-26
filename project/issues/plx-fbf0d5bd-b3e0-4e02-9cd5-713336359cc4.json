@@ -1,0 +1,24 @@
+{
+  "id": "plx-fbf0d5bd-b3e0-4e02-9cd5-713336359cc4",
+  "title": "[Snyk] SNYK-PYTHON-AZURECORE-14927372 in azure-core@1.30.1",
+  "description": "## Deserialization of Untrusted Data\n\n**Severity:** high\n**Package:** azure-core@1.30.1\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 7.7  \n**Snyk Priority Score:** 599/1000\n\n### CVEs\n- [CVE-2026-21226](https://nvd.nist.gov/vuln/detail/CVE-2026-21226)\n\n**Fix:** Pin `azure-core` to version 1.38.0 or later.\n\n### Details\n## Overview\n[azure-core](https://pypi.org/project/azure-core) is a Microsoft Azure Core Library for Python\n\nAffected versions of this package are vulnerable to Deserialization of Untrusted Data in the shared client library. An attacker can execute arbitrary code by sending specially crafted data to be deserialized over a network connection.\n\n## Details\n\nSerialization is a process of converting an object into a sequence of bytes which can be persisted to a disk or database or can be sent through streams. The reverse process of creating object from sequence of bytes is called deserialization. Serialization is commonly used for communication (sharing objects between multiple hosts) and persistence (store the object state in a file or a database). It is an integral part of popular protocols like _Remote Method Invocation (RMI)_, _Java Management Extension (JMX)_, _Java Messaging System (JMS)_, _Action Message Format (AMF)_, _Java Server Faces (JSF) ViewState_, etc.\n\n_Deserialization of untrusted data_ ([CWE-502](https://cwe.mitre.org/data/definitions/502.html)) is when the application deserializes untrusted data without sufficiently verifying that the resulting data will be valid, thus allowing the attacker to control the state or the flow of the execution.\n  \n## Remediation\nUpgrade `azure-core` to version 1.38.0 or higher.\n## References\n- [GitHub ChangeLog](https://github.com/Azure/azure-sdk-for-python/blob/6d2e6431ea0991861640e449e51e894247a7771a/sdk/core/azure-core/CHANGELOG.md#1380-2026-01-12)\n- [Microsoft Security Advisory](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-21226)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-AZURECORE-14927372)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.245574676Z",
+  "updated_at": "2026-02-26T00:13:56.245574676Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-AZURECORE-14927372",
+    "snyk_severity": "high"
+  }
+}
