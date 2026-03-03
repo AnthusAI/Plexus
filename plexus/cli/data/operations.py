@@ -29,7 +29,6 @@ from sklearn.utils import resample
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import xgboost as xgb
-import shap
 from imblearn.over_sampling import RandomOverSampler, SMOTE
 from imblearn.under_sampling import RandomUnderSampler
 
@@ -467,6 +466,7 @@ def compute_shap_feature_importances(
     logging.info(f"F1 Score (weighted): {f1:.4f}")
 
     logging.info("Calculating SHAP values...")
+    import shap
     explainer = shap.TreeExplainer(model)
     shap_values = explainer(X_train)
     logging.info(f"SHAP values calculated for all classes: {shap_values.values.shape}")
