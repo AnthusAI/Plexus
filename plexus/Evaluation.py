@@ -2066,16 +2066,77 @@ Total cost:       ${expenses['total_cost']:.6f}
                 if item_id:
                     try:
                         from plexus.dashboard.api.models.item import Item
+                        from plexus.cli.shared.client_utils import create_client
+                        item_id = str(item_id).strip()
                         item_client = None
+                        used_fallback_client = False
                         if hasattr(self.scorecard, 'client') and self.scorecard.client:
                             item_client = self.scorecard.client
                         elif getattr(self, 'dashboard_client', None):
                             item_client = self.dashboard_client
+                        elif getattr(self, '_item_fetch_client', None):
+                            item_client = self._item_fetch_client
+                            used_fallback_client = True
+                        else:
+                            # Fallback for runs where dashboard client initialization failed,
+                            # but data loading still succeeded via environment credentials.
+                            try:
+                                self._item_fetch_client = create_client()
+                                item_client = self._item_fetch_client
+                                used_fallback_client = True
+                            except Exception as client_error:
+                                logging.warning(
+                                    f"Could not initialize fallback item client: {client_error}"
+                                )
                         item = Item.get_by_id(item_id, item_client) if item_client else None
                         if not item_client:
                             logging.warning(f"No dashboard client available to fetch Item {item_id}")
+                        elif not item:
+                            logging.warning(f"Item lookup returned no result for item_id={item_id}")
+                            # If the account-scoped dashboard client can't read the item,
+                            # retry with a generic API client that may have broader access.
+                            if not used_fallback_client:
+                                try:
+                                    if not getattr(self, '_item_fetch_client', None):
+                                        self._item_fetch_client = create_client()
+                                    item = Item.get_by_id(item_id, self._item_fetch_client)
+                                    if item:
+                                        logging.info(
+                                            f"Successfully fetched item {item_id} using fallback API client"
+                                        )
+                                except Exception as fallback_error:
+                                    logging.warning(
+                                        f"Fallback item lookup failed for item_id={item_id}: {fallback_error}"
+                                    )
                     except Exception as e:
                         logging.warning(f"Could not fetch Item {item_id}: {e}")
+                # Some datasets omit/transform item_id but keep content_id as the Item ID.
+                # Retry using content_id if we still don't have an Item.
+                if not item:
+                    content_item_id = row.get('content_id')
+                    if content_item_id:
+                        try:
+                            from plexus.dashboard.api.models.item import Item
+                            from plexus.cli.shared.client_utils import create_client
+                            content_item_id = str(content_item_id).strip()
+                            content_client = (
+                                getattr(self, '_item_fetch_client', None)
+                                or getattr(self, 'dashboard_client', None)
+                                or (self.scorecard.client if hasattr(self.scorecard, 'client') else None)
+                            )
+                            if not content_client:
+                                self._item_fetch_client = create_client()
+                                content_client = self._item_fetch_client
+
+                            item = Item.get_by_id(content_item_id, content_client)
+                            if item:
+                                logging.info(
+                                    f"Fetched item via content_id fallback: {content_item_id}"
+                                )
+                        except Exception as content_lookup_error:
+                            logging.warning(
+                                f"Could not fetch Item using content_id={content_item_id}: {content_lookup_error}"
+                            )
 
                 # Extract feedback_item_id if available
                 
@@ -2230,6 +2291,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                                     # Override applied
                                     human_labels[str(override_question_name)] = correct_value
 
+                        if score_result.metadata is None:
+                            score_result.metadata = {}
                         score_result.metadata['human_label'] = human_label
                         score_result.metadata['human_explanation'] = human_explanation
                         # Only calculate correctness if we have a label
@@ -2237,7 +2300,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                             score_result.metadata['correct'] = score_result_value.strip() == human_label.strip()
                         else:
                             score_result.metadata['correct'] = None  # No label to compare against
-                        score_result.metadata['text'] = text
+                        # Preserve scorecard-provided scoring text if available; fallback to original row text.
+                        score_result.metadata['text'] = score_result.metadata.get('text') or text
 
                         # Add to filtered results only if we get here (i.e., all conditions are met)
                         filtered_results[score_identifier] = score_result
