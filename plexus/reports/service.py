@@ -448,7 +448,12 @@ def _generate_report_core(
 
         # === 2. Create Report Record ===
         # Stage 2: Initializing Report Record
-        report_name = f"{report_config_name} - {datetime.now(timezone.utc).strftime('%B %d, %Y %H:%M UTC')}"
+        scorecard_name = run_parameters.get("param_scorecard_name")
+        if scorecard_name:
+            report_name = f"{report_config_name} for {scorecard_name} - {datetime.now(timezone.utc).strftime('%B %d, %Y %H:%M UTC')}"
+        else:
+            report_name = f"{report_config_name} - {datetime.now(timezone.utc).strftime('%B %d, %Y %H:%M UTC')}"
+        
         logger.info(f"{log_prefix} Creating Report DB record: '{report_name}'")
         try:
             # --- DEBUG: Inspect config_markdown before saving --- #
