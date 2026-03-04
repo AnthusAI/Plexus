@@ -78,7 +78,9 @@ dependencies = [
     "fastmcp>=2.3.5",
     "ollama>=0.1.6",
     "bertopic>=0.16.2",
-    "kaleido>=0.2.1"
+    "kaleido>=0.2.1",
+    "opensearch-py>=2.4.0",
+    "requests-aws4auth>=1.2.3"
 ]
 
 [project.scripts]
