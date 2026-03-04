@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deploy OpenSearch + Embeddings stack for Vector Topic Memory (development).
+Deploy dual-store stack for Semantic Reinforcement Memory (development).
 
 Usage:
     cd infrastructure
@@ -9,15 +9,14 @@ Usage:
 Prerequisites:
     - AWS CLI configured
     - CDK bootstrapped: cdk bootstrap aws://ACCOUNT/REGION
-    - Service-linked role for OpenSearch (created automatically by AWS Console, or):
-      aws iam create-service-linked-role --aws-service-name es.amazonaws.com
 
 After deployment, set in your environment:
-    export OPENSEARCH_ENDPOINT=<endpoint from stack output>
+    export OPENSEARCH_ENDPOINT=<opensearch endpoint from stack output>   # optional
+    export S3_VECTOR_BUCKET_NAME=<vector bucket from stack output>
+    export S3_VECTOR_INDEX_NAME=<vector index from stack output>
     export EMBEDDING_CACHE_BUCKET=plexus-embeddings-development
 """
 import os
-import sys
 
 # Load .env if present
 env_path = os.path.join(os.path.dirname(__file__), ".env")
@@ -31,7 +30,7 @@ if os.path.exists(env_path):
 
 import aws_cdk as cdk
 
-from stacks.opensearch_stack import OpenSearchStack
+from stacks.opensearch_stack import TopicMemoryVectorStack
 
 app = cdk.App()
 
@@ -41,13 +40,14 @@ env = cdk.Environment(account=account, region=region)
 
 environment = os.environ.get("ENVIRONMENT", "development")
 
-OpenSearchStack(
+# Keep stack name/id unchanged for in-place migration in this feature branch.
+TopicMemoryVectorStack(
     app,
     "plexus-opensearch-development",
     environment=environment,
     stack_name=f"plexus-opensearch-{environment}",
     env=env,
-    description="OpenSearch + Embeddings for Vector Topic Memory",
+    description="OpenSearch + S3 Vectors + Embeddings for Semantic Reinforcement Memory",
 )
 
 app.synth()

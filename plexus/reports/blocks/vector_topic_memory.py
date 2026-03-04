@@ -1,7 +1,7 @@
 """
 VectorTopicMemory ReportBlock — full orchestration.
 
-Rebuilds topic memory by re-indexing datasets into OpenSearch.
+Rebuilds topic memory by re-indexing datasets into S3 Vectors.
 Uses S3 embedding cache, global clustering, and memory weights.
 
 Supports two data sources:
@@ -25,20 +25,20 @@ from . import feedback_utils
 class VectorTopicMemory(BaseReportBlock):
     """
     ReportBlock that rebuilds a full topic memory view by re-indexing
-    datasets into an AWS OpenSearch vector index.
+    datasets into an AWS S3 Vectors index.
 
     Config:
         scorecard (str): Scorecard identifier. When provided with days, uses feedback items (same as FeedbackAnalysis).
         days (int): Number of days of feedback to include. Used with scorecard.
         data: { source?: str, dataset?: str, content_column?: str, fresh?: bool }  # Alternative to scorecard+days
-        opensearch: { endpoint: str, region: str }
+        s3_vectors: { bucket_name: str, index_name: str, index_arn?: str, region?: str }
         embedding: { model_id?: str, preprocessing_version?: str }
         clustering: { min_topic_size?: int }
         mode: "full" | "incremental"  # incremental = KNN assign only, no re-cluster
     """
 
     DEFAULT_NAME = "Vector Topic Memory"
-    DEFAULT_DESCRIPTION = "Persistent vector-based topic memory from OpenSearch index"
+    DEFAULT_DESCRIPTION = "Persistent vector-based topic memory from S3 Vectors index"
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
@@ -60,14 +60,16 @@ class VectorTopicMemory(BaseReportBlock):
         try:
             # 1. Config validation
             data_config = self.config.get("data", {})
-            opensearch_config = self.config.get("opensearch", {})
-            endpoint = opensearch_config.get("endpoint") or os.environ.get("OPENSEARCH_ENDPOINT")
-            region = opensearch_config.get("region") or os.environ.get("AWS_REGION", "us-west-2")
+            vectors_config = self.config.get("s3_vectors", {})
+            vector_bucket = vectors_config.get("bucket_name") or os.environ.get("S3_VECTOR_BUCKET_NAME")
+            vector_index = vectors_config.get("index_name") or os.environ.get("S3_VECTOR_INDEX_NAME")
+            vector_index_arn = vectors_config.get("index_arn") or os.environ.get("S3_VECTOR_INDEX_ARN")
+            region = vectors_config.get("region") or os.environ.get("AWS_REGION", "us-west-2")
 
-            if not endpoint:
-                self._log("OpenSearch endpoint not configured. Skipping full pipeline.")
+            if not vector_bucket or not vector_index:
+                self._log("S3 Vectors bucket/index not configured. Skipping full pipeline.")
                 output_data["status"] = "shell"
-                output_data["message"] = "OpenSearch not configured — run with opensearch.endpoint."
+                output_data["message"] = "S3 Vectors not configured — set s3_vectors.bucket_name and s3_vectors.index_name."
                 return output_data, self._get_log_string()
 
             # 2. Resolve datasets
@@ -136,13 +138,19 @@ class VectorTopicMemory(BaseReportBlock):
             embeddings = svc.batch_embed(all_texts, model_id=model_id, preprocessing_version=version)
             output_data["items_processed"] = len(embeddings)
 
-            # 4. OpenSearch index
-            from plexus.analysis.opensearch_client import TopicMemoryIndex
-            idx_client = TopicMemoryIndex(endpoint=endpoint, region=region)
+            # 4. S3 Vectors index
+            from plexus.analysis.s3vectors_client import TopicMemoryVectorStore
+
+            idx_client = TopicMemoryVectorStore(
+                bucket_name=vector_bucket,
+                index_name=vector_index,
+                index_arn=vector_index_arn,
+                region=region,
+            )
             if not idx_client.health_check():
-                self._log("OpenSearch health check failed.", level="WARNING")
+                self._log("S3 Vectors health check failed.", level="WARNING")
                 output_data["status"] = "partial"
-                output_data["summary"] = "OpenSearch unavailable — embeddings computed but not indexed."
+                output_data["summary"] = "S3 Vectors unavailable — embeddings computed but not indexed."
                 return output_data, self._get_log_string()
 
             import numpy as np
@@ -273,7 +281,7 @@ class VectorTopicMemory(BaseReportBlock):
                         "days_inactive": days_inactive
                     })
                     
-                    # Store updated weight back to OpenSearch
+                    # Store updated weight back to S3 Vectors
                     updated_clusters.append({
                         "cluster_id": str(tid),
                         "memory_weight": weight,

@@ -30,13 +30,13 @@ days: {{ days }}
 
 ## Persistent Vector Topic Memory
 
-The VectorTopicMemory block rebuilds topic memory from the same feedback items as above — transcript text from Items linked to feedback in this scorecard and date range. Re-indexes into OpenSearch with S3 embedding cache, global clustering, and memory weights.
+The VectorTopicMemory block rebuilds topic memory from the same feedback items as above — transcript text from Items linked to feedback in this scorecard and date range. Re-indexes into S3 Vectors with S3 embedding cache, global clustering, and memory weights.
 
 ```block name="Vector Topic Memory"
 class: VectorTopicMemory
 scorecard: {{ scorecard }}
 days: {{ days }}
-opensearch:
+s3_vectors:
   region: us-west-2
 clustering:
   min_topic_size: 10

@@ -20,14 +20,14 @@ parameters:
 
 ---
 
-# Vector Topic Memory Report
+# Semantic Reinforcement Memory Report
 ## Scorecard: {{ scorecard_name }}
 {% if score_id is defined and score_id %}
 ## Score: {{ score_id_name }}
 {% endif %}
 ## Last {{ days }} days
 
-Rebuilds topic memory from **edit comments** (reviewer feedback) in this scorecard and date range. Clusters what reviewers are saying when they correct scores. Re-indexes into OpenSearch with S3 embedding cache, global clustering, and memory weights.
+Rebuilds topic memory from **edit comments** (reviewer feedback) in this scorecard and date range. Clusters what reviewers are saying when they correct scores. Re-indexes into S3 Vectors with S3 embedding cache, global clustering, and memory weights.
 
 ```block name="Vector Topic Memory"
 class: VectorTopicMemory
@@ -38,7 +38,7 @@ score_id: {{ score_id }}
 days: {{ days }}
 data:
   content_source: edit_comment
-opensearch:
+s3_vectors:
   region: us-west-2
 clustering:
   min_topic_size: 2

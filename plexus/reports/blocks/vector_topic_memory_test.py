@@ -19,7 +19,7 @@ def vector_topic_memory_block(mock_api_client):
 @pytest.mark.asyncio
 async def test_vector_topic_memory_generate_returns_well_formed_tuple(vector_topic_memory_block):
     """generate() returns Tuple[Optional[Dict], Optional[str]]."""
-    vector_topic_memory_block.config = {}  # No opensearch -> shell mode
+    vector_topic_memory_block.config = {}  # No s3_vectors -> shell mode
     output_data, log_string = await vector_topic_memory_block.generate()
 
     assert output_data is not None
@@ -31,8 +31,8 @@ async def test_vector_topic_memory_generate_returns_well_formed_tuple(vector_top
 
 
 @pytest.mark.asyncio
-async def test_vector_topic_memory_shell_when_no_opensearch(vector_topic_memory_block):
-    """Block returns shell status when OpenSearch not configured."""
+async def test_vector_topic_memory_shell_when_no_s3_vectors(vector_topic_memory_block):
+    """Block returns shell status when S3 Vectors not configured."""
     vector_topic_memory_block.config = {"data": {"dataset": "ds-1"}}
     with patch(
         "plexus.reports.blocks.vector_topic_memory.DatasetResolver"
@@ -47,7 +47,9 @@ async def test_vector_topic_memory_shell_when_no_opensearch(vector_topic_memory_
 @pytest.mark.asyncio
 async def test_vector_topic_memory_error_when_no_data_config(vector_topic_memory_block):
     """Block returns error when data config missing."""
-    vector_topic_memory_block.config = {"opensearch": {"endpoint": "x", "region": "us-west-2"}}
+    vector_topic_memory_block.config = {
+        "s3_vectors": {"bucket_name": "test-bucket", "index_name": "test-index", "region": "us-west-2"}
+    }
     output_data, _ = await vector_topic_memory_block.generate()
     assert output_data["status"] == "error"
     assert "Missing data config" in output_data.get("summary", "")

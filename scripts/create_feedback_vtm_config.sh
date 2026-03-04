@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 python -m plexus.cli.CommandLineInterface report config create \
   --name "Feedback Analysis + Vector Topic Memory" \
   --file feedback_and_vector_topic_memory_report.md \
-  --description "Feedback analysis + Vector Topic Memory (OpenSearch clustering)"
+  --description "Feedback analysis + Vector Topic Memory (S3 Vectors clustering)"
 
 echo ""
 echo "Config created. Now run a report via:"
