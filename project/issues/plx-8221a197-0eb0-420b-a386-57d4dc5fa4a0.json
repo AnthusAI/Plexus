@@ -3,7 +3,7 @@
   "title": "S3 read/write for cached embeddings",
   "description": "**As an** embedding pipeline, **I want** to store and retrieve embedding vectors from S3, **so that** expensive model invocations are avoided on re-runs.\n\nEmbedding vectors (as numpy arrays serialized to JSON) are stored in S3 at the path `embeddings/{model_id}/{key_prefix}/{key}.json`, where `key_prefix` is the first two hex characters of the cache key for S3 prefix-based partitioning. Follows the same boto3 patterns used in `plexus/reports/s3_utils.py`.\n\nError handling is crucial: S3 read failures must return `None` (cache miss) rather than crashing the pipeline. S3 write failures must be non-fatal (log and continue) since the embedding was already computed in memory.\n\n## Key Files\n\n- Modify: `plexus/analysis/embedding_cache.py`\n- Modify: `plexus/analysis/embedding_cache_test.py`\n\n## Dependencies\n\nStory plx-19f3d6 (Deterministic cache key generation)",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-03-04T02:22:16.503398Z",
-  "updated_at": "2026-03-04T02:23:34.542010Z",
-  "closed_at": null,
+  "updated_at": "2026-03-04T13:11:32.003217Z",
+  "closed_at": "2026-03-04T13:11:32.003217Z",
   "custom": {}
 }

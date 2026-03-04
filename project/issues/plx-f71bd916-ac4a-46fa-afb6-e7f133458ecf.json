@@ -3,7 +3,7 @@
   "title": "Persistent Vector Topic Memory for Plexus Reports",
   "description": "Add a new ReportBlock that rebuilds a full topic memory view by re-indexing an entire dataset into an AWS OpenSearch vector index. Reuses cached embeddings so re-indexing does not mean re-embedding. Supports periodic global re-clustering (stable buckets), incremental assignment of new items into existing buckets between global runs, and memory weights (reinforcement + decay) stored as derived metadata. Two deployables: (1) a separate infra repo with a Python CDK stack provisioning OpenSearch + IAM, and (2) the Plexus repo with a new VectorTopicMemory ReportBlock, S3-backed embedding cache, OpenSearch client wrapper, clustering engine, and memory weight logic.",
   "type": "initiative",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -14,24 +14,30 @@
     {
       "id": "b2224da6-0266-4214-8597-f13428220194",
       "author": "ryan.porter",
-      "text": "## Planned Story Ordering\n\nStories are sequenced so each builds on testable foundations laid by prior stories. Three independent work streams can start in parallel.\n\n```mermaid\ngraph TD\n    E1[Epic 1: Block Shell] --> E7[Epic 7: Full Orchestration]\n    E2[Epic 2: Embedding Cache] --> E4[Epic 4: OpenSearch Client]\n    E3[Epic 3: CDK Infra] --> E4\n    E4 --> E5[Epic 5: Global Clustering]\n    E2 --> E5\n    E5 --> E6[Epic 6: Memory Weights]\n    E6 --> E7\n    E5 --> E7\n```\n\n**Parallel start:**\n- Epic 1: Block Shell (1.1 \u2192 1.2)\n- Epic 2: Embedding Cache (2.1 \u2192 2.2 \u2192 2.3)\n- Epic 3: CDK Infra [separate repo] (3.1 \u2192 3.2)\n\n**Then sequential:**\n- Epic 4: OpenSearch Client (4.1 \u2192 4.2 \u2192 4.3) \u2014 needs Epics 2 + 3\n- Epic 5: Global Clustering (5.1 \u2192 5.2) \u2014 needs Epics 2 + 4\n- Epic 6: Memory Weights (6.1 \u2192 6.2) \u2014 needs Epic 5\n- Epic 7: Full Orchestration (7.1 \u2192 7.2 \u2192 7.3) \u2014 needs all above\n",
+      "text": "## Planned Story Ordering\n\nStories are sequenced so each builds on testable foundations laid by prior stories. Three independent work streams can start in parallel.\n\n```mermaid\ngraph TD\n    E1[Epic 1: Block Shell] --> E7[Epic 7: Full Orchestration]\n    E2[Epic 2: Embedding Cache] --> E4[Epic 4: OpenSearch Client]\n    E3[Epic 3: CDK Infra] --> E4\n    E4 --> E5[Epic 5: Global Clustering]\n    E2 --> E5\n    E5 --> E6[Epic 6: Memory Weights]\n    E6 --> E7\n    E5 --> E7\n```\n\n**Parallel start:**\n- Epic 1: Block Shell (1.1 → 1.2)\n- Epic 2: Embedding Cache (2.1 → 2.2 → 2.3)\n- Epic 3: CDK Infra [separate repo] (3.1 → 3.2)\n\n**Then sequential:**\n- Epic 4: OpenSearch Client (4.1 → 4.2 → 4.3) — needs Epics 2 + 3\n- Epic 5: Global Clustering (5.1 → 5.2) — needs Epics 2 + 4\n- Epic 6: Memory Weights (6.1 → 6.2) — needs Epic 5\n- Epic 7: Full Orchestration (7.1 → 7.2 → 7.3) — needs all above\n",
       "created_at": "2026-03-04T02:19:38.256551Z"
     },
     {
       "id": "1148791f-072e-4c51-954d-a485749db9ac",
       "author": "ryan.porter",
-      "text": "## Retrospective Notes (2026-03-04)\n\n### Mistakes we made\n- **Epic 3 scope mismatch**: Original spec said CDK in a *separate repo*. We built it in Plexus `infrastructure/` instead. Epic 3 remains open; infra is done in-repo.\n- **Ran before infra ready**: Tried to run VectorTopicMemory report before OpenSearch was deployed. Block requires `OPENSEARCH_ENDPOINT` and `EMBEDDING_CACHE_BUCKET`.\n- **Domain name length**: `plexus-topic-memory-development` exceeded AWS 28-char limit \u2192 renamed to `plexus-vtm-development`.\n- **T3 multi-AZ**: Had to add `multi_az_with_standby_enabled=False` for t3.small.search.\n\n### Current state\n- OpenSearch CDK stack: `infrastructure/stacks/opensearch_stack.py` (domain `plexus-vtm-development`, t3.small.search, 10GB EBS, single node)\n- S3 bucket: `plexus-embeddings-development` for embedding cache\n- Deploy script: `infrastructure/deploy_opensearch.py`\n- Config loader: `opensearch.endpoint` \u2192 `OPENSEARCH_ENDPOINT`, `embedding_cache.bucket` \u2192 `EMBEDDING_CACHE_BUCKET`\n- Embeddings: all-MiniLM-L6-v2 (384 dims), configurable via `embedding.model_id`\n\n### Next steps\n1. Confirm OpenSearch deployment completes (~10\u201315 min)\n2. Set `OPENSEARCH_ENDPOINT` and `EMBEDDING_CACHE_BUCKET` in .plexus/config.yaml or env\n3. Run report with VectorTopicMemory block + valid data source (e.g. customer-calls)",
+      "text": "## Retrospective Notes (2026-03-04)\n\n### Mistakes we made\n- **Epic 3 scope mismatch**: Original spec said CDK in a *separate repo*. We built it in Plexus `infrastructure/` instead. Epic 3 remains open; infra is done in-repo.\n- **Ran before infra ready**: Tried to run VectorTopicMemory report before OpenSearch was deployed. Block requires `OPENSEARCH_ENDPOINT` and `EMBEDDING_CACHE_BUCKET`.\n- **Domain name length**: `plexus-topic-memory-development` exceeded AWS 28-char limit → renamed to `plexus-vtm-development`.\n- **T3 multi-AZ**: Had to add `multi_az_with_standby_enabled=False` for t3.small.search.\n\n### Current state\n- OpenSearch CDK stack: `infrastructure/stacks/opensearch_stack.py` (domain `plexus-vtm-development`, t3.small.search, 10GB EBS, single node)\n- S3 bucket: `plexus-embeddings-development` for embedding cache\n- Deploy script: `infrastructure/deploy_opensearch.py`\n- Config loader: `opensearch.endpoint` → `OPENSEARCH_ENDPOINT`, `embedding_cache.bucket` → `EMBEDDING_CACHE_BUCKET`\n- Embeddings: all-MiniLM-L6-v2 (384 dims), configurable via `embedding.model_id`\n\n### Next steps\n1. Confirm OpenSearch deployment completes (~10–15 min)\n2. Set `OPENSEARCH_ENDPOINT` and `EMBEDDING_CACHE_BUCKET` in .plexus/config.yaml or env\n3. Run report with VectorTopicMemory block + valid data source (e.g. customer-calls)",
       "created_at": "2026-03-04T03:17:59.955328Z"
     },
     {
       "id": "8239d962-1c86-4aad-8c0d-b3da6269c7f5",
       "author": "ryan.porter",
-      "text": "## Initiative Progress (2026-03-04)\n\n### Completed\n- OpenSearch stack deployed (plexus-opensearch-development)\n- Config: opensearch.endpoint + embedding_cache.bucket in .plexus/config.yaml\n- Report config created: Feedback 1438 + VTM (ca1d2c5d-1609-4334-aac7-2b232fc033c7)\n- VectorTopicMemory block runs end-to-end: config validation \u2192 dataset resolution \u2192 (would proceed to embed \u2192 index \u2192 cluster \u2192 memory weights)\n\n### Blocker\n- DataSource \"customer-calls\" not found in account. VectorTopicMemory needs a valid data source (name, key, or ID) with text content. Run with data_source=<valid-id> once a DataSource exists.",
+      "text": "## Initiative Progress (2026-03-04)\n\n### Completed\n- OpenSearch stack deployed (plexus-opensearch-development)\n- Config: opensearch.endpoint + embedding_cache.bucket in .plexus/config.yaml\n- Report config created: Feedback 1438 + VTM (ca1d2c5d-1609-4334-aac7-2b232fc033c7)\n- VectorTopicMemory block runs end-to-end: config validation → dataset resolution → (would proceed to embed → index → cluster → memory weights)\n\n### Blocker\n- DataSource \"customer-calls\" not found in account. VectorTopicMemory needs a valid data source (name, key, or ID) with text content. Run with data_source=<valid-id> once a DataSource exists.",
       "created_at": "2026-03-04T03:31:37.785685Z"
+    },
+    {
+      "id": "af629422-3a5e-4ceb-9a24-3387c3a70cfb",
+      "author": "ryan.porter",
+      "text": "All stories and epics have been completed. The VectorTopicMemory report block now successfully clusters mismatched feedback edit comments, extracts TF-IDF keywords, generates LLM topic labels, and supports filtering by specific score IDs. Work committed to feature/reinforcement-memory branch.",
+      "created_at": "2026-03-04T13:12:07.379610Z"
     }
   ],
   "created_at": "2026-03-04T02:19:24.636720Z",
-  "updated_at": "2026-03-04T03:31:37.785685Z",
-  "closed_at": null,
+  "updated_at": "2026-03-04T13:23:30.485836Z",
+  "closed_at": "2026-03-04T13:23:30.485836Z",
   "custom": {}
 }

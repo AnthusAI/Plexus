@@ -1,9 +1,10 @@
 {
-  "built_at": "2026-03-04T12:45:07Z",
+  "built_at": "2026-03-04T13:11:53Z",
   "file_mtimes": {
     "plx-0144c92e-99a9-4e6b-983b-75fd8f11902a.json": 1772589869.698945,
     "plx-04f4aec4-819d-4fb3-af97-3028914b702d.json": 1772589869.699015,
     "plx-076788c0-2927-4f65-bddb-3115531e73c5.json": 1772589869.699105,
+    "plx-085286b2-0ecd-42fc-ac6f-d711f873eb69.json": 1772628920.388139,
     "plx-0880fc4e-97af-440d-8a2d-f26a6d39802c.json": 1772589869.69917,
     "plx-0c32518f-16c9-4e81-b1c2-6b971856d80f.json": 1772589869.699231,
     "plx-0e18571a-1bf9-43c3-8d53-1d64b665644c.json": 1772589869.699292,
@@ -21,6 +22,7 @@
     "plx-18a3a988-6e08-4252-8c79-7c6c47851fb3.json": 1772589869.70018,
     "plx-18bddb42-bad6-4d82-813e-6aa3f2625f62.json": 1772589869.700273,
     "plx-19f3d691-d1c5-471a-8191-ff74063db13e.json": 1772594328.904286,
+    "plx-1acf384e-46a6-4bdd-8467-fd8cc8ae39d4.json": 1772628386.036741,
     "plx-1b6175b4-f78d-48b0-b5f5-ef6dfa890151.json": 1772589869.70037,
     "plx-237a49ff-f70e-4157-bf6a-87e0337df94c.json": 1772589869.700487,
     "plx-25fbd48c-e4c9-46ef-af93-a3851fd86c58.json": 1772589869.700644,
@@ -67,13 +69,13 @@
     "plx-75c7857e-17f4-44ff-834b-17f9ed42efea.json": 1772589869.704083,
     "plx-78a89cd2-c315-4c1b-b9b9-f0724a8d936f.json": 1772589869.704168,
     "plx-7aca2476-5a08-40e0-9f5e-95d822832f9c.json": 1772589869.704268,
-    "plx-7c45c12f-4cb1-48e8-bd4f-a8acebd07654.json": 1772591450.051722,
+    "plx-7c45c12f-4cb1-48e8-bd4f-a8acebd07654.json": 1772629891.760352,
     "plx-7e4f2ed8-6ea5-4840-a7b2-b729f3073fca.json": 1772589869.704349,
     "plx-7f5149f7-f99b-450b-be1e-91689e326386.json": 1772589869.704424,
     "plx-7f7720e6-8226-42a3-ab0b-c858d35adb63.json": 1772589869.704512,
-    "plx-806719a4-b255-4724-856f-0cad4e189bef.json": 1772591403.701996,
+    "plx-806719a4-b255-4724-856f-0cad4e189bef.json": 1772629891.889698,
     "plx-81d9cbbc-4b77-465e-a296-ae129dad4ad8.json": 1772589869.704593,
-    "plx-8221a197-0eb0-420b-a386-57d4dc5fa4a0.json": 1772591014.54214,
+    "plx-8221a197-0eb0-420b-a386-57d4dc5fa4a0.json": 1772629892.00346,
     "plx-834d645c-ad96-4f6a-8c7b-e9773f3cc89c.json": 1772589869.704675,
     "plx-84101569-b171-4c33-b7c8-d750487c8a4f.json": 1772589869.704757,
     "plx-86010df1-b51d-4e49-b764-613467db663a.json": 1772589869.704854,
@@ -85,15 +87,15 @@
     "plx-8f12606a-d731-46eb-96d6-1c301f8eed84.json": 1772589869.705501,
     "plx-906bf3dc-fd2e-4b9b-9c5a-b423d76fd5c6.json": 1772589869.705606,
     "plx-90a2b1b7-fac7-4566-9416-0d717c2ab42d.json": 1772589869.705706,
-    "plx-941008c4-b0e5-4d88-a3e6-24d84677e0b0.json": 1772591295.873961,
+    "plx-941008c4-b0e5-4d88-a3e6-24d84677e0b0.json": 1772629892.11891,
     "plx-95b48339-46d7-4f6d-9517-6c5b690747bf.json": 1772589869.70579,
-    "plx-9984cc57-c8b8-42fb-9d6c-e84f17b9d1ff.json": 1772591380.320104,
+    "plx-9984cc57-c8b8-42fb-9d6c-e84f17b9d1ff.json": 1772629892.242083,
     "plx-a22c6ac6-b6ca-4a93-a6b2-a204f46358d9.json": 1772589869.705867,
-    "plx-a2a3cbd4-90f0-4d3e-b59d-cc2263f80cb5.json": 1772591102.479132,
+    "plx-a2a3cbd4-90f0-4d3e-b59d-cc2263f80cb5.json": 1772629892.358058,
     "plx-a37578a9-7c01-404d-86a9-d84e2e8bfa25.json": 1772589869.706,
     "plx-a3dbf58c-7fef-4613-ad6b-5f8771761a6a.json": 1772589869.706159,
     "plx-a6aa5003-e97e-4e13-8c02-6f1d76ec0ef6.json": 1772589869.706283,
-    "plx-a7dceed5-30d8-480a-8b94-9fb3ee00fe45.json": 1772591474.543781,
+    "plx-a7dceed5-30d8-480a-8b94-9fb3ee00fe45.json": 1772629892.475559,
     "plx-a8b0b3ca-f376-425f-807a-e8807b30ea47.json": 1772589869.706398,
     "plx-aa99c758-ae09-4d93-94ea-f16f1894de04.json": 1772589869.706505,
     "plx-aac0e996-b9d6-4a96-97a5-86b688999acb.json": 1772589869.706599,
@@ -101,14 +103,14 @@
     "plx-acf95de6-9880-4ac5-9e75-2d5d39d83e29.json": 1772589869.70668,
     "plx-ad4ba9ce-abf7-4cf7-ba7b-cb0432e2e345.json": 1772589869.706767,
     "plx-ae4965d0-ca98-4e97-95ac-367b1d2cbd85.json": 1772589869.706843,
-    "plx-b02d588e-11cf-459e-9065-d3e0bfcddba8.json": 1772591211.690257,
+    "plx-b02d588e-11cf-459e-9065-d3e0bfcddba8.json": 1772629892.593108,
     "plx-b09bc829-d165-4735-bbb6-079cb1b8d7c6.json": 1772589869.706915,
     "plx-b6809ada-0463-45a8-b3e5-f2f38b0d1f28.json": 1772589869.707002,
     "plx-b8850595-7e6c-46a3-8ed0-ba73236ebf0c.json": 1772589869.707081,
     "plx-b8bac83b-b685-4780-9ab4-f9ca89061550.json": 1772589869.707178,
     "plx-bc9fb5aa-8825-4690-b2f4-fcdf42fd4507.json": 1772589869.707258,
-    "plx-be9cda46-2367-4d8c-8092-cb274fa00919.json": 1772590827.050167,
-    "plx-c141470a-cd0a-4c92-a6b9-94ec4728a629.json": 1772591177.84172,
+    "plx-be9cda46-2367-4d8c-8092-cb274fa00919.json": 1772629892.715706,
+    "plx-c141470a-cd0a-4c92-a6b9-94ec4728a629.json": 1772629892.835767,
     "plx-c16e77f6-8b1f-4afd-85be-120f25ce09b3.json": 1772589869.707356,
     "plx-c24404c9-7faf-4010-b419-f51a3da01577.json": 1772589869.707458,
     "plx-c28acc9b-f460-4738-8272-69966c6e6aae.json": 1772589869.70755,
@@ -210,6 +212,24 @@
       "title": "[Snyk] SNYK-JS-DOMPURIFY-8722251 in dompurify@3.1.6",
       "type": "sub-task",
       "updated_at": "2026-02-26T00:13:56.241711195Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": "2026-03-04T12:55:20.388039Z",
+      "comments": [],
+      "created_at": "2026-03-04T12:50:25.935867Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "Modify VectorTopicMemory report block to accept a score_id parameter to filter items down to a specific score, rather than pulling items for all scores in the scorecard.",
+      "id": "plx-085286b2-0ecd-42fc-ac6f-d711f873eb69",
+      "labels": [],
+      "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+      "priority": 1,
+      "status": "closed",
+      "title": "Allow targeting a specific score in VectorTopicMemory",
+      "type": "story",
+      "updated_at": "2026-03-04T12:55:20.388039Z"
     },
     {
       "assignee": null,
@@ -619,6 +639,24 @@
       "title": "Deterministic cache key generation",
       "type": "story",
       "updated_at": "2026-03-04T03:18:48.903685Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": "2026-03-04T12:46:26.036637Z",
+      "comments": [],
+      "created_at": "2026-03-04T12:46:00.943279Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "The VectorTopicMemory report block currently processes all FeedbackItems. We need to adjust it to discard FeedbackItems where the initial answer matches the final answer, so we only analyze the mismatches (edit comments for corrections).",
+      "id": "plx-1acf384e-46a6-4bdd-8467-fd8cc8ae39d4",
+      "labels": [],
+      "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+      "priority": 1,
+      "status": "closed",
+      "title": "Filter out matching FeedbackItems in VectorTopicMemory",
+      "type": "story",
+      "updated_at": "2026-03-04T12:46:26.036637Z"
     },
     {
       "assignee": null,
@@ -1727,7 +1765,7 @@
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:31.759481Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -1745,10 +1783,10 @@
       "labels": [],
       "parent": "plx-e46b4309-66bb-4c0e-88af-696c703abc1d",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "Dataset resolution and embedding pipeline integration",
       "type": "story",
-      "updated_at": "2026-03-04T02:30:50.051593Z"
+      "updated_at": "2026-03-04T13:11:31.759481Z"
     },
     {
       "assignee": null,
@@ -1824,7 +1862,7 @@
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:31.889389Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -1842,10 +1880,10 @@
       "labels": [],
       "parent": "plx-2f480702-d08b-4e2f-9bfb-548f88753b70",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "Memory weight update integrated with cluster records",
       "type": "story",
-      "updated_at": "2026-03-04T02:30:03.701880Z"
+      "updated_at": "2026-03-04T13:11:31.889389Z"
     },
     {
       "assignee": null,
@@ -1873,7 +1911,7 @@
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:32.003217Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -1891,10 +1929,10 @@
       "labels": [],
       "parent": "plx-46f6f0dd-b5af-4573-8f35-27f3d21f774f",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "S3 read/write for cached embeddings",
       "type": "story",
-      "updated_at": "2026-03-04T02:23:34.542010Z"
+      "updated_at": "2026-03-04T13:11:32.003217Z"
     },
     {
       "assignee": null,
@@ -2160,7 +2198,7 @@
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:32.118779Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -2178,10 +2216,10 @@
       "labels": [],
       "parent": "plx-aaeca313-e50a-46f6-8488-c58461cbc823",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "Cluster from pre-computed embeddings",
       "type": "story",
-      "updated_at": "2026-03-04T02:28:15.873831Z"
+      "updated_at": "2026-03-04T13:11:32.118779Z"
     },
     {
       "assignee": null,
@@ -2209,7 +2247,7 @@
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:32.241967Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -2227,10 +2265,10 @@
       "labels": [],
       "parent": "plx-2f480702-d08b-4e2f-9bfb-548f88753b70",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "Memory weight calculation",
       "type": "story",
-      "updated_at": "2026-03-04T02:29:40.319976Z"
+      "updated_at": "2026-03-04T13:11:32.241967Z"
     },
     {
       "assignee": null,
@@ -2258,7 +2296,7 @@
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:32.357943Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -2276,10 +2314,10 @@
       "labels": [],
       "parent": "plx-46723f50-117a-404a-963e-8753dd84bf70",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "CDK stack synthesizes a valid OpenSearch domain",
       "type": "story",
-      "updated_at": "2026-03-04T02:25:02.479Z"
+      "updated_at": "2026-03-04T13:11:32.357943Z"
     },
     {
       "assignee": null,
@@ -2355,7 +2393,7 @@
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:32.475442Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -2373,10 +2411,10 @@
       "labels": [],
       "parent": "plx-e46b4309-66bb-4c0e-88af-696c703abc1d",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "Index rebuild and clustering orchestration",
       "type": "story",
-      "updated_at": "2026-03-04T02:31:14.543645Z"
+      "updated_at": "2026-03-04T13:11:32.475442Z"
     },
     {
       "assignee": null,
@@ -2542,7 +2580,7 @@
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:32.592994Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -2560,10 +2598,10 @@
       "labels": [],
       "parent": "plx-493fd84f-ad2e-420b-8a5c-6cf22a8794ac",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "Bulk index with blue/green alias swap",
       "type": "story",
-      "updated_at": "2026-03-04T02:26:51.690114Z"
+      "updated_at": "2026-03-04T13:11:32.592994Z"
     },
     {
       "assignee": null,
@@ -2687,7 +2725,7 @@
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:32.715602Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -2705,14 +2743,14 @@
       "labels": [],
       "parent": "plx-cb54e515-c6e6-46b0-9aa3-0ba15325d39a",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "Block registration and instantiation",
       "type": "story",
-      "updated_at": "2026-03-04T02:20:27.049978Z"
+      "updated_at": "2026-03-04T13:11:32.715602Z"
     },
     {
       "assignee": null,
-      "closed_at": null,
+      "closed_at": "2026-03-04T13:11:32.835649Z",
       "comments": [
         {
           "author": "ryan.porter",
@@ -2730,10 +2768,10 @@
       "labels": [],
       "parent": "plx-493fd84f-ad2e-420b-8a5c-6cf22a8794ac",
       "priority": 2,
-      "status": "open",
+      "status": "closed",
       "title": "OpenSearch client connection and health check",
       "type": "story",
-      "updated_at": "2026-03-04T02:26:17.841595Z"
+      "updated_at": "2026-03-04T13:11:32.835649Z"
     },
     {
       "assignee": null,

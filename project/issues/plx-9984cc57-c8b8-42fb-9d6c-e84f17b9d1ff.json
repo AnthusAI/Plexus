@@ -3,7 +3,7 @@
   "title": "Memory weight calculation",
   "description": "**As a** topic memory system, **I want** to compute reinforcement and decay on cluster weights, **so that** frequently recurring topics are treated as established while transient ones fade.\n\nPure logic — no I/O dependencies. Functions:\n- `initial_weight()` — returns 0.5 (neutral starting point) for new clusters\n- `reinforce(weight, new_docs, rate)` — increases weight toward 1.0 based on document count\n- `decay(weight, days_since_last, rate)` — decreases weight toward 0.0 based on time elapsed\n- `tier_from_weight(weight, thresholds)` — maps weight to hot/warm/cold tier\n- `should_prune(weight, threshold)` — returns True if weight is below prune threshold\n\nWeight is always clamped to [0.0, 1.0].\n\n## Key Files\n\n- Create: `plexus/analysis/memory_weights.py`\n- Create: `plexus/analysis/memory_weights_test.py`\n\n## Dependencies\n\nNone (pure logic).",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-03-04T02:29:26.924930Z",
-  "updated_at": "2026-03-04T02:29:40.319976Z",
-  "closed_at": null,
+  "updated_at": "2026-03-04T13:11:32.241967Z",
+  "closed_at": "2026-03-04T13:11:32.241967Z",
   "custom": {}
 }

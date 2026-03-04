@@ -3,7 +3,7 @@
   "title": "Bulk index with blue/green alias swap",
   "description": "**As a** ReportBlock, **I want** to bulk-index documents into a new timestamped index and atomically swap the live alias, **so that** re-indexing is safe, repeatable, and zero-downtime.\n\nThe client creates a new timestamped index (e.g., `topic-memory-20260303-143022`), bulk-indexes all documents, then atomically swaps the `topic-memory-live` alias from the old index to the new one using a single `update_aliases` call. After a successful swap, the old index is deleted.\n\nPartial bulk failures (e.g., malformed embeddings) must be tracked: the method returns success/error counts and logs failed doc_ids rather than aborting the entire batch.\n\n## Key Files\n\n- Modify: `plexus/analysis/opensearch_client.py`\n- Modify: `plexus/analysis/opensearch_client_test.py`\n\n## Dependencies\n\nStory plx-c14147 (Client connection and health check)",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-03-04T02:26:31.723524Z",
-  "updated_at": "2026-03-04T02:26:51.690114Z",
-  "closed_at": null,
+  "updated_at": "2026-03-04T13:11:32.592994Z",
+  "closed_at": "2026-03-04T13:11:32.592994Z",
   "custom": {}
 }
