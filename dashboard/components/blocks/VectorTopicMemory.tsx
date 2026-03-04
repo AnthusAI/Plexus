@@ -107,6 +107,22 @@ function TopicItem({
 function ScoreSection({ score }: { score: ScoreData }) {
   const hasClusters = (score.topics?.length ?? 0) > 0;
   
+  // Sort topics: worst (hot) last, best (cold) first.
+  const sortedTopics = hasClusters ? [...score.topics].sort((a, b) => {
+    const getTierWeight = (tier: string) => {
+      if (tier === 'hot') return 3;
+      if (tier === 'warm') return 2;
+      return 1; // cold or unknown
+    };
+    const tierA = getTierWeight(a.memory_tier);
+    const tierB = getTierWeight(b.memory_tier);
+    
+    if (tierA !== tierB) return tierA - tierB; // cold -> warm -> hot
+    
+    // If same tier, sort by member count ascending (most members last)
+    return a.member_count - b.member_count;
+  }) : [];
+
   return (
     <div className="rounded-lg bg-muted/20 mt-6 first:mt-0">
       <div className="bg-muted/30 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
@@ -119,7 +135,7 @@ function ScoreSection({ score }: { score: ScoreData }) {
       <div className="p-4">
         {hasClusters ? (
           <ul className="space-y-2">
-            {score.topics.map((t) => (
+            {sortedTopics.map((t) => (
               <TopicItem key={t.cluster_id} topic={t} />
             ))}
           </ul>
@@ -194,10 +210,23 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
   // Use scores for counting topics if multi-score, else use root topics length
   const hasClusters = isMultiScore ? data.scores!.some(s => s.topics?.length > 0) : topicCount > 0;
 
+  const sortedSingleTopics = (!isMultiScore && hasClusters && data.topics) ? [...data.topics].sort((a, b) => {
+    const getTierWeight = (tier: string) => {
+      if (tier === 'hot') return 3;
+      if (tier === 'warm') return 2;
+      return 1; // cold or unknown
+    };
+    const tierA = getTierWeight(a.memory_tier);
+    const tierB = getTierWeight(b.memory_tier);
+    
+    if (tierA !== tierB) return tierA - tierB; // cold -> warm -> hot
+    return a.member_count - b.member_count;
+  }) : [];
+
   return (
     <Card className="border-0 shadow-none bg-transparent">
       <CardHeader className="px-0 pt-0">
-        <CardTitle>{name || "Vector Topic Memory"}</CardTitle>
+        <CardTitle>{name || "Inferred Topics"}</CardTitle>
         <p className="text-sm text-muted-foreground mt-1">
           Topics and themes from reviewer edit comments — what reviewers are saying when they correct scores.
         </p>
@@ -252,7 +281,7 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
                   Themes from reviewer edit comments. Each topic groups similar feedback.
                 </p>
                 <ul className="space-y-2">
-                  {data.topics.map((t) => (
+                  {sortedSingleTopics.map((t) => (
                     <TopicItem key={t.cluster_id} topic={t} />
                   ))}
                 </ul>
