@@ -69,18 +69,41 @@ class TopicClusterer:
         from hdbscan import HDBSCAN
 
         n = len(embeddings)
+        
+        if n < 15:
+            # Bypass UMAP/HDBSCAN/BERTopic entirely for very small datasets
+            # UMAP and BERTopic's c-TF-IDF can crash with "zero-size array to reduction operation maximum"
+            # or sparse matrix errors when n is too small.
+            from sklearn.cluster import KMeans
+            
+            k = max(1, min(3, n // 3))
+            if k <= 1 or n < 2:
+                topics = np.zeros(n, dtype=int)
+            else:
+                kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+                topics = kmeans.fit_predict(embeddings)
+                
+            self._topics = np.array(topics)
+            self._embeddings = np.asarray(embeddings, dtype=np.float32)
+            self._documents = documents
+            self._topic_model = None
+            self._cluster_version = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            return self._topics, self._cluster_version
+
         mt = min(min_topic_size or self.min_topic_size, max(2, n))
         ms = min_samples if min_samples is not None else min(2, mt)
-        n_neighbors = min(50, max(2, n - 1))
-        n_components = min(self.umap_n_components, max(2, n - 1))
-        if n < 10:
-            n_components = min(2, n - 1)  # UMAP spectral fails when n_components >= n
+        n_neighbors = min(15, max(2, n - 1))
+        n_components = min(self.umap_n_components, max(2, n - 2))
+        
+        # UMAP's default spectral init fails with "k >= N" on small or disconnected graphs.
+        init_method = "spectral" if n >= 15 else "random"
 
         umap_model = UMAP(
             n_neighbors=n_neighbors,
             n_components=n_components,
             min_dist=self.umap_min_dist,
             metric=self.umap_metric,
+            init=init_method,
             random_state=42,
             n_jobs=1,
         )
