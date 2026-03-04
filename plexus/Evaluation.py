@@ -2062,80 +2062,46 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                 # Fetch Item object if item_id is available (needed for input sources)
                 item = None
+                item_client = None
+                if hasattr(self.scorecard, 'client') and self.scorecard.client:
+                    item_client = self.scorecard.client
+                elif getattr(self, 'dashboard_client', None):
+                    item_client = self.dashboard_client
+
                 item_id = row.get('item_id')
                 if item_id:
                     try:
                         from plexus.dashboard.api.models.item import Item
-                        from plexus.cli.shared.client_utils import create_client
-                        item_id = str(item_id).strip()
-                        item_client = None
-                        used_fallback_client = False
-                        if hasattr(self.scorecard, 'client') and self.scorecard.client:
-                            item_client = self.scorecard.client
-                        elif getattr(self, 'dashboard_client', None):
-                            item_client = self.dashboard_client
-                        elif getattr(self, '_item_fetch_client', None):
-                            item_client = self._item_fetch_client
-                            used_fallback_client = True
-                        else:
-                            # Fallback for runs where dashboard client initialization failed,
-                            # but data loading still succeeded via environment credentials.
-                            try:
-                                self._item_fetch_client = create_client()
-                                item_client = self._item_fetch_client
-                                used_fallback_client = True
-                            except Exception as client_error:
-                                logging.warning(
-                                    f"Could not initialize fallback item client: {client_error}"
-                                )
                         item = Item.get_by_id(item_id, item_client) if item_client else None
                         if not item_client:
                             logging.warning(f"No dashboard client available to fetch Item {item_id}")
                         elif not item:
                             logging.warning(f"Item lookup returned no result for item_id={item_id}")
-                            # If the account-scoped dashboard client can't read the item,
-                            # retry with a generic API client that may have broader access.
-                            if not used_fallback_client:
-                                try:
-                                    if not getattr(self, '_item_fetch_client', None):
-                                        self._item_fetch_client = create_client()
-                                    item = Item.get_by_id(item_id, self._item_fetch_client)
-                                    if item:
-                                        logging.info(
-                                            f"Successfully fetched item {item_id} using fallback API client"
-                                        )
-                                except Exception as fallback_error:
-                                    logging.warning(
-                                        f"Fallback item lookup failed for item_id={item_id}: {fallback_error}"
-                                    )
                     except Exception as e:
                         logging.warning(f"Could not fetch Item {item_id}: {e}")
-                # Some datasets omit/transform item_id but keep content_id as the Item ID.
-                # Retry using content_id if we still don't have an Item.
-                if not item:
-                    content_item_id = row.get('content_id')
-                    if content_item_id:
+
+                # Some datasets only include report ID as content_id (no item_id column).
+                # Resolve the Item via reportId identifier for those rows.
+                if not item and item_client:
+                    content_id = row.get('content_id')
+                    account_id = getattr(self, 'account_id', None)
+                    if content_id and account_id:
                         try:
                             from plexus.dashboard.api.models.item import Item
-                            from plexus.cli.shared.client_utils import create_client
-                            content_item_id = str(content_item_id).strip()
-                            content_client = (
-                                getattr(self, '_item_fetch_client', None)
-                                or getattr(self, 'dashboard_client', None)
-                                or (self.scorecard.client if hasattr(self.scorecard, 'client') else None)
+                            item = Item.find_by_identifier(
+                                client=item_client,
+                                account_id=account_id,
+                                identifier_key="reportId",
+                                identifier_value=str(content_id),
+                                debug=False,
                             )
-                            if not content_client:
-                                self._item_fetch_client = create_client()
-                                content_client = self._item_fetch_client
-
-                            item = Item.get_by_id(content_item_id, content_client)
                             if item:
                                 logging.info(
-                                    f"Fetched item via content_id fallback: {content_item_id}"
+                                    f"Resolved Item {item.id} from reportId/content_id={content_id}"
                                 )
-                        except Exception as content_lookup_error:
+                        except Exception as e:
                             logging.warning(
-                                f"Could not fetch Item using content_id={content_item_id}: {content_lookup_error}"
+                                f"Could not fetch Item via reportId={content_id}: {e}"
                             )
 
                 # Extract feedback_item_id if available
