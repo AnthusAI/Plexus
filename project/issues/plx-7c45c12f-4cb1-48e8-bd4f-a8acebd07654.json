@@ -3,7 +3,7 @@
   "title": "Dataset resolution and embedding pipeline integration",
   "description": "**As a** VectorTopicMemory block, **I want** to resolve the dataset via `DatasetResolver` and produce cached embeddings, **so that** re-indexing does not mean re-embedding.\n\nThis story replaces the shell from Story plx-30a738 with real data flow. It wires up:\n- `DatasetResolver` from `plexus/reports/blocks/data_utils.py` to load the dataset\n- `EmbeddingService` from Epic 2 to compute embeddings with S3 caching\n\nOpenSearch and clustering are still mocked at this stage. The block extracts text from a configurable column (`data.content_column`, defaulting to `text`) and feeds it to the embedding pipeline.\n\n## Key Files\n\n- Modify: `plexus/reports/blocks/vector_topic_memory.py`\n- Modify: `plexus/reports/blocks/vector_topic_memory_test.py`\n\n## Dependencies\n\n- Story plx-30a738 (Generate returns structured output envelope)\n- Story plx-3bb9ce (Batch embedding with cache-aware pipeline)",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-03-04T02:30:38.350273Z",
-  "updated_at": "2026-03-04T02:30:50.051593Z",
-  "closed_at": null,
+  "updated_at": "2026-03-04T13:11:31.759481Z",
+  "closed_at": "2026-03-04T13:11:31.759481Z",
   "custom": {}
 }

@@ -3,7 +3,7 @@
   "title": "OpenSearch client connection and health check",
   "description": "**As a** ReportBlock, **I want** an OpenSearch client that connects via IAM auth and verifies cluster health, **so that** I can fail fast when the domain is unavailable.\n\nA `TopicMemoryIndex` class wraps the `opensearch-py` client, configured with the domain endpoint and AWS SigV4 auth (via the IAM role from the infra stack). The first observable behavior is a health check that returns `True`/`False`.\n\nThe client accepts an endpoint URL and region, handling all SigV4 signing internally. Connection failures must not raise — they return `False` from `health_check()` and log the error.\n\n## Key Files\n\n- Create: `plexus/analysis/opensearch_client.py`\n- Create: `plexus/analysis/opensearch_client_test.py`\n- Modify: `pyproject.toml` (add `opensearch-py>=2.4.0`, `requests-aws4auth>=1.2.3`)\n\n## Dependencies\n\nStory plx-a2a3cb (CDK stack) — for knowing the endpoint config shape.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-03-04T02:26:07.091224Z",
-  "updated_at": "2026-03-04T02:26:17.841595Z",
-  "closed_at": null,
+  "updated_at": "2026-03-04T13:11:32.835649Z",
+  "closed_at": "2026-03-04T13:11:32.835649Z",
   "custom": {}
 }

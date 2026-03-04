@@ -3,7 +3,7 @@
   "title": "CDK stack synthesizes a valid OpenSearch domain",
   "description": "**As a** platform team, **I want** a CDK stack that provisions a minimal OpenSearch domain, **so that** the Plexus runtime has a vector index to write to and search.\n\nSingle `t3.small.search` node, 10GB EBS, no multi-AZ, no dedicated master — the cheapest viable production config. The stack outputs the domain endpoint, domain ARN, and a Plexus access IAM role ARN.\n\nFollows the CDK v2 Python patterns established in the existing Plexus `infrastructure/app.py`.\n\n## Key Files (new infra repo)\n\n- Create: `opensearch_infra/stacks/opensearch_stack.py`\n- Create: `opensearch_infra/app.py`\n- Create: `opensearch_infra/cdk.json`\n- Create: `tests/test_opensearch_stack.py`\n- Create: `requirements.txt`\n\n## Dependencies\n\nNone.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-03-04T02:24:49.050184Z",
-  "updated_at": "2026-03-04T02:25:02.479Z",
-  "closed_at": null,
+  "updated_at": "2026-03-04T13:11:32.357943Z",
+  "closed_at": "2026-03-04T13:11:32.357943Z",
   "custom": {}
 }
