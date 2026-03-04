@@ -1,0 +1,42 @@
+name: Sync requirements.txt
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - pyproject.toml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pip-compile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-tools
+        run: python -m pip install --upgrade pip pip-tools
+
+      - name: Compile requirements
+        run: pip-compile --strip-extras -o requirements.txt pyproject.toml
+
+      - name: Commit and push if changed
+        run: |
+          if ! git diff --quiet -- requirements.txt; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add requirements.txt
+            git commit -m "chore: sync requirements.txt from pyproject.toml for Snyk scanning"
+            git pull --rebase
+            git push
+          fi
