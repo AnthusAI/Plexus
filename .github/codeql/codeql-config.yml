@@ -2,6 +2,7 @@ name: "Plexus CodeQL Config"
 
 # Restrict CodeQL to first-party source and avoid vendored/generated artifacts.
 paths-ignore:
+  - "**/.codeql/**"
   - "**/node_modules/**"
   - "**/.venv/**"
   - "**/venv/**"
