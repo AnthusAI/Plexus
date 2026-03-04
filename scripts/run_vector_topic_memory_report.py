@@ -5,6 +5,7 @@ Creates config if needed, then runs the report.
 """
 import sys
 import os
+import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -14,11 +15,14 @@ def main():
     from plexus.dashboard.api.models.report_configuration import ReportConfiguration
     from plexus.reports.service import generate_report_with_parameters
 
+    parser = argparse.ArgumentParser(description="Run the Vector Topic Memory report")
+    parser.add_argument("--scorecard", type=str, required=True, help="The Scorecard ID (or external ID)")
+    parser.add_argument("--score-id", type=str, help="Optional specific Score ID to filter by")
+    parser.add_argument("--days", type=str, default="90", help="Number of days to analyze (default: 90)")
+    args = parser.parse_args()
+
     config_name = "Vector Topic Memory"
     config_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "vector_topic_memory_report.md")
-    scorecard = "1438"
-    score_id = "45285" # Medication Review
-    days = "90"
 
     print("Creating client...")
     client = create_client()
@@ -50,10 +54,16 @@ def main():
         )
         print(f"Using config: {config.id} ({config.name})")
 
-    print(f"Running report for score_id: {score_id} (Vector Topic Memory only)...")
+    report_params = {"scorecard": args.scorecard, "days": args.days}
+    if args.score_id:
+        report_params["score_id"] = args.score_id
+        print(f"Running report for score_id: {args.score_id} (Vector Topic Memory only)...")
+    else:
+        print(f"Running report for all scores in scorecard {args.scorecard} (Vector Topic Memory only)...")
+
     report_id, first_block_error, task_id = generate_report_with_parameters(
         config_id=config.id,
-        parameters={"scorecard": scorecard, "score_id": score_id, "days": days},
+        parameters=report_params,
         account_id=account_id,
         client=client,
         trigger="script",
