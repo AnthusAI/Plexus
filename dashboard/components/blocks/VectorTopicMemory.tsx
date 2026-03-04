@@ -50,7 +50,7 @@ function TopicItem({
   const hasDetails = (topic.keywords?.length ?? 0) > 0 || (topic.exemplars?.length ?? 0) > 0 || topic.days_inactive !== undefined;
 
   return (
-    <li className="border-b last:border-0 pb-3">
+    <li className="pb-3">
       <button
         type="button"
         onClick={() => hasDetails && setExpanded((e) => !e)}
@@ -68,9 +68,9 @@ function TopicItem({
         </div>
         <div className="flex gap-2 text-sm text-muted-foreground shrink-0 ml-2">
           {topic.days_inactive !== undefined && (
-             <Badge variant="outline" className="font-mono text-xs">{topic.days_inactive}d inactive</Badge>
+             <Badge variant="secondary" className="font-mono text-xs bg-muted/50 hover:bg-muted/50 border-0">{topic.days_inactive}d inactive</Badge>
           )}
-          <Badge variant={topic.memory_tier === 'hot' ? "default" : topic.memory_tier === 'warm' ? "secondary" : "outline"}>
+          <Badge variant={topic.memory_tier === 'hot' ? "default" : "secondary"} className={topic.memory_tier === 'warm' ? "bg-muted/50 hover:bg-muted/50 border-0" : "border-0"}>
             {topic.memory_tier}
           </Badge>
           <span>{topic.member_count} comment{topic.member_count !== 1 ? "s" : ""}</span>
@@ -108,12 +108,12 @@ function ScoreSection({ score }: { score: ScoreData }) {
   const hasClusters = (score.topics?.length ?? 0) > 0;
   
   return (
-    <div className="border rounded-lg overflow-hidden bg-card mt-6 first:mt-0">
-      <div className="bg-muted/50 px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2">
+    <div className="rounded-lg bg-muted/20 mt-6 first:mt-0">
+      <div className="bg-muted/30 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold text-base">{score.score_name}</h3>
         <div className="flex gap-2">
-           <Badge variant="outline">{score.items_processed} items</Badge>
-           {hasClusters && <Badge variant="secondary">{score.topics.length} topics</Badge>}
+           <Badge variant="secondary" className="bg-muted/50 hover:bg-muted/50 border-0">{score.items_processed} items</Badge>
+           {hasClusters && <Badge variant="secondary" className="border-0">{score.topics.length} topics</Badge>}
         </div>
       </div>
       <div className="p-4">
@@ -151,7 +151,7 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
 
   if (data.status === "shell" || data.status === "error") {
     return (
-      <Card>
+      <Card className="border-0 shadow-none bg-transparent">
         <CardHeader>
           <CardTitle>{name || "Vector Topic Memory"}</CardTitle>
         </CardHeader>
@@ -172,29 +172,29 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
   const hasClusters = isMultiScore ? data.scores!.some(s => s.topics?.length > 0) : topicCount > 0;
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-0 shadow-none bg-transparent">
+      <CardHeader className="px-0 pt-0">
         <CardTitle>{name || "Vector Topic Memory"}</CardTitle>
         <p className="text-sm text-muted-foreground mt-1">
           Topics and themes from reviewer edit comments — what reviewers are saying when they correct scores.
         </p>
         <div className="flex flex-wrap gap-2 mt-2">
-          <Badge variant="outline">{data.items_processed ?? 0} items analyzed</Badge>
+          <Badge variant="secondary" className="bg-muted/50 hover:bg-muted/50 border-0">{data.items_processed ?? 0} items analyzed</Badge>
           {!isMultiScore && hasClusters && (
-            <Badge variant="secondary">{topicCount} topic{topicCount !== 1 ? "s" : ""} found</Badge>
+            <Badge variant="secondary" className="border-0">{topicCount} topic{topicCount !== 1 ? "s" : ""} found</Badge>
           )}
           {isMultiScore && hasClusters && (
-            <Badge variant="secondary">{data.scores!.reduce((acc, s) => acc + (s.topics?.length || 0), 0)} topics found</Badge>
+            <Badge variant="secondary" className="border-0">{data.scores!.reduce((acc, s) => acc + (s.topics?.length || 0), 0)} topics found</Badge>
           )}
           {data.cluster_version && (
-            <Badge variant="outline">v{data.cluster_version}</Badge>
+            <Badge variant="secondary" className="bg-muted/50 hover:bg-muted/50 border-0">v{data.cluster_version}</Badge>
           )}
           {data.cache_hit_rate != null && (
-            <Badge variant="outline">{Math.round(data.cache_hit_rate * 100)}% cache hit</Badge>
+            <Badge variant="secondary" className="bg-muted/50 hover:bg-muted/50 border-0">{Math.round(data.cache_hit_rate * 100)}% cache hit</Badge>
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="px-0 pb-0 space-y-4">
         
         {isMultiScore ? (
           <div className="space-y-6">
@@ -203,7 +203,7 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
             ))}
             
             {!hasClusters && (
-              <div className="rounded-lg border border-dashed bg-muted/30 p-4">
+              <div className="rounded-lg bg-muted/20 p-4">
                 <h4 className="font-semibold mb-2">No topics formed</h4>
                 <p className="text-sm text-muted-foreground">
                   Processed {data.items_processed ?? 0} items but no clusters emerged. Add more data
@@ -223,7 +223,7 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
           /* Legacy / Single Score view */
           <>
             {hasClusters && data.topics && (
-              <div className="rounded-lg border bg-card p-4">
+              <div className="rounded-lg bg-card p-4">
                 <h4 className="font-semibold mb-3">Memories / Topics discovered</h4>
                 <p className="text-sm text-muted-foreground mb-4">
                   Themes from reviewer edit comments. Each topic groups similar feedback.
@@ -237,7 +237,7 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
             )}
 
             {!hasClusters && (
-              <div className="rounded-lg border border-dashed bg-muted/30 p-4">
+              <div className="rounded-lg bg-muted/20 p-4">
                 <h4 className="font-semibold mb-2">No topics formed</h4>
                 <p className="text-sm text-muted-foreground">
                   Processed {data.items_processed ?? 0} items but no clusters emerged. Add more data

@@ -5,10 +5,11 @@ parameters:
     required: true
     description: Scorecard for feedback items (transcript source)
   - name: score_id
-    label: Target Score ID
-    type: string
+    label: Target Score
+    type: score_select
+    depends_on: scorecard
     required: false
-    description: Optional specific score ID to analyze. If empty, analyzes all scores in the scorecard.
+    description: Optional specific score to analyze. If empty, analyzes all scores in the scorecard.
   - name: days
     label: Analysis Period (days)
     type: number
@@ -21,6 +22,9 @@ parameters:
 
 # Vector Topic Memory Report
 ## Scorecard: {{ scorecard_name }}
+{% if score_id is defined and score_id %}
+## Score: {{ score_id_name }}
+{% endif %}
 ## Last {{ days }} days
 
 Rebuilds topic memory from **edit comments** (reviewer feedback) in this scorecard and date range. Clusters what reviewers are saying when they correct scores. Re-indexes into OpenSearch with S3 embedding cache, global clustering, and memory weights.
@@ -28,7 +32,9 @@ Rebuilds topic memory from **edit comments** (reviewer feedback) in this scoreca
 ```block name="Vector Topic Memory"
 class: VectorTopicMemory
 scorecard: {{ scorecard }}
+{% if score_id is defined and score_id %}
 score_id: {{ score_id }}
+{% endif %}
 days: {{ days }}
 data:
   content_source: edit_comment
