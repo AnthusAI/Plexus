@@ -166,6 +166,29 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
 
   const isMultiScore = Array.isArray(data.scores) && data.scores.length > 0;
   
+  // Sort scores by severity (most hot/warm topics last, then most topics overall last, then by items processed)
+  const sortedScores = isMultiScore ? [...data.scores!].sort((a, b) => {
+    // Score based on memory tiers (higher score = worse/more hot topics)
+    const getSeverityScore = (topics: Topic[]) => {
+      if (!topics || topics.length === 0) return 0;
+      let score = 0;
+      for (const t of topics) {
+        if (t.memory_tier === 'hot') score += 10;
+        else if (t.memory_tier === 'warm') score += 5;
+        else score += 1;
+      }
+      return score;
+    };
+    
+    const scoreA = getSeverityScore(a.topics);
+    const scoreB = getSeverityScore(b.topics);
+    
+    // Sort ascending by severity so the "worst" (highest severity score) are at the bottom
+    if (scoreA !== scoreB) return scoreA - scoreB;
+    if ((a.topics?.length || 0) !== (b.topics?.length || 0)) return (a.topics?.length || 0) - (b.topics?.length || 0);
+    return a.items_processed - b.items_processed;
+  }) : [];
+  
   // For backwards compatibility or single-score mode
   const topicCount = data.topics?.length ?? 0;
   // Use scores for counting topics if multi-score, else use root topics length
@@ -198,7 +221,7 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
         
         {isMultiScore ? (
           <div className="space-y-6">
-            {data.scores!.map(score => (
+            {sortedScores.map(score => (
               <ScoreSection key={score.score_id} score={score} />
             ))}
             
