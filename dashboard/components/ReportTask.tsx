@@ -337,7 +337,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
             ? 'Feedback Analysis'
             : blockData.type === 'VectorTopicMemory'
               ? 'Vector Topic Memory'
-              : blockData.name;
+              : blockData.name ?? undefined;
         const blockProps = {
           id: blockData.id,
           config: {
