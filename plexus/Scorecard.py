@@ -632,9 +632,15 @@ class Scorecard:
                 if processors_config:
                     try:
                         original_text_preview = text[:100] if text else ""
-                        processed_text = Score.apply_processors_to_text(
-                            text, processors_config
+                        processed_input = Score.apply_processors(
+                            Score.Input(
+                                text=text,
+                                metadata=metadata or {},
+                                results=converted_results,
+                            ),
+                            processors_config,
                         )
+                        processed_text = processed_input.text
                         processed_text_preview = (
                             processed_text[:100] if processed_text else ""
                         )
@@ -648,6 +654,7 @@ class Scorecard:
                             f"Processed text preview: {processed_text_preview}..."
                         )
                         text = processed_text
+                        metadata = processed_input.metadata or {}
                     except Exception as e:
                         logging.error(
                             f"Error applying processors for score '{score}': {e}"
@@ -780,6 +787,21 @@ class Scorecard:
                     score_total_cost.get("llm_calls", 0),
                     scorecard_dimensions,
                 )
+
+                # Persist the final text that was sent to the model (after input source/processors)
+                # so downstream consumers (e.g., evaluation dashboard views) can show what was scored.
+                if isinstance(score_result, list):
+                    for single_result in score_result:
+                        if isinstance(single_result, Score.Result):
+                            if single_result.metadata is None:
+                                single_result.metadata = {}
+                            if isinstance(single_result.metadata, dict):
+                                single_result.metadata["text"] = text
+                elif isinstance(score_result, Score.Result):
+                    if score_result.metadata is None:
+                        score_result.metadata = {}
+                    if isinstance(score_result.metadata, dict):
+                        score_result.metadata["text"] = text
 
                 # Ensure we always return a list of results
                 if isinstance(score_result, list):
