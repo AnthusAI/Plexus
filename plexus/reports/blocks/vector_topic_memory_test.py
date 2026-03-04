@@ -31,8 +31,10 @@ async def test_vector_topic_memory_generate_returns_well_formed_tuple(vector_top
 
 
 @pytest.mark.asyncio
-async def test_vector_topic_memory_shell_when_no_s3_vectors(vector_topic_memory_block):
-    """Block returns shell status when S3 Vectors not configured."""
+async def test_vector_topic_memory_dataset_resolution_error_with_s3_defaults(
+    vector_topic_memory_block,
+):
+    """Block returns dataset-resolution error even when relying on S3 defaults."""
     vector_topic_memory_block.config = {"data": {"dataset": "ds-1"}}
     with patch(
         "plexus.reports.blocks.vector_topic_memory.DatasetResolver"
@@ -41,7 +43,24 @@ async def test_vector_topic_memory_shell_when_no_s3_vectors(vector_topic_memory_
             return_value=(None, None)
         )
         output_data, _ = await vector_topic_memory_block.generate()
-    assert output_data["status"] == "shell"
+    assert output_data["status"] == "error"
+    assert "Dataset resolution failed" in output_data.get("summary", "")
+
+
+def test_vector_topic_memory_resolves_default_s3_vectors_from_environment(
+    vector_topic_memory_block, monkeypatch
+):
+    """Defaults bucket/index from ENVIRONMENT when explicit values are missing."""
+    monkeypatch.delenv("S3_VECTOR_BUCKET_NAME", raising=False)
+    monkeypatch.delenv("S3_VECTOR_INDEX_NAME", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    vector_topic_memory_block.config = {"s3_vectors": {"region": "us-west-2"}}
+    cfg = vector_topic_memory_block._resolve_s3_vectors_config()
+
+    assert cfg["bucket_name"] == "plexus-vectors-development"
+    assert cfg["index_name"] == "topic-memory-idx-development"
+    assert cfg["region"] == "us-west-2"
 
 
 @pytest.mark.asyncio

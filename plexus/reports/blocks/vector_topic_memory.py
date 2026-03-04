@@ -40,6 +40,42 @@ class VectorTopicMemory(BaseReportBlock):
     DEFAULT_NAME = "Vector Topic Memory"
     DEFAULT_DESCRIPTION = "Persistent vector-based topic memory from S3 Vectors index"
 
+    def _resolve_s3_vectors_config(self) -> Dict[str, Optional[str]]:
+        """
+        Resolve S3 Vectors configuration with safe defaults for prototype stacks.
+
+        Resolution order:
+        1) explicit block config (s3_vectors.*)
+        2) environment variables
+        3) prototype naming convention using ENVIRONMENT (default: development)
+        """
+        vectors_config = self.config.get("s3_vectors", {})
+        environment_name = os.environ.get("ENVIRONMENT", "development")
+
+        default_bucket = f"plexus-vectors-{environment_name}"
+        default_index = f"topic-memory-idx-{environment_name}"
+
+        explicit_bucket = vectors_config.get("bucket_name") or os.environ.get("S3_VECTOR_BUCKET_NAME")
+        explicit_index = vectors_config.get("index_name") or os.environ.get("S3_VECTOR_INDEX_NAME")
+        vector_index_arn = vectors_config.get("index_arn") or os.environ.get("S3_VECTOR_INDEX_ARN")
+        region = vectors_config.get("region") or os.environ.get("AWS_REGION", "us-west-2")
+
+        vector_bucket = explicit_bucket or default_bucket
+        vector_index = explicit_index or default_index
+
+        if not explicit_bucket or not explicit_index:
+            self._log(
+                f"Using S3 Vectors defaults for missing settings: "
+                f"bucket={vector_bucket}, index={vector_index}, environment={environment_name}"
+            )
+
+        return {
+            "bucket_name": vector_bucket,
+            "index_name": vector_index,
+            "index_arn": vector_index_arn,
+            "region": region,
+        }
+
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
         Orchestrates: resolve dataset -> embed -> index -> cluster -> memory weights.
@@ -60,11 +96,11 @@ class VectorTopicMemory(BaseReportBlock):
         try:
             # 1. Config validation
             data_config = self.config.get("data", {})
-            vectors_config = self.config.get("s3_vectors", {})
-            vector_bucket = vectors_config.get("bucket_name") or os.environ.get("S3_VECTOR_BUCKET_NAME")
-            vector_index = vectors_config.get("index_name") or os.environ.get("S3_VECTOR_INDEX_NAME")
-            vector_index_arn = vectors_config.get("index_arn") or os.environ.get("S3_VECTOR_INDEX_ARN")
-            region = vectors_config.get("region") or os.environ.get("AWS_REGION", "us-west-2")
+            vectors_config = self._resolve_s3_vectors_config()
+            vector_bucket = vectors_config.get("bucket_name")
+            vector_index = vectors_config.get("index_name")
+            vector_index_arn = vectors_config.get("index_arn")
+            region = vectors_config.get("region")
 
             if not vector_bucket or not vector_index:
                 self._log("S3 Vectors bucket/index not configured. Skipping full pipeline.")
