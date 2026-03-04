@@ -49,11 +49,12 @@ class VectorTopicMemory(BaseReportBlock):
             "status": "ok",
             "cluster_version": None,
             "topics": [],
+            "scores": [],
             "summary": "",
             "items_processed": 0,
             "cache_hit_rate": None,
             "index_name": None,
-            "indexed_doc_ids": [],  # Item IDs indexed (useful when 0 clusters)
+            "indexed_doc_ids": [],
         }
 
         try:
@@ -67,19 +68,18 @@ class VectorTopicMemory(BaseReportBlock):
                 self._log("OpenSearch endpoint not configured. Skipping full pipeline.")
                 output_data["status"] = "shell"
                 output_data["message"] = "OpenSearch not configured — run with opensearch.endpoint."
-                log_string = self._get_log_string()
-                return output_data, log_string
+                return output_data, self._get_log_string()
 
-            # 2. Resolve dataset — feedback items (scorecard+days) or DataSource/DataSet
+            # 2. Resolve datasets
             scorecard_param = self.config.get("scorecard")
             days_param = self.config.get("days", 14)
             source = data_config.get("source")
             dataset = data_config.get("dataset")
 
+            datasets = []
+
             if scorecard_param:
-                # Use feedback items (same as FeedbackAnalysis)
-                texts, doc_ids = await self._resolve_feedback_dataset(scorecard_param, days_param)
-                self._log(f"Loaded {len(texts)} documents from feedback items.")
+                datasets = await self._resolve_feedback_datasets(scorecard_param, days_param)
             elif source or dataset:
                 # Use DataSource/DataSet
                 resolver = DatasetResolver(self.api_client)
@@ -90,8 +90,7 @@ class VectorTopicMemory(BaseReportBlock):
                     self._log("Failed to resolve dataset.", level="ERROR")
                     output_data["status"] = "error"
                     output_data["summary"] = "Dataset resolution failed."
-                    log_string = self._get_log_string()
-                    return output_data, log_string
+                    return output_data, self._get_log_string()
 
                 if metadata and metadata.get("id"):
                     self.set_resolved_dataset_id(metadata["id"])
@@ -102,168 +101,217 @@ class VectorTopicMemory(BaseReportBlock):
                     content_col = df.columns[0]
                 texts = df[content_col].fillna("").astype(str).tolist()
                 doc_ids = [str(i) for i in range(len(texts))]
+                timestamps = [datetime.now(timezone.utc)] * len(texts)
                 self._log(f"Loaded {len(texts)} documents from dataset.")
+                datasets.append({
+                    "score_id": "dataset",
+                    "score_name": "Dataset",
+                    "texts": texts,
+                    "doc_ids": doc_ids,
+                    "timestamps": timestamps
+                })
             else:
                 self._log("No data config: provide scorecard+days (feedback) or data.source/dataset.", level="ERROR")
                 output_data["status"] = "error"
                 output_data["summary"] = "Missing data config: scorecard+days or data.source/dataset."
-                log_string = self._get_log_string()
-                return output_data, log_string
+                return output_data, self._get_log_string()
 
-            if len(texts) == 0:
+            total_texts = sum(len(ds["texts"]) for ds in datasets)
+            if total_texts == 0:
                 output_data["status"] = "ok"
                 output_data["summary"] = "No documents to process."
                 output_data["items_processed"] = 0
-                log_string = self._get_log_string()
-                return output_data, log_string
+                return output_data, self._get_log_string()
 
-            # 3. Embed
+            # 3. Embed all texts at once for efficiency
+            all_texts = []
+            for ds in datasets:
+                all_texts.extend(ds["texts"])
+            
             from plexus.analysis.embedding_cache import EmbeddingCache, EmbeddingService
-
             model_id = self.config.get("embedding", {}).get("model_id", "all-MiniLM-L6-v2")
             version = self.config.get("embedding", {}).get("preprocessing_version", "1")
             cache = EmbeddingCache()
             svc = EmbeddingService(cache=cache, model_id=model_id, preprocessing_version=version)
-            embeddings = svc.batch_embed(texts, model_id=model_id, preprocessing_version=version)
+            embeddings = svc.batch_embed(all_texts, model_id=model_id, preprocessing_version=version)
             output_data["items_processed"] = len(embeddings)
 
             # 4. OpenSearch index
             from plexus.analysis.opensearch_client import TopicMemoryIndex
-
             idx_client = TopicMemoryIndex(endpoint=endpoint, region=region)
             if not idx_client.health_check():
                 self._log("OpenSearch health check failed.", level="WARNING")
                 output_data["status"] = "partial"
                 output_data["summary"] = "OpenSearch unavailable — embeddings computed but not indexed."
-                log_string = self._get_log_string()
-                return output_data, log_string
+                return output_data, self._get_log_string()
 
             import numpy as np
 
-            documents = [
-                {
-                    "doc_id": doc_ids[i],
-                    "text": texts[i],
-                    "embedding": np.array(embeddings[i]) if hasattr(embeddings[i], "tolist") else embeddings[i],
-                    "metadata": {},
-                    "cluster_id": "",
-                    "cluster_version": "",
-                    "record_type": "item",
-                }
-                for i in range(len(embeddings))
-            ]
+            # Distribute embeddings back to datasets and build index documents
+            documents = []
+            current_idx = 0
+            for ds in datasets:
+                ds_len = len(ds["texts"])
+                ds["embeddings"] = embeddings[current_idx:current_idx + ds_len]
+                
+                for i in range(ds_len):
+                    documents.append({
+                        "doc_id": ds["doc_ids"][i],
+                        "text": ds["texts"][i],
+                        "embedding": np.array(ds["embeddings"][i]) if hasattr(ds["embeddings"][i], "tolist") else ds["embeddings"][i],
+                        "metadata": {"score_id": ds["score_id"]},
+                        "cluster_id": "",
+                        "cluster_version": "",
+                        "record_type": "item",
+                    })
+                current_idx += ds_len
+                
             build_result = idx_client.build_index(documents)
-            output_data["index_name"] = build_result.get("new_index_name")
-            output_data["indexed_doc_ids"] = doc_ids
+            index_name = build_result.get("new_index_name")
+            output_data["index_name"] = index_name
+            output_data["indexed_doc_ids"] = [d["doc_id"] for d in documents]
             self._log(f"Indexed {build_result['success_count']} documents.")
 
-            # 5. Cluster
+            # 5-8. Cluster per score
             from plexus.analysis.topic_clusterer import TopicClusterer
+            from plexus.analysis.memory_weights import tier_from_weight
 
             clustering_config = self.config.get("clustering", {})
             min_topic_size = clustering_config.get("min_topic_size", 10)
             min_samples = clustering_config.get("min_samples")
-            cluster_selection_method = clustering_config.get(
-                "cluster_selection_method", "leaf"
-            )
-            cluster_selection_epsilon = clustering_config.get(
-                "cluster_selection_epsilon", 0.5
-            )
-            clusterer = TopicClusterer(min_topic_size=min_topic_size)
-            import numpy as np
-
-            emb_array = np.array(embeddings, dtype=np.float32)
-            topics, cluster_version = clusterer.cluster(
-                emb_array,
-                texts,
-                min_topic_size=min_topic_size,
-                min_samples=min_samples,
-                cluster_selection_method=cluster_selection_method,
-                cluster_selection_epsilon=cluster_selection_epsilon,
-            )
-            output_data["cluster_version"] = cluster_version
-
-            # 6. Cluster records for OpenSearch
-            records = clusterer.get_cluster_records()
-            idx_client.persist_clusters(records, index_name=build_result.get("new_index_name"))
-
-            # 7. Memory weights (simplified: treat all as active for first run)
-            from plexus.analysis.memory_weights import initial_weight, tier_from_weight, update_memory_weights
-
-            existing = [
-                {"cluster_id": r["cluster_id"], "memory_weight": initial_weight(), "new_docs_this_run": 10}
-                for r in records
-            ]
-            active_ids = [
-                int(r["cluster_id"])
-                for r in records
-                if str(r["cluster_id"]).lstrip("-").isdigit()
-            ]
-            updated, _pruned = update_memory_weights(existing, active_ids, prune=False)
-            if updated:
-                for u in updated:
-                    u["metadata"] = u.get("metadata", {})
-                idx_client.bulk_update_cluster_weights(
-                    updated, index_name=build_result.get("new_index_name")
-                )
-
-            # 8. Build topics output with exemplars, keywords, and LLM labels
-            centroids = clusterer.cluster_centroids()
-            boundaries = clusterer.cluster_boundaries()
-            topics_arr = np.array(topics)
-
+            cluster_selection_method = clustering_config.get("cluster_selection_method", "leaf")
+            cluster_selection_epsilon = clustering_config.get("cluster_selection_epsilon", 0.5)
+            
             label_config = self.config.get("label", {})
             use_llm_labels = label_config.get("use_llm", True)
             api_key_env = label_config.get("api_key_env_var", "OPENAI_API_KEY")
             model_name = label_config.get("model", "gpt-4o-mini")
             openai_key = os.environ.get(api_key_env) if use_llm_labels else None
 
-            for tid in centroids:
-                member_count = int(np.sum(topics_arr == tid))
-                weight = 0.5
-                tier = tier_from_weight(weight)
-                exemplars = clusterer._get_representative_docs(tid, n=5)
-                keywords = clusterer.get_keywords(tid, n=8)
-                exemplars_truncated = [
-                    (ex[:300] + "…" if len(ex) > 300 else ex) for ex in exemplars
-                ]
+            # Reference date for calculating decay (usually today)
+            end_date = datetime.now(timezone.utc)
 
-                label = f"Topic {tid}"
-                if use_llm_labels and openai_key and (keywords or exemplars):
-                    try:
-                        label = self._generate_topic_label(
-                            keywords=keywords,
-                            exemplars=exemplars[:3],
-                            model_name=model_name,
-                            api_key=openai_key,
-                        )
-                    except Exception as e:
-                        self._log(f"LLM label failed for topic {tid}: {e}", level="WARNING")
+            for ds in datasets:
+                if len(ds["texts"]) == 0:
+                    self._log(f"No items to cluster for score {ds['score_name']}.")
+                    continue
+                
+                self._log(f"Clustering {len(ds['texts'])} items for score {ds['score_name']}...")
+                clusterer = TopicClusterer(min_topic_size=min_topic_size)
+                emb_array = np.array(ds["embeddings"], dtype=np.float32)
+                topics, cluster_version = clusterer.cluster(
+                    emb_array,
+                    ds["texts"],
+                    min_topic_size=min_topic_size,
+                    min_samples=min_samples,
+                    cluster_selection_method=cluster_selection_method,
+                    cluster_selection_epsilon=cluster_selection_epsilon,
+                )
+                
+                records = clusterer.get_cluster_records()
+                for r in records:
+                    r["metadata"] = {"score_id": ds["score_id"]}
+                idx_client.persist_clusters(records, index_name=index_name)
 
-                output_data["topics"].append({
-                    "cluster_id": tid,
-                    "label": label,
-                    "keywords": keywords,
-                    "exemplars": exemplars_truncated,
-                    "memory_weight": weight,
-                    "memory_tier": tier,
-                    "p95_distance": boundaries.get(tid, 0.0),
-                    "member_count": member_count,
+                # Compute weights based on calendar days
+                centroids = clusterer.cluster_centroids()
+                boundaries = clusterer.cluster_boundaries()
+                topics_arr = np.array(topics)
+                
+                ds_topics = []
+                updated_clusters = []
+                
+                for tid in centroids:
+                    member_indices = np.where(topics_arr == tid)[0]
+                    member_count = len(member_indices)
+                    cluster_timestamps = [ds["timestamps"][i] for i in member_indices if ds["timestamps"][i]]
+                    
+                    if cluster_timestamps:
+                        most_recent = max(cluster_timestamps)
+                        if most_recent.tzinfo is None:
+                            most_recent = most_recent.replace(tzinfo=timezone.utc)
+                        days_inactive = max(0, (end_date - most_recent).days)
+                    else:
+                        days_inactive = 0
+                        
+                    # Simulated history for full rebuild:
+                    # If active within last 14 days -> hot (0.8)
+                    # If active within last 30 days -> warm (0.5)
+                    # If inactive > 30 days -> decay based on days
+                    if days_inactive <= 14:
+                        weight = 0.8
+                    elif days_inactive <= 30:
+                        weight = 0.5
+                    else:
+                        weight = max(0.0, 0.5 - (days_inactive - 30) * 0.01)
+                        
+                    tier = tier_from_weight(weight)
+                    
+                    exemplars = clusterer._get_representative_docs(tid, n=5)
+                    keywords = clusterer.get_keywords(tid, n=8)
+                    exemplars_truncated = [(ex[:300] + "…" if len(ex) > 300 else ex) for ex in exemplars]
+
+                    label = f"Topic {tid}"
+                    if use_llm_labels and openai_key and (keywords or exemplars):
+                        try:
+                            label = self._generate_topic_label(
+                                keywords=keywords, exemplars=exemplars[:3],
+                                model_name=model_name, api_key=openai_key
+                            )
+                        except Exception as e:
+                            self._log(f"LLM label failed for topic {tid}: {e}", level="WARNING")
+
+                    ds_topics.append({
+                        "cluster_id": tid,
+                        "label": label,
+                        "keywords": keywords,
+                        "exemplars": exemplars_truncated,
+                        "memory_weight": weight,
+                        "memory_tier": tier,
+                        "p95_distance": boundaries.get(tid, 0.0),
+                        "member_count": member_count,
+                        "days_inactive": days_inactive
+                    })
+                    
+                    # Store updated weight back to OpenSearch
+                    updated_clusters.append({
+                        "cluster_id": str(tid),
+                        "memory_weight": weight,
+                        "memory_tier": tier,
+                        "metadata": {"score_id": ds["score_id"]}
+                    })
+
+                if updated_clusters:
+                    idx_client.bulk_update_cluster_weights(updated_clusters, index_name=index_name)
+
+                # Add this score's topics to the output
+                output_data["scores"].append({
+                    "score_id": ds["score_id"],
+                    "score_name": ds["score_name"],
+                    "items_processed": len(ds["texts"]),
+                    "topics": ds_topics,
+                    "cluster_version": cluster_version
                 })
 
-            output_data["summary"] = f"Processed {len(texts)} items, {len(output_data['topics'])} clusters."
+            total_clusters = sum(len(s["topics"]) for s in output_data["scores"])
+            
+            # For backwards compatibility, hoist topics if there's only one score
+            if len(output_data["scores"]) == 1:
+                output_data["topics"] = output_data["scores"][0]["topics"]
+                output_data["cluster_version"] = output_data["scores"][0]["cluster_version"]
+                
+            output_data["summary"] = f"Processed {total_texts} items across {len(output_data['scores'])} scores, {total_clusters} clusters total."
+                
             self._log(output_data["summary"])
 
         except Exception as e:
             self._log(f"Error: {e}", level="ERROR")
             import traceback
-
             self._log(traceback.format_exc(), level="DEBUG")
             output_data["status"] = "error"
             output_data["summary"] = str(e)
 
-        log_string = self._get_log_string()
-        return output_data, log_string
+        return output_data, self._get_log_string()
 
     def _generate_topic_label(
         self,
@@ -284,28 +332,21 @@ class VectorTopicMemory(BaseReportBlock):
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You generate short, descriptive topic labels for reviewer feedback/edit comments. Return only the label, no quotes or extra text."),
-            ("user", """Topic from reviewer edit comments (what reviewers said when correcting scores). Keywords: {keywords}
-
-Representative excerpts:
-{docs}
-
-Provide a short descriptive label (2-6 words) for this topic. Return only the label.""")
+            ("user", f"Topic from reviewer edit comments (what reviewers said when correcting scores). Keywords: {keywords_str}\n\nRepresentative excerpts:\n{docs_str}\n\nProvide a short descriptive label (2-6 words) for this topic. Return only the label.")
         ])
         llm = ChatOpenAI(model=model_name, temperature=0, api_key=api_key)
         chain = prompt | llm
-        result = chain.invoke({"keywords": keywords_str, "docs": docs_str})
+        result = chain.invoke({})
         label = result.content.strip().strip('"\'')
         return label[:80] if label else "Unnamed topic"
 
-    async def _resolve_feedback_dataset(
+    async def _resolve_feedback_datasets(
         self, scorecard_param: str, days: int
-    ) -> Tuple[List[str], List[str]]:
+    ) -> List[Dict[str, Any]]:
         """
         Resolve dataset from feedback items for the scorecard and date range.
-        Uses editCommentValue (reviewer comments) by default — what reviewers said
-        when they edited/corrected scores. Set data.content_source: "transcript"
-        to use Item transcript text instead.
-        Returns (texts, doc_ids).
+        Organizes the results per score.
+        Returns list of dicts: {"score_id": str, "score_name": str, "texts": [], "doc_ids": [], "timestamps": []}
         """
         from plexus.dashboard.api.models.scorecard import Scorecard
         from plexus.dashboard.api.models.score import Score
@@ -387,22 +428,25 @@ Provide a short descriptive label (2-6 words) for this topic. Return only the la
 
         if not scores_to_process:
             self._log("No scores to process.", level="WARNING")
-            return [], []
+            return []
 
-        if content_source == "edit_comment":
-            # Use edit comments from feedback items — what reviewers said when correcting
-            # Only include mismatches (where initial answer != final answer)
+        datasets = []
+        
+        for score_info in scores_to_process:
             texts = []
             doc_ids = []
-            for score_info in scores_to_process:
-                items = await feedback_utils.fetch_feedback_items_for_score(
-                    self.api_client,
-                    account_id,
-                    plexus_scorecard.id,
-                    score_info["plexus_score_id"],
-                    start_date,
-                    end_date,
-                )
+            timestamps = []
+            
+            items = await feedback_utils.fetch_feedback_items_for_score(
+                self.api_client,
+                account_id,
+                plexus_scorecard.id,
+                score_info["plexus_score_id"],
+                start_date,
+                end_date,
+            )
+            
+            if content_source == "edit_comment":
                 for fi in items:
                     # Skip items where the original answer was correct (no mismatch)
                     if fi.initialAnswerValue == fi.finalAnswerValue:
@@ -412,40 +456,41 @@ Provide a short descriptive label (2-6 words) for this topic. Return only the la
                     if comment:
                         texts.append(comment)
                         doc_ids.append(fi.id or f"{fi.itemId}_{fi.scoreId}")
+                        # Parse timestamp
+                        ts = fi.updatedAt or fi.createdAt
+                        if isinstance(ts, str):
+                            ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                        timestamps.append(ts)
+            else:
+                # content_source == "transcript": use Item transcript text
+                seen_item_ids: set = set()
+                item_ids_to_fetch: List[str] = []
+                item_timestamps = {}
+                
+                for fi in items:
+                    if fi.itemId and fi.itemId not in seen_item_ids:
+                        seen_item_ids.add(fi.itemId)
+                        item_ids_to_fetch.append(fi.itemId)
+                        ts = fi.updatedAt or fi.createdAt
+                        if isinstance(ts, str):
+                            ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                        item_timestamps[fi.itemId] = ts
 
-            self._log(f"Resolved {len(texts)} feedback items with edit comments (mismatches only).")
-            return texts, doc_ids
+                for item_id in item_ids_to_fetch:
+                    item = await asyncio.to_thread(Item.get_by_id, item_id, self.api_client)
+                    if item and (item.text or "").strip():
+                        texts.append((item.text or "").strip())
+                        doc_ids.append(item_id)
+                        timestamps.append(item_timestamps[item_id])
 
-        # content_source == "transcript": use Item transcript text (legacy behavior)
-        seen_item_ids: set = set()
-        item_ids_to_fetch: List[str] = []
+            if texts:
+                datasets.append({
+                    "score_id": score_info["cc_question_id"] or score_info["plexus_score_id"],
+                    "score_name": score_info["plexus_score_name"],
+                    "texts": texts,
+                    "doc_ids": doc_ids,
+                    "timestamps": timestamps
+                })
+                self._log(f"Resolved {len(texts)} items for score {score_info['plexus_score_name']}.")
 
-        for score_info in scores_to_process:
-            items = await feedback_utils.fetch_feedback_items_for_score(
-                self.api_client,
-                account_id,
-                plexus_scorecard.id,
-                score_info["plexus_score_id"],
-                start_date,
-                end_date,
-            )
-            for fi in items:
-                if fi.itemId and fi.itemId not in seen_item_ids:
-                    seen_item_ids.add(fi.itemId)
-                    item_ids_to_fetch.append(fi.itemId)
-
-        self._log(f"Found {len(item_ids_to_fetch)} unique items from feedback.")
-
-        if not item_ids_to_fetch:
-            return [], []
-
-        texts = []
-        doc_ids = []
-        for item_id in item_ids_to_fetch:
-            item = await asyncio.to_thread(Item.get_by_id, item_id, self.api_client)
-            if item and (item.text or "").strip():
-                texts.append((item.text or "").strip())
-                doc_ids.append(item_id)
-
-        self._log(f"Resolved {len(texts)} items with transcript text.")
-        return texts, doc_ids
+        return datasets
