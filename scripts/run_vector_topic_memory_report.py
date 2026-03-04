@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--days", type=str, default="90", help="Number of days to analyze (default: 90)")
     args = parser.parse_args()
 
-    config_name = "Vector Topic Memory"
+    config_name = "Semantic Reinforcement Memory"
     config_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "vector_topic_memory_report.md")
 
     print("Creating client...")
