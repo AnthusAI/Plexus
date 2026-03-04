@@ -1,0 +1,25 @@
+{
+  "id": "plx-a7dceed5-30d8-480a-8b94-9fb3ee00fe45",
+  "title": "Index rebuild and clustering orchestration",
+  "description": "**As a** VectorTopicMemory block, **I want** to rebuild the OpenSearch index and run global clustering after embeddings are computed, **so that** topic buckets are recomputed from the full dataset.\n\nAfter embeddings are produced (Story 7.1), `generate()` calls:\n1. `TopicMemoryIndex.build_index(documents)` — bulk-index all documents with embeddings\n2. `TopicMemoryIndex.swap_alias(new_index)` — atomic blue/green swap\n3. `TopicClusterer.cluster(embeddings, texts)` — run UMAP + HDBSCAN on pre-computed embeddings\n4. `TopicMemoryIndex.persist_clusters(clusters)` — store cluster records\n\nOpenSearch connection failures must be handled gracefully, returning an error status in the output rather than crashing the block.\n\n## Key Files\n\n- Modify: `plexus/reports/blocks/vector_topic_memory.py`\n- Modify: `plexus/reports/blocks/vector_topic_memory_test.py`\n\n## Dependencies\n\n- Story plx-b02d58 (Bulk index with blue/green alias swap)\n- Story plx-941008 (Cluster from pre-computed embeddings)\n- Story plx-5244af (Cluster record persistence)",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e46b4309-66bb-4c0e-88af-696c703abc1d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2b5fafd1-55ea-4d55-949d-a15c7fe4fb71",
+      "author": "ryan.porter",
+      "text": "Feature: Index rebuild and clustering orchestration\n\n  Scenario: Full pipeline executes in order\n    Given 100 documents with embeddings\n    And mocked TopicMemoryIndex and TopicClusterer\n    When generate() is awaited\n    Then the following calls occur in order:\n      1. TopicMemoryIndex.build_index(documents) is called\n      2. TopicMemoryIndex.swap_alias(new_index) is called\n      3. TopicClusterer.cluster(embeddings, texts) is called\n      4. Cluster records are persisted\n    And the output contains \"cluster_count\" greater than 0\n\n  Scenario: Clustering results appear in the output\n    Given TopicClusterer returns 5 clusters with labels\n    When generate() completes\n    Then the output \"topics\" list has 5 entries\n    And each entry has keys: cluster_id, label, member_count, memory_weight, memory_tier\n\n  Scenario: OpenSearch connection failure does not crash the block\n    Given TopicMemoryIndex.health_check() returns False\n    When generate() is awaited\n    Then the output contains an error about OpenSearch connectivity\n    And the block returns gracefully with error status\n",
+      "created_at": "2026-03-04T02:31:14.543645Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:31:03.748957Z",
+  "updated_at": "2026-03-04T02:31:14.543645Z",
+  "closed_at": null,
+  "custom": {}
+}

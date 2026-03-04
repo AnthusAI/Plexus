@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "395cf6ff-85b8-40ab-a035-689a149a4870",
+  "issue_id": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T02:19:24.636Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "Add a new ReportBlock that rebuilds a full topic memory view by re-indexing an entire dataset into an AWS OpenSearch vector index. Reuses cached embeddings so re-indexing does not mean re-embedding. Supports periodic global re-clustering (stable buckets), incremental assignment of new items into existing buckets between global runs, and memory weights (reinforcement + decay) stored as derived metadata. Two deployables: (1) a separate infra repo with a Python CDK stack provisioning OpenSearch + IAM, and (2) the Plexus repo with a new VectorTopicMemory ReportBlock, S3-backed embedding cache, OpenSearch client wrapper, clustering engine, and memory weight logic.",
+    "issue_type": "initiative",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Persistent Vector Topic Memory for Plexus Reports"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "plx-e46b4309-66bb-4c0e-88af-696c703abc1d",
+  "title": "Full VectorTopicMemory Orchestration",
+  "description": "Wire all pieces together inside `VectorTopicMemory.generate()`. This is the final integration epic. The block orchestrates the full pipeline:\n\n1. Resolve dataset items via `DatasetResolver`\n2. Compute embeddings via `EmbeddingService` (cache-aware)\n3. Rebuild OpenSearch index (blue/green alias swap)\n4. Run global clustering on pre-computed embeddings\n5. Update memory weights (reinforcement + decay)\n6. Emit structured report output\n\nAlso implements the `mode: incremental` option for assigning new items to existing clusters without re-clustering.\n\n## Definition of Done\n\n- `generate()` method in `VectorTopicMemory` orchestrates all stages in order\n- Dataset resolution uses `DatasetResolver` from `plexus/reports/blocks/data_utils.py`\n- Embedding pipeline uses `EmbeddingService` with S3 cache\n- OpenSearch index rebuilt with blue/green swap\n- Global clustering produces topic assignments\n- Memory weights applied with reinforcement and decay\n- Output schema includes: status, cluster_version, topics (with labels, weights, tiers), summary, items_processed, cache_hit_rate, index_name\n- Incremental mode assigns new items via KNN without re-clustering\n- All scenarios in child stories pass\n\n## Depends On\n\nAll prior epics (1, 2, 4, 5, 6)\n\n## Key Files\n\n- Modify: `plexus/reports/blocks/vector_topic_memory.py`\n- Modify: `plexus/reports/blocks/vector_topic_memory_test.py`",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-04T02:30:26.170556Z",
+  "updated_at": "2026-03-04T02:39:24.882296Z",
+  "closed_at": "2026-03-04T02:39:24.882296Z",
+  "custom": {}
+}

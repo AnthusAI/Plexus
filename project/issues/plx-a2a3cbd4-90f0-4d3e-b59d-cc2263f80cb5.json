@@ -1,0 +1,25 @@
+{
+  "id": "plx-a2a3cbd4-90f0-4d3e-b59d-cc2263f80cb5",
+  "title": "CDK stack synthesizes a valid OpenSearch domain",
+  "description": "**As a** platform team, **I want** a CDK stack that provisions a minimal OpenSearch domain, **so that** the Plexus runtime has a vector index to write to and search.\n\nSingle `t3.small.search` node, 10GB EBS, no multi-AZ, no dedicated master — the cheapest viable production config. The stack outputs the domain endpoint, domain ARN, and a Plexus access IAM role ARN.\n\nFollows the CDK v2 Python patterns established in the existing Plexus `infrastructure/app.py`.\n\n## Key Files (new infra repo)\n\n- Create: `opensearch_infra/stacks/opensearch_stack.py`\n- Create: `opensearch_infra/app.py`\n- Create: `opensearch_infra/cdk.json`\n- Create: `tests/test_opensearch_stack.py`\n- Create: `requirements.txt`\n\n## Dependencies\n\nNone.",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-46723f50-117a-404a-963e-8753dd84bf70",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b891bcc6-65e9-4fb4-94f5-9ab0bc65da09",
+      "author": "ryan.porter",
+      "text": "Feature: CDK stack synthesizes a valid OpenSearch domain\n\n  Scenario: CDK synth produces valid CloudFormation\n    Given a CDK app with the OpenSearchStack instantiated\n    When cdk.App().synth() is called\n    Then the synthesized template contains a resource of type \"AWS::OpenSearchService::Domain\"\n    And the domain config has instance type \"t3.small.search\"\n    And EBS is enabled with volume size 10\n    And the template has an Output named \"DomainEndpoint\"\n    And the template has an Output named \"DomainArn\"\n\n  Scenario: Single-node configuration for cost optimization\n    Given the synthesized template\n    When the OpenSearch domain resource is inspected\n    Then instance count is 1\n    And zone awareness is disabled\n    And dedicated master is disabled\n\n  Scenario: IAM role for Plexus runtime access\n    Given the synthesized template\n    When IAM resources are inspected\n    Then there is a Role with a policy allowing es:ESHttpGet, es:ESHttpPut, es:ESHttpPost, es:ESHttpDelete\n    And the role has an Output named \"PlexusAccessRoleArn\"\n",
+      "created_at": "2026-03-04T02:25:02.479Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:24:49.050184Z",
+  "updated_at": "2026-03-04T02:25:02.479Z",
+  "closed_at": null,
+  "custom": {}
+}
