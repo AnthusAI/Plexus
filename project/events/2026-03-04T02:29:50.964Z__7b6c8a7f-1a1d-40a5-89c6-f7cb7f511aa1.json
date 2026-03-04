@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7b6c8a7f-1a1d-40a5-89c6-f7cb7f511aa1",
+  "issue_id": "plx-806719a4-b255-4724-856f-0cad4e189bef",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T02:29:50.964Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** topic memory system, **I want** to apply weight updates to persisted cluster records after each run, **so that** memory state is durable across runs.\n\nAfter global clustering runs, the system computes which clusters were reinforced (matched new documents) and which were not (decayed). Updated weights and tiers are written back to the cluster records in OpenSearch via bulk update.\n\nPruned clusters (weight below threshold) are deleted from OpenSearch, and their previously-assigned items have `cluster_id` set to -1 (unassigned) to be reassigned on the next run.\n\n## Key Files\n\n- Modify: `plexus/analysis/memory_weights.py`\n- Modify: `plexus/analysis/memory_weights_test.py`\n- Modify: `plexus/analysis/opensearch_client.py` (add bulk update method for cluster records)\n\n## Dependencies\n\n- Story plx-9984cc (Memory weight calculation)\n- Story plx-5244af (Cluster record persistence in OpenSearch)",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-2f480702-d08b-4e2f-9bfb-548f88753b70",
+    "priority": 2,
+    "status": "open",
+    "title": "Memory weight update integrated with cluster records"
+  }
+}

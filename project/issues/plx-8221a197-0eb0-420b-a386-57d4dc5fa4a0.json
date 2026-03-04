@@ -1,0 +1,25 @@
+{
+  "id": "plx-8221a197-0eb0-420b-a386-57d4dc5fa4a0",
+  "title": "S3 read/write for cached embeddings",
+  "description": "**As an** embedding pipeline, **I want** to store and retrieve embedding vectors from S3, **so that** expensive model invocations are avoided on re-runs.\n\nEmbedding vectors (as numpy arrays serialized to JSON) are stored in S3 at the path `embeddings/{model_id}/{key_prefix}/{key}.json`, where `key_prefix` is the first two hex characters of the cache key for S3 prefix-based partitioning. Follows the same boto3 patterns used in `plexus/reports/s3_utils.py`.\n\nError handling is crucial: S3 read failures must return `None` (cache miss) rather than crashing the pipeline. S3 write failures must be non-fatal (log and continue) since the embedding was already computed in memory.\n\n## Key Files\n\n- Modify: `plexus/analysis/embedding_cache.py`\n- Modify: `plexus/analysis/embedding_cache_test.py`\n\n## Dependencies\n\nStory plx-19f3d6 (Deterministic cache key generation)",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-46f6f0dd-b5af-4573-8f35-27f3d21f774f",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3cbb88e0-7b84-4ac8-acb3-4fcb24f091b6",
+      "author": "ryan.porter",
+      "text": "Feature: S3 read/write for cached embeddings\n\n  Scenario: Cache miss returns None\n    Given an S3 bucket \"plexus-embeddings\" exists but is empty\n    And an EmbeddingCache instance configured with that bucket\n    When get(cache_key) is called for a key that does not exist\n    Then the return value is None\n\n  Scenario: Round-trip write then read preserves vector\n    Given an EmbeddingCache instance with a mocked S3 client\n    And a numpy array embedding of 384 dimensions\n    When put(cache_key, embedding) is called\n    And then get(cache_key) is called\n    Then the returned vector equals the original within floating-point tolerance\n    And the S3 key follows the pattern \"embeddings/{model_id}/{first_2_chars}/{full_key}.json\"\n\n  Scenario: S3 read error returns None gracefully\n    Given an EmbeddingCache instance where S3 raises a ClientError on get_object\n    When get(cache_key) is called\n    Then it returns None\n    And a warning is logged\n\n  Scenario: S3 write error is non-fatal\n    Given an EmbeddingCache instance where S3 raises a ClientError on put_object\n    When put(cache_key, embedding) is called\n    Then no exception is raised\n    And an error is logged\n",
+      "created_at": "2026-03-04T02:23:34.542010Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:22:16.503398Z",
+  "updated_at": "2026-03-04T02:23:34.542010Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-3bb9ce18-9d60-4a54-83bf-7c88fd8f076b",
+  "title": "Batch embedding with cache-aware pipeline",
+  "description": "**As a** ReportBlock, **I want** to compute embeddings for a list of texts using cache for hits and the model for misses, **so that** re-indexing does not mean re-embedding.\n\nThe `EmbeddingService` class checks cache for each text, computes only misses via sentence-transformers, and writes new embeddings back through the cache. The existing `plexus/analysis/topics/analyzer.py` uses BERTopic's built-in sentence-transformers; this story extracts embedding into a standalone cacheable step that the new ReportBlock will call directly.\n\nThe key interface is `batch_embed(texts: List[str], model_id: str, version: str) -> List[np.ndarray]`. It must preserve the original ordering of texts in the returned embeddings list, even when cache hits and misses are interleaved.\n\n## Key Files\n\n- Modify: `plexus/analysis/embedding_cache.py` (add `EmbeddingService` class)\n- Modify: `plexus/analysis/embedding_cache_test.py`\n\n## Dependencies\n\nStory plx-8221a1 (S3 read/write for cached embeddings)",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-46f6f0dd-b5af-4573-8f35-27f3d21f774f",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "17b552b5-05d5-45d9-9669-7561e31e70ad",
+      "author": "ryan.porter",
+      "text": "Feature: Batch embedding with cache-aware pipeline\n\n  Scenario: All cache hits, no model invocation\n    Given 10 texts that all have cached embeddings\n    When batch_embed(texts, model_id, version) is called\n    Then 10 embedding vectors are returned\n    And the sentence-transformer model is never called\n    And 10 cache get calls are made and 0 cache put calls\n\n  Scenario: All cache misses, all computed and cached\n    Given 10 texts with no cached embeddings\n    And a mocked sentence-transformer model that returns 384-dim vectors\n    When batch_embed(texts, model_id, version) is called\n    Then 10 embedding vectors are returned\n    And the model encode method is called once with all 10 texts\n    And 10 cache put calls are made\n\n  Scenario: Mixed hits and misses preserves order\n    Given 10 texts where 6 are cached and 4 are not\n    When batch_embed(texts, model_id, version) is called\n    Then 10 embedding vectors are returned in the original order\n    And the model is called with only the 4 uncached texts\n    And 4 cache put calls are made\n\n  Scenario: Empty text list returns empty\n    Given an empty list of texts\n    When batch_embed([], model_id, version) is called\n    Then an empty list of vectors is returned\n    And no cache or model calls are made\n",
+      "created_at": "2026-03-04T02:24:10.998431Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:23:55.292698Z",
+  "updated_at": "2026-03-04T03:18:49.575074Z",
+  "closed_at": "2026-03-04T03:18:49.575074Z",
+  "custom": {}
+}

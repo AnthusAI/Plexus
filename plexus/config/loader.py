@@ -112,7 +112,12 @@ class ConfigLoader:
         
         # Third-party
         'airtable.api_key': 'AIRTABLE_API_KEY',
-        
+
+        # Vector Topic Memory (OpenSearch + Embeddings)
+        'opensearch.endpoint': 'OPENSEARCH_ENDPOINT',
+        'opensearch.region': 'AWS_REGION',
+        'embedding_cache.bucket': 'EMBEDDING_CACHE_BUCKET',
+
         # Dashboard
         'dashboard.minimal_branding': 'NEXT_PUBLIC_MINIMAL_BRANDING',
     }

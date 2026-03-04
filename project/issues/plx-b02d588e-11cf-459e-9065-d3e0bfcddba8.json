@@ -1,0 +1,25 @@
+{
+  "id": "plx-b02d588e-11cf-459e-9065-d3e0bfcddba8",
+  "title": "Bulk index with blue/green alias swap",
+  "description": "**As a** ReportBlock, **I want** to bulk-index documents into a new timestamped index and atomically swap the live alias, **so that** re-indexing is safe, repeatable, and zero-downtime.\n\nThe client creates a new timestamped index (e.g., `topic-memory-20260303-143022`), bulk-indexes all documents, then atomically swaps the `topic-memory-live` alias from the old index to the new one using a single `update_aliases` call. After a successful swap, the old index is deleted.\n\nPartial bulk failures (e.g., malformed embeddings) must be tracked: the method returns success/error counts and logs failed doc_ids rather than aborting the entire batch.\n\n## Key Files\n\n- Modify: `plexus/analysis/opensearch_client.py`\n- Modify: `plexus/analysis/opensearch_client_test.py`\n\n## Dependencies\n\nStory plx-c14147 (Client connection and health check)",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-493fd84f-ad2e-420b-8a5c-6cf22a8794ac",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "66caa9e1-a37c-4270-a327-4ddf9d27e19f",
+      "author": "ryan.porter",
+      "text": "Feature: Bulk index with blue/green alias swap\n\n  Scenario: Documents indexed via bulk API\n    Given a TopicMemoryIndex with a mocked opensearch-py client\n    And 100 documents each with doc_id, text, embedding (384-dim), and metadata\n    When build_index(documents) is called\n    Then a new index is created with a name matching \"topic-memory-YYYYMMDD-HHMMSS\"\n    And the bulk API is called with 100 documents\n    And no errors are returned\n\n  Scenario: Atomic alias swap\n    Given a mocked client where \"topic-memory-live\" currently points to \"topic-memory-old\"\n    And a new index \"topic-memory-20260303\" has been successfully populated\n    When swap_alias(new_index_name) is called\n    Then a single indices.update_aliases call is made with actions:\n      remove alias \"topic-memory-live\" from \"topic-memory-old\"\n      add alias \"topic-memory-live\" to \"topic-memory-20260303\"\n\n  Scenario: Old index is deleted after successful swap\n    Given a successful alias swap from \"topic-memory-old\" to \"topic-memory-new\"\n    When the swap completes\n    Then indices.delete is called for \"topic-memory-old\"\n\n  Scenario: Partial bulk failures are reported\n    Given 100 documents where 2 have malformed embeddings\n    When build_index(documents) is called\n    Then the result has success_count=98 and error_count=2\n    And the failed doc_ids are logged\n",
+      "created_at": "2026-03-04T02:26:51.690114Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:26:31.723524Z",
+  "updated_at": "2026-03-04T02:26:51.690114Z",
+  "closed_at": null,
+  "custom": {}
+}
