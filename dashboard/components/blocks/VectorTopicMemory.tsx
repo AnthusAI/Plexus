@@ -7,21 +7,33 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { parseOutputString } from "@/lib/utils";
 
+interface Topic {
+  cluster_id: number;
+  label: string;
+  keywords?: string[];
+  exemplars?: string[];
+  memory_weight: number;
+  memory_tier: string;
+  p95_distance: number;
+  member_count: number;
+  days_inactive?: number;
+}
+
+interface ScoreData {
+  score_id: string;
+  score_name: string;
+  topics: Topic[];
+  items_processed: number;
+  cluster_version?: string;
+}
+
 interface VectorTopicMemoryData {
   type?: string;
   status?: string;
   message?: string;
   cluster_version?: string;
-  topics?: Array<{
-    cluster_id: number;
-    label: string;
-    keywords?: string[];
-    exemplars?: string[];
-    memory_weight: number;
-    memory_tier: string;
-    p95_distance: number;
-    member_count: number;
-  }>;
+  topics?: Topic[];
+  scores?: ScoreData[];
   summary?: string;
   items_processed?: number;
   cache_hit_rate?: number;
@@ -32,17 +44,10 @@ interface VectorTopicMemoryData {
 function TopicItem({
   topic,
 }: {
-  topic: {
-    cluster_id: number;
-    label: string;
-    keywords?: string[];
-    exemplars?: string[];
-    member_count: number;
-    memory_tier: string;
-  };
+  topic: Topic;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const hasDetails = (topic.keywords?.length ?? 0) > 0 || (topic.exemplars?.length ?? 0) > 0;
+  const hasDetails = (topic.keywords?.length ?? 0) > 0 || (topic.exemplars?.length ?? 0) > 0 || topic.days_inactive !== undefined;
 
   return (
     <li className="border-b last:border-0 pb-3">
@@ -62,7 +67,12 @@ function TopicItem({
           <span className="font-medium truncate">{topic.label}</span>
         </div>
         <div className="flex gap-2 text-sm text-muted-foreground shrink-0 ml-2">
-          <Badge variant="outline">{topic.memory_tier}</Badge>
+          {topic.days_inactive !== undefined && (
+             <Badge variant="outline" className="font-mono text-xs">{topic.days_inactive}d inactive</Badge>
+          )}
+          <Badge variant={topic.memory_tier === 'hot' ? "default" : topic.memory_tier === 'warm' ? "secondary" : "outline"}>
+            {topic.memory_tier}
+          </Badge>
           <span>{topic.member_count} comment{topic.member_count !== 1 ? "s" : ""}</span>
         </div>
       </button>
@@ -91,6 +101,35 @@ function TopicItem({
         </div>
       )}
     </li>
+  );
+}
+
+function ScoreSection({ score }: { score: ScoreData }) {
+  const hasClusters = (score.topics?.length ?? 0) > 0;
+  
+  return (
+    <div className="border rounded-lg overflow-hidden bg-card mt-6 first:mt-0">
+      <div className="bg-muted/50 px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold text-base">{score.score_name}</h3>
+        <div className="flex gap-2">
+           <Badge variant="outline">{score.items_processed} items</Badge>
+           {hasClusters && <Badge variant="secondary">{score.topics.length} topics</Badge>}
+        </div>
+      </div>
+      <div className="p-4">
+        {hasClusters ? (
+          <ul className="space-y-2">
+            {score.topics.map((t) => (
+              <TopicItem key={t.cluster_id} topic={t} />
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground italic text-center py-4">
+            No clusters formed for this score (processed {score.items_processed} items).
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -125,8 +164,12 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
     );
   }
 
+  const isMultiScore = Array.isArray(data.scores) && data.scores.length > 0;
+  
+  // For backwards compatibility or single-score mode
   const topicCount = data.topics?.length ?? 0;
-  const hasClusters = topicCount > 0;
+  // Use scores for counting topics if multi-score, else use root topics length
+  const hasClusters = isMultiScore ? data.scores!.some(s => s.topics?.length > 0) : topicCount > 0;
 
   return (
     <Card>
@@ -137,8 +180,11 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
         </p>
         <div className="flex flex-wrap gap-2 mt-2">
           <Badge variant="outline">{data.items_processed ?? 0} items analyzed</Badge>
-          {hasClusters && (
+          {!isMultiScore && hasClusters && (
             <Badge variant="secondary">{topicCount} topic{topicCount !== 1 ? "s" : ""} found</Badge>
+          )}
+          {isMultiScore && hasClusters && (
+            <Badge variant="secondary">{data.scores!.reduce((acc, s) => acc + (s.topics?.length || 0), 0)} topics found</Badge>
           )}
           {data.cluster_version && (
             <Badge variant="outline">v{data.cluster_version}</Badge>
@@ -149,36 +195,64 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Lead with memories/topics — the whole point */}
-        {hasClusters && data.topics && (
-          <div className="rounded-lg border bg-card p-4">
-            <h4 className="font-semibold mb-3">Memories / Topics discovered</h4>
-            <p className="text-sm text-muted-foreground mb-4">
-              Themes from reviewer edit comments. Each topic groups similar feedback.
-            </p>
-            <ul className="space-y-2">
-              {data.topics.map((t) => (
-                <TopicItem key={t.cluster_id} topic={t} />
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {!hasClusters && (
-          <div className="rounded-lg border border-dashed bg-muted/30 p-4">
-            <h4 className="font-semibold mb-2">No topics formed</h4>
-            <p className="text-sm text-muted-foreground">
-              Processed {data.items_processed ?? 0} items but no clusters emerged. Add more data
-              (widen the date range or include more scorecards) or lower{" "}
-              <code className="text-xs bg-muted px-1 rounded">min_topic_size</code> in the report
-              config to surface themes from smaller groups.
-            </p>
-            {data.index_name && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Index: <code>{data.index_name}</code>
-              </p>
+        
+        {isMultiScore ? (
+          <div className="space-y-6">
+            {data.scores!.map(score => (
+              <ScoreSection key={score.score_id} score={score} />
+            ))}
+            
+            {!hasClusters && (
+              <div className="rounded-lg border border-dashed bg-muted/30 p-4">
+                <h4 className="font-semibold mb-2">No topics formed</h4>
+                <p className="text-sm text-muted-foreground">
+                  Processed {data.items_processed ?? 0} items but no clusters emerged. Add more data
+                  (widen the date range or include more scorecards) or lower{" "}
+                  <code className="text-xs bg-muted px-1 rounded">min_topic_size</code> in the report
+                  config to surface themes from smaller groups.
+                </p>
+                {data.index_name && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Index: <code>{data.index_name}</code>
+                  </p>
+                )}
+              </div>
             )}
           </div>
+        ) : (
+          /* Legacy / Single Score view */
+          <>
+            {hasClusters && data.topics && (
+              <div className="rounded-lg border bg-card p-4">
+                <h4 className="font-semibold mb-3">Memories / Topics discovered</h4>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Themes from reviewer edit comments. Each topic groups similar feedback.
+                </p>
+                <ul className="space-y-2">
+                  {data.topics.map((t) => (
+                    <TopicItem key={t.cluster_id} topic={t} />
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {!hasClusters && (
+              <div className="rounded-lg border border-dashed bg-muted/30 p-4">
+                <h4 className="font-semibold mb-2">No topics formed</h4>
+                <p className="text-sm text-muted-foreground">
+                  Processed {data.items_processed ?? 0} items but no clusters emerged. Add more data
+                  (widen the date range or include more scorecards) or lower{" "}
+                  <code className="text-xs bg-muted px-1 rounded">min_topic_size</code> in the report
+                  config to surface themes from smaller groups.
+                </p>
+                {data.index_name && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Index: <code>{data.index_name}</code>
+                  </p>
+                )}
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
