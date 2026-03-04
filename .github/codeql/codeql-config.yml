@@ -1,0 +1,15 @@
+name: "Plexus CodeQL Config"
+
+# Restrict CodeQL to first-party source and avoid vendored/generated artifacts.
+paths-ignore:
+  - "**/node_modules/**"
+  - "**/.venv/**"
+  - "**/venv/**"
+  - "**/__pycache__/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/storybook-static/**"
+  - "**/.next/**"
+  - "**/coverage/**"
+  - "**/cdk.out/**"
+  - "**/amplify/#current-cloud-backend/**"
