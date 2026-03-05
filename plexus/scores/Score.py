@@ -1,28 +1,13 @@
 import os
 import json
 import pandas as pd
-import numpy as np
-import inspect
-import functools
 from pydantic import BaseModel, ValidationError, field_validator, ConfigDict
-from typing import Optional, Union, List, Any
+from typing import Optional, Union, List
 from abc import ABC, abstractmethod
-import matplotlib.pyplot as plt
-import seaborn as sns
 # from tensorflow.keras.utils import plot_model
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import roc_curve, auc, precision_recall_curve
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
-from sklearn.calibration import calibration_curve
-import matplotlib.ticker as ticker
-from rich.table import Table
-from rich.panel import Panel
-from rich.columns import Columns
-from rich.text import Text
-from plexus.CustomLogging import logging, console
-from sklearn.preprocessing import LabelBinarizer
+from plexus.CustomLogging import logging
 from collections import Counter
-import xgboost as xgb
 
 from plexus.Registries import scorecard_registry
 from plexus.scores.core.ScoreData import ScoreData
@@ -115,6 +100,7 @@ class Score(ABC,
         label_field: Optional[str] = None
 
         @field_validator('data')
+        @classmethod
         def convert_data_percentage(cls, value):
             """
             Convert the percentage value in the data dictionary to a float.
@@ -290,17 +276,6 @@ class Score(ABC,
             The full path to the report file with spaces replaced by underscores.
         """
         return os.path.join(self.report_directory_path(), file_name).replace(' ', '_')
-
-    def train_model(self):
-        """
-        Train the model on the training data.
-
-        Returns
-        -------
-        object
-            The trained model.
-        """
-        pass
 
     def predict_validation(self):
         """
