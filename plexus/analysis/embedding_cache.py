@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import re
-from typing import List, Optional
+from typing import List, Optional, cast
 
 import boto3
 import numpy as np
@@ -158,9 +158,21 @@ class EmbeddingService:
         if miss_texts:
             model = self._get_model()
             embeddings = model.encode(miss_texts, convert_to_numpy=True)
+            if len(embeddings) != len(miss_indices):
+                raise RuntimeError(
+                    "Embedding model returned unexpected batch size: "
+                    f"expected {len(miss_indices)}, got {len(embeddings)}"
+                )
             for idx, emb in zip(miss_indices, embeddings):
-                result[idx] = emb
+                result[idx] = np.asarray(emb, dtype=np.float32)
                 key = keys[idx]
-                self.cache.put(mid, key, emb)
+                self.cache.put(mid, key, result[idx])
 
-        return [r for r in result if r is not None]
+        unresolved_indices = [i for i, emb in enumerate(result) if emb is None]
+        if unresolved_indices:
+            raise RuntimeError(
+                "Embedding batch completed with unresolved entries at indices: "
+                + ",".join(str(i) for i in unresolved_indices[:10])
+            )
+
+        return cast(List[np.ndarray], result)
