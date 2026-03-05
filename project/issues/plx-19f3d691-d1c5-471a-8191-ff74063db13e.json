@@ -1,0 +1,25 @@
+{
+  "id": "plx-19f3d691-d1c5-471a-8191-ff74063db13e",
+  "title": "Deterministic cache key generation",
+  "description": "**As a** caching system, **I want** identical text+model+version inputs to always produce the same cache key, **so that** cached embeddings are reliably reused and invalidated when parameters change.\n\nCache key = `SHA-256(normalize(text) + \"|\" + model_id + \"|\" + preprocessing_version)`. Normalization collapses whitespace and lowercases. This story is pure logic with no I/O \u2014 it establishes the deterministic foundation the entire cache depends on.\n\nCache invalidation happens naturally: bumping `model_id` or `preprocessing_version` produces entirely new keys, so old cached values are simply never hit again.\n\n## Key Files\n\n- Create: `plexus/analysis/embedding_cache.py`\n- Create: `plexus/analysis/embedding_cache_test.py`\n\n## Dependencies\n\nNone.",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-46f6f0dd-b5af-4573-8f35-27f3d21f774f",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1b094c68-d6a2-4f9e-bb89-5120154875a6",
+      "author": "ryan.porter",
+      "text": "Feature: Deterministic embedding cache key generation\n\n  Scenario: Identical text produces identical cache keys\n    Given text = \"Hello world\", model_id = \"all-MiniLM-L6-v2\", version = \"v1\"\n    When cache_key() is called twice\n    Then both calls return the same 64-character hex string (SHA-256)\n\n  Scenario: Whitespace normalization produces stable keys\n    Given text_a = \"  Hello   world  \n\" and text_b = \"hello world\"\n    And model_id = \"all-MiniLM-L6-v2\" and version = \"v1\"\n    When cache_key() is computed for both\n    Then the keys are identical\n\n  Scenario: Different model_id produces different keys\n    Given identical text and version but model_id \"model-A\" vs \"model-B\"\n    When cache_key() is computed for both\n    Then the keys differ\n\n  Scenario: Different preprocessing version produces different keys\n    Given identical text and model_id but version \"v1\" vs \"v2\"\n    When cache_key() is computed for both\n    Then the keys differ\n",
+      "created_at": "2026-03-04T02:22:04.066443Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:21:54.295221Z",
+  "updated_at": "2026-03-04T03:18:48.903685Z",
+  "closed_at": "2026-03-04T03:18:48.903685Z",
+  "custom": {}
+}
