@@ -64,10 +64,40 @@
       "author": "derek",
       "text": "Updated .github/workflows/ci.yaml triggers: push now limited to main and staging; pull_request remains all branches. This removes duplicate push+PR runs for feature/dev branches while preserving required pre-merge CI checks. YAML validated (YAML_OK).",
       "created_at": "2026-03-05T22:23:14.435100675Z"
+    },
+    {
+      "id": "bf52adf6-1f45-430c-ac77-c390629da438",
+      "author": "derek",
+      "text": "Emergency rollback to restore CI signal: broadening push trigger again because pull_request checks are not being created for feature/deepgram-input-source (no github-actions suite on latest PR SHA).",
+      "created_at": "2026-03-05T22:58:43.763316063Z"
+    },
+    {
+      "id": "c7ee048a-fcd8-4255-840b-f62a25c5b1cf",
+      "author": "derek",
+      "text": "Rolled back push trigger filter to ** in .github/workflows/ci.yaml so CI runs on feature branch pushes again. This is an immediate reliability fix while PR-trigger behavior is investigated. YAML validated (YAML_OK).",
+      "created_at": "2026-03-05T22:58:50.926849608Z"
+    },
+    {
+      "id": "5933bfbb-34cc-41ef-b028-4b482cbb256f",
+      "author": "derek",
+      "text": "Operational cleanup requested: clear Actions backlog by canceling stale queued CodeQL runs and obsolete CI runs, while preserving the newest PR validation run.",
+      "created_at": "2026-03-05T23:05:48.431743232Z"
+    },
+    {
+      "id": "8f4c7329-5778-4fc0-a2de-5f8ed77811ee",
+      "author": "derek",
+      "text": "Reverting temporary rollback: restricting CI push trigger back to main/staging to avoid duplicate push+PR runs on feature branches.",
+      "created_at": "2026-03-05T23:07:48.685533963Z"
+    },
+    {
+      "id": "042d80c5-2db6-4a3d-83b7-cf4442520083",
+      "author": "derek",
+      "text": "Temporary push-all rollback removed. CI trigger is now push on main/staging only, plus pull_request on all branches. This prevents duplicate runs on feature/dev branches while keeping PR validation checks.",
+      "created_at": "2026-03-05T23:07:56.650839993Z"
     }
   ],
   "created_at": "2026-03-05T21:41:06.420470202Z",
-  "updated_at": "2026-03-05T22:23:14.435100675Z",
+  "updated_at": "2026-03-05T23:07:56.650839993Z",
   "closed_at": null,
   "custom": {}
 }
