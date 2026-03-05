@@ -162,6 +162,37 @@ def test_vector_topic_memory_lifecycle_flags_established(vector_topic_memory_blo
     assert flags["lifecycle_tier"] == "established"
 
 
+def test_vector_topic_memory_resolve_effective_min_topic_size():
+    """Effective min topic size scales to avoid over-fragmentation."""
+    effective = VectorTopicMemory._resolve_effective_min_topic_size(
+        item_count=1000,
+        configured_min_topic_size=8,
+        min_topic_fraction=0.01,
+        target_max_topics_per_score=30,
+    )
+    # max(8, 10, ceil(1000/30)=34) => 34
+    assert effective == 34
+
+
+def test_vector_topic_memory_select_llm_label_topic_ids():
+    """LLM labels are bounded by size threshold and max label budget."""
+    selected = VectorTopicMemory._select_llm_label_topic_ids(
+        cluster_member_counts={0: 50, 1: 20, 2: 11, 3: 5, 4: 2},
+        max_topics_to_label=2,
+        label_min_member_count=10,
+    )
+    assert selected == {0, 1}
+
+
+def test_vector_topic_memory_fallback_topic_label():
+    """Fallback label uses top keywords when LLM labels are disabled/skipped."""
+    label = VectorTopicMemory._fallback_topic_label(
+        keywords=["shipping address", "confirmation issue", "patient details"],
+        cluster_id=7,
+    )
+    assert label == "shipping address / confirmation issue"
+
+
 @pytest.mark.asyncio
 async def test_vector_topic_memory_resolves_score_result_no_explanation_source(
     vector_topic_memory_block,
