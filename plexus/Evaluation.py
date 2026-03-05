@@ -1,74 +1,36 @@
 from __future__ import annotations
 
 import os
-import math
 import yaml
 import json
-import copy
-import base64
 import pandas as pd
-import requests
-import random
 import time
 import traceback
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
-import string
-import pprint
+from typing import List, Optional
 import asyncio
-from decimal import Decimal
-from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tenacity import retry, wait_fixed, stop_after_attempt, before_log, retry_if_exception_type, AsyncRetrying, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.exceptions import Timeout, RequestException
-from concurrent.futures import ThreadPoolExecutor
-from asyncio import Queue
-import importlib
 import logging
-import re
-import uuid
-import traceback
 
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from matplotlib.colors import ListedColormap
 from collections import Counter
 
-from graphviz import Digraph
-from jinja2 import Template
-
-from plexus.scores.CompositeScore import CompositeScore
 from plexus.scores.Score import Score
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
-from plexus.cli.shared.CommandProgress import CommandProgress
 
 from sklearn.metrics import confusion_matrix
 
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
-from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
-from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
-from plexus.dashboard.api.models.score import Score as DashboardScore
-from plexus.dashboard.api.models.score_result import ScoreResult
-from plexus.dashboard.api.models.task import Task
 
-from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
+from plexus.scores.LangGraphScore import LangGraphScore
 import inspect
-from plexus.utils.dict_utils import truncate_dict_strings_inner
 from plexus.CustomLogging import logging, setup_logging, set_log_group
-
-from plexus.cli.shared.task_progress_tracker import StageConfig, TaskProgressTracker
-from typing import Optional
-
-from plexus.analysis.metrics import GwetAC1
-from plexus.analysis.metrics.metric import Metric
-from plexus.analysis.metrics.accuracy import Accuracy
-from plexus.analysis.metrics.precision import Precision
-from plexus.analysis.metrics.recall import Recall
 
 # Set up logging for evaluations
 set_log_group('plexus/evaluation')
@@ -677,9 +639,7 @@ class Evaluation:
                 )
                 result = gwet_calculator.calculate(metric_input)
                 gwet_ac1_value = result.value
-                # Map AC1 from [-1, 1] to [0, 1] for backward compatibility
-                # Any negative values are mapped to 0
-                gwet_ac1_mapped = max(0, (gwet_ac1_value + 1) / 2)
+                # AC1 remains in its native [-1, 1] range.
             except Exception as e:
                 self.logging.error(f"Error calculating Gwet's AC1: {str(e)}")
                 gwet_ac1_value = 0
@@ -787,13 +747,11 @@ class Evaluation:
         if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
             primary_score_name_for_cm = self.subset_of_score_names[0]
 
-        target_score_name = primary_score_name_for_cm
-        if target_score_name and target_score_name in confusion_matrices:
-            matrix_data = confusion_matrices[target_score_name]
+        if primary_score_name_for_cm and primary_score_name_for_cm in confusion_matrices:
+            matrix_data = confusion_matrices[primary_score_name_for_cm]
         elif confusion_matrices: # Fallback to the first matrix if primary not found or not set
             first_score_name = next(iter(confusion_matrices))
             matrix_data = confusion_matrices[first_score_name]
-            target_score_name = first_score_name # Update target name for logging
         else:
             matrix_data = None # No matrices calculated
 
@@ -1176,7 +1134,6 @@ class Evaluation:
 
         def log_scorecard_costs():
             try:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 analysis.plot_scorecard_costs(results=self.all_results)
             except Exception as e:
                 logging.error(f"Failed to log scorecard costs: {e}")
@@ -1200,8 +1157,6 @@ class Evaluation:
 
         expenses = self.scorecard.get_accumulated_costs()
         expenses['cost_per_text'] = expenses['total_cost'] / len(selected_sample_rows)    
-
-        loop = asyncio.get_running_loop()
 
         # Run these operations concurrently
         await asyncio.gather(
@@ -1442,12 +1397,9 @@ class Evaluation:
                             last_processed_count = current_count
                             # Close the client if possible (assuming synchronous close or relying on GC)
                             if hasattr(final_client, 'close') and callable(final_client.close):
-                                try:
-                                    # If close is async, this needs await asyncio.to_thread(final_client.close)
-                                    # Assuming sync close or GC for now.
-                                    pass
-                                except Exception as close_err:
-                                    self.logging.warning(f"Error closing final update client: {close_err}")
+                                # If close is async this would need background execution;
+                                # rely on GC here to preserve existing behavior.
+                                pass
 
                         except Exception as e:
                             self.logging.error(f"Error in final metrics update: {e}")
@@ -1542,15 +1494,6 @@ class Evaluation:
             metrics_for_api.append({"name": "Recall", "value": metrics["recall"] * 100})
         
         # Metrics prepared for API
-        
-        # Get first score's confusion matrix
-        confusion_matrix_data = metrics.get("confusion_matrices", [{}])[0] if metrics.get("confusion_matrices") else {}
-        matrix_data = {}
-        if confusion_matrix_data:
-            matrix_data = {
-                "matrix": confusion_matrix_data.get("matrix", {}),
-                "labels": list(confusion_matrix_data.get("labels", []))
-            }
         
         # Calculate total items based on status
         total_predictions = 0
@@ -1788,7 +1731,7 @@ class Evaluation:
             total = true_labels.count(label)
             accuracies.append(correct / total if total > 0 else 0)
         
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
+        _, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
         
         x = np.arange(len(unique_labels))
         width = 0.35
@@ -1853,9 +1796,6 @@ class Evaluation:
     def _format_confusion_matrix_for_summary(self, final_metrics):
         """Format confusion matrix for the concise evaluation summary."""
         confusion_matrix = final_metrics.get('confusionMatrix')
-        predicted_dist = final_metrics.get('predictedClassDistribution', {})
-        dataset_dist = final_metrics.get('datasetClassDistribution', {})
-        
         if not confusion_matrix:
             return ""
         
@@ -2461,9 +2401,6 @@ Total cost:       ${expenses['total_cost']:.6f}
 
             # Prepare data for GraphQL mutation
 
-            # Validate feedback_item_id if present
-            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
-
             # Debug logging to see what's actually in the data dict
             logging.info(f"DEBUG: ScoreResult data keys: {list(data.keys())}")
             logging.info(f"DEBUG: type={data.get('type')}, status={data.get('status')}, updatedAt={data.get('updatedAt')}")
@@ -2618,7 +2555,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 try:
                     await asyncio.wait(tasks, timeout=2.0)
                 except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
+                    self.logging.debug("Task cleanup wait cancelled or timed out")
 
         except Exception as e:
             self.logging.error(f"Error during {self.__class__.__name__} cleanup: {e}")
@@ -2653,7 +2590,6 @@ Total cost:       ${expenses['total_cost']:.6f}
         from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
         from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
         from plexus.dashboard.api.models.score import Score as DashboardScore
-        import json
         
         try:
             client = PlexusDashboardClient()
@@ -2993,7 +2929,7 @@ class FeedbackEvaluation(Evaluation):
             start_date = end_date - timedelta(days=self.days)
             
             # Get scorecard
-            scorecard = DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
+            DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
             
             # Feedback evaluation MUST have a score_id
             if not self.score_id:
@@ -3251,7 +3187,6 @@ class FeedbackEvaluation(Evaluation):
         """
         from plexus.dashboard.api.models.score_result import ScoreResult
         from plexus.dashboard.api.models.item import Item
-        import json
         
         self.logger.info(f"Creating {len(feedback_items)} ScoreResult records for feedback evaluation")
         
@@ -3317,7 +3252,7 @@ class FeedbackEvaluation(Evaluation):
                             if trace_str:
                                 try:
                                     trace = json.loads(trace_str) if isinstance(trace_str, str) else trace_str
-                                except:
+                                except (TypeError, ValueError, json.JSONDecodeError):
                                     trace = None
                         else:
                             self.logger.debug(f"No production ScoreResult found for FeedbackItem {feedback_item.id} (found {len(items)} total, {len(production_results)} without evaluationId)")
@@ -3352,7 +3287,7 @@ class FeedbackEvaluation(Evaluation):
                     metadata['final_comment'] = feedback_item.finalCommentValue
                 
                 # Create the ScoreResult record
-                score_result = ScoreResult.create(
+                ScoreResult.create(
                     client=self.api_client,
                     evaluationId=evaluation_id,
                     itemId=feedback_item.itemId,
@@ -3419,7 +3354,7 @@ class AccuracyEvaluation(Evaluation):
         self.task_id = task_id  # Store task ID
         # evaluation_id and account_id already set above
         # Don't overwrite scorecard_id here since it's already set
-        self.results_queue = Queue()
+        self.results_queue = asyncio.Queue()
         self.metrics_tasks = {}  # Dictionary to track metrics tasks per score
         self.should_stop = False
         self.completed_scores = set()  # Track which scores have completed all their results
@@ -3687,7 +3622,6 @@ class AccuracyEvaluation(Evaluation):
             # Log ScoreResult creation statistics
             attempts = getattr(self, 'scoreresult_creation_attempts', 0)
             successes = getattr(self, 'scoreresult_creation_successes', 0)
-            failures = getattr(self, 'scoreresult_creation_failures', 0)
             if attempts > 0:
                 success_rate = (successes / attempts) * 100
                 self.logging.info(f"ScoreResult creation: {successes}/{attempts} successful ({success_rate:.1f}%)")
@@ -3851,7 +3785,6 @@ class AccuracyEvaluation(Evaluation):
                                     # Save calibration metrics to JSON file
                                     calibration_metrics_path = f"{report_folder_path}/calibration_metrics_{timestamp}.json"
                                     with open(calibration_metrics_path, 'w') as f:
-                                        import json
                                         json.dump(calibration_report, f, indent=2)
                                     logging.info(f"Calibration metrics saved to: {calibration_metrics_path}")
 
