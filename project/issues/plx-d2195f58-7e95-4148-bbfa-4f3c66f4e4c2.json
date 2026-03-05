@@ -1,0 +1,31 @@
+{
+  "id": "plx-d2195f58-7e95-4148-bbfa-4f3c66f4e4c2",
+  "title": "Parallelize GitHub Actions tests while keeping AWS steps sequential",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "59cc8352-2212-485a-8ae7-5e9e8b09ed3a",
+      "author": "derek",
+      "text": "Started work. Goal: reduce CI wall time by parallelizing test execution in GitHub Actions while preserving sequential order for AWS-related stages.",
+      "created_at": "2026-03-05T21:41:10.823970665Z"
+    },
+    {
+      "id": "e5599a52-05a6-422f-8b55-387cf06b93b8",
+      "author": "derek",
+      "text": "Implemented workflow parallelization in .github/workflows/ci.yaml:\n- Split monolithic test job into python-tests, dashboard-unit-tests, and dashboard-storybook-tests so they run concurrently.\n- Kept semantic-release in python-tests to preserve current release gating behavior on push branches.\n- Updated trigger-deployment to depend on all three test jobs, so AWS pipeline triggers remain after successful test completion.\n- Verified YAML parses successfully (YAML_OK).",
+      "created_at": "2026-03-05T21:41:58.329056548Z"
+    }
+  ],
+  "created_at": "2026-03-05T21:41:06.420470202Z",
+  "updated_at": "2026-03-05T21:42:02.796456229Z",
+  "closed_at": null,
+  "custom": {}
+}
