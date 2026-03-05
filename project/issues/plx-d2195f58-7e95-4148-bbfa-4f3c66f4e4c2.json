@@ -46,10 +46,28 @@
       "author": "derek",
       "text": "Updated GitHub repository ruleset main-branch-protection (ID: 13251390) required status checks to match new CI jobs: Python Tests (3.11), Python Tests (3.12), Dashboard Unit Tests, Dashboard Storybook Tests. Removed obsolete test context.",
       "created_at": "2026-03-05T22:10:39.495111367Z"
+    },
+    {
+      "id": "0acd3b4d-a1b7-48a5-a42f-c7801412a09f",
+      "author": "derek",
+      "text": "Follow-up: eliminate duplicate CI runs by narrowing  trigger to long-lived branches only, since main is protected and staging pushes are rare.",
+      "created_at": "2026-03-05T22:16:28.605905707Z"
+    },
+    {
+      "id": "5e133d9c-45f2-4ed7-93c7-aebff11c6576",
+      "author": "derek",
+      "text": "Applying agreed trigger change: run CI on push only for main and staging; keep pull_request trigger for all branches to preserve pre-merge validation.",
+      "created_at": "2026-03-05T22:23:07.092991572Z"
+    },
+    {
+      "id": "57c09b48-2f7e-464c-b7c1-0343d55798fe",
+      "author": "derek",
+      "text": "Updated .github/workflows/ci.yaml triggers: push now limited to main and staging; pull_request remains all branches. This removes duplicate push+PR runs for feature/dev branches while preserving required pre-merge CI checks. YAML validated (YAML_OK).",
+      "created_at": "2026-03-05T22:23:14.435100675Z"
     }
   ],
   "created_at": "2026-03-05T21:41:06.420470202Z",
-  "updated_at": "2026-03-05T22:10:42.259405796Z",
+  "updated_at": "2026-03-05T22:23:14.435100675Z",
   "closed_at": null,
   "custom": {}
 }
