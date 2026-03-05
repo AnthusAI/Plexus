@@ -99,8 +99,32 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   onClose,
   isSelected
 }) => {
+  // Helper to transform raw blocks into ReportBlock format
+  const transformBlocks = (rawBlocks: Array<{ type?: string; name?: string; position: number; output?: any; log?: string; config?: any; attachedFiles?: any[]; dataSet?: any }>): ReportBlock[] => {
+    return rawBlocks.map(blockProp => {
+      const parsedOutput = parseOutputString(blockProp.output);
+      const blockTypeToUse = blockProp.type || (typeof parsedOutput === 'object' && parsedOutput?.class) || 'unknown';
+      return {
+        id: blockProp.name || `block-${blockProp.position}`,
+        name: blockProp.name,
+        position: blockProp.position,
+        type: blockTypeToUse,
+        output: typeof parsedOutput === 'object' ? parsedOutput : blockProp.output,
+        log: blockProp.log || null,
+        config: blockProp.config || (typeof parsedOutput === 'object' ? parsedOutput : {}),
+        attachedFiles: Array.isArray(blockProp.attachedFiles) ? blockProp.attachedFiles : [],
+        dataSet: blockProp.dataSet || null
+      };
+    });
+  };
+
+  // Initialize from task.data.reportBlocks when available (avoids empty flash for detail view)
+  const initialBlocks = task.data?.reportBlocks && task.data.reportBlocks.length > 0
+    ? transformBlocks(task.data.reportBlocks)
+    : [];
+
   // Add state for report blocks
-  const [reportBlocks, setReportBlocks] = useState<ReportBlock[]>([])
+  const [reportBlocks, setReportBlocks] = useState<ReportBlock[]>(initialBlocks)
   const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
   const [blockError, setBlockError] = useState<string | null>(null)
 
@@ -161,53 +185,15 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     }
   }, [variant, task.data?.id]);
 
-  // Use reportBlocks from task.data for bare mode
+  // Sync reportBlocks from task.data when parent passes them (detail view: avoids empty flash before fetch; bare: primary source)
   useEffect(() => {
-    if (variant === 'bare' && task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
-      console.log('📋 ReportTask processing reportBlocks for bare mode:', {
-        blocksCount: task.data.reportBlocks.length,
-        blocks: task.data.reportBlocks.map(b => ({
-          type: b.type,
-          name: b.name,
-          position: b.position,
-          hasOutput: !!b.output
-        }))
-      });
-      
-      const transformedBlocks = task.data.reportBlocks.map(blockProp => {
-        const parsedOutput = parseOutput(blockProp.output);
-        const blockTypeToUse = blockProp.type || parsedOutput.class || 'unknown';
-
-        const transformed = {
-          id: blockProp.name || `block-${blockProp.position}`,
-          name: blockProp.name,
-          position: blockProp.position,
-          type: blockTypeToUse, 
-          output: parsedOutput,
-          log: blockProp.log || null,
-          config: blockProp.config || parsedOutput,
-          attachedFiles: Array.isArray(blockProp.attachedFiles) ? blockProp.attachedFiles : [],
-          dataSet: blockProp.dataSet || null
-        };
-        
-        console.log('🔄 Transformed block:', {
-          originalType: blockProp.type,
-          transformedType: transformed.type,
-          name: transformed.name,
-          position: transformed.position
-        });
-        
-        return transformed;
-      });
-      
-      setReportBlocks(transformedBlocks);
-      
-      // If there were any pre-existing errors, clear them since we have blocks now
-      if (blockError) {
-        setBlockError(null);
-      }
+    if (task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
+      setReportBlocks(transformBlocks(task.data.reportBlocks));
     }
-  }, [variant, task.data?.reportBlocks, blockError]);
+  }, [task.data?.id, task.data?.reportBlocks?.length, task.data?.reportBlocks]);
+
+  // (Bare mode uses the same sync effect above - task.data.reportBlocks is the primary source)
+
 
   // Format the timestamp for detail view display
   const formattedDetailTimestamp = task.data?.updatedAt 
@@ -326,88 +312,14 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     if (language === 'block') {
       const content = childrenText;
       
-      // Parse the YAML-like content
-      const lines = content.split('\n');
-      const blockConfig: Record<string, any> = {};
+      // Parse the YAML-like content to get block class (first line: "class: X")
+      const firstLine = content.split('\n')[0] || '';
+      const classMatch = firstLine.match(/class:\s*(\S+)/);
+      const blockClass = classMatch ? classMatch[1].trim() : '';
       
-      lines.forEach(line => {
-        const parts = line.split(':');
-        if (parts.length >= 2) {
-          const key = parts[0].trim();
-          let value = parts.slice(1).join(':').trim();
-          // Remove quotes if present
-          if ((value.startsWith('"') && value.endsWith('"')) || 
-              (value.startsWith("'") && value.endsWith("'"))) {
-            value = value.slice(1, -1);
-          }
-          if (key) {
-            blockConfig[key] = value;
-          }
-        }
-      });
-      
-      console.log('🔍 Looking for block to match:', {
-        blockConfig,
-        availableBlocks: reportBlocks.map(b => ({
-          type: b.type,
-          name: b.name,
-          position: b.position
-        })),
-        searchingForName: blockConfig.name,
-        searchingForClass: blockConfig.class
-      });
-      
-      // Try to match blocks by class/type and then by position if available
-      const blockData = reportBlocks.find(block => {
-        console.log('🔍 Checking block:', {
-          blockName: block.name,
-          blockType: block.type,
-          blockPosition: block.position,
-          configName: blockConfig.name,
-          configClass: blockConfig.class,
-          nameMatch: blockConfig.name && block.name === blockConfig.name,
-          typeMatch: block.type === blockConfig.class
-        });
-        
-        // Primary match: if markdown has a name, it must match block.name
-        if (blockConfig.name && block.name === blockConfig.name) {
-          console.log('✅ Block matched by name:', block.name);
-          return true;
-        }
-        // Secondary match: if markdown does not have a name, match by class/type AND (position if available in markdown OR it's the only one of its type)
-        if (!blockConfig.name && block.type === blockConfig.class) {
-          if (blockConfig.position) {
-            const matches = block.position.toString() === blockConfig.position;
-            console.log(`${matches ? '✅' : '❌'} Block position match:`, {
-              blockPosition: block.position,
-              configPosition: blockConfig.position,
-              matches
-            });
-            return matches;
-          }
-          // If no position in markdown, and no name, it implies we might be looking for *any* block of this type.
-          // This could be ambiguous if there are multiple. For now, let's assume if no name/position, it's the first one.
-          // A more robust solution might involve ensuring markdown provides enough info or a different matching strategy.
-          console.log('✅ Block matched by type (first match):', block.type);
-          return true; // Matches the first block of this type if no name/position specified in markdown
-        }
-        
-        // Fallback: if markdown only has class, and no name, and block.type matches.
-        // This is similar to the above but explicit.
-        if (!blockConfig.name && !blockConfig.position && block.type === blockConfig.class) {
-            console.log('✅ Block matched by type (fallback):', block.type);
-            return true;
-        }
-        
-        // Additional fallback: match by class if we have a class and it matches block type
-        if (blockConfig.class && block.type === blockConfig.class) {
-            console.log('✅ Block matched by class:', block.type);
-            return true;
-        }
+      // Match by block type: find the block whose type matches the class in the markdown
+      const blockData = reportBlocks.find(b => b.type === blockClass) ?? null;
 
-        return false;
-      });
-      
       if (blockData) {
         // Check if the report is complete
         const complete = isReportComplete(task.status, reportBlocks);
@@ -419,6 +331,13 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         const attachedFiles = Array.isArray(blockData.attachedFiles) ? blockData.attachedFiles : [];
         
         // Set up enhanced props for the block when the report is not complete
+        const displayName = blockData.name && !blockData.name.startsWith('block_')
+          ? blockData.name
+          : blockData.type === 'FeedbackAnalysis'
+            ? 'Feedback Analysis'
+            : blockData.type === 'VectorTopicMemory'
+              ? 'Vector Topic Memory'
+              : blockData.name ?? undefined;
         const blockProps = {
           id: blockData.id,
           config: {
@@ -428,7 +347,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           },
           output: blockData.output,
           log: blockData.log || undefined,
-          name: blockData.name || blockConfig.name || undefined,
+          name: displayName,
           position: blockData.position,
           type: blockData.type,
           attachedFiles: attachedFiles,
@@ -440,7 +359,11 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         };
         
         return (
-          <div key={blockKey} className="my-4">
+          <div
+            key={blockKey}
+            className="my-4"
+            id={blockData.type === 'VectorTopicMemory' ? 'vector-topic-memory' : undefined}
+          >
             <BlockRenderer {...blockProps} />
             
             {/* If not using a Block component that handles logs/files, show them directly */}
@@ -455,11 +378,15 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           </div>
         );
       } else {
-        // No matching block found, log for debugging
-        console.error('❌ No matching block found for config:', blockConfig);
-        // Instead of showing a loading placeholder, return an empty div
-        // This prevents flickering while still reserving space for the block
-        return <div className="my-2"></div>;
+        // No matching block - show placeholder
+        const blockLabel = blockClass === 'VectorTopicMemory' ? 'Vector Topic Memory' : blockClass === 'FeedbackAnalysis' ? 'Feedback Analysis' : blockClass || 'Report block';
+        return (
+          <div className="my-4 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/10 p-4">
+            <p className="text-sm text-muted-foreground">
+              <strong>{blockLabel}</strong> — Block data not available. Report has {reportBlocks.length} block(s).
+            </p>
+          </div>
+        );
       }
     }
     
