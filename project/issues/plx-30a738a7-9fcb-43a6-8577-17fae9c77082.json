@@ -1,0 +1,25 @@
+{
+  "id": "plx-30a738a7-9fcb-43a6-8577-17fae9c77082",
+  "title": "Generate returns structured output envelope",
+  "description": "**As a** report service, **I want** `generate()` to return the expected `Tuple[Optional[Dict], Optional[str]]`, **so that** the block can participate in report generation without error.\n\nIn this shell story, `generate()` returns a well-formed output dictionary with status information and an empty topics list, plus a log string. This proves the block can participate in the report generation lifecycle before any real dependencies (OpenSearch, embeddings, clustering) are wired up.\n\n## Key Files\n\n- Modify: `plexus/reports/blocks/vector_topic_memory.py`\n- Modify: `plexus/reports/blocks/vector_topic_memory_test.py`\n\n## Dependencies\n\nStory plx-be9cda (Block registration and instantiation)",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cb54e515-c6e6-46b0-9aa3-0ba15325d39a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "24968ad0-6747-403e-8696-98fe288d2d02",
+      "author": "ryan.porter",
+      "text": "Feature: VectorTopicMemory generate returns structured output\n\n  Scenario: Generate returns valid output tuple\n    Given a VectorTopicMemory block with valid config\n    And all external dependencies are mocked\n    When generate() is awaited\n    Then the first element is a dict with keys \"status\", \"topics\", \"cluster_version\", \"summary\"\n    And \"topics\" is an empty list\n    And the second element is a non-empty log string\n\n  Scenario: Generate logs configuration extraction\n    Given config containing data.source = \"test-source\"\n    When generate() is awaited\n    Then the log output contains \"VectorTopicMemory\"\n\n  Scenario: Generate returns error when data config is missing\n    Given config = {} with no \"data\" section\n    When generate() is awaited\n    Then the output dict contains an \"errors\" list\n    And the error mentions \"'data' configuration section is required\"\n",
+      "created_at": "2026-03-04T02:20:49.053901Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:20:38.384129Z",
+  "updated_at": "2026-03-04T03:18:48.271869Z",
+  "closed_at": "2026-03-04T03:18:48.271869Z",
+  "custom": {}
+}

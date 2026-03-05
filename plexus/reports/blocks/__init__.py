@@ -5,5 +5,13 @@ from .score_info import ScoreInfo
 from .feedback_analysis import FeedbackAnalysis
 from .topic_analysis import TopicAnalysis
 from .cost_analysis import CostAnalysis
+from .vector_topic_memory import VectorTopicMemory
 
-__all__ = ["BaseReportBlock", "ScoreInfo", "FeedbackAnalysis", "TopicAnalysis", "CostAnalysis"]
+__all__ = [
+    "BaseReportBlock",
+    "ScoreInfo",
+    "FeedbackAnalysis",
+    "TopicAnalysis",
+    "CostAnalysis",
+    "VectorTopicMemory",
+]
