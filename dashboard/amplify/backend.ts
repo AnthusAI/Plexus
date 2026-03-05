@@ -4,7 +4,7 @@ import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
-import { Stack } from 'aws-cdk-lib';
+import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 
@@ -136,4 +136,32 @@ const mcpStack = new McpStack(
     }
 );
 
-export { backend, mcpStack };
+function resolveEnvironmentName(): string {
+    if (process.env.ENVIRONMENT) {
+        return process.env.ENVIRONMENT.toLowerCase();
+    }
+    if (process.env.AMPLIFY_ENV) {
+        return process.env.AMPLIFY_ENV.toLowerCase();
+    }
+    const branch = process.env.AWS_BRANCH?.toLowerCase();
+    if (!branch) {
+        return 'development';
+    }
+    if (branch === 'main' || branch === 'production') {
+        return 'production';
+    }
+    if (branch === 'staging') {
+        return 'staging';
+    }
+    return branch;
+}
+
+const topicMemoryVectorStoreStack = new TopicMemoryVectorStoreStack(
+    backend.createStack('TopicMemoryVectorStoreStack'),
+    'TopicMemoryVectorStore',
+    {
+        environmentName: resolveEnvironmentName()
+    }
+);
+
+export { backend, mcpStack, topicMemoryVectorStoreStack };
