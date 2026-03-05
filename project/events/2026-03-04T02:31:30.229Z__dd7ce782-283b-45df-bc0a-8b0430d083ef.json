@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dd7ce782-283b-45df-bc0a-8b0430d083ef",
+  "issue_id": "plx-568ac39d-679f-4b17-95d3-9059c48f44e1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T02:31:30.229Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** report consumer, **I want** the VectorTopicMemory block to apply memory weights and emit a complete report with topic summaries, memory tiers, and run metadata, **so that** I can see persistent vs transient topics at a glance.\n\nThis is the capstone story. After clustering (Story 7.2), `generate()`:\n- Applies reinforcement to clusters that received new documents\n- Applies decay to clusters that did not\n- Persists updated weights to OpenSearch\n- Assembles the complete output dictionary\n\nAlso implements the `mode: incremental` config option: when set, the block skips global re-clustering and instead uses KNN search (Story 4.3) to assign new items to the nearest existing cluster. Memory weights are still reinforced for receiving clusters.\n\n## Output Schema\n\n```json\n{\n  \"status\": \"success\",\n  \"cluster_version\": \"20260303-143022\",\n  \"topics\": [\n    {\n      \"cluster_id\": 0,\n      \"label\": \"Billing Complaints\",\n      \"member_count\": 45,\n      \"memory_weight\": 0.85,\n      \"memory_tier\": \"hot\",\n      \"top_terms\": [\"billing\", \"charge\", \"refund\"]\n    }\n  ],\n  \"summary\": \"5 topics identified, 3 hot, 1 warm, 1 cold\",\n  \"items_processed\": 500,\n  \"cache_hit_rate\": 0.72,\n  \"index_name\": \"topic-memory-20260303-143022\",\n  \"mode\": \"full\"\n}\n```\n\n## Key Files\n\n- Modify: `plexus/reports/blocks/vector_topic_memory.py`\n- Modify: `plexus/reports/blocks/vector_topic_memory_test.py`\n\n## Dependencies\n\n- Story plx-806719 (Memory weight update integrated with cluster records)\n- Story plx-a7dcee (Index rebuild and clustering orchestration)",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-e46b4309-66bb-4c0e-88af-696c703abc1d",
+    "priority": 2,
+    "status": "open",
+    "title": "Memory weight update and final report output"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "plx-aaeca313-e50a-46f6-8488-c58461cbc823",
+  "title": "Global Clustering Engine",
+  "description": "Perform full re-clustering over all indexed documents, producing stable cluster assignments with centroids, boundary distances, and LLM-generated labels. Reuses BERTopic patterns from `plexus/analysis/topics/analyzer.py` but operates on **pre-computed embeddings** rather than raw text.\n\nThe key architectural change from existing `TopicAnalysis` is decoupling: the `TopicClusterer` receives embeddings that were already computed (and cached) by Epic 2, then runs only UMAP + HDBSCAN + c-TF-IDF.\n\n## Definition of Done\n\n- `TopicClusterer` class in `plexus/analysis/topic_clusterer.py`\n- Clusters from pre-computed 384-dim embeddings via BERTopic\n- Computes centroids (mean of member embeddings) per cluster\n- Computes p95 distance boundaries per cluster\n- Generates human-readable labels via LLM (mocked in tests)\n- Cluster records persisted to OpenSearch as special documents with `record_type: cluster`\n- All scenarios in child stories pass\n\n## Depends On\n\n- Epic plx-46f6f0 (Embedding Cache) — for embedding format\n- Epic plx-493fd8 (OpenSearch Client) — for persistence\n\n## Key Files\n\n- Create: `plexus/analysis/topic_clusterer.py`\n- Create: `plexus/analysis/topic_clusterer_test.py`\n- Modify: `plexus/analysis/opensearch_client.py` (cluster record methods)\n- Reuse patterns from: `plexus/analysis/topics/analyzer.py` (UMAP lines 524-534, BERTopic lines 738-746)",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-04T02:27:45.562726Z",
+  "updated_at": "2026-03-04T02:37:54.674251Z",
+  "closed_at": "2026-03-04T02:37:54.674251Z",
+  "custom": {}
+}
