@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fecefe19-6859-4b54-aada-81113c4cb3a2",
+  "issue_id": "plx-46723f50-117a-404a-963e-8753dd84bf70",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T02:24:34.755Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "Provision the lowest-cost AWS OpenSearch domain via a Python CDK stack in a **separate repository** from Plexus. The stack produces CloudFormation outputs (domain endpoint, ARN, IAM role, index alias names) consumed by the Plexus runtime at configuration time.\n\nThis epic is independent of all Plexus code and can be developed in parallel with Epics 1 and 2.\n\n## Definition of Done\n\n- A separate CDK repo exists with a stack that synthesizes a valid CloudFormation template\n- OpenSearch domain: single `t3.small.search` node, 10GB EBS, no multi-AZ, no dedicated master\n- IAM role for Plexus runtime with `es:ESHttp*` permissions\n- Index template with `knn_vector` field for embeddings (384 dimensions)\n- Blue/green aliases (`topic-memory-live`, `topic-memory-build`) pre-configured\n- All stack outputs exported for Plexus consumption\n- CDK synth tests pass\n\n## Depends On\n\nNothing. This is one of three parallel starting points.\n\n## Key Files (new infra repo)\n\n- Create: `opensearch_infra/stacks/opensearch_stack.py`\n- Create: `opensearch_infra/app.py`\n- Create: `opensearch_infra/cdk.json`\n- Create: `tests/test_opensearch_stack.py`\n- Create: `requirements.txt` (`aws-cdk-lib>=2.100.0`, `constructs>=10.0.0`)",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 2,
+    "status": "open",
+    "title": "OpenSearch Infrastructure (CDK)"
+  }
+}

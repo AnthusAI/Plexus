@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "20957646-6902-4f26-8a7e-6d0ad050e678",
+  "issue_id": "plx-be9cda46-2367-4d8c-8092-cb274fa00919",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T02:20:08.895Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** report system consumer, **I want** to declare a `VectorTopicMemory` block in my report configuration, **so that** the report service discovers and instantiates it like any other block.\n\nThe report service in `plexus/reports/service.py` discovers block classes via reflection on the `plexus/reports/blocks/__init__.py` module. A new `VectorTopicMemory` class must extend `BaseReportBlock`, be imported in `__init__.py`, and appear in the `BLOCK_CLASSES` registry.\n\n## Key Files\n\n- Create: `plexus/reports/blocks/vector_topic_memory.py`\n- Create: `plexus/reports/blocks/vector_topic_memory_test.py`\n- Modify: `plexus/reports/blocks/__init__.py` (add import + `__all__` entry)\n\n## Dependencies\n\nNone. First story in the initiative.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-cb54e515-c6e6-46b0-9aa3-0ba15325d39a",
+    "priority": 2,
+    "status": "open",
+    "title": "Block registration and instantiation"
+  }
+}

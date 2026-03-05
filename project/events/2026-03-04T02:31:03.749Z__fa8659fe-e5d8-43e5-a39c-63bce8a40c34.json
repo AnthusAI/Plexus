@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fa8659fe-e5d8-43e5-a39c-63bce8a40c34",
+  "issue_id": "plx-a7dceed5-30d8-480a-8b94-9fb3ee00fe45",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T02:31:03.749Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** VectorTopicMemory block, **I want** to rebuild the OpenSearch index and run global clustering after embeddings are computed, **so that** topic buckets are recomputed from the full dataset.\n\nAfter embeddings are produced (Story 7.1), `generate()` calls:\n1. `TopicMemoryIndex.build_index(documents)` — bulk-index all documents with embeddings\n2. `TopicMemoryIndex.swap_alias(new_index)` — atomic blue/green swap\n3. `TopicClusterer.cluster(embeddings, texts)` — run UMAP + HDBSCAN on pre-computed embeddings\n4. `TopicMemoryIndex.persist_clusters(clusters)` — store cluster records\n\nOpenSearch connection failures must be handled gracefully, returning an error status in the output rather than crashing the block.\n\n## Key Files\n\n- Modify: `plexus/reports/blocks/vector_topic_memory.py`\n- Modify: `plexus/reports/blocks/vector_topic_memory_test.py`\n\n## Dependencies\n\n- Story plx-b02d58 (Bulk index with blue/green alias swap)\n- Story plx-941008 (Cluster from pre-computed embeddings)\n- Story plx-5244af (Cluster record persistence)",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-e46b4309-66bb-4c0e-88af-696c703abc1d",
+    "priority": 2,
+    "status": "open",
+    "title": "Index rebuild and clustering orchestration"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "plx-085286b2-0ecd-42fc-ac6f-d711f873eb69",
+  "title": "Allow targeting a specific score in VectorTopicMemory",
+  "description": "Modify VectorTopicMemory report block to accept a score_id parameter to filter items down to a specific score, rather than pulling items for all scores in the scorecard.",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-04T12:50:25.935867Z",
+  "updated_at": "2026-03-04T12:55:20.388039Z",
+  "closed_at": "2026-03-04T12:55:20.388039Z",
+  "custom": {}
+}
