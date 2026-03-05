@@ -14,6 +14,12 @@ interface Topic {
   exemplars?: string[];
   memory_weight: number;
   memory_tier: string;
+  lifecycle_tier?: string;
+  is_new?: boolean;
+  is_trending?: boolean;
+  has_short_term_memory?: boolean;
+  has_medium_term_memory?: boolean;
+  has_long_term_memory?: boolean;
   p95_distance: number;
   member_count: number;
   days_inactive?: number;
@@ -70,6 +76,14 @@ function TopicItem({
           {topic.days_inactive !== undefined && (
              <Badge variant="secondary" className="font-mono text-xs bg-muted/50 hover:bg-muted/50 border-0">{topic.days_inactive}d inactive</Badge>
           )}
+          {topic.lifecycle_tier && topic.lifecycle_tier !== "established" && (
+            <Badge
+              variant={topic.lifecycle_tier === "new" ? "default" : "secondary"}
+              className={topic.lifecycle_tier === "trending" ? "bg-muted/50 hover:bg-muted/50 border-0" : "border-0"}
+            >
+              {topic.lifecycle_tier}
+            </Badge>
+          )}
           <Badge variant={topic.memory_tier === 'hot' ? "default" : "secondary"} className={topic.memory_tier === 'warm' ? "bg-muted/50 hover:bg-muted/50 border-0" : "border-0"}>
             {topic.memory_tier}
           </Badge>
@@ -107,7 +121,7 @@ function TopicItem({
 function ScoreSection({ score }: { score: ScoreData }) {
   const hasClusters = (score.topics?.length ?? 0) > 0;
   
-  // Sort topics: worst (hot) last, best (cold) first.
+  // Sort topics worst-to-best: hot first, then warm, then cold.
   const sortedTopics = hasClusters ? [...score.topics].sort((a, b) => {
     const getTierWeight = (tier: string) => {
       if (tier === 'hot') return 3;
@@ -117,10 +131,10 @@ function ScoreSection({ score }: { score: ScoreData }) {
     const tierA = getTierWeight(a.memory_tier);
     const tierB = getTierWeight(b.memory_tier);
     
-    if (tierA !== tierB) return tierA - tierB; // cold -> warm -> hot
+    if (tierA !== tierB) return tierB - tierA; // hot -> warm -> cold
     
-    // If same tier, sort by member count ascending (most members last)
-    return a.member_count - b.member_count;
+    // If same tier, higher member count first.
+    return b.member_count - a.member_count;
   }) : [];
 
   return (
@@ -182,7 +196,7 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
 
   const isMultiScore = Array.isArray(data.scores) && data.scores.length > 0;
   
-  // Sort scores by severity (most hot/warm topics last, then most topics overall last, then by items processed)
+  // Sort scores worst-to-best by severity, then topic count, then items processed.
   const sortedScores = isMultiScore ? [...data.scores!].sort((a, b) => {
     // Score based on memory tiers (higher score = worse/more hot topics)
     const getSeverityScore = (topics: Topic[]) => {
@@ -199,10 +213,9 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
     const scoreA = getSeverityScore(a.topics);
     const scoreB = getSeverityScore(b.topics);
     
-    // Sort ascending by severity so the "worst" (highest severity score) are at the bottom
-    if (scoreA !== scoreB) return scoreA - scoreB;
-    if ((a.topics?.length || 0) !== (b.topics?.length || 0)) return (a.topics?.length || 0) - (b.topics?.length || 0);
-    return a.items_processed - b.items_processed;
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    if ((a.topics?.length || 0) !== (b.topics?.length || 0)) return (b.topics?.length || 0) - (a.topics?.length || 0);
+    return b.items_processed - a.items_processed;
   }) : [];
   
   // For backwards compatibility or single-score mode
@@ -219,8 +232,8 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
     const tierA = getTierWeight(a.memory_tier);
     const tierB = getTierWeight(b.memory_tier);
     
-    if (tierA !== tierB) return tierA - tierB; // cold -> warm -> hot
-    return a.member_count - b.member_count;
+    if (tierA !== tierB) return tierB - tierA; // hot -> warm -> cold
+    return b.member_count - a.member_count;
   }) : [];
 
   return (
