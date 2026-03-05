@@ -34,10 +34,22 @@
       "author": "derek",
       "text": "Updated CI to run Python tests on a matrix of Python versions (3.11 and 3.12) in parallel. Added matrix guards so Initialize Version Tag and Semantic Release execute only on the 3.11 leg, preventing duplicate release operations. Workflow YAML validated successfully (YAML_OK).",
       "created_at": "2026-03-05T21:51:15.680892607Z"
+    },
+    {
+      "id": "749cddc5-a62b-46f5-bb03-deace5415181",
+      "author": "derek",
+      "text": "Follow-up: branch protection/ruleset currently requires old  check. Updating required status checks to new CI job names.",
+      "created_at": "2026-03-05T22:10:15.838836787Z"
+    },
+    {
+      "id": "a11d8d69-e622-44dc-b17d-6071699aa508",
+      "author": "derek",
+      "text": "Updated GitHub repository ruleset main-branch-protection (ID: 13251390) required status checks to match new CI jobs: Python Tests (3.11), Python Tests (3.12), Dashboard Unit Tests, Dashboard Storybook Tests. Removed obsolete test context.",
+      "created_at": "2026-03-05T22:10:39.495111367Z"
     }
   ],
   "created_at": "2026-03-05T21:41:06.420470202Z",
-  "updated_at": "2026-03-05T21:51:15.680892607Z",
+  "updated_at": "2026-03-05T22:10:42.259405796Z",
   "closed_at": null,
   "custom": {}
 }
