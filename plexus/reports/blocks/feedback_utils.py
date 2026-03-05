@@ -20,6 +20,7 @@ from plexus.dashboard.api.models.scorecard import Scorecard
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
 
 logger = logging.getLogger(__name__)
+_score_results_window_cache: Dict[tuple, List[Dict[str, Any]]] = {}
 
 
 async def fetch_all_scorecards(api_client, account_id: str) -> List[Scorecard]:
@@ -308,7 +309,10 @@ async def fetch_score_results_for_score(
     """
     Fetches ScoreResult records for a specific score on a scorecard within a date range.
 
-    Uses listScoreResultByScoreIdAndUpdatedAt with filter narrowing by account and scorecard.
+    Uses listScoreResultByScorecardIdAndUpdatedAt with account/date filtering and
+    performs score-specific filtering in-process. The underlying scorecard window
+    query is cached so repeated calls for each score don't re-scan the full window.
+
     Returns raw dictionaries to avoid unnecessary model parsing overhead.
     """
     logger.debug(
@@ -319,94 +323,107 @@ async def fetch_score_results_for_score(
         end_date.isoformat(),
     )
 
-    query = """
-    query ListScoreResultsByScoreAndUpdatedAt(
-        $scoreId: String!,
-        $startTime: String!,
-        $endTime: String!,
-        $accountId: String!,
-        $scorecardId: String!,
-        $limit: Int,
-        $nextToken: String
-    ) {
-        listScoreResultByScoreIdAndUpdatedAt(
-            scoreId: $scoreId,
-            updatedAt: { between: [$startTime, $endTime] },
-            filter: {
-                accountId: { eq: $accountId },
-                scorecardId: { eq: $scorecardId }
-            },
-            sortDirection: DESC,
-            limit: $limit,
-            nextToken: $nextToken
+    scorecard_id_str = str(scorecard_id)
+    score_id_str = str(score_id)
+    start_time_iso = start_date.isoformat()
+    end_time_iso = end_date.isoformat()
+    cache_key = (id(api_client), str(account_id), scorecard_id_str, start_time_iso, end_time_iso)
+
+    if cache_key not in _score_results_window_cache:
+        query = """
+        query ListScoreResultsByScorecardAndUpdatedAt(
+            $scorecardId: String!,
+            $startTime: String!,
+            $endTime: String!,
+            $accountId: String!,
+            $limit: Int,
+            $nextToken: String
         ) {
-            items {
-                id
-                value
-                explanation
-                type
-                status
-                code
-                evaluationId
-                itemId
-                scoreId
-                accountId
-                scorecardId
-                createdAt
-                updatedAt
-                score {
+            listScoreResultByScorecardIdAndUpdatedAt(
+                scorecardId: $scorecardId,
+                updatedAt: { between: [$startTime, $endTime] },
+                filter: {
+                    accountId: { eq: $accountId }
+                },
+                sortDirection: DESC,
+                limit: $limit,
+                nextToken: $nextToken
+            ) {
+                items {
                     id
-                    name
+                    value
+                    explanation
+                    type
+                    status
+                    code
+                    evaluationId
+                    itemId
+                    scoreId
+                    accountId
+                    scorecardId
+                    createdAt
+                    updatedAt
+                    score {
+                        id
+                        name
+                    }
                 }
+                nextToken
             }
-            nextToken
         }
-    }
-    """
+        """
 
-    all_results: List[Dict[str, Any]] = []
-    next_token: Optional[str] = None
-    seen_tokens: set[str] = set()
+        all_results: List[Dict[str, Any]] = []
+        next_token: Optional[str] = None
+        seen_tokens: set[str] = set()
 
-    while True:
-        variables = {
-            "scoreId": str(score_id),
-            "startTime": start_date.isoformat(),
-            "endTime": end_date.isoformat(),
-            "accountId": str(account_id),
-            "scorecardId": str(scorecard_id),
-            "limit": 500,
-            "nextToken": next_token,
-        }
+        while True:
+            variables = {
+                "scorecardId": scorecard_id_str,
+                "startTime": start_time_iso,
+                "endTime": end_time_iso,
+                "accountId": str(account_id),
+                "limit": 500,
+                "nextToken": next_token,
+            }
 
-        try:
-            response = await asyncio.to_thread(api_client.execute, query, variables)
-        except Exception as e:
-            logger.warning(f"Error fetching ScoreResults for score {score_id}: {e}")
-            break
+            try:
+                response = await asyncio.to_thread(api_client.execute, query, variables)
+            except Exception as e:
+                logger.warning(
+                    "Error fetching ScoreResults for scorecard %s: %s",
+                    scorecard_id_str,
+                    e,
+                )
+                break
 
-        payload = response.get("listScoreResultByScoreIdAndUpdatedAt") or {}
-        page_items = payload.get("items") or []
-        if page_items:
-            all_results.extend(page_items)
+            payload = response.get("listScoreResultByScorecardIdAndUpdatedAt") or {}
+            page_items = payload.get("items") or []
+            if page_items:
+                all_results.extend(page_items)
 
-        next_token = payload.get("nextToken")
-        if not next_token:
-            break
-        if next_token in seen_tokens:
-            logger.warning(
-                "Detected repeated ScoreResult pagination token for score %s; breaking loop.",
-                score_id,
-            )
-            break
-        seen_tokens.add(next_token)
+            next_token = payload.get("nextToken")
+            if not next_token:
+                break
+            if next_token in seen_tokens:
+                logger.warning(
+                    "Detected repeated ScoreResult pagination token for scorecard %s; breaking loop.",
+                    scorecard_id_str,
+                )
+                break
+            seen_tokens.add(next_token)
 
+        _score_results_window_cache[cache_key] = all_results
+
+    scorecard_window = _score_results_window_cache.get(cache_key, [])
+    filtered_results = [sr for sr in scorecard_window if str(sr.get("scoreId") or "") == score_id_str]
     logger.debug(
-        "Fetched %d score results for score %s.",
-        len(all_results),
+        "Fetched %d score results for score %s (from cached scorecard window of %d records).",
+        len(filtered_results),
         score_id,
+        len(scorecard_window),
     )
-    return all_results
+    return filtered_results
 
 
 async def get_feedback_counts_by_score(
