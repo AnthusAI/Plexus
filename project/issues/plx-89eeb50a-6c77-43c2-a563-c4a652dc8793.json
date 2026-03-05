@@ -1,0 +1,24 @@
+{
+  "id": "plx-89eeb50a-6c77-43c2-a563-c4a652dc8793",
+  "title": "[Snyk] SNYK-PYTHON-NUMPY-2321970 in numpy@1.21.3",
+  "description": "## Denial of Service (DoS)\n\n**Severity:** low\n**Package:** numpy@1.21.3\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 3.7  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 506/1000\n\n### CVEs\n- [CVE-2021-34141](https://nvd.nist.gov/vuln/detail/CVE-2021-34141)\n\n**Fix:** Pin `numpy` to version 1.22.0rc1 or later.\n\n### Details\n## Overview\n[numpy](https://github.com/numpy/numpy) is a fundamental package needed for scientific computing with Python.\n\nAffected versions of this package are vulnerable to Denial of Service (DoS) due to an incomplete string comparison in the `numpy.core` component, which may allow attackers to fail the APIs via constructing specific string objects.\n\n## Details\n\nDenial of Service (DoS) describes a family of attacks, all aimed at making a system inaccessible to its intended and legitimate users.\n\nUnlike other vulnerabilities, DoS attacks usually do not aim at breaching security. Rather, they are focused on making websites and services unavailable to genuine users resulting in downtime.\n\nOne popular Denial of Service vulnerability is DDoS (a Distributed Denial of Service), an attack that attempts to clog network pipes to the system by generating a large volume of traffic from many machines.\n\nWhen it comes to open source libraries, DoS vulnerabilities allow attackers to trigger such a crash or crippling of the service by using a flaw either in the application code or from the use of open source libraries.\n\nTwo common types of DoS vulnerabilities:\n\n* High CPU/Memory Consumption- An attacker sending crafted requests that could cause the system to take a disproportionate amount of time to process. For example, [commons-fileupload:commons-fileupload](https://security.snyk.io/vuln/SNYK-JAVA-COMMONSFILEUPLOAD-30082).\n\n* Crash - An attacker sending crafted requests that could cause the system to crash. For Example,  [npm `ws` package](https://snyk.io/vuln/npm:ws:20171108)\n\n## Remediation\nUpgrade `numpy` to version 1.22.0rc1 or higher.\n## References\n- [GitHub Commit](https://github.com/numpy/numpy/commit/eeef9d4646103c3b1afd3085f1393f2b3f9575b2)\n- [GitHub Issue](https://github.com/numpy/numpy/issues/18993)\n- [GitHub PR](https://github.com/numpy/numpy/pull/19539)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-NUMPY-2321970)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.247023946Z",
+  "updated_at": "2026-02-26T00:13:56.247023946Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-NUMPY-2321970",
+    "snyk_severity": "low"
+  }
+}

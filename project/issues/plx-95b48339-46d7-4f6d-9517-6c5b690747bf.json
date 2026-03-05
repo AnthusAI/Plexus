@@ -1,0 +1,24 @@
+{
+  "id": "plx-95b48339-46d7-4f6d-9517-6c5b690747bf",
+  "title": "[Snyk] SNYK-DEBIAN13-NCURSES-10378958 in ncurses/ncurses-bin@6.5+20250216-2",
+  "description": "## Out-of-Bounds\n\n**Severity:** low\n**Package:** ncurses/ncurses-bin@6.5+20250216-2\n**File:** `score-processor-lambda/Dockerfile`\n\n**CVSS Score:** 3.3  \n**Snyk Priority Score:** 150/1000\n\n### CVEs\n- [CVE-2025-6141](https://nvd.nist.gov/vuln/detail/CVE-2025-6141)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `ncurses` package and not the `ncurses` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nA vulnerability has been found in GNU ncurses up to 6.5-20250322 and classified as problematic. This vulnerability affects the function postprocess_termcap of the file tinfo/parse_entry.c. The manipulation leads to stack-based buffer overflow. The attack needs to be approached locally. Upgrading to version 6.5-20250329 is able to address this issue. It is recommended to upgrade the affected component.\n## Remediation\nThere is no fixed version for `Debian:13` `ncurses`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2025-6141](https://security-tracker.debian.org/tracker/CVE-2025-6141)\n- [https://invisible-island.net/ncurses/NEWS.html#index-t20250329](https://invisible-island.net/ncurses/NEWS.html#index-t20250329)\n- [https://lists.gnu.org/archive/html/bug-ncurses/2025-03/msg00107.html](https://lists.gnu.org/archive/html/bug-ncurses/2025-03/msg00107.html)\n- [https://lists.gnu.org/archive/html/bug-ncurses/2025-03/msg00109.html](https://lists.gnu.org/archive/html/bug-ncurses/2025-03/msg00109.html)\n- [https://lists.gnu.org/archive/html/bug-ncurses/2025-03/msg00114.html](https://lists.gnu.org/archive/html/bug-ncurses/2025-03/msg00114.html)\n- [https://vuldb.com/?ctiid.312610](https://vuldb.com/?ctiid.312610)\n- [https://vuldb.com/?id.312610](https://vuldb.com/?id.312610)\n- [https://vuldb.com/?submit.593000](https://vuldb.com/?submit.593000)\n- [https://www.gnu.org/](https://www.gnu.org/)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-NCURSES-10378958)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.244979578Z",
+  "updated_at": "2026-02-26T00:13:56.244979578Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-NCURSES-10378958",
+    "snyk_severity": "low"
+  }
+}

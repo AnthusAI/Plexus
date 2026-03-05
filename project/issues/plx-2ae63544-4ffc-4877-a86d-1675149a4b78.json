@@ -1,0 +1,25 @@
+{
+  "id": "plx-2ae63544-4ffc-4877-a86d-1675149a4b78",
+  "title": "KNN search for nearest cluster assignment",
+  "description": "**As an** incremental assignment pipeline, **I want** to find the nearest cluster centroids for a given embedding vector, **so that** new items can be assigned to existing clusters between full rebuild runs.\n\nAdds a `find_nearest_clusters(embedding, k, threshold)` method using OpenSearch's native KNN search. Returns top-k nearest documents with their cluster_ids and similarity scores, ordered by descending similarity. An optional threshold filters out low-similarity results, marking those items as outliers.\n\nThis capability supports the incremental mode of the ReportBlock (config `mode: incremental`) where new items are assigned without re-clustering.\n\n## Key Files\n\n- Modify: `plexus/analysis/opensearch_client.py`\n- Modify: `plexus/analysis/opensearch_client_test.py`\n\n## Dependencies\n\nStory plx-b02d58 (Bulk index with blue/green alias swap)",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-493fd84f-ad2e-420b-8a5c-6cf22a8794ac",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2f403d9c-1e57-4a68-93ed-6e29a5f2f1f2",
+      "author": "ryan.porter",
+      "text": "Feature: KNN search for nearest cluster assignment\n\n  Scenario: KNN search returns k nearest results\n    Given a TopicMemoryIndex with a mocked client\n    And the mock returns 5 hits with cluster_id and similarity scores\n    When find_nearest_clusters(embedding, k=5) is called\n    Then 5 results are returned each with cluster_id, doc_id, and similarity_score\n    And results are ordered by descending similarity\n\n  Scenario: Threshold filters low-similarity results\n    Given a TopicMemoryIndex with a mocked client returning 5 hits\n    And 2 hits have similarity below the threshold of 0.5\n    When find_nearest_clusters(embedding, k=5, threshold=0.5) is called\n    Then only 3 results are returned\n\n  Scenario: Empty index returns empty results\n    Given a TopicMemoryIndex with a mocked client that returns 0 hits\n    When find_nearest_clusters(embedding, k=5) is called\n    Then an empty list is returned\n",
+      "created_at": "2026-03-04T02:27:22.080399Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:27:02.830653Z",
+  "updated_at": "2026-03-04T03:18:50.957418Z",
+  "closed_at": "2026-03-04T03:18:50.957418Z",
+  "custom": {}
+}

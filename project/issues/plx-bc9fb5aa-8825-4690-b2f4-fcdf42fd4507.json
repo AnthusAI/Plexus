@@ -1,0 +1,24 @@
+{
+  "id": "plx-bc9fb5aa-8825-4690-b2f4-fcdf42fd4507",
+  "title": "[Snyk] SNYK-PYTHON-PILLOW-6043904 in pillow@9.5.0",
+  "description": "## Uncontrolled Resource Consumption ('Resource Exhaustion')\n\n**Severity:** high\n**Package:** pillow@9.5.0\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 7.5  \n**Snyk Priority Score:** 589/1000\n\n### CVEs\n- [CVE-2023-44271](https://nvd.nist.gov/vuln/detail/CVE-2023-44271)\n\n**Fix:** Pin `pillow` to version 10.0.0 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Uncontrolled Resource Consumption ('Resource Exhaustion') when the `ImageFont` truetype in an `ImageDraw` instance operates on a long text argument. An attacker can cause the service to crash by processing a task that uncontrollably allocates memory.\n## Remediation\nUpgrade `pillow` to version 10.0.0 or higher.\n## References\n- [GitHub Commit](https://github.com/python-pillow/Pillow/commit/1fe1bb49c452b0318cad12ea9d97c3bef188e9a7)\n- [GitHub PR](https://github.com/python-pillow/Pillow/pull/7244)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-PILLOW-6043904)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.245839916Z",
+  "updated_at": "2026-02-26T00:13:56.245839916Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-PILLOW-6043904",
+    "snyk_severity": "high"
+  }
+}

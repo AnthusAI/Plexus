@@ -1,0 +1,24 @@
+{
+  "id": "plx-5d0c449f-3f2b-4495-abab-e6aa2489eb57",
+  "title": "[Snyk] SNYK-PYTHON-NUMPY-2321966 in numpy@1.21.3",
+  "description": "## Buffer Overflow\n\n**Severity:** low\n**Package:** numpy@1.21.3\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 3.7  \n**Snyk Priority Score:** 399/1000\n\n### CVEs\n- [CVE-2021-41496](https://nvd.nist.gov/vuln/detail/CVE-2021-41496)\n\n**Fix:** Pin `numpy` to version 1.22.0 or later.\n\n### Details\n## Overview\n[numpy](https://github.com/numpy/numpy) is a fundamental package needed for scientific computing with Python.\n\nAffected versions of this package are vulnerable to Buffer Overflow due to missing boundary checks in the `array_from_pyobj` function of `fortranobject.c`. This may allow an attacker to conduct Denial of Service by carefully constructing an array with negative values.\n## Remediation\nUpgrade `numpy` to version 1.22.0 or higher.\n## References\n- [GitHub Commit](https://github.com/numpy/numpy/commit/271010f1037150e95017f803f4214b8861e528f2)\n- [GitHub Issue](https://github.com/numpy/numpy/issues/19000)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-NUMPY-2321966)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.246956505Z",
+  "updated_at": "2026-02-26T00:13:56.246956505Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-NUMPY-2321966",
+    "snyk_severity": "low"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "plx-63699533-b7cd-421b-916d-df5c519d2aa0",
+  "title": "[Snyk] SNYK-PYTHON-NLTK-7411380 in nltk@3.8.1",
+  "description": "## Remote Code Execution (RCE)\n\n**Severity:** high\n**Package:** nltk@3.8.1\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 8.4  \n**Snyk Priority Score:** 634/1000\n\n### CVEs\n- [CVE-2024-39705](https://nvd.nist.gov/vuln/detail/CVE-2024-39705)\n\n**Fix:** Pin `nltk` to version 3.9 or later.\n\n### Details\n## Overview\n[nltk](http://www.nltk.org) is a Natural Language Toolkit (NLTK) is a Python package for natural language processing.\n\nAffected versions of this package are vulnerable to Remote Code Execution (RCE) through the integrated data package download functionality. An attacker with control over the [NLTK data index](https://github.com/nltk/nltk_data) can execute arbitrary code by supplying pickled Python code within untrusted packages and trick a user into loading the malicious pickle.\r\n\r\nSome packages found to be vulnerable if compromised are `averaged_perceptron_tagger`, `punkt`, `maxent_ne_chunker`, `help/tagsets`, and `maxent_treebank_pos_tagger`.\n## Remediation\nUpgrade `nltk` to version 3.9 or higher.\n## References\n- [GitHub Commit](https://github.com/nltk/nltk/commit/a12d0a6a8cdba58d5e4e5f92ac62bb80fc26c624)\n- [GitHub Issue](https://github.com/nltk/nltk/issues/2522)\n- [GitHub Issue](https://github.com/nltk/nltk/issues/3266)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-NLTK-7411380)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.246097355Z",
+  "updated_at": "2026-02-26T00:13:56.246097355Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-NLTK-7411380",
+    "snyk_severity": "high"
+  }
+}

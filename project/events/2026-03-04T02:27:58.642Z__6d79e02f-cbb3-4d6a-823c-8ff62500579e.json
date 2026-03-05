@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6d79e02f-cbb3-4d6a-823c-8ff62500579e",
+  "issue_id": "plx-941008c4-b0e5-4d88-a3e6-24d84677e0b0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T02:27:58.642Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** topic memory system, **I want** to cluster pre-computed embedding vectors via BERTopic (UMAP + HDBSCAN + c-TF-IDF), **so that** the embedding step is decoupled from the clustering step.\n\nThe existing `plexus/analysis/topics/analyzer.py` passes raw text to BERTopic which embeds internally. This `TopicClusterer` accepts pre-computed vectors instead, following the same UMAP/HDBSCAN config patterns (UMAP: `n_components=5, min_dist=0.0, metric=cosine`; HDBSCAN via BERTopic's `min_topic_size`).\n\nAfter clustering, the system computes:\n- **Centroids**: mean of member embeddings per cluster\n- **p95 distances**: 95th percentile of cosine distances from members to centroid (for threshold-based assignment)\n- **Labels**: human-readable topic labels via LLM (configurable provider, mocked in tests)\n\nA monotonic `cluster_version` string (timestamp-based) is returned to track which clustering run produced these assignments.\n\n## Key Files\n\n- Create: `plexus/analysis/topic_clusterer.py`\n- Create: `plexus/analysis/topic_clusterer_test.py`\n\n## Dependencies\n\nStory plx-3bb9ce (Batch embedding) — for embedding format.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-aaeca313-e50a-46f6-8488-c58461cbc823",
+    "priority": 2,
+    "status": "open",
+    "title": "Cluster from pre-computed embeddings"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "plx-f86db27a-fc59-40e9-a7f2-4a2e4552bab9",
+  "title": "[Snyk] SNYK-DEBIAN13-SQLITE3-5696112 in sqlite3/libsqlite3-0@3.46.1-7",
+  "description": "## Memory Leak\n\n**Severity:** low\n**Package:** sqlite3/libsqlite3-0@3.46.1-7\n**File:** `score-processor-lambda/Dockerfile`\n\n**CVSS Score:** 4.3  \n**Snyk Priority Score:** 150/1000\n\n### CVEs\n- [CVE-2021-45346](https://nvd.nist.gov/vuln/detail/CVE-2021-45346)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `sqlite3` package and not the `sqlite3` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nA Memory Leak vulnerability exists in SQLite Project SQLite3 3.35.1 and 3.37.0 via maliciously crafted SQL Queries (made via editing the Database File), it is possible to query a record, and leak subsequent bytes of memory that extend beyond the record, which could let a malicious user obtain sensitive information. NOTE: The developer disputes this as a vulnerability stating that If you give SQLite a corrupted database file and submit a query against the database, it might read parts of the database that you did not intend or expect.\n## Remediation\nThere is no fixed version for `Debian:13` `sqlite3`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2021-45346](https://security-tracker.debian.org/tracker/CVE-2021-45346)\n- [https://github.com/guyinatuxedo/sqlite3_record_leaking](https://github.com/guyinatuxedo/sqlite3_record_leaking)\n- [https://security.netapp.com/advisory/ntap-20220303-0001/](https://security.netapp.com/advisory/ntap-20220303-0001/)\n- [https://sqlite.org/forum/forumpost/056d557c2f8c452ed5](https://sqlite.org/forum/forumpost/056d557c2f8c452ed5)\n- [https://sqlite.org/forum/forumpost/53de8864ba114bf6](https://sqlite.org/forum/forumpost/53de8864ba114bf6)\n- [https://www.sqlite.org/cves.html#status_of_recent_sqlite_cves](https://www.sqlite.org/cves.html#status_of_recent_sqlite_cves)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-SQLITE3-5696112)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.243716132Z",
+  "updated_at": "2026-02-26T00:13:56.243716132Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-SQLITE3-5696112",
+    "snyk_severity": "low"
+  }
+}

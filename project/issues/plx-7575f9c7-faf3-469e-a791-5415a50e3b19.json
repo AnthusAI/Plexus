@@ -1,0 +1,24 @@
+{
+  "id": "plx-7575f9c7-faf3-469e-a791-5415a50e3b19",
+  "title": "[Snyk] SNYK-DEBIAN13-SHADOW-8551157 in shadow/login.defs@1:4.17.4-2",
+  "description": "## CVE-2024-56433\n\n**Severity:** low\n**Package:** shadow/login.defs@1:4.17.4-2\n**File:** `score-processor-lambda/Dockerfile`\n\n**Snyk Priority Score:** 150/1000\n\n### CVEs\n- [CVE-2024-56433](https://nvd.nist.gov/vuln/detail/CVE-2024-56433)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## NVD Description\n**_Note:_** _Versions mentioned in the description apply only to the upstream `shadow` package and not the `shadow` package as distributed by `Debian`._\n_See `How to fix?` for `Debian:13` relevant fixed versions and status._\n\nshadow-utils (aka shadow) 4.4 through 4.17.0 establishes a default /etc/subuid behavior (e.g., uid 100000 through 165535 for the first user account) that can realistically conflict with the uids of users defined on locally administered networks, potentially leading to account takeover, e.g., by leveraging newuidmap for access to an NFS home directory (or same-host resources in the case of remote logins by these local network users). NOTE: it may also be argued that system administrators should not have assigned uids, within local networks, that are within the range that can occur in /etc/subuid.\n## Remediation\nThere is no fixed version for `Debian:13` `shadow`.\n## References\n- [https://security-tracker.debian.org/tracker/CVE-2024-56433](https://security-tracker.debian.org/tracker/CVE-2024-56433)\n- [https://github.com/shadow-maint/shadow/blob/e2512d5741d4a44bdd81a8c2d0029b6222728cf0/etc/login.defs#L238-L241](https://github.com/shadow-maint/shadow/blob/e2512d5741d4a44bdd81a8c2d0029b6222728cf0/etc/login.defs#L238-L241)\n- [https://github.com/shadow-maint/shadow/issues/1157](https://github.com/shadow-maint/shadow/issues/1157)\n- [https://github.com/shadow-maint/shadow/releases/tag/4.4](https://github.com/shadow-maint/shadow/releases/tag/4.4)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-DEBIAN13-SHADOW-8551157)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-04f4aec4-819d-4fb3-af97-3028914b702d",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.244403563Z",
+  "updated_at": "2026-02-26T00:13:56.244403563Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-DEBIAN13-SHADOW-8551157",
+    "snyk_severity": "low"
+  }
+}

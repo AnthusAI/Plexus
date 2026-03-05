@@ -1,0 +1,24 @@
+{
+  "id": "plx-a22c6ac6-b6ca-4a93-a6b2-a204f46358d9",
+  "title": "[Snyk] SNYK-PYTHON-URLLIB3-7267250 in urllib3@2.0.7",
+  "description": "## Improper Removal of Sensitive Information Before Storage or Transfer\n\n**Severity:** medium\n**Package:** urllib3@2.0.7\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 6.0  \n**Snyk Priority Score:** 514/1000\n\n### CVEs\n- [CVE-2024-37891](https://nvd.nist.gov/vuln/detail/CVE-2024-37891)\n\n**Fix:** Pin `urllib3` to version 1.26.19, 2.2.2 or later.\n\n### Details\n## Overview\n[urllib3](https://pypi.org/project/urllib3/) is a HTTP library with thread-safe connection pooling, file post, and more.\n\nAffected versions of this package are vulnerable to Improper Removal of Sensitive Information Before Storage or Transfer due to the improper handling of the `Proxy-Authorization` header during cross-origin redirects when `ProxyManager` is not in use. When the conditions below are met, including non-recommended configurations, the contents of this header can be sent in an automatic HTTP redirect.\r\n\r\n**Notes:**\r\n\r\nTo be vulnerable, the application must be doing all of the following:\r\n\r\n1) Setting the `Proxy-Authorization` header without using urllib3's built-in proxy support.\r\n\r\n2) Not disabling HTTP redirects (e.g. with `redirects=False`)\r\n\r\n3) Either not using an HTTPS origin server, or having a proxy or target origin that redirects to a malicious origin.\r\n\r\n## Workarounds\r\n\r\n1) Using the `Proxy-Authorization` header with urllib3's `ProxyManager`.\r\n\r\n2) Disabling HTTP redirects using `redirects=False` when sending requests.\r\n\r\n3) Not using the `Proxy-Authorization` header.\n## Remediation\nUpgrade `urllib3` to version 1.26.19, 2.2.2 or higher.\n## References\n- [GitHub Commit](https://github.com/urllib3/urllib3/commit/40b6d1605814dd1db0a46e202d6e56f2e4c9a468)\n- [GitHub Commit](https://github.com/urllib3/urllib3/commit/accff72ecc2f6cf5a76d9570198a93ac7c90270e)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-URLLIB3-7267250)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.246501150Z",
+  "updated_at": "2026-02-26T00:13:56.246501150Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-URLLIB3-7267250",
+    "snyk_severity": "medium"
+  }
+}

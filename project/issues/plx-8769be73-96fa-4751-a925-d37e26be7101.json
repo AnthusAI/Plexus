@@ -1,0 +1,23 @@
+{
+  "id": "plx-8769be73-96fa-4751-a925-d37e26be7101",
+  "title": "plexus/metrics/requirements.txt",
+  "description": "Snyk vulnerabilities found in `plexus/metrics/requirements.txt`.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dce57ac5-051d-4a53-abd0-04dff69e7ca2",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.242570283Z",
+  "updated_at": "2026-02-26T00:13:56.242570283Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_target_file": "plexus/metrics/requirements.txt"
+  }
+}

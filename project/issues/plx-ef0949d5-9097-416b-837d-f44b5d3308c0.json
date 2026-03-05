@@ -1,0 +1,24 @@
+{
+  "id": "plx-ef0949d5-9097-416b-837d-f44b5d3308c0",
+  "title": "[Snyk] SNYK-PYTHON-PILLOW-6219986 in pillow@9.5.0",
+  "description": "## Denial of Service (DoS)\n\n**Severity:** high\n**Package:** pillow@9.5.0\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 7.5  \n**Snyk Priority Score:** 589/1000\n\n### CVEs\nNo CVE assigned.\n\n**Fix:** Pin `pillow` to version 10.2.0 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Denial of Service (DoS) if the size of individual glyphs extends beyond the bitmap image, when using `PIL.ImageFont.ImageFont` function. Exploiting this vulnerability could lead to a system crash.\n\n## Details\n\nDenial of Service (DoS) describes a family of attacks, all aimed at making a system inaccessible to its intended and legitimate users.\n\nUnlike other vulnerabilities, DoS attacks usually do not aim at breaching security. Rather, they are focused on making websites and services unavailable to genuine users resulting in downtime.\n\nOne popular Denial of Service vulnerability is DDoS (a Distributed Denial of Service), an attack that attempts to clog network pipes to the system by generating a large volume of traffic from many machines.\n\nWhen it comes to open source libraries, DoS vulnerabilities allow attackers to trigger such a crash or crippling of the service by using a flaw either in the application code or from the use of open source libraries.\n\nTwo common types of DoS vulnerabilities:\n\n* High CPU/Memory Consumption- An attacker sending crafted requests that could cause the system to take a disproportionate amount of time to process. For example, [commons-fileupload:commons-fileupload](https://security.snyk.io/vuln/SNYK-JAVA-COMMONSFILEUPLOAD-30082).\n\n* Crash - An attacker sending crafted requests that could cause the system to crash. For Example,  [npm `ws` package](https://snyk.io/vuln/npm:ws:20171108)\n\n## Remediation\nUpgrade `pillow` to version 10.2.0 or higher.\n## References\n- [GitHub Commit](https://github.com/python-pillow/Pillow/commit/10c2df5430f3c111f25508152eb1f2ea8741c686)\n- [Pillow Release Notes](https://pillow.readthedocs.io/en/stable/releasenotes/10.2.0.html)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-PILLOW-6219986)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.245642151Z",
+  "updated_at": "2026-02-26T00:13:56.245642151Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-PILLOW-6219986",
+    "snyk_severity": "high"
+  }
+}

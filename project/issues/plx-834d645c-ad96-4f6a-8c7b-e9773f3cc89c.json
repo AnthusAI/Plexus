@@ -1,0 +1,24 @@
+{
+  "id": "plx-834d645c-ad96-4f6a-8c7b-e9773f3cc89c",
+  "title": "[Snyk] SNYK-JS-NEXT-14400636 in next@14.2.29",
+  "description": "## Deserialization of Untrusted Data\n\n**Severity:** high\n**Package:** next@14.2.29\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 8.7  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 796/1000\n\n### CVEs\n- [CVE-2025-55184](https://nvd.nist.gov/vuln/detail/CVE-2025-55184)\n\n**Fix:** Upgrade `next` to version 14.2.34, 15.0.6, 15.1.10, 15.2.7, 15.3.7, 15.4.9, 15.5.8, 16.0.9, 16.1.0-canary.19 or later.\n\n### Details\n## Overview\n[next](https://www.npmjs.com/package/next) is a react framework.\n\nAffected versions of this package are vulnerable to Deserialization of Untrusted Data due to unsafe deserialization of payloads from HTTP requests to Server Function endpoints. An attacker can cause the server process to enter an infinite loop and hang, preventing it from serving future HTTP requests by sending specially crafted payloads.\r\n\r\n**Notes:**\r\n\r\nEven if your app does not implement any React Server Function endpoints it may still be vulnerable if your app supports React Server Components.\r\n\r\nIf your app’s React code does not use a server, your app is not affected by these vulnerabilities. If your app does not use a framework, bundler, or bundler plugin that supports React Server Components, your app is not affected by these vulnerabilities.\r\n\r\nFor React Native users not using a monorepo or `react-dom`, your `react` version should be pinned in your `package.json`, and there are no additional steps needed.\r\n\r\nIf you are using React Native in a monorepo, you should update only the impacted packages if they are installed: `react-server-dom-webpack`, `react-server-dom-parcel`, `react-server-dom-turbopack`. This is required to mitigate the security advisories, but you do not need to update `react` and `react-dom` so this will not cause the version mismatch error in React Native. See [this issue](https://github.com/facebook/react-native/issues/54772#issuecomment-3617929832) for more information.\n\n## Details\n\nSerialization is a process of converting an object into a sequence of bytes which can be persisted to a disk or database or can be sent through streams. The reverse process of creating object from sequence of bytes is called deserialization. Serialization is commonly used for communication (sharing objects between multiple hosts) and persistence (store the object state in a file or a database). It is an integral part of popular protocols like _Remote Method Invocation (RMI)_, _Java Management Extension (JMX)_, _Java Messaging System (JMS)_, _Action Message Format (AMF)_, _Java Server Faces (JSF) ViewState_, etc.\n\n_Deserialization of untrusted data_ ([CWE-502](https://cwe.mitre.org/data/definitions/502.html)) is when the application deserializes untrusted data without sufficiently verifying that the resulting data will be valid, thus allowing the attacker to control the state or the flow of the execution.\n  \n## Remediation\nUpgrade `next` to version 14.2.34, 15.0.6, 15.1.10, 15.2.7, 15.3.7, 15.4.9, 15.5.8, 16.0.9, 16.1.0-canary.19 or higher.\n## References\n- [Facebook Security Advisory](https://www.facebook.com/security/advisories/cve-2025-55184)\n- [GitHub Commit](https://github.com/facebook/react/commit/894bc73cb493487c48d57f4508e6278db58e673a)\n- [GitHub PR](https://github.com/facebook/react/pull/35345)\n- [React Blog Post](https://react.dev/blog/2025/12/11/denial-of-service-and-source-code-exposure-in-react-server-components)\n- [React Blog Post (26.01.26 Update)](https://react.dev/blog/2025/12/11/denial-of-service-and-source-code-exposure-in-react-server-components#additional-fix-published)\n- [Vercel Advisory](https://vercel.com/kb/bulletin/security-bulletin-cve-2025-55184-and-cve-2025-55183)\n- [Nuclei Templates](https://github.com/projectdiscovery/nuclei-templates/blob/main/http/cves/2025/CVE-2025-55184.yaml)\n- [PoC in GitHub](https://github.com/cybertechajju/CVE-2025-55184-POC-Expolit)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-NEXT-14400636)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-02-26T00:13:56.240017320Z",
+  "updated_at": "2026-02-26T00:13:56.240017320Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-NEXT-14400636",
+    "snyk_severity": "high"
+  }
+}
