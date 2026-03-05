@@ -1,5 +1,5 @@
 {
-  "built_at": "2026-03-04T21:13:26Z",
+  "built_at": "2026-03-05T19:48:37Z",
   "file_mtimes": {
     "plx-0144c92e-99a9-4e6b-983b-75fd8f11902a.json": 1772475881.505567,
     "plx-04f4aec4-819d-4fb3-af97-3028914b702d.json": 1772475881.505567,
@@ -33,6 +33,7 @@
     "plx-42852570-c1cd-4e62-8ad4-09e9c1cdaa34.json": 1772475881.505567,
     "plx-49842217-b1b4-4542-ac32-3991ac18aac2.json": 1772475881.505567,
     "plx-51fdb29b-22f8-4d13-8088-14539dabb257.json": 1772475881.505567,
+    "plx-55cc5016-6518-422f-8b4f-c23120e97210.json": 1772740117.25656,
     "plx-56335b77-ad2b-4d8e-b81b-79fe373c21ce.json": 1772475881.505567,
     "plx-56d83d40-7d3e-4f51-bb10-1ab707973e8f.json": 1772475881.505567,
     "plx-5b703a81-f943-498e-aac3-dac2b8506cb5.json": 1772475881.505567,
@@ -86,6 +87,7 @@
     "plx-b6809ada-0463-45a8-b3e5-f2f38b0d1f28.json": 1772475881.515567,
     "plx-b8850595-7e6c-46a3-8ed0-ba73236ebf0c.json": 1772475881.515567,
     "plx-b8bac83b-b685-4780-9ab4-f9ca89061550.json": 1772475881.515567,
+    "plx-bc3c9860-bb07-4fb0-a2cf-a76821b48a15.json": 1772661457.640177,
     "plx-bc9fb5aa-8825-4690-b2f4-fcdf42fd4507.json": 1772475881.515567,
     "plx-c16e77f6-8b1f-4afd-85be-120f25ce09b3.json": 1772475881.515567,
     "plx-c24404c9-7faf-4010-b419-f51a3da01577.json": 1772475881.515567,
@@ -96,6 +98,7 @@
     "plx-ca3d353e-a672-44de-a394-713522a5fc63.json": 1772475881.515567,
     "plx-cae3ce00-b5ed-4340-8f9f-5fc13d8aa7f7.json": 1772475881.515567,
     "plx-cefacb2b-8e46-49d0-84d5-7810da790e1b.json": 1772475881.515567,
+    "plx-d0936fbe-41ba-4c21-a97a-c03b42a73501.json": 1772736035.976974,
     "plx-d1ca5313-47cf-4295-a0b9-4c860b8af011.json": 1772475881.515567,
     "plx-d21b85b4-13ee-433e-8ec4-1a3d959787a4.json": 1772475881.515567,
     "plx-d4e3d4e0-12d6-4bb6-b2cb-a0df02ac7d22.json": 1772475881.515567,
@@ -881,6 +884,24 @@
       "title": "[Snyk] SNYK-PYTHON-PILLOW-6219984 in pillow@9.5.0",
       "type": "sub-task",
       "updated_at": "2026-02-26T00:13:56.245771003Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": null,
+      "comments": [],
+      "created_at": "2026-03-05T19:48:37.264390470Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-55cc5016-6518-422f-8b4f-c23120e97210",
+      "labels": [],
+      "parent": null,
+      "priority": 2,
+      "status": "open",
+      "title": "Clean Evaluation.py CodeQL findings (start with unused imports)",
+      "type": "task",
+      "updated_at": "2026-03-05T19:48:37.264390470Z"
     },
     {
       "assignee": null,
@@ -2153,6 +2174,61 @@
     {
       "assignee": null,
       "closed_at": null,
+      "comments": [
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:14:16.486267867Z",
+          "id": "14186e70-b262-4146-bef3-6ff22393c657",
+          "text": "Investigating CodeQL scanning of vendored paths (e.g., dashboard/node_modules/aws-cdk templates) and preparing exclusion config for repo."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:14:35.634690598Z",
+          "id": "db7b54da-2dbf-4b4d-9bfb-2db5f4dc8304",
+          "text": "Added  with  entries for vendored/generated directories including . Next: share exact CodeQL CLI flags to ensure this config is applied in local runs and GitHub Actions."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:14:38.052457341Z",
+          "id": "2c58dff7-043a-425c-b672-637c9a440815",
+          "text": "Added .github/codeql/codeql-config.yml with paths-ignore rules for vendored/generated directories including **/node_modules/**. Preparing handoff instructions for local CodeQL and GitHub Action usage."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:14:41.879830428Z",
+          "id": "ed5f2bef-eea8-4d64-b08e-f6ea0473f852",
+          "text": "Closed after adding CodeQL ignore config and confirming file creation."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:23:11.653330995Z",
+          "id": "5ce4ab1c-68e0-45e3-953e-1524bdd1dd18",
+          "text": "Reopened to add .codeql exclusion after user reported warnings from .codeql/db-python snapshot paths."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:23:23.159115186Z",
+          "id": "2b38b65e-4616-49e5-a741-6cfea69272b5",
+          "text": "Implemented .codeql exclusion in both .github/codeql/codeql-config.yml (paths-ignore) and .gitignore to prevent scanning/noise from local CodeQL databases."
+        }
+      ],
+      "created_at": "2026-03-04T21:13:51.589783386Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-bc3c9860-bb07-4fb0-a2cf-a76821b48a15",
+      "labels": [],
+      "parent": "plx-dce57ac5-051d-4a53-abd0-04dff69e7ca2",
+      "priority": 2,
+      "status": "in_progress",
+      "title": "CodeQL exclude config for node_modules scan noise",
+      "type": "chore",
+      "updated_at": "2026-03-04T21:23:23.159115186Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": null,
       "comments": [],
       "created_at": "2026-02-26T00:13:56.245839916Z",
       "creator": null,
@@ -2388,6 +2464,31 @@
       "title": "[Snyk] SNYK-JS-MERMAID-12027649 in mermaid@10.9.3",
       "type": "sub-task",
       "updated_at": "2026-02-26T00:13:56.240969393Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": null,
+      "comments": [
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T18:40:35.981715873Z",
+          "id": "849657ec-017a-43d0-9ee6-015585883374",
+          "text": "Validated and fixed Scorecard.py CodeQL findings: removed unused imports and removed unreachable else branch in get_score_result. rcql --files Scorecard.py now exits clean; targeted scorecard tests pass (15 passed)."
+        }
+      ],
+      "created_at": "2026-03-05T18:37:21.106269738Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-d0936fbe-41ba-4c21-a97a-c03b42a73501",
+      "labels": [],
+      "parent": null,
+      "priority": 2,
+      "status": "in_progress",
+      "title": "Clean valid CodeQL findings in plexus/Scorecard.py",
+      "type": "task",
+      "updated_at": "2026-03-05T18:40:35.981715873Z"
     },
     {
       "assignee": null,

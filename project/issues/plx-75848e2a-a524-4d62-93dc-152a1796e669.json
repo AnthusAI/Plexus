@@ -1,0 +1,18 @@
+{
+  "id": "plx-75848e2a-a524-4d62-93dc-152a1796e669",
+  "title": "Clean Score.py CodeQL findings",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-05T20:14:27.534292516Z",
+  "updated_at": "2026-03-05T20:14:31.005293755Z",
+  "closed_at": null,
+  "custom": {}
+}
