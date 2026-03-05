@@ -12,9 +12,14 @@ permissions:
   contents: write
 
 jobs:
-  test:
+  python-tests:
+    name: Python Tests (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     defaults:
       run:
         shell: bash -el {0}
@@ -35,10 +40,10 @@ jobs:
         echo "Disk space after cleanup:"
         df -h
 
-    - name: Set up Conda with Python 3.11
+    - name: Set up Conda with Python ${{ matrix.python-version }}
       uses: conda-incubator/setup-miniconda@v3
       with:
-        python-version: "3.11"
+        python-version: ${{ matrix.python-version }}
         miniforge-version: latest
         activate-environment: plexus-ci
         auto-activate-base: false
@@ -75,6 +80,33 @@ jobs:
         echo "Conda environment: $CONDA_DEFAULT_ENV"
         invoke ci
 
+    - name: Initialize Version Tag (if needed)
+      if: matrix.python-version == '3.11' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/develop')
+      run: |
+        git config --global user.email "semantic-release@github.actions"
+        git config --global user.name "Semantic Release Bot"
+        if ! git tag | grep -q "v0.0.0"; then
+          git tag -a v0.0.0 -m "Initial version"
+          git push origin v0.0.0
+        fi
+
+    - name: Semantic Release
+      if: matrix.python-version == '3.11' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/develop')
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        semantic-release version
+        semantic-release publish
+
+  dashboard-unit-tests:
+    name: Dashboard Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -91,6 +123,24 @@ jobs:
     - name: Run Unit Tests
       working-directory: ./dashboard
       run: npm run ci:unit
+
+  dashboard-storybook-tests:
+    name: Dashboard Storybook Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+
+    - name: Install Node dependencies
+      working-directory: ./dashboard
+      run: npm ci
 
     - name: Build Storybook
       working-directory: ./dashboard
@@ -118,27 +168,12 @@ jobs:
           "npx http-server storybook-static --port 6006 --address 127.0.0.1" \
           "npx wait-on --verbose --interval 1000 --timeout 30000 http-get://127.0.0.1:6006 && echo 'Server ready' && npm run test-storybook -- --url http://127.0.0.1:6006 --verbose"
 
-    - name: Initialize Version Tag (if needed)
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/develop')
-      run: |
-        git config --global user.email "semantic-release@github.actions"
-        git config --global user.name "Semantic Release Bot"
-        if ! git tag | grep -q "v0.0.0"; then
-          git tag -a v0.0.0 -m "Initial version"
-          git push origin v0.0.0
-        fi
-
-    - name: Semantic Release
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/develop')
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        semantic-release version
-        semantic-release publish
-
   trigger-deployment:
     name: Trigger AWS CodePipeline
-    needs: test
+    needs:
+      - python-tests
+      - dashboard-unit-tests
+      - dashboard-storybook-tests
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
     # Required for OIDC authentication
