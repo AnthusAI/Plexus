@@ -1,0 +1,73 @@
+{
+  "id": "plx-d2195f58-7e95-4148-bbfa-4f3c66f4e4c2",
+  "title": "Parallelize GitHub Actions tests while keeping AWS steps sequential",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "59cc8352-2212-485a-8ae7-5e9e8b09ed3a",
+      "author": "derek",
+      "text": "Started work. Goal: reduce CI wall time by parallelizing test execution in GitHub Actions while preserving sequential order for AWS-related stages.",
+      "created_at": "2026-03-05T21:41:10.823970665Z"
+    },
+    {
+      "id": "e5599a52-05a6-422f-8b55-387cf06b93b8",
+      "author": "derek",
+      "text": "Implemented workflow parallelization in .github/workflows/ci.yaml:\n- Split monolithic test job into python-tests, dashboard-unit-tests, and dashboard-storybook-tests so they run concurrently.\n- Kept semantic-release in python-tests to preserve current release gating behavior on push branches.\n- Updated trigger-deployment to depend on all three test jobs, so AWS pipeline triggers remain after successful test completion.\n- Verified YAML parses successfully (YAML_OK).",
+      "created_at": "2026-03-05T21:41:58.329056548Z"
+    },
+    {
+      "id": "9e89db54-b082-41f7-b2ae-8b1ea41fa47b",
+      "author": "derek",
+      "text": "Follow-up request: run Python test suite against both Python 3.11 and 3.12 in CI. Implementing matrix strategy while ensuring semantic-release still runs exactly once.",
+      "created_at": "2026-03-05T21:51:02.438628064Z"
+    },
+    {
+      "id": "3f54bec9-f52f-4ac8-8db2-d63334cd5828",
+      "author": "derek",
+      "text": "Updated CI to run Python tests on a matrix of Python versions (3.11 and 3.12) in parallel. Added matrix guards so Initialize Version Tag and Semantic Release execute only on the 3.11 leg, preventing duplicate release operations. Workflow YAML validated successfully (YAML_OK).",
+      "created_at": "2026-03-05T21:51:15.680892607Z"
+    },
+    {
+      "id": "749cddc5-a62b-46f5-bb03-deace5415181",
+      "author": "derek",
+      "text": "Follow-up: branch protection/ruleset currently requires old  check. Updating required status checks to new CI job names.",
+      "created_at": "2026-03-05T22:10:15.838836787Z"
+    },
+    {
+      "id": "a11d8d69-e622-44dc-b17d-6071699aa508",
+      "author": "derek",
+      "text": "Updated GitHub repository ruleset main-branch-protection (ID: 13251390) required status checks to match new CI jobs: Python Tests (3.11), Python Tests (3.12), Dashboard Unit Tests, Dashboard Storybook Tests. Removed obsolete test context.",
+      "created_at": "2026-03-05T22:10:39.495111367Z"
+    },
+    {
+      "id": "0acd3b4d-a1b7-48a5-a42f-c7801412a09f",
+      "author": "derek",
+      "text": "Follow-up: eliminate duplicate CI runs by narrowing  trigger to long-lived branches only, since main is protected and staging pushes are rare.",
+      "created_at": "2026-03-05T22:16:28.605905707Z"
+    },
+    {
+      "id": "5e133d9c-45f2-4ed7-93c7-aebff11c6576",
+      "author": "derek",
+      "text": "Applying agreed trigger change: run CI on push only for main and staging; keep pull_request trigger for all branches to preserve pre-merge validation.",
+      "created_at": "2026-03-05T22:23:07.092991572Z"
+    },
+    {
+      "id": "57c09b48-2f7e-464c-b7c1-0343d55798fe",
+      "author": "derek",
+      "text": "Updated .github/workflows/ci.yaml triggers: push now limited to main and staging; pull_request remains all branches. This removes duplicate push+PR runs for feature/dev branches while preserving required pre-merge CI checks. YAML validated (YAML_OK).",
+      "created_at": "2026-03-05T22:23:14.435100675Z"
+    }
+  ],
+  "created_at": "2026-03-05T21:41:06.420470202Z",
+  "updated_at": "2026-03-05T22:23:14.435100675Z",
+  "closed_at": null,
+  "custom": {}
+}
