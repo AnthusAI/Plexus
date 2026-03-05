@@ -146,3 +146,16 @@ class TestEmbeddingService:
         np.testing.assert_array_almost_equal(result[0], vec_a)
         np.testing.assert_array_almost_equal(result[2], vec_c)
         assert result[1].shape[0] == 384
+
+    def test_batch_embed_raises_when_model_returns_short_batch(self):
+        mock_cache = MagicMock(spec=EmbeddingCache)
+        mock_cache.get.return_value = None
+        mock_cache.put = MagicMock()
+        mock_model = MagicMock()
+        # Simulate transient failure that only returns one embedding for two misses.
+        mock_model.encode.return_value = np.array([[0.1] * 384], dtype=np.float32)
+        svc = EmbeddingService(cache=mock_cache, model_id="test-model")
+
+        with patch.object(svc, "_get_model", return_value=mock_model):
+            with pytest.raises(RuntimeError, match="unexpected batch size"):
+                svc.batch_embed(["hello", "world"])
