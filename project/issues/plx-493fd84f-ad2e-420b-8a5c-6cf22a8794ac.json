@@ -1,0 +1,25 @@
+{
+  "id": "plx-493fd84f-ad2e-420b-8a5c-6cf22a8794ac",
+  "title": "OpenSearch Client in Plexus",
+  "description": "Build the Plexus-side client that talks to OpenSearch. This is a thin adapter layer (`TopicMemoryIndex`) wrapping the `opensearch-py` library with AWS SigV4 auth, tested with mocks. It depends on the infra repo only for configuration values (endpoint, role ARN), which are injected.\n\n## Definition of Done\n\n- `TopicMemoryIndex` class in `plexus/analysis/opensearch_client.py`\n- Connection via IAM SigV4 auth with health check\n- Bulk indexing with timestamped index creation\n- Atomic blue/green alias swap with old index cleanup\n- KNN search for nearest cluster assignment\n- Partial failure handling and logging\n- All scenarios in child stories pass\n\n## Depends On\n\n- Epic plx-46f6f0 (Embedding Cache) \u2014 for embedding vector format\n- Epic plx-46723f (CDK Infra) \u2014 for endpoint/schema shape\n\n## Key Files\n\n- Create: `plexus/analysis/opensearch_client.py`\n- Create: `plexus/analysis/opensearch_client_test.py`\n- Modify: `pyproject.toml` (add `opensearch-py>=2.4.0`, `requests-aws4auth>=1.2.3`)",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "860b01f2-8d3a-4dce-977d-1a5099f57bb9",
+      "author": "ryan.porter",
+      "text": "## Retrospective Notes (2026-03-04)\n\nOpenSearch client consumes `OPENSEARCH_ENDPOINT` from config (`opensearch.endpoint`). Index fixed at 384 dimensions to match all-MiniLM-L6-v2. Domain: `plexus-vtm-development`.",
+      "created_at": "2026-03-04T03:18:05.272579Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:25:50.558910Z",
+  "updated_at": "2026-03-04T03:18:05.272579Z",
+  "closed_at": "2026-03-04T02:36:26.200880Z",
+  "custom": {}
+}

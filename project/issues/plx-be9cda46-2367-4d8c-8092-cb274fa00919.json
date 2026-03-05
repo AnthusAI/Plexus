@@ -1,0 +1,25 @@
+{
+  "id": "plx-be9cda46-2367-4d8c-8092-cb274fa00919",
+  "title": "Block registration and instantiation",
+  "description": "**As a** report system consumer, **I want** to declare a `VectorTopicMemory` block in my report configuration, **so that** the report service discovers and instantiates it like any other block.\n\nThe report service in `plexus/reports/service.py` discovers block classes via reflection on the `plexus/reports/blocks/__init__.py` module. A new `VectorTopicMemory` class must extend `BaseReportBlock`, be imported in `__init__.py`, and appear in the `BLOCK_CLASSES` registry.\n\n## Key Files\n\n- Create: `plexus/reports/blocks/vector_topic_memory.py`\n- Create: `plexus/reports/blocks/vector_topic_memory_test.py`\n- Modify: `plexus/reports/blocks/__init__.py` (add import + `__all__` entry)\n\n## Dependencies\n\nNone. First story in the initiative.",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cb54e515-c6e6-46b0-9aa3-0ba15325d39a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b4255603-7973-481d-87de-bf816d1ed7e4",
+      "author": "ryan.porter",
+      "text": "Feature: VectorTopicMemory block registration and instantiation\n\n  Scenario: VectorTopicMemory appears in the block class registry\n    Given the plexus.reports.blocks module has been imported\n    When the BLOCK_CLASSES dictionary is inspected in plexus/reports/service.py\n    Then it contains a key \"VectorTopicMemory\"\n    And the value is a class that is a subclass of BaseReportBlock\n\n  Scenario: VectorTopicMemory is instantiated from valid config\n    Given a config dict with embedding, opensearch, and clustering sections\n    And a mock PlexusDashboardClient\n    When VectorTopicMemory(config, params, api_client) is called\n    Then the instance has config, params, and api_client set correctly\n    And DEFAULT_NAME equals \"Vector Topic Memory\"\n\n  Scenario: VectorTopicMemory handles None params\n    Given a config dict and params is None\n    When VectorTopicMemory(config, None, api_client) is called\n    Then self.params is an empty dictionary\n",
+      "created_at": "2026-03-04T02:20:27.049978Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:20:08.895686Z",
+  "updated_at": "2026-03-04T13:11:32.715602Z",
+  "closed_at": "2026-03-04T13:11:32.715602Z",
+  "custom": {}
+}

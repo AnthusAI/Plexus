@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1c7c77a3-0d08-4edb-8d5d-0b861514d1b6",
+  "issue_id": "plx-1acf384e-46a6-4bdd-8467-fd8cc8ae39d4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T12:46:00.943Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "The VectorTopicMemory report block currently processes all FeedbackItems. We need to adjust it to discard FeedbackItems where the initial answer matches the final answer, so we only analyze the mismatches (edit comments for corrections).",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 1,
+    "status": "open",
+    "title": "Filter out matching FeedbackItems in VectorTopicMemory"
+  }
+}
