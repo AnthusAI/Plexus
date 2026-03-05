@@ -152,10 +152,18 @@ def test_writable_dirs(self):
 
 @suite.test("Verify tactus version")
 def test_tactus_version(self):
-    """Verify tactus package matches pinned version in requirements.txt"""
-    import tactus
-    expected_version = "0.43.1"
-    actual_version = tactus.__version__
+    """Verify installed tactus version matches the pinned version in requirements.txt"""
+    import re
+    from importlib.metadata import version as pkg_version
+
+    req_file = "/tmp/requirements.txt"
+    with open(req_file) as f:
+        content = f.read()
+    match = re.search(r"^tactus==(.+)$", content, re.MULTILINE)
+    assert match, f"Could not find tactus pin in {req_file}"
+    expected_version = match.group(1).strip()
+
+    actual_version = pkg_version("tactus")
     assert actual_version == expected_version, \
         f"Expected tactus {expected_version}, got {actual_version}"
     print(f"    - tactus version matches: {actual_version}")

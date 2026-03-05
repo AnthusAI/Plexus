@@ -60,7 +60,7 @@ dependencies = [
     "langchain-anthropic==0.3.22",
     "langgraph-checkpoint-postgres==2.0.9",
     "lupa==2.6",
-    "tactus==0.43.1",
+    "tactus==0.44.0",
     "openpyxl==3.1.5",
     "rapidfuzz==3.9.4",
     "datasets",
@@ -78,7 +78,8 @@ dependencies = [
     "fastmcp>=2.3.5",
     "ollama>=0.1.6",
     "bertopic>=0.16.2",
-    "kaleido>=0.2.1"
+    "kaleido>=0.2.1",
+    "requests>=2.31.0"
 ]
 
 [project.scripts]
