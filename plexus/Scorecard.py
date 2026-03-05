@@ -1,31 +1,21 @@
 import os
 import re
 import yaml
-import json
-import requests
-import json
-import rich
 import logging
-import pandas as pd
 import importlib.util
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, List, Dict, Union, Any
+from typing import Optional, List, Dict, Any
 import asyncio
-import boto3
-from botocore.exceptions import ClientError
 import tiktoken
-from os import getenv
 from ruamel.yaml import YAML
 from datetime import datetime
 
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
-import plexus.scores
 from plexus.scores.Score import Score
 from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
 from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
-from plexus.utils.dict_utils import truncate_dict_strings_inner, truncate_dict_strings
 
 
 class Scorecard:
@@ -815,11 +805,6 @@ class Scorecard:
                     f"BatchProcessingPause caught in get_score_result for {score}"
                 )
                 raise
-
-        else:
-            error_string = f'No score found for question: "{score}"'
-            logging.error(error_string)
-            return [Score.Result(value="ERROR", error=error_string)]
 
     async def score_entire_text(
         self,
