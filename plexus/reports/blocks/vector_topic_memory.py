@@ -6,6 +6,8 @@ Uses S3 embedding cache, global clustering, and memory weights.
 
 Supports two data sources:
 - Feedback items: scorecard + days (same as FeedbackAnalysis) — uses transcript text from Items
+- ScoreResults: scorecard + days with content_source=score_result_no_explanation —
+  uses ScoreResult.explanation where value='No' from normal production predictions
 - DataSource/DataSet: data.source or data.dataset — uses Parquet from DatasetResolver
 """
 
@@ -30,7 +32,11 @@ class VectorTopicMemory(BaseReportBlock):
     Config:
         scorecard (str): Scorecard identifier. When provided with days, uses feedback items (same as FeedbackAnalysis).
         days (int): Number of days of feedback to include. Used with scorecard.
-        data: { source?: str, dataset?: str, content_column?: str, fresh?: bool }  # Alternative to scorecard+days
+        data: { source?: str, dataset?: str, content_column?: str, fresh?: bool, content_source?: str }
+          content_source:
+            - edit_comment (default): FeedbackItem.editCommentValue for mismatches
+            - transcript: Item transcript text linked from feedback items
+            - score_result_no_explanation: ScoreResult.explanation for normal production predictions with value='No'
         s3_vectors: { bucket_name: str, index_name: str, index_arn?: str, region?: str }
         embedding: { model_id?: str, preprocessing_version?: str }
         clustering: { min_topic_size?: int }
@@ -384,6 +390,41 @@ class VectorTopicMemory(BaseReportBlock):
         label = result.content.strip().strip('"\'')
         return label[:80] if label else "Unnamed topic"
 
+    @staticmethod
+    def _parse_iso_timestamp(value: Any) -> Optional[datetime]:
+        """Parse ISO timestamps consistently and return UTC-aware datetime."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _is_normal_prediction_score_result(score_result: Dict[str, Any]) -> bool:
+        """
+        Normal production ScoreResult heuristic:
+        - prediction type
+        - completed status
+        - success code 200
+        - not linked to an evaluation
+        """
+        if score_result.get("evaluationId"):
+            return False
+        score_type = str(score_result.get("type") or "prediction").strip().lower()
+        if score_type != "prediction":
+            return False
+        status = str(score_result.get("status") or "COMPLETED").strip().upper()
+        if status != "COMPLETED":
+            return False
+        code = str(score_result.get("code") or "200").strip()
+        return code == "200"
+
     async def _resolve_feedback_datasets(
         self, scorecard_param: str, days: int
     ) -> List[Dict[str, Any]]:
@@ -501,11 +542,9 @@ class VectorTopicMemory(BaseReportBlock):
                         texts.append(comment)
                         doc_ids.append(fi.id or f"{fi.itemId}_{fi.scoreId}")
                         # Parse timestamp
-                        ts = fi.updatedAt or fi.createdAt
-                        if isinstance(ts, str):
-                            ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
-                        timestamps.append(ts)
-            else:
+                        ts = self._parse_iso_timestamp(fi.updatedAt or fi.createdAt)
+                        timestamps.append(ts or end_date)
+            elif content_source == "transcript":
                 # content_source == "transcript": use Item transcript text
                 seen_item_ids: set = set()
                 item_ids_to_fetch: List[str] = []
@@ -515,10 +554,8 @@ class VectorTopicMemory(BaseReportBlock):
                     if fi.itemId and fi.itemId not in seen_item_ids:
                         seen_item_ids.add(fi.itemId)
                         item_ids_to_fetch.append(fi.itemId)
-                        ts = fi.updatedAt or fi.createdAt
-                        if isinstance(ts, str):
-                            ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
-                        item_timestamps[fi.itemId] = ts
+                        ts = self._parse_iso_timestamp(fi.updatedAt or fi.createdAt)
+                        item_timestamps[fi.itemId] = ts or end_date
 
                 for item_id in item_ids_to_fetch:
                     item = await asyncio.to_thread(Item.get_by_id, item_id, self.api_client)
@@ -526,6 +563,41 @@ class VectorTopicMemory(BaseReportBlock):
                         texts.append((item.text or "").strip())
                         doc_ids.append(item_id)
                         timestamps.append(item_timestamps[item_id])
+            elif content_source == "score_result_no_explanation":
+                score_results = await feedback_utils.fetch_score_results_for_score(
+                    self.api_client,
+                    account_id,
+                    plexus_scorecard.id,
+                    score_info["plexus_score_id"],
+                    start_date,
+                    end_date,
+                )
+                retained = 0
+                for sr in score_results:
+                    if not self._is_normal_prediction_score_result(sr):
+                        continue
+                    value = str(sr.get("value") or "").strip().lower()
+                    if value != "no":
+                        continue
+                    explanation = (sr.get("explanation") or "").strip()
+                    if not explanation:
+                        continue
+
+                    texts.append(explanation)
+                    doc_ids.append(sr.get("id") or f"{sr.get('itemId')}_{sr.get('scoreId')}")
+                    ts = self._parse_iso_timestamp(sr.get("updatedAt") or sr.get("createdAt"))
+                    timestamps.append(ts or end_date)
+                    retained += 1
+                self._log(
+                    f"ScoreResult source retained {retained} items for score {score_info['plexus_score_name']} "
+                    f"(fetched {len(score_results)} records)."
+                )
+            else:
+                self._log(
+                    f"Unsupported content_source '{content_source}'. Supported: edit_comment, transcript, score_result_no_explanation.",
+                    level="ERROR",
+                )
+                continue
 
             if texts:
                 datasets.append({
