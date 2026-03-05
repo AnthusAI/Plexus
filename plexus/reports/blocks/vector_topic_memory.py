@@ -12,6 +12,7 @@ Supports two data sources:
 """
 
 import asyncio
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -230,6 +231,8 @@ class VectorTopicMemory(BaseReportBlock):
 
             clustering_config = self.config.get("clustering", {})
             min_topic_size = clustering_config.get("min_topic_size", 10)
+            min_topic_fraction = float(clustering_config.get("min_topic_fraction", 0.01))
+            target_max_topics_per_score = clustering_config.get("target_max_topics_per_score")
             min_samples = clustering_config.get("min_samples")
             cluster_selection_method = clustering_config.get("cluster_selection_method", "leaf")
             cluster_selection_epsilon = clustering_config.get("cluster_selection_epsilon", 0.5)
@@ -238,6 +241,8 @@ class VectorTopicMemory(BaseReportBlock):
             use_llm_labels = label_config.get("use_llm", True)
             api_key_env = label_config.get("api_key_env_var", "OPENAI_API_KEY")
             model_name = label_config.get("model", "gpt-4o-mini")
+            max_topics_to_label = int(label_config.get("max_topics_to_label", 25))
+            label_min_member_count = int(label_config.get("label_min_member_count", 8))
             openai_key = os.environ.get(api_key_env) if use_llm_labels else None
 
             # Reference date for calculating decay (usually today)
@@ -247,14 +252,24 @@ class VectorTopicMemory(BaseReportBlock):
                 if len(ds["texts"]) == 0:
                     self._log(f"No items to cluster for score {ds['score_name']}.")
                     continue
+
+                effective_min_topic_size = self._resolve_effective_min_topic_size(
+                    item_count=len(ds["texts"]),
+                    configured_min_topic_size=int(min_topic_size),
+                    min_topic_fraction=min_topic_fraction,
+                    target_max_topics_per_score=target_max_topics_per_score,
+                )
                 
-                self._log(f"Clustering {len(ds['texts'])} items for score {ds['score_name']}...")
-                clusterer = TopicClusterer(min_topic_size=min_topic_size)
+                self._log(
+                    f"Clustering {len(ds['texts'])} items for score {ds['score_name']} "
+                    f"(effective_min_topic_size={effective_min_topic_size})..."
+                )
+                clusterer = TopicClusterer(min_topic_size=effective_min_topic_size)
                 emb_array = np.array(ds["embeddings"], dtype=np.float32)
                 topics, cluster_version = clusterer.cluster(
                     emb_array,
                     ds["texts"],
-                    min_topic_size=min_topic_size,
+                    min_topic_size=effective_min_topic_size,
                     min_samples=min_samples,
                     cluster_selection_method=cluster_selection_method,
                     cluster_selection_epsilon=cluster_selection_epsilon,
@@ -269,6 +284,21 @@ class VectorTopicMemory(BaseReportBlock):
                 centroids = clusterer.cluster_centroids()
                 boundaries = clusterer.cluster_boundaries()
                 topics_arr = np.array(topics)
+                cluster_member_counts = {
+                    tid: int(len(np.where(topics_arr == tid)[0]))
+                    for tid in centroids
+                }
+                llm_label_topic_ids = self._select_llm_label_topic_ids(
+                    cluster_member_counts=cluster_member_counts,
+                    max_topics_to_label=max_topics_to_label,
+                    label_min_member_count=label_min_member_count,
+                )
+                self._log(
+                    f"Score {ds['score_name']}: {len(centroids)} clusters, "
+                    f"LLM labeling budget={len(llm_label_topic_ids)} "
+                    f"(max_topics_to_label={max_topics_to_label}, "
+                    f"label_min_member_count={label_min_member_count})."
+                )
                 
                 ds_topics = []
                 updated_clusters = []
@@ -310,8 +340,16 @@ class VectorTopicMemory(BaseReportBlock):
                     keywords = clusterer.get_keywords(tid, n=8)
                     exemplars_truncated = [(ex[:300] + "…" if len(ex) > 300 else ex) for ex in exemplars]
 
-                    label = f"Topic {tid}"
-                    if use_llm_labels and openai_key and (keywords or exemplars):
+                    label = self._fallback_topic_label(
+                        keywords=keywords,
+                        cluster_id=tid,
+                    )
+                    if (
+                        use_llm_labels
+                        and openai_key
+                        and tid in llm_label_topic_ids
+                        and (keywords or exemplars)
+                    ):
                         try:
                             label = self._generate_topic_label(
                                 keywords=keywords, exemplars=exemplars[:3],
@@ -404,6 +442,59 @@ class VectorTopicMemory(BaseReportBlock):
         result = chain.invoke({})
         label = result.content.strip().strip('"\'')
         return label[:80] if label else "Unnamed topic"
+
+    @staticmethod
+    def _fallback_topic_label(keywords: List[str], cluster_id: int) -> str:
+        """
+        Generate a deterministic non-LLM label from top keywords.
+        """
+        top_keywords = [kw.strip() for kw in (keywords or []) if kw and kw.strip()]
+        if not top_keywords:
+            return f"Topic {cluster_id}"
+        compact = top_keywords[:2]
+        return " / ".join(compact)[:80]
+
+    @staticmethod
+    def _select_llm_label_topic_ids(
+        cluster_member_counts: Dict[int, int],
+        max_topics_to_label: int,
+        label_min_member_count: int,
+    ) -> set:
+        """
+        Select which clusters are eligible for LLM labeling.
+        """
+        if max_topics_to_label <= 0:
+            return set()
+        ranked = sorted(
+            (
+                (topic_id, count)
+                for topic_id, count in cluster_member_counts.items()
+                if count >= label_min_member_count
+            ),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        return {topic_id for topic_id, _ in ranked[:max_topics_to_label]}
+
+    @staticmethod
+    def _resolve_effective_min_topic_size(
+        item_count: int,
+        configured_min_topic_size: int,
+        min_topic_fraction: float,
+        target_max_topics_per_score: Optional[int],
+    ) -> int:
+        """
+        Resolve an effective min_topic_size that avoids over-fragmented clusters.
+        """
+        effective = max(2, configured_min_topic_size)
+        if min_topic_fraction > 0:
+            effective = max(effective, int(math.ceil(item_count * min_topic_fraction)))
+        if target_max_topics_per_score and target_max_topics_per_score > 0:
+            effective = max(
+                effective,
+                int(math.ceil(item_count / float(target_max_topics_per_score))),
+            )
+        return min(effective, max(2, item_count))
 
     @staticmethod
     def _parse_iso_timestamp(value: Any) -> Optional[datetime]:
