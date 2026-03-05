@@ -109,6 +109,59 @@ def test_vector_topic_memory_normal_prediction_score_result_filter(vector_topic_
     assert vector_topic_memory_block._is_normal_prediction_score_result(drop_status) is False
 
 
+def test_vector_topic_memory_lifecycle_flags_new(vector_topic_memory_block):
+    """new = short && !medium && !long."""
+    end_date = datetime(2026, 3, 5, tzinfo=timezone.utc)
+    timestamps = [
+        datetime(2026, 3, 4, tzinfo=timezone.utc),
+        datetime(2026, 2, 28, tzinfo=timezone.utc),
+    ]
+
+    flags = vector_topic_memory_block._derive_lifecycle_flags(timestamps, end_date)
+
+    assert flags["has_short_term_memory"] is True
+    assert flags["has_medium_term_memory"] is False
+    assert flags["has_long_term_memory"] is False
+    assert flags["is_new"] is True
+    assert flags["is_trending"] is True
+    assert flags["lifecycle_tier"] == "new"
+
+
+def test_vector_topic_memory_lifecycle_flags_trending(vector_topic_memory_block):
+    """trending = (short || medium) && !long."""
+    end_date = datetime(2026, 3, 5, tzinfo=timezone.utc)
+    timestamps = [
+        datetime(2026, 3, 4, tzinfo=timezone.utc),
+        datetime(2026, 2, 15, tzinfo=timezone.utc),
+    ]
+
+    flags = vector_topic_memory_block._derive_lifecycle_flags(timestamps, end_date)
+
+    assert flags["has_short_term_memory"] is True
+    assert flags["has_medium_term_memory"] is True
+    assert flags["has_long_term_memory"] is False
+    assert flags["is_new"] is False
+    assert flags["is_trending"] is True
+    assert flags["lifecycle_tier"] == "trending"
+
+
+def test_vector_topic_memory_lifecycle_flags_established(vector_topic_memory_block):
+    """Long-window presence marks topic as established."""
+    end_date = datetime(2026, 3, 5, tzinfo=timezone.utc)
+    timestamps = [
+        datetime(2026, 3, 4, tzinfo=timezone.utc),
+        datetime(2026, 1, 10, tzinfo=timezone.utc),
+    ]
+
+    flags = vector_topic_memory_block._derive_lifecycle_flags(timestamps, end_date)
+
+    assert flags["has_short_term_memory"] is True
+    assert flags["has_long_term_memory"] is True
+    assert flags["is_new"] is False
+    assert flags["is_trending"] is False
+    assert flags["lifecycle_tier"] == "established"
+
+
 @pytest.mark.asyncio
 async def test_vector_topic_memory_resolves_score_result_no_explanation_source(
     vector_topic_memory_block,

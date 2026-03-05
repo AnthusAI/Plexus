@@ -45,6 +45,8 @@ class VectorTopicMemory(BaseReportBlock):
 
     DEFAULT_NAME = "Vector Topic Memory"
     DEFAULT_DESCRIPTION = "Persistent vector-based topic memory from S3 Vectors index"
+    SHORT_TERM_DAYS = 14
+    MEDIUM_TERM_DAYS = 30
 
     def _resolve_s3_vectors_config(self) -> Dict[str, Optional[str]]:
         """
@@ -283,6 +285,13 @@ class VectorTopicMemory(BaseReportBlock):
                         days_inactive = max(0, (end_date - most_recent).days)
                     else:
                         days_inactive = 0
+
+                    lifecycle = self._derive_lifecycle_flags(
+                        cluster_timestamps=cluster_timestamps,
+                        end_date=end_date,
+                        short_term_days=self.SHORT_TERM_DAYS,
+                        medium_term_days=self.MEDIUM_TERM_DAYS,
+                    )
                         
                     # Simulated history for full rebuild:
                     # If active within last 14 days -> hot (0.8)
@@ -320,7 +329,13 @@ class VectorTopicMemory(BaseReportBlock):
                         "memory_tier": tier,
                         "p95_distance": boundaries.get(tid, 0.0),
                         "member_count": member_count,
-                        "days_inactive": days_inactive
+                        "days_inactive": days_inactive,
+                        "has_short_term_memory": lifecycle["has_short_term_memory"],
+                        "has_medium_term_memory": lifecycle["has_medium_term_memory"],
+                        "has_long_term_memory": lifecycle["has_long_term_memory"],
+                        "is_new": lifecycle["is_new"],
+                        "is_trending": lifecycle["is_trending"],
+                        "lifecycle_tier": lifecycle["lifecycle_tier"],
                     })
                     
                     # Store updated weight back to S3 Vectors
@@ -404,6 +419,53 @@ class VectorTopicMemory(BaseReportBlock):
             except ValueError:
                 return None
         return None
+
+    @staticmethod
+    def _derive_lifecycle_flags(
+        cluster_timestamps: List[datetime],
+        end_date: datetime,
+        short_term_days: int = SHORT_TERM_DAYS,
+        medium_term_days: int = MEDIUM_TERM_DAYS,
+    ) -> Dict[str, Any]:
+        """
+        Derive lifecycle windows from member timestamps.
+
+        Definitions:
+        - new = short && !medium && !long
+        - trending = (short || medium) && !long
+        """
+        has_short = False
+        has_medium = False
+        has_long = False
+
+        for ts in cluster_timestamps:
+            ts_aware = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+            age_days = max(0, (end_date - ts_aware).days)
+            if age_days <= short_term_days:
+                has_short = True
+            elif age_days <= medium_term_days:
+                has_medium = True
+            else:
+                has_long = True
+
+        is_new = has_short and (not has_medium) and (not has_long)
+        is_trending = (has_short or has_medium) and (not has_long)
+
+        if is_new:
+            lifecycle_tier = "new"
+        elif is_trending:
+            lifecycle_tier = "trending"
+        else:
+            lifecycle_tier = "established"
+
+        return {
+            "has_short_term_memory": has_short,
+            "has_medium_term_memory": has_medium,
+            "has_long_term_memory": has_long,
+            "is_new": is_new,
+            "is_trending": is_trending,
+            "lifecycle_tier": lifecycle_tier,
+        }
 
     @staticmethod
     def _is_normal_prediction_score_result(score_result: Dict[str, Any]) -> bool:
