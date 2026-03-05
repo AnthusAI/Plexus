@@ -1,0 +1,55 @@
+{
+  "id": "plx-bc3c9860-bb07-4fb0-a2cf-a76821b48a15",
+  "title": "CodeQL exclude config for node_modules scan noise",
+  "description": "",
+  "type": "chore",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dce57ac5-051d-4a53-abd0-04dff69e7ca2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "14186e70-b262-4146-bef3-6ff22393c657",
+      "author": "derek",
+      "text": "Investigating CodeQL scanning of vendored paths (e.g., dashboard/node_modules/aws-cdk templates) and preparing exclusion config for repo.",
+      "created_at": "2026-03-04T21:14:16.486267867Z"
+    },
+    {
+      "id": "db7b54da-2dbf-4b4d-9bfb-2db5f4dc8304",
+      "author": "derek",
+      "text": "Added  with  entries for vendored/generated directories including . Next: share exact CodeQL CLI flags to ensure this config is applied in local runs and GitHub Actions.",
+      "created_at": "2026-03-04T21:14:35.634690598Z"
+    },
+    {
+      "id": "2c58dff7-043a-425c-b672-637c9a440815",
+      "author": "derek",
+      "text": "Added .github/codeql/codeql-config.yml with paths-ignore rules for vendored/generated directories including **/node_modules/**. Preparing handoff instructions for local CodeQL and GitHub Action usage.",
+      "created_at": "2026-03-04T21:14:38.052457341Z"
+    },
+    {
+      "id": "ed5f2bef-eea8-4d64-b08e-f6ea0473f852",
+      "author": "derek",
+      "text": "Closed after adding CodeQL ignore config and confirming file creation.",
+      "created_at": "2026-03-04T21:14:41.879830428Z"
+    },
+    {
+      "id": "5ce4ab1c-68e0-45e3-953e-1524bdd1dd18",
+      "author": "derek",
+      "text": "Reopened to add .codeql exclusion after user reported warnings from .codeql/db-python snapshot paths.",
+      "created_at": "2026-03-04T21:23:11.653330995Z"
+    },
+    {
+      "id": "2b38b65e-4616-49e5-a741-6cfea69272b5",
+      "author": "derek",
+      "text": "Implemented .codeql exclusion in both .github/codeql/codeql-config.yml (paths-ignore) and .gitignore to prevent scanning/noise from local CodeQL databases.",
+      "created_at": "2026-03-04T21:23:23.159115186Z"
+    }
+  ],
+  "created_at": "2026-03-04T21:13:51.589783386Z",
+  "updated_at": "2026-03-04T21:23:23.159115186Z",
+  "closed_at": null,
+  "custom": {}
+}
