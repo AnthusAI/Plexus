@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
+from datetime import datetime, timezone
 
 from plexus.reports.blocks.vector_topic_memory import VectorTopicMemory
 
@@ -80,3 +81,111 @@ async def test_vector_topic_memory_is_base_report_block():
     from plexus.reports.blocks.base import BaseReportBlock
 
     assert issubclass(VectorTopicMemory, BaseReportBlock)
+
+
+def test_vector_topic_memory_normal_prediction_score_result_filter(vector_topic_memory_block):
+    """Normal-production filter accepts only prediction/completed/200/non-evaluation rows."""
+    keep = {
+        "type": "prediction",
+        "status": "COMPLETED",
+        "code": "200",
+        "evaluationId": None,
+    }
+    drop_eval = {
+        "type": "prediction",
+        "status": "COMPLETED",
+        "code": "200",
+        "evaluationId": "eval-1",
+    }
+    drop_status = {
+        "type": "prediction",
+        "status": "RUNNING",
+        "code": "200",
+        "evaluationId": None,
+    }
+
+    assert vector_topic_memory_block._is_normal_prediction_score_result(keep) is True
+    assert vector_topic_memory_block._is_normal_prediction_score_result(drop_eval) is False
+    assert vector_topic_memory_block._is_normal_prediction_score_result(drop_status) is False
+
+
+@pytest.mark.asyncio
+async def test_vector_topic_memory_resolves_score_result_no_explanation_source(
+    vector_topic_memory_block,
+):
+    """content_source=score_result_no_explanation uses only normal 'No' ScoreResult explanations."""
+    vector_topic_memory_block.config = {"data": {"content_source": "score_result_no_explanation"}}
+    vector_topic_memory_block.params = {"account_id": "acct-1"}
+
+    scorecard = MagicMock()
+    scorecard.id = "scorecard-1"
+    scorecard.name = "Test Scorecard"
+
+    with patch(
+        "plexus.dashboard.api.models.scorecard.Scorecard.get_by_external_id",
+        return_value=scorecard,
+    ), patch(
+        "plexus.reports.blocks.feedback_utils.fetch_scores_for_scorecard",
+        new=AsyncMock(
+            return_value=[
+                {
+                    "plexus_score_id": "score-1",
+                    "plexus_score_name": "Program Match",
+                    "cc_question_id": "44245",
+                }
+            ]
+        ),
+    ), patch(
+        "plexus.reports.blocks.feedback_utils.fetch_score_results_for_score",
+        new=AsyncMock(
+            return_value=[
+                {
+                    "id": "sr-keep",
+                    "value": "No",
+                    "explanation": "Retain this explanation.",
+                    "type": "prediction",
+                    "status": "COMPLETED",
+                    "code": "200",
+                    "evaluationId": None,
+                    "updatedAt": "2026-03-04T19:00:00Z",
+                },
+                {
+                    "id": "sr-skip-value",
+                    "value": "Yes",
+                    "explanation": "Do not keep.",
+                    "type": "prediction",
+                    "status": "COMPLETED",
+                    "code": "200",
+                    "evaluationId": None,
+                    "updatedAt": "2026-03-04T19:00:00Z",
+                },
+                {
+                    "id": "sr-skip-eval",
+                    "value": "No",
+                    "explanation": "Do not keep.",
+                    "type": "prediction",
+                    "status": "COMPLETED",
+                    "code": "200",
+                    "evaluationId": "eval-1",
+                    "updatedAt": "2026-03-04T19:00:00Z",
+                },
+                {
+                    "id": "sr-skip-empty",
+                    "value": "No",
+                    "explanation": "",
+                    "type": "prediction",
+                    "status": "COMPLETED",
+                    "code": "200",
+                    "evaluationId": None,
+                    "updatedAt": "2026-03-04T19:00:00Z",
+                },
+            ]
+        ),
+    ):
+        datasets = await vector_topic_memory_block._resolve_feedback_datasets("97", 14)
+
+    assert len(datasets) == 1
+    assert datasets[0]["score_id"] == "44245"
+    assert datasets[0]["texts"] == ["Retain this explanation."]
+    assert datasets[0]["doc_ids"] == ["sr-keep"]
+    assert datasets[0]["timestamps"] == [datetime(2026, 3, 4, 19, 0, tzinfo=timezone.utc)]
