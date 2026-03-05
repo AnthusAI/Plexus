@@ -112,7 +112,14 @@ class ConfigLoader:
         
         # Third-party
         'airtable.api_key': 'AIRTABLE_API_KEY',
-        
+
+        # Semantic Reinforcement Memory (S3 Vectors + Embeddings)
+        's3_vectors.bucket_name': 'S3_VECTOR_BUCKET_NAME',
+        's3_vectors.index_name': 'S3_VECTOR_INDEX_NAME',
+        's3_vectors.index_arn': 'S3_VECTOR_INDEX_ARN',
+        's3_vectors.region': 'AWS_REGION',
+        'embedding_cache.bucket': 'EMBEDDING_CACHE_BUCKET',
+
         # Dashboard
         'dashboard.minimal_branding': 'NEXT_PUBLIC_MINIMAL_BRANDING',
     }

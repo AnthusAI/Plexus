@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b0017e52-a8ad-4df1-8d0e-783af5f92503",
+  "issue_id": "plx-3bb9ce18-9d60-4a54-83bf-7c88fd8f076b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T02:23:55.292Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** ReportBlock, **I want** to compute embeddings for a list of texts using cache for hits and the model for misses, **so that** re-indexing does not mean re-embedding.\n\nThe `EmbeddingService` class checks cache for each text, computes only misses via sentence-transformers, and writes new embeddings back through the cache. The existing `plexus/analysis/topics/analyzer.py` uses BERTopic's built-in sentence-transformers; this story extracts embedding into a standalone cacheable step that the new ReportBlock will call directly.\n\nThe key interface is `batch_embed(texts: List[str], model_id: str, version: str) -> List[np.ndarray]`. It must preserve the original ordering of texts in the returned embeddings list, even when cache hits and misses are interleaved.\n\n## Key Files\n\n- Modify: `plexus/analysis/embedding_cache.py` (add `EmbeddingService` class)\n- Modify: `plexus/analysis/embedding_cache_test.py`\n\n## Dependencies\n\nStory plx-8221a1 (S3 read/write for cached embeddings)",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-46f6f0dd-b5af-4573-8f35-27f3d21f774f",
+    "priority": 2,
+    "status": "open",
+    "title": "Batch embedding with cache-aware pipeline"
+  }
+}

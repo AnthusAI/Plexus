@@ -14,6 +14,7 @@ import ScorecardReport from './ScorecardReport';
 import ScoreInfo from './ScoreInfo';
 import TopicAnalysis from './TopicAnalysis';
 import CostAnalysis from './CostAnalysis';
+import VectorTopicMemory from './VectorTopicMemory';
 
 // Register all block components
 // Register the default block handler first
@@ -26,3 +27,4 @@ registerBlock('text', TextBlock as BlockComponent);
 registerBlock('ScoreInfo', ScoreInfo as BlockComponent);
 registerBlock('TopicAnalysis', TopicAnalysis as BlockComponent); 
 registerBlock('CostAnalysis', CostAnalysis as BlockComponent);
+registerBlock('VectorTopicMemory', VectorTopicMemory as BlockComponent);
