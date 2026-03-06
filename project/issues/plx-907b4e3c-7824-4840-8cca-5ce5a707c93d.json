@@ -3,7 +3,7 @@
   "title": "Fix Scorecard missing-score return contract and ReportTask effect deps",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -25,7 +25,7 @@
     }
   ],
   "created_at": "2026-03-06T17:55:43.048607Z",
-  "updated_at": "2026-03-06T17:56:40.223041Z",
-  "closed_at": null,
+  "updated_at": "2026-03-06T17:56:44.255805Z",
+  "closed_at": "2026-03-06T17:56:44.255805Z",
   "custom": {}
 }
