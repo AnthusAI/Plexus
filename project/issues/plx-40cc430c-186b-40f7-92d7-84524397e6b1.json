@@ -1,0 +1,25 @@
+{
+  "id": "plx-40cc430c-186b-40f7-92d7-84524397e6b1",
+  "title": "Integrate origin/dev into feature/reinforcement-memory",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b4285ed5-74fa-47da-81d9-696ddd4ca5ac",
+      "author": "ryan.porter",
+      "text": "Starting integration: checkpointing full working tree (including project artifacts) on feature/reinforcement-memory, then merging origin/dev and resolving conflicts.",
+      "created_at": "2026-03-06T17:43:29.449109Z"
+    }
+  ],
+  "created_at": "2026-03-06T17:43:26.863560Z",
+  "updated_at": "2026-03-06T17:43:29.449109Z",
+  "closed_at": null,
+  "custom": {}
+}

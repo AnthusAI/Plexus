@@ -1,0 +1,229 @@
+{
+  "id": "plx-10aac752-d464-43ff-99a1-b3c6e98fd13d",
+  "title": "Run 60-day Semantic Reinforcement Memory for Andersen Windows IB Sales",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d93d086b-39cc-4392-a45e-b6150099e373",
+      "author": "unknown",
+      "text": "Run initialized. Target scorecard: Andersen Windows IB Sales (externalId=555, id=78ce4b2d-e132-4358-8130-6a8c82c39cce). Next: dispatch 60-day ScoreResult No-explanation Semantic Reinforcement Memory report and track task/report IDs live.",
+      "created_at": "2026-03-05T06:32:12.481407Z"
+    },
+    {
+      "id": "3099981a-9da6-4e82-9274-ac2a825362c9",
+      "author": "unknown",
+      "text": "Run dispatched and active. report_id=d9b3335b-20a4-4190-88a9-fc5627497e18 task_id=babb9d7e-d95e-4f78-8357-4a7f8d46c394 report_block_id=66d9de92-2d97-4a83-b0e8-82f037fc74c2. Current state: stage 4/5 (Processing Report Blocks) RUNNING.",
+      "created_at": "2026-03-05T06:35:39.954623Z"
+    },
+    {
+      "id": "732beeba-0f64-4639-bef5-db170ee9a540",
+      "author": "unknown",
+      "text": "Execution checkpoint: VectorTopicMemory block started (report_block_id=66d9de92-2d97-4a83-b0e8-82f037fc74c2) and resolved 74 score definitions on Andersen Windows IB Sales for the 60-day window.",
+      "created_at": "2026-03-05T06:37:17.551574Z"
+    },
+    {
+      "id": "e96995ac-30b9-4eb0-8f1e-8052c679c7fe",
+      "author": "unknown",
+      "text": "Runtime checkpoint: worker process remains active (~10m elapsed, ~14% CPU), still in stage 4 block processing. No failure signal yet.",
+      "created_at": "2026-03-05T06:43:40.214850Z"
+    },
+    {
+      "id": "7a5a3bd6-936a-4b31-b49c-ee37ea93d222",
+      "author": "unknown",
+      "text": "Current status is not finalized: task remains in Stage 4 RUNNING and has not emitted completion/failure. Given identical code path, this run is expected to fail at finalization with the same dict/encode regression if allowed to continue. Plan: patch first, then rerun cleanly.",
+      "created_at": "2026-03-05T12:28:36.862699Z"
+    },
+    {
+      "id": "58d0ac53-53b5-4b70-b5dc-2a159d614d16",
+      "author": "unknown",
+      "text": "Hotfix applied for finalization regression (dict output normalization before attachment upload); focused tests passed (20). Stale long-running worker from buggy code path was terminated and this scorecard run will be relaunched on fixed code.",
+      "created_at": "2026-03-05T12:30:21.876006Z"
+    },
+    {
+      "id": "e59c01a4-2330-4abc-84b0-57a9a3a2228d",
+      "author": "unknown",
+      "text": "Rerun dispatched on hotfix build. New task_id=1807c1ce-42b8-4d3f-871f-419a070207a7 new report_id=f6e2ba04-5da4-4638-bccf-c9f325bbb21c. Processing now.",
+      "created_at": "2026-03-05T12:31:45.395665Z"
+    },
+    {
+      "id": "494542a6-58b2-42e8-bb04-d048eaeb658f",
+      "author": "unknown",
+      "text": "Current status: hotfix rerun task_id=1807c1ce-42b8-4d3f-871f-419a070207a7 still RUNNING in stage 4/5.",
+      "created_at": "2026-03-05T13:03:13.315982Z"
+    },
+    {
+      "id": "b4f604c2-2afb-437b-a30a-316e850073a4",
+      "author": "unknown",
+      "text": "Update: task_id=1807c1ce-42b8-4d3f-871f-419a070207a7 remains active in stage 4/5.",
+      "created_at": "2026-03-05T13:03:40.965034Z"
+    },
+    {
+      "id": "48f899b2-0e61-47e1-a17e-b36e1b443d88",
+      "author": "unknown",
+      "text": "Watchdog active: polling every 3 minutes; auto-rerun enabled on crash (max retries=2). Current task_id=1807c1ce-42b8-4d3f-871f-419a070207a7.",
+      "created_at": "2026-03-05T13:04:55.716464Z"
+    },
+    {
+      "id": "fc17e1e2-cb93-42fd-a0b3-e487be3c42bf",
+      "author": "unknown",
+      "text": "Watchdog status change: task_id=1807c1ce-42b8-4d3f-871f-419a070207a7 status=PENDING.",
+      "created_at": "2026-03-05T13:04:57.141851Z"
+    },
+    {
+      "id": "5fdea97c-ced3-42e3-a698-358d22f7dd06",
+      "author": "unknown",
+      "text": "Execution restart: marking prior Andersen task 1807c1ce-42b8-4d3f-871f-419a070207a7 as stale for timeout policy, proceeding with config-sync canary/fanout relaunch workflow.",
+      "created_at": "2026-03-05T14:07:31.845467Z"
+    },
+    {
+      "id": "05f4d761-d4cc-4d04-964f-990b6f23ad67",
+      "author": "unknown",
+      "text": "Stale local runner for Andersen was terminated and superseded (old task remains recorded: 1807c1ce-42b8-4d3f-871f-419a070207a7). Continuing with fresh synced runs under timeout policy.",
+      "created_at": "2026-03-05T14:07:50.434438Z"
+    },
+    {
+      "id": "79f69463-b0bc-4dd1-b991-b08e327c2377",
+      "author": "unknown",
+      "text": "[2026-03-05 10:31 ET] Relaunched 60-day SRM run (superseding stale task 1807c1ce-42b8-4d3f-871f-419a070207a7 under timeout policy). New report/task created: report=68e07046-c8e9-498c-bcd7-fc897a9c258a, task=30155c76-61d1-4795-9813-44fa64f86aeb. Status: running (stage processing started).",
+      "created_at": "2026-03-05T15:31:22.731342Z"
+    },
+    {
+      "id": "c2371a50-a98c-41d8-a51f-5424f5cd74b9",
+      "author": "unknown",
+      "text": "[2026-03-05 10:31 ET] Progress: task 30155c76-61d1-4795-9813-44fa64f86aeb advanced into block processing (stage 4). ReportBlock created: 6470f42e-aecb-44b4-b3c0-84003866d0f4. Runtime confirms S3 vectors defaults + coarse/batch label config loaded from synced template.",
+      "created_at": "2026-03-05T15:31:46.514471Z"
+    },
+    {
+      "id": "f7e8dd8e-18fc-41a7-a093-9fccc40d1354",
+      "author": "unknown",
+      "text": "[2026-03-05 10:43 ET] Monitoring heartbeat: task 30155c76-61d1-4795-9813-44fa64f86aeb remains in stage 4 RUNNING; report block still pending. No-progress window ~12 minutes so far (below 45-minute relaunch threshold).",
+      "created_at": "2026-03-05T15:43:24.844466Z"
+    },
+    {
+      "id": "c5e0225f-ee52-4e6e-a88d-1dc819a929c3",
+      "author": "unknown",
+      "text": "[2026-03-05 10:47 ET] Task 30155c76-61d1-4795-9813-44fa64f86aeb still stage4=RUNNING; no task timestamp movement for ~16 minutes. Continuing monitor; timeout relaunch threshold is 45 minutes.",
+      "created_at": "2026-03-05T15:47:09.024377Z"
+    },
+    {
+      "id": "1c5434a1-2e64-42bb-bdac-c45a8851aa56",
+      "author": "unknown",
+      "text": "[2026-03-05 10:52 ET] Heartbeat: still stage4 RUNNING for task 30155c76-61d1-4795-9813-44fa64f86aeb (~22 min in stage 4, no error). Continuing monitor.",
+      "created_at": "2026-03-05T15:52:55.062210Z"
+    },
+    {
+      "id": "20ee2e47-ace6-44ea-b41c-ed1aae4eed60",
+      "author": "unknown",
+      "text": "[2026-03-05 10:55 ET] Runtime probe: Andersen worker process remains alive and consuming CPU/memory; currently waiting on remote API I/O in stage 4 (network read observed in sample). No error set yet; continuing monitor against 45-minute no-progress policy.",
+      "created_at": "2026-03-05T15:55:11.826653Z"
+    },
+    {
+      "id": "98029cd1-1bf1-4241-99df-0cec78fa60a6",
+      "author": "unknown",
+      "text": "[2026-03-05 10:57 ET] No new block logs emitted yet for Andersen since stage-4 start, but worker remains alive (CPU/memory active, no task error). Continuing watch; will relaunch if no forward signal by 45-minute threshold.",
+      "created_at": "2026-03-05T15:59:24.136463Z"
+    },
+    {
+      "id": "b869c9a4-9a09-472a-ba4c-692fbdf9de0e",
+      "author": "unknown",
+      "text": "[2026-03-05 11:01 ET] Forward signal confirmed: Andersen stage-4 logs resumed with active score ingestion/filtering (examples: TY Commitment to all owners=2748 retained, Blinds Between Glass=8197 retained). Timeout relaunch no longer indicated.",
+      "created_at": "2026-03-05T16:01:48.495275Z"
+    },
+    {
+      "id": "3b4e1f05-eede-4556-8bea-0f89784eda35",
+      "author": "unknown",
+      "text": "[2026-03-05 11:08 ET] Andersen continues active stage-4 ingestion with high-volume retained items across many scores (multiple 7k-8k retained counts observed). Run remains healthy.",
+      "created_at": "2026-03-05T16:09:57.914707Z"
+    },
+    {
+      "id": "2c3a23ae-c10e-48b3-bd4e-b884f818de88",
+      "author": "unknown",
+      "text": "[2026-03-05 11:15 ET] Current state: process remains alive in stage 4, now in a quiet network-bound phase after prior high-volume score ingestion. No explicit error; continuing monitor.",
+      "created_at": "2026-03-05T16:14:48.869846Z"
+    },
+    {
+      "id": "9e561141-930a-4243-9137-ec0830946814",
+      "author": "unknown",
+      "text": "[2026-03-05 11:20 ET] Still running in stage 4. Process is alive (CPU/memory stable) but no fresh block logs in the last ~14 minutes; continuing toward timeout threshold before any relaunch decision.",
+      "created_at": "2026-03-05T16:25:29.020573Z"
+    },
+    {
+      "id": "e16ef191-954a-4d40-b1d3-5442718efe07",
+      "author": "unknown",
+      "text": "[2026-03-05 11:36 ET] Andersen run 30155c76-61d1-4795-9813-44fa64f86aeb still active while fanout proceeds; maintaining monitoring cadence and timeout/relaunch policy.",
+      "created_at": "2026-03-05T16:36:43.290395Z"
+    },
+    {
+      "id": "f786fc2b-9f23-4886-b412-06b6432da646",
+      "author": "unknown",
+      "text": "[2026-03-05 11:42 ET] Andersen task still alive and executing (long-running stage-4 network-bound phase, no explicit error). Continuing monitoring under timeout policy.",
+      "created_at": "2026-03-05T16:42:20.919271Z"
+    },
+    {
+      "id": "467f0727-6313-4d9b-8ee5-9fe39e2eaf76",
+      "author": "unknown",
+      "text": "[2026-03-05 11:49 ET] Andersen still running and alive in stage 4; currently in quiet/network-bound phase. No explicit failure signal observed.",
+      "created_at": "2026-03-05T16:52:39.628085Z"
+    },
+    {
+      "id": "5e3e2205-12ac-4a6a-a574-52ed5eb5d23c",
+      "author": "unknown",
+      "text": "[2026-03-05 13:12 ET] Timeout policy triggered: task 30155c76-61d1-4795-9813-44fa64f86aeb remains stage4 RUNNING with unchanged task timestamp since 10:31 ET (>45 min no-progress). Marking stale/superseded and relaunching now.",
+      "created_at": "2026-03-05T18:12:28.514739Z"
+    },
+    {
+      "id": "e7d073dc-1146-4c8a-870f-b0e96d29f15a",
+      "author": "unknown",
+      "text": "[2026-03-05 13:13 ET] Andersen relaunch started after timeout supersession. New report/task: report=bbc4166b-ab64-4eda-a849-8ca1217a1df1 task=84db57f5-a3ae-4105-a97d-74b73f52bb3f. Superseded stale run: report=68e07046-c8e9-498c-bcd7-fc897a9c258a task=30155c76-61d1-4795-9813-44fa64f86aeb.",
+      "created_at": "2026-03-05T18:13:36.204741Z"
+    },
+    {
+      "id": "8558bf22-aca7-4632-8a74-1072ae65d35d",
+      "author": "unknown",
+      "text": "[2026-03-05 13:14 ET] Relaunched Andersen run is progressing normally into stage 4. ReportBlock created: 14afd982-a723-4d50-9b11-1698639d0278. S3 vectors defaults + coarse/batch naming config confirmed loaded.",
+      "created_at": "2026-03-05T18:14:47.519986Z"
+    },
+    {
+      "id": "e7920512-74d4-4f5b-8381-caa81d0c06ef",
+      "author": "unknown",
+      "text": "[2026-03-05 14:51 ET] Executing approved next step: superseding stale Andersen task 84db57f5-a3ae-4105-a97d-74b73f52bb3f and launching a fresh 60-day rerun now.",
+      "created_at": "2026-03-05T19:55:13.432955Z"
+    },
+    {
+      "id": "e05543c5-195a-432f-91e2-eb834f3abfb1",
+      "author": "unknown",
+      "text": "2026-03-05 11:15 ET: stale Andersen 60-day run still active (PID 90095, >1h40m). Terminating stale process now and relaunching fresh run; will post new task/report IDs.",
+      "created_at": "2026-03-05T19:55:48.460312Z"
+    },
+    {
+      "id": "df75706f-5f80-4829-8a49-61614cd51301",
+      "author": "unknown",
+      "text": "2026-03-05 11:57 ET relaunch started. report_id=3d4d6b46-028b-436f-a4fb-2049e9172e6b task_id=d0a734cd-8b39-4165-a1e3-744b2d6ff0c3 (scorecard 555, days=60). Config sync confirmed: coarse_min_topic_fraction=0.02, coarse_target_max_topics_per_score=12, label.batch_one_pass=true, label.batch_model=gpt-4o.",
+      "created_at": "2026-03-05T19:57:24.627902Z"
+    },
+    {
+      "id": "161dd11a-90b7-4c74-bbf7-4c1d79672d57",
+      "author": "unknown",
+      "text": "2026-03-05 11:57 ET progress: report block started (report_block_id=300ca4c6-b283-4309-b426-0c7ff8b34307). S3 vectors defaults resolved to bucket=plexus-vectors-development index=topic-memory-idx-development. Score discovery found 74 scores for this scorecard.",
+      "created_at": "2026-03-05T19:57:44.870804Z"
+    },
+    {
+      "id": "ef739437-c97b-458a-8f2f-28675f62f1e6",
+      "author": "unknown",
+      "text": "2026-03-05 12:03 ET monitoring: task d0a734cd-8b39-4165-a1e3-744b2d6ff0c3 is in stage 4 (Processing Report Blocks) status RUNNING/PENDING; last stage update 19:57:18Z. Watching for forward progress and applying 45-minute stale relaunch policy if needed.",
+      "created_at": "2026-03-05T20:03:36.731648Z"
+    }
+  ],
+  "created_at": "2026-03-05T06:32:05.705509Z",
+  "updated_at": "2026-03-05T20:03:36.731648Z",
+  "closed_at": null,
+  "custom": {}
+}

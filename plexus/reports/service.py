@@ -40,6 +40,116 @@ from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageCo
 logger = logging.getLogger(__name__)
 
 
+MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS = int(
+    os.environ.get("REPORT_BLOCK_MAX_INLINE_OUTPUT_CHARS", "120000")
+)
+MAX_REPORT_BLOCK_OUTPUT_PREVIEW_CHARS = int(
+    os.environ.get("REPORT_BLOCK_OUTPUT_PREVIEW_CHARS", "1000")
+)
+ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT = os.environ.get(
+    "REPORT_BLOCK_ATTACH_OUTPUT_JSON_ALWAYS", "1"
+) not in ("0", "false", "False")
+
+
+def _normalize_output_for_storage(output_payload: Any) -> Optional[str]:
+    """
+    Normalize block output payload to a JSON string for durable storage/attachments.
+    """
+    if output_payload is None:
+        return None
+    if isinstance(output_payload, str):
+        return output_payload
+    try:
+        return json.dumps(output_payload)
+    except Exception:
+        return json.dumps({"raw_output_repr": str(output_payload)})
+
+
+def _safe_output_preview(output_payload: Any) -> Dict[str, Any]:
+    """
+    Build a tiny, safe preview payload from potentially large output JSON.
+    """
+    normalized = _normalize_output_for_storage(output_payload)
+    if not normalized:
+        return {}
+    try:
+        parsed = json.loads(normalized)
+        if not isinstance(parsed, dict):
+            return {"raw_preview": str(parsed)[:MAX_REPORT_BLOCK_OUTPUT_PREVIEW_CHARS]}
+        preview: Dict[str, Any] = {}
+        for key in ("type", "status", "summary", "items_processed", "index_name", "cluster_version"):
+            if key in parsed:
+                preview[key] = parsed[key]
+        return preview
+    except Exception:
+        return {"raw_preview": normalized[:MAX_REPORT_BLOCK_OUTPUT_PREVIEW_CHARS]}
+
+
+def _compact_output_json_for_storage(
+    output_payload: Any,
+    output_attachment_path: Optional[str],
+) -> str:
+    """
+    Return a compact inline output payload that points at attached output JSON.
+    """
+    compact_payload: Dict[str, Any] = {
+        "status": "ok",
+        "summary": "Large output moved to attached file due storage limits.",
+        "output_compacted": True,
+        "preview": _safe_output_preview(output_payload),
+    }
+    if output_attachment_path:
+        compact_payload["output_attachment"] = output_attachment_path
+    return json.dumps(compact_payload)
+
+
+def _persist_output_artifact_and_compact_if_needed(
+    report_block_id: str,
+    output_payload: Any,
+    existing_details_files_list: List[str],
+    log_prefix: str,
+) -> Tuple[Optional[str], List[str], Optional[str]]:
+    """
+    Persist output JSON as an attached artifact when enabled, and compact inline output
+    only when it risks exceeding storage limits.
+    """
+    normalized_output = _normalize_output_for_storage(output_payload)
+    if not normalized_output or not S3_UTILS_AVAILABLE:
+        return normalized_output, existing_details_files_list, None
+
+    output_path: Optional[str] = None
+    should_attach = ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT or (
+        len(normalized_output) > MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS
+    )
+    if should_attach:
+        output_file_name = f"output-{report_block_id}.json"
+        output_path = upload_report_block_file(
+            report_block_id=report_block_id,
+            file_name=output_file_name,
+            content=normalized_output.encode("utf-8"),
+            content_type="application/json",
+        )
+        if output_path not in existing_details_files_list:
+            existing_details_files_list.append(output_path)
+
+    if len(normalized_output) > MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS:
+        logger.warning(
+            f"{log_prefix} ReportBlock {report_block_id} output length {len(normalized_output)} exceeds "
+            f"inline limit {MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS}. Compacting inline payload."
+        )
+        return (
+            _compact_output_json_for_storage(normalized_output, output_path),
+            existing_details_files_list,
+            output_path,
+        )
+
+    return normalized_output, existing_details_files_list, output_path
+
+
+def _is_dynamodb_item_size_error(exc: Exception) -> bool:
+    return "Item size to update has exceeded the maximum allowed size" in str(exc)
+
+
 
 # --- Remove Mock Data Loading ---
 # MOCK_CONFIGURATIONS = { ... } # Removed
@@ -649,8 +759,14 @@ def _generate_report_core(
             try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
 
+                compact_output_json, existing_details_files_list, output_attachment_path = _persist_output_artifact_and_compact_if_needed(
+                    report_block_id=current_report_block.id,
+                    output_payload=output_json,
+                    existing_details_files_list=existing_details_files_list,
+                    log_prefix=log_prefix,
+                )
                 update_params = {
-                    'output': output_json if output_json is not None else json.dumps({"status": "failed", "error": log_string}),
+                    'output': compact_output_json if compact_output_json is not None else json.dumps({"status": "failed", "error": log_string}),
                     'log': final_log_message_for_db,
                     'attachedFiles': existing_details_files_list, # Pass array directly without JSON conversion
                     'client': client
@@ -664,9 +780,48 @@ def _generate_report_core(
                 current_report_block.update(**update_params)
                 logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. attachedFiles: {existing_details_files_list}")
             except Exception as e:
-                 logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
-                 if first_block_error_message is None:
-                    first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
+                if _is_dynamodb_item_size_error(e) and S3_UTILS_AVAILABLE:
+                    logger.warning(
+                        f"{log_prefix} ReportBlock {current_report_block.id} exceeded DynamoDB item size on final update. "
+                        "Retrying with compact output."
+                    )
+                    try:
+                        output_path = output_attachment_path
+                        if output_json and not output_path:
+                            normalized_retry_output = _normalize_output_for_storage(output_json)
+                            output_file_name = f"output-{current_report_block.id}.json"
+                            output_path = upload_report_block_file(
+                                report_block_id=current_report_block.id,
+                                file_name=output_file_name,
+                                content=(normalized_retry_output or "").encode("utf-8"),
+                                content_type="application/json",
+                            )
+                            if output_path not in existing_details_files_list:
+                                existing_details_files_list.append(output_path)
+
+                        retry_update_params = {
+                            'output': _compact_output_json_for_storage(output_json, output_path),
+                            'log': final_log_message_for_db,
+                            'attachedFiles': existing_details_files_list,
+                            'client': client,
+                        }
+                        if resolved_dataset_id:
+                            retry_update_params['dataSetId'] = resolved_dataset_id
+
+                        current_report_block.update(**retry_update_params)
+                        logger.info(
+                            f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id} after compact-output retry."
+                        )
+                    except Exception as retry_error:
+                        logger.exception(
+                            f"{log_prefix} Compact-output retry failed for ReportBlock {current_report_block.id}: {retry_error}"
+                        )
+                        if first_block_error_message is None:
+                            first_block_error_message = f"Failed to finalize block {block_display_name}: {retry_error}"
+                else:
+                    logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
+                    if first_block_error_message is None:
+                        first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
             
 
             if output_json is None and first_block_error_message is None:

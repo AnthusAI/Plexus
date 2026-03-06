@@ -159,3 +159,16 @@ class TestEmbeddingService:
         with patch.object(svc, "_get_model", return_value=mock_model):
             with pytest.raises(RuntimeError, match="unexpected batch size"):
                 svc.batch_embed(["hello", "world"])
+
+    def test_batch_embed_raises_when_model_returns_none_entry(self):
+        mock_cache = MagicMock(spec=EmbeddingCache)
+        mock_cache.get.return_value = None
+        mock_cache.put = MagicMock()
+        mock_model = MagicMock()
+        good = np.array([0.1] * 384, dtype=np.float32)
+        mock_model.encode.return_value = np.array([good, None], dtype=object)
+        svc = EmbeddingService(cache=mock_cache, model_id="test-model")
+
+        with patch.object(svc, "_get_model", return_value=mock_model):
+            with pytest.raises(RuntimeError, match="unresolved entries"):
+                svc.batch_embed(["hello", "world"])

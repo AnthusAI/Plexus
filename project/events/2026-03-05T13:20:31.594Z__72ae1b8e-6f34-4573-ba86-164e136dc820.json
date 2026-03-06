@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "72ae1b8e-6f34-4573-ba86-164e136dc820",
+  "issue_id": "plx-e4122644-6856-498e-8ba9-221506821963",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T13:20:31.594Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Coarsen Semantic Reinforcement Memory buckets and add batched LLM fine-tuned topic naming"
+  }
+}

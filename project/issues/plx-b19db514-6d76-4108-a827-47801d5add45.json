@@ -1,0 +1,25 @@
+{
+  "id": "plx-b19db514-6d76-4108-a827-47801d5add45",
+  "title": "Flip Semantic Reinforcement Memory ranking to worst-to-best",
+  "description": "Change score/topic ranking order in Semantic Reinforcement Memory outputs from best-to-worst to worst-to-best and validate with report run.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b23f74ad-0f0e-449b-ad91-9eab2f7a6161",
+      "author": "unknown",
+      "text": "Implemented ranking-order change in dashboard/components/blocks/VectorTopicMemory.tsx: scores/topics now sort worst-to-best (hot/high severity first) instead of best-to-worst.",
+      "created_at": "2026-03-05T02:00:49.983059Z"
+    }
+  ],
+  "created_at": "2026-03-05T02:00:03.058520Z",
+  "updated_at": "2026-03-05T02:20:09.754883Z",
+  "closed_at": "2026-03-05T02:20:09.754883Z",
+  "custom": {}
+}
