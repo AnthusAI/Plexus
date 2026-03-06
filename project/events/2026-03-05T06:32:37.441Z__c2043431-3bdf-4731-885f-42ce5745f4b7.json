@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c2043431-3bdf-4731-885f-42ce5745f4b7",
+  "issue_id": "plx-af68f58a-0634-4038-83e2-b431ac687288",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T06:32:37.441Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Run 60-day Semantic Reinforcement Memory for Prime - EDU 3rd Party"
+  }
+}

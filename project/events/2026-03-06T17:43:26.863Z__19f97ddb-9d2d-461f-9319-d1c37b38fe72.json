@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "19f97ddb-9d2d-461f-9319-d1c37b38fe72",
+  "issue_id": "plx-40cc430c-186b-40f7-92d7-84524397e6b1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-06T17:43:26.863Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Integrate origin/dev into feature/reinforcement-memory"
+  }
+}

@@ -511,4 +511,66 @@ class TestIdentifyScorecardsWithFeedback:
         assert result[0]['scores_with_feedback'][0]['feedback_count'] == 2
 
 
+class TestFetchScoreResultsForScoreCache:
+    @pytest.fixture(autouse=True)
+    def clear_score_results_window_cache(self):
+        feedback_utils._score_results_window_cache.clear()
+        yield
+        feedback_utils._score_results_window_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_cache_reused_across_api_client_instances(self):
+        start_date = datetime.now(timezone.utc) - timedelta(days=7)
+        end_date = datetime.now(timezone.utc)
+
+        page = {
+            "listScoreResultByScorecardIdAndUpdatedAt": {
+                "items": [
+                    {
+                        "id": "sr-1",
+                        "scoreId": "score-1",
+                        "scorecardId": "scorecard-1",
+                        "accountId": "test-account-id",
+                        "updatedAt": start_date.isoformat(),
+                    },
+                    {
+                        "id": "sr-2",
+                        "scoreId": "score-2",
+                        "scorecardId": "scorecard-1",
+                        "accountId": "test-account-id",
+                        "updatedAt": start_date.isoformat(),
+                    },
+                ],
+                "nextToken": None,
+            }
+        }
+
+        client_one = MagicMock()
+        client_one.execute = MagicMock(return_value=page)
+        client_two = MagicMock()
+        client_two.execute = MagicMock(return_value=page)
+
+        first = await feedback_utils.fetch_score_results_for_score(
+            client_one,
+            "test-account-id",
+            "scorecard-1",
+            "score-1",
+            start_date,
+            end_date,
+        )
+        second = await feedback_utils.fetch_score_results_for_score(
+            client_two,
+            "test-account-id",
+            "scorecard-1",
+            "score-2",
+            start_date,
+            end_date,
+        )
+
+        assert [item["id"] for item in first] == ["sr-1"]
+        assert [item["id"] for item in second] == ["sr-2"]
+        client_one.execute.assert_called_once()
+        client_two.execute.assert_not_called()
+        assert len(feedback_utils._score_results_window_cache) == 1
+
 

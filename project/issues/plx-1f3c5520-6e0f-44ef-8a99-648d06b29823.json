@@ -1,0 +1,18 @@
+{
+  "id": "plx-1f3c5520-6e0f-44ef-8a99-648d06b29823",
+  "title": "Define readiness gate for OpenSearch decommission",
+  "description": "Define explicit pass/fail criteria to authorize OpenSearch removal.\n\nInclude:\n- Required validation duration and run frequency\n- Minimum successful run threshold across representative scorecards\n- Error budget / incident threshold\n- Required evidence links to reports and CI",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-04T17:13:52.424493Z",
+  "updated_at": "2026-03-04T17:13:52.424493Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,43 @@
+{
+  "id": "plx-4081dc7f-bcfd-4bb4-8786-1f85c9c5d03d",
+  "title": "Remove OpenSearch resources from prototype CDK stack",
+  "description": "After readiness gate passes, remove OpenSearch domain/resources and related outputs from the prototype CDK stack while preserving S3 Vectors and embeddings bucket.\n\nInclude a rollback note in task comments.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8e8223dd-08d8-48c7-95a2-dc82d2861b53",
+      "author": "unknown",
+      "text": "Implementation progress: removed standalone prototype stack files infrastructure/stacks/opensearch_stack.py, infrastructure/deploy_opensearch.py, and infrastructure/OPENSEARCH_DEPLOY.md as part of removing OpenSearch from standalone CDK provisioning path.",
+      "created_at": "2026-03-05T00:49:49.316075Z"
+    },
+    {
+      "id": "7a663999-5896-42f0-a89f-e682d6a1e3e3",
+      "author": "unknown",
+      "text": "Code pushed: OpenSearch resource removal + Amplify extension migration landed on feature/reinforcement-memory (commits 3a3bc527 and 7cc12e97). Proceeding to staging merge validation.",
+      "created_at": "2026-03-05T00:54:16.503122Z"
+    },
+    {
+      "id": "7e44191a-16f8-4b6c-937d-08076c4d237f",
+      "author": "unknown",
+      "text": "Infrastructure removal landed previously; now validating downstream runtime behavior after OpenSearch resource removal and collecting rollback/evidence notes.",
+      "created_at": "2026-03-05T00:55:48.639947Z"
+    },
+    {
+      "id": "db62607c-41e4-4677-b41e-2cfbebe4e52d",
+      "author": "unknown",
+      "text": "Rollback note: if any S3 vector instability appears in staging, rollback by reverting staging merge commit ba91f933 (and if needed feature commit b70b2424) to restore prior branch state; then rerun Semantic Reinforcement Memory with existing config for verification.",
+      "created_at": "2026-03-05T01:36:40.795975Z"
+    }
+  ],
+  "created_at": "2026-03-04T17:13:52.692178Z",
+  "updated_at": "2026-03-05T01:36:40.795975Z",
+  "closed_at": "2026-03-05T01:36:24.082198Z",
+  "custom": {}
+}

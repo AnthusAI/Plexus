@@ -1,0 +1,675 @@
+2026-03-04 09:11:16,971  [WARNING] AWS region not set, CloudWatch metrics       
+disabled                                                                        
+Creating client...
+2026-03-04 09:11:21,242  [INFO] Loaded Plexus configuration from 2 file(s):     
+/Users/ryan.porter/.plexus/config.yaml,                                         
+/Users/ryan.porter/Projects/Plexus/.plexus/config.yaml - Set 37 environment     
+variables                                                                       
+Account ID: 9c929f25-a91f-4db7-8943-5aa93498b8e9
+Resolved config by name: 'Vector Topic Memory' to ID 
+2e6dcc26-ff55-4c7d-a906-def69a5ee528
+Syncing config from /Users/ryan.porter/Projects/Plexus/vector_topic_memory_report.md...
+Using config: 2e6dcc26-ff55-4c7d-a906-def69a5ee528 (Vector Topic Memory)
+Running report for all scores in scorecard 1438 (Vector Topic Memory only)...
+2026-03-04 09:11:25,371  [INFO] [RunScript] Loading configuration               
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:11:25,371  [INFO] Loading report configuration from API:          
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:11:26,631  [INFO] Successfully loaded configuration:              
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:11:26,632  [INFO] [RunScript] Loaded configuration: Vector Topic  
+Memory                                                                          
+2026-03-04 09:11:26,633  [INFO] [RunScript] Configuration requires 3 parameters 
+2026-03-04 09:11:26,633  [INFO] [RunScript] Parameters validated: {'scorecard': 
+'1438', 'days': 180}                                                            
+2026-03-04 09:11:29,183  [INFO] [RunScript] Parameters enriched with names:     
+{'scorecard': '1438', 'days': 180, 'scorecard_name': 'SelectQuote HCS           
+Medium-Risk'}                                                                   
+2026-03-04 09:11:29,186  [INFO] [RunScript] Configuration rendered with         
+parameters                                                                      
+2026-03-04 09:11:30,092  [INFO] [RunScript] Created task:                       
+2d31029e-0da5-434b-a000-aa0958955a92                                            
+2026-03-04 09:11:30,094  [INFO] [RunScript] Progress tracker initialized        
+2026-03-04 09:11:30,094  [INFO] [RunScript] Executing report generation core    
+logic                                                                           
+2026-03-04 09:11:30,095  [INFO] [RunScript] Starting core report generation     
+logic.                                                                          
+2026-03-04 09:11:30,095  [INFO] Loading report configuration from API:          
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:11:31,032  [INFO] Creating 5 stages in batch for task             
+2d31029e-0da5-434b-a000-aa0958955a92                                            
+2026-03-04 09:11:31,033  [INFO] Executing batch TaskStage creation for 5 stages 
+2026-03-04 09:11:31,233  [INFO] Successfully loaded configuration:              
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:11:31,233  [INFO] [RunScript] Using provided configuration content
+override (e.g., rendered with parameters)                                       
+2026-03-04 09:11:31,234  [INFO] [RunScript] Loaded ReportConfiguration: Vector  
+Topic Memory (2e6dcc26-ff55-4c7d-a906-def69a5ee528)                             
+2026-03-04 09:11:31,234  [INFO] [RunScript] Added account_id to run_parameters: 
+9c929f25-a91f-4db7-8943-5aa93498b8e9                                            
+2026-03-04 09:11:33,755  [INFO] ==== STAGE: Loading Configuration ====          
+2026-03-04 09:11:33,755  [INFO] Successfully created 5 stages in batch          
+2026-03-04 09:11:36,012  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:11:36,012  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:11:38,051  [INFO] [RunScript] Creating Report DB record: 'Vector  
+Topic Memory - March 04, 2026 14:11 UTC'                                        
+2026-03-04 09:11:38,053  [INFO] [RunScript] repr(config_markdown) before        
+Report.create:                                                                  
+'# Vector Topic Memory Report\n## Scorecard: SelectQuote HCS Medium-Risk\n##    
+Last 180 days\n\nRebuilds topic memory from **edit comments** (reviewer         
+feedback) in this scorecard and date range. Clusters what reviewers are saying  
+when they correct scores. Re-indexes into OpenSearch with S3 embedding cache,   
+global clustering, and memory weights.\n\n```block name="Vector Topic           
+Memory"\nclass: VectorTopicMemory\nscorecard: 1438\ndays: 180\ndata:\n          
+content_source: edit_comment\nopensearch:\n  region: us-west-2\nclustering:\n   
+min_topic_size: 2\n  min_samples: 2\n  cluster_selection_method: eom\n          
+cluster_selection_epsilon: 0.5\nlabel:\n  use_llm: true\n  model: gpt-4o-mini\n 
+api_key_env_var: OPENAI_API_KEY\n```'                                           
+2026-03-04 09:11:38,054  [INFO] [RunScript] Actual content (first 100 chars): # 
+Vector Topic Memory Report                                                      
+## Scorecard: SelectQuote HCS Medium-Risk                                       
+## Last 180 days                                                                
+                                                                                
+Rebuilds to                                                                     
+2026-03-04 09:11:38,055  [INFO] [RunScript] Content contains literal newlines:  
+False                                                                           
+2026-03-04 09:11:38,055  [INFO] [RunScript] Content contains actual newlines:   
+True                                                                            
+2026-03-04 09:11:38,944  [INFO] [RunScript] Report content after creation (first
+100 chars): # Vector Topic Memory Report                                        
+## Scorecard: SelectQuote HCS Medium-Risk                                       
+## Last 180 days                                                                
+                                                                                
+Rebuilds to                                                                     
+2026-03-04 09:11:38,945  [INFO] [RunScript] Report content contains literal     
+newlines: False                                                                 
+2026-03-04 09:11:38,945  [INFO] [RunScript] Report content contains actual      
+newlines: True                                                                  
+2026-03-04 09:11:38,946  [INFO] [RunScript] Successfully created Report record  
+with ID: 25a94a1c-16b1-49c5-9c96-7ee65d6a6726                                   
+2026-03-04 09:11:42,466  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:11:42,466  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:11:44,526  [INFO] [RunScript] Parsing configuration markdown to   
+extract blocks.                                                                 
+2026-03-04 09:11:44,528  [INFO] [RunScript] Found 1 blocks to process.          
+2026-03-04 09:11:48,079  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:11:48,081  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:11:49,859  [INFO] [RunScript] Starting processing of 1 report     
+blocks.                                                                         
+2026-03-04 09:11:50,792  [INFO] [RunScript] Preparing block 1/1: block_0 (Class:
+VectorTopicMemory, Pos: 0)                                                      
+2026-03-04 09:11:50,793  [INFO] [RunScript] Creating initial ReportBlock record 
+for block_0                                                                     
+2026-03-04 09:11:50,793  [INFO] ReportBlock create sizes - Total input: 178     
+bytes                                                                           
+2026-03-04 09:11:50,794  [INFO] ReportBlock create sizes - Output field: 21     
+bytes                                                                           
+2026-03-04 09:11:50,794  [INFO] ReportBlock create sizes - Other fields: 157    
+bytes                                                                           
+2026-03-04 09:11:51,818  [INFO] [RunScript] Created ReportBlock ID              
+c41859e9-d49f-47af-93a3-af785c7416df for block_0                                
+2026-03-04 09:11:51,819  [INFO] Instantiating block: VectorTopicMemory with     
+config: {'scorecard': 1438, 'days': 180, 'data': {'content_source':             
+'edit_comment'}, 'opensearch': {'region': 'us-west-2'}, 'clustering':           
+{'min_topic_size': 2, 'min_samples': 2, 'cluster_selection_method': 'eom',      
+'cluster_selection_epsilon': 0.5}, 'label': {'use_llm': True, 'model':          
+'gpt-4o-mini', 'api_key_env_var': 'OPENAI_API_KEY'}}                            
+2026-03-04 09:11:51,819  [INFO] Set report_block_id                             
+'c41859e9-d49f-47af-93a3-af785c7416df' on block instance 'VectorTopicMemory'    
+2026-03-04 09:11:51,820  [INFO] No running event loop. Creating new loop for    
+block 'VectorTopicMemory' generation.                                           
+2026-03-04 09:11:51,821  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolving scorecard: 1438, days: 180      
+2026-03-04 09:11:51,822  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Date range: 2025-09-05 to 2026-03-04      
+2026-03-04 09:11:51,823  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Content source: edit_comment              
+2026-03-04 09:11:53,335  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Found scorecard: SelectQuote HCS          
+Medium-Risk                                                                     
+2026-03-04 09:11:53,336  [INFO] Fetching scores for scorecard                   
+59125ba2-670c-4aa5-b796-c2085cf38a0c                                            
+2026-03-04 09:11:54,345  [INFO] Found 18 scores with externalIds for scorecard  
+59125ba2-670c-4aa5-b796-c2085cf38a0c                                            
+2026-03-04 09:11:55,446  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 5 items for score Pharmacy       
+Information.                                                                    
+2026-03-04 09:12:00,309  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 3 items for score Patient        
+Interest.                                                                       
+2026-03-04 09:12:01,362  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 1 items for score HCS Membership 
+Satisfaction.                                                                   
+2026-03-04 09:12:02,500  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 9 items for score HCS Membership 
+Understanding.                                                                  
+2026-03-04 09:12:04,570  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 17 items for score Patient       
+Cognition.                                                                      
+2026-03-04 09:12:05,617  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 3 items for score Patient        
+Understanding.                                                                  
+2026-03-04 09:12:07,694  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 34 items for score Medication    
+Review.                                                                         
+2026-03-04 09:12:08,672  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 4 items for score Patient        
+Allergies.                                                                      
+2026-03-04 09:12:09,650  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 2 items for score Prescriber     
+Information.                                                                    
+2026-03-04 09:12:11,752  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Resolved 28 items for score Agent         
+Misrepresentation.                                                              
+2026-03-04 09:12:36,108  [INFO] GET                                             
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_cluster/health                                                 
+2026-03-04 09:12:37,099  [INFO] PUT                                             
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236                                    
+2026-03-04 09:12:38,173  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:38,296  [WARNING] GET                                          
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_alias/topic-memory-live                                        
+2026-03-04 09:12:38,296  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Indexed 106 documents.                    
+2026-03-04 09:12:38,298  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 5 items for score Pharmacy     
+Information...                                                                  
+2026-03-04 09:12:45,787  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:46,684  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:46,685  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 3 items for score Patient      
+Interest...                                                                     
+2026-03-04 09:12:46,823  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:47,430  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:47,431  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 1 items for score HCS          
+Membership Satisfaction...                                                      
+2026-03-04 09:12:47,562  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:47,685  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:47,686  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 9 items for score HCS          
+Membership Understanding...                                                     
+2026-03-04 09:12:48,170  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:49,647  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:49,772  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-1                  
+2026-03-04 09:12:49,903  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-2                  
+2026-03-04 09:12:49,903  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 17 items for score Patient     
+Cognition...                                                                    
+OMP: Info #276: omp_set_nested routine deprecated, please use omp_set_max_active_levels instead.
+2026-03-04 09:12:52,047  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:52,178  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:52,305  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-1                  
+2026-03-04 09:12:52,305  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 3 items for score Patient      
+Understanding...                                                                
+2026-03-04 09:12:52,442  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:53,186  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:53,186  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 34 items for score Medication  
+Review...                                                                       
+2026-03-04 09:12:53,390  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:53,536  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:53,664  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-1                  
+2026-03-04 09:12:53,792  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-2                  
+2026-03-04 09:12:53,925  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-3                  
+2026-03-04 09:12:54,055  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-4                  
+2026-03-04 09:12:54,056  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 4 items for score Patient      
+Allergies...                                                                    
+2026-03-04 09:12:54,220  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:54,801  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:54,801  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 2 items for score Prescriber   
+Information...                                                                  
+2026-03-04 09:12:54,934  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:56,731  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:56,732  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Clustering 28 items for score Agent       
+Misrepresentation...                                                            
+2026-03-04 09:12:57,071  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:12:59,804  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-0                  
+2026-03-04 09:12:59,939  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-1                  
+2026-03-04 09:13:00,086  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-2                  
+2026-03-04 09:13:00,483  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-3                  
+2026-03-04 09:13:00,619  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-141236/_update/cluster-4                  
+2026-03-04 09:13:00,621  [INFO] [ReportBlock                                    
+c41859e9-d49f-47af-93a3-af785c7416df] Processed 106 items across 10 scores, 21  
+clusters total.                                                                 
+2026-03-04 09:13:00,627  [INFO] Block 'block_0' executed. Log output length:    
+2309                                                                            
+2026-03-04 09:13:00,627  [INFO] [RunScript] Re-fetching ReportBlock ID          
+c41859e9-d49f-47af-93a3-af785c7416df after block execution.                     
+2026-03-04 09:13:02,337  [INFO] [RunScript] Fetched DB state. Current           
+attachedFiles: None                                                             
+2026-03-04 09:13:02,338  [INFO] [RunScript] Uploading log.txt for ReportBlock   
+c41859e9-d49f-47af-93a3-af785c7416df                                            
+2026-03-04 09:13:02,338  [INFO] Starting S3 upload for block                    
+c41859e9-d49f-47af-93a3-af785c7416df, file log.txt                              
+2026-03-04 09:13:02,338  [INFO] Using S3 bucket:                                
+amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l                 
+2026-03-04 09:13:02,375  [INFO] Creating temporary file for content (content    
+length: 2309)                                                                   
+2026-03-04 09:13:02,376  [INFO] Created temp file at                            
+/var/folders/gb/d2rz0yr907x6sl234fhp7mbm0000gn/T/tmp5z14_p5e_log.txt            
+2026-03-04 09:13:02,377  [INFO] Starting S3 upload to                           
+s3://amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l/reportblock
+s/c41859e9-d49f-47af-93a3-af785c7416df/log.txt with args: {'ContentType':       
+'text/plain'}                                                                   
+2026-03-04 09:13:03,250  [INFO] Successfully uploaded log.txt to                
+s3://amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l/reportblock
+s/c41859e9-d49f-47af-93a3-af785c7416df/log.txt                                  
+2026-03-04 09:13:03,251  [INFO] Removing temp file                              
+/var/folders/gb/d2rz0yr907x6sl234fhp7mbm0000gn/T/tmp5z14_p5e_log.txt            
+2026-03-04 09:13:03,252  [INFO] [RunScript] Appended log.txt info. New          
+attachedFiles list:                                                             
+['reportblocks/c41859e9-d49f-47af-93a3-af785c7416df/log.txt']                   
+2026-03-04 09:13:03,252  [INFO] [RunScript] Performing final update for         
+ReportBlock c41859e9-d49f-47af-93a3-af785c7416df                                
+2026-03-04 09:13:03,253  [INFO] ReportBlock update: Converted 'output' dict to  
+JSON string (21891 bytes)                                                       
+2026-03-04 09:13:03,253  [INFO] ReportBlock update: attachedFiles before        
+processing - Type: <class 'list'>, Value:                                       
+['reportblocks/c41859e9-d49f-47af-93a3-af785c7416df/log.txt']                   
+2026-03-04 09:13:05,285  [INFO] Update result for ReportBlock                   
+c41859e9-d49f-47af-93a3-af785c7416df: {'id':                                    
+'c41859e9-d49f-47af-93a3-af785c7416df', 'reportId':                             
+'25a94a1c-16b1-49c5-9c96-7ee65d6a6726', 'name': 'block_0', 'position': 0,       
+'type': 'VectorTopicMemory', 'output': '{"type": "VectorTopicMemory", "status": 
+"ok", "cluster_version": null, "topics": [], "scores": [{"score_id": "44548",   
+"score_name": "Pharmacy Information", "items_processed": 5, "topics":           
+[{"cluster_id": 0, "label": "Agent Verification of Pharmacy", "keywords":       
+["agent", "pharmacy", "agent did", "did", "verified pharmacy", "verified",      
+"agent verified", "confirm"], "exemplars": ["Agent did confirm pharmacy", "Agent
+did verify last known pharmacy", "agent verified pharmacy", "Agent verifies     
+Lukes Pharmacy", "Customer his getting meds through Optum"], "memory_weight":   
+0.0, "memory_tier": "cold", "p95_distance": 0.3449447393417358, "member_count": 
+5, "days_inactive": 118}], "cluster_version": "20260304-141245"}, {"score_id":  
+"45281", "score_name": "Patient Interest", "items_processed": 3, "topics":      
+[{"cluster_id": 0, "label": "Customer Declined SRX Enrollment", "keywords":     
+["enroll", "customer", "srx", "customer declined", "declined", "enroll srx",    
+"declined enroll", "agent"], "exemplars": ["Customer declined SRX and was never 
+re-asked if she wanted to enroll. Agent almost made it seem as if she had to    
+enroll.", "Customer declined to enroll into SRX.", "While the customer and his  
+wife did remain positive throughout the call, the level of interest was not     
+there. Customer expressed he was calling for something else. When agent mentions
+meeting with a doctor, it completely confused him and he was not understanding  
+why. Based off of the call, I would s\\u2026"], "memory_weight": 0.0,           
+"memory_tier": "cold", "p95_distance": 0.2703650832176208, "member_count": 3,   
+"days_inactive": 118}], "cluster_version": "20260304-141246"}, {"score_id":     
+"45780", "score_name": "HCS Membership Satisfaction", "items_processed": 1,     
+"topics": [{"cluster_id": 0, "label": "Enrollment Confusion and Call Issues",   
+"keywords": [], "exemplars": ["Customer wanted to enroll into SRX, customer     
+thought she was already signed up. Call disconnects."], "memory_weight": 0.0,   
+"memory_tier": "cold", "p95_distance": 0.0, "member_count": 1, "days_inactive": 
+153}], "cluster_version": "20260304-141247"}, {"score_id": "45779",             
+"score_name": "HCS Membership Understanding", "items_processed": 9, "topics":   
+[{"cluster_id": 0, "label": "Customer Understanding and Questions", "keywords": 
+["customer", "understand", "questions", "did", "hcs", "understand hcs",         
+"customer did", "appropriate"], "exemplars": ["Customer did have questions, but 
+they were answered appropriately. Customer voiced understanding.", "Customer    
+asked appropriate questions and seems to understand HCS", "Customer did         
+understand HCS, but had questions about her actual insurance plan.", "No        
+concerns heard. Customer seemed to understand and did no voice otherwise.",     
+"Customer displayed a mix of engagement and skepticism throughout the call      
+regarding the membership benefits and services offered through Healthcare       
+Select. \\"Well I mean, what are you guys offering?\\" \\"When was this         
+membership put into place?\\""], "memory_weight": 0.0, "memory_tier": "cold",   
+"p95_distance": 0.2784920930862427, "member_count": 5, "days_inactive": 117},   
+{"cluster_id": 1, "label": "Agent Explanation of Medicare Plan", "keywords":    
+["medicare", "did", "customer", "medicare plan", "plan", "agent did", "agent",  
+"understanding"], "exemplars": ["Agent did state that it is not part of her     
+Medicare plan. Customer seemed to voce understanding.", "Agent did explain this 
+was not part of their Medicare plan and that they were not required to take     
+action. Customer voiced understanding."], "memory_weight": 0.0, "memory_tier":  
+"cold", "p95_distance": 0.03306704461574554, "member_count": 2, "days_inactive":
+153}, {"cluster_id": 2, "label": "Understanding of HCS/SRX", "keywords": ["srx",
+"understand", "cstr understand", "cstr", "understand hcs", "hcs", "hcs srx",    
+"customer"], "exemplars": ["After first SRX enrollment question, the customer   
+says at 30:17, \\"I guess.I just want to see if I can still go to Walgreens.\\" 
+This shows that the customer does not have a full understanding of HCS/SRX.",   
+"cstr seemed to understand HCS and SRX."], "memory_weight": 0.0, "memory_tier": 
+"cold", "p95_distance": 0.1195132702589035, "member_count": 2, "days_inactive": 
+107}], "cluster_version": "20260304-141248"}, {"score_id": "45283",             
+"score_name": "Patient Cognition", "items_processed": 17, "topics":             
+[{"cluster_id": 0, "label": "Cognitive Concerns Noted", "keywords": ["cstr",    
+"cognitive", "cognitive concerns", "concerns", "concerns heard", "heard", "did",
+"agent"], "exemplars": ["No cognitive concerns heard. Moments of confusion with 
+the program and SRX. Cstr states she takes so many medications and verified them
+with the agent. If anything, she was a little confused about how everything     
+works and overwhelmed and had the agent re-explain, but not cognitively         
+impaired.", "No cognitive concerns heard. Cstr was confused on why he was       
+transferred as he was looking for assistance with the food card. He did         
+originally say no to the MSA as he did not understand and thought she was trying
+to change his plan. The agent mentioned that it was free and we were not        
+changing his \\u2026", "No cognitive concerns heard. Cstr did not have an e-mail
+address to provide. Cstr did ask for things to be repeated, such as the phone   
+number for SelectRX after agreeing to enroll and with repeating what the        
+pharmacy was called. It seems the cstr had more of a hard time hearing the      
+agent, than actua\\u2026", "No cognitive concerns heard. Cstr seemed more       
+agitated and disengaged than anything. Cstr expressed that she had already given
+her medication information.", "I do not feel there were any cognitive concerns  
+heard during the call, but the customer was confused on why he was transferred  
+and what he was enrolling in."], "memory_weight": 0.8, "memory_tier": "hot",    
+"p95_distance": 0.33894834518432615, "member_count": 9, "days_inactive": 11},   
+{"cluster_id": 1, "label": "Cognitive Concerns Addressed", "keywords":          
+["concerns", "cognitive", "cognitive concerns", "cognition", "cognition         
+concerns", "heard", "concerns heard", "don"], "exemplars": ["No cognitive       
+concerns", "No cognitive concerns", "no cognition concerns", "no cognition      
+concerns heard on call", "No cognition concerns heard on call"],                
+"memory_weight": 0.8, "memory_tier": "hot", "p95_distance": 0.4039710849523543, 
+"member_count": 8, "days_inactive": 11}], "cluster_version": "20260304-141251"},
+{"score_id": "45282", "score_name": "Patient Understanding", "items_processed": 
+3, "topics": [{"cluster_id": 0, "label": "Understanding and Questioning         
+Appropriateness", "keywords": ["questions", "understand asked", "cstr           
+understand", "cstr", "asked", "appropriate questions", "appropriate",           
+"understand"], "exemplars": ["while the patient was distracted at one point     
+during the call, she did voice understanding and answer questions               
+appropriately.", "\\"what\'s happening here is my ability to really even        
+concentrate. At this point, I just wanna get done. And it isn\'t because I      
+don\'t I I don\'t wanna I mean, I\'m very interested in this program, but I\'m  
+getting to where I can\'t observe it all.\\" Customer is possibly responding,   
+\\"yes\\" just because she i\\u2026", "Cstr seemed to understand and asked      
+appropriate questions."], "memory_weight": 0.0, "memory_tier": "cold",          
+"p95_distance": 0.2967779994010925, "member_count": 3, "days_inactive": 104}],  
+"cluster_version": "20260304-141252"}, {"score_id": "45285", "score_name":      
+"Medication Review", "items_processed": 34, "topics": [{"cluster_id": 0,        
+"label": "Medication Verification by Agent", "keywords": ["agent", "verified",  
+"medication", "prescribing", "verified medication", "agent verified",           
+"physician", "prescribing physician"], "exemplars": ["Agent verified all        
+medication names, dosages and prescribing physician for each.", "Agent verified 
+all medication names, dosages and prescribing physician for each.", "Agent      
+verified all medication names, dosages and prescribing physician for each       
+individually.", "Agent/cstr verified all medication names, dosages and          
+prescribing physician for each.", "Agent and cstr verified all medication names,
+dosages and prescribing physicians for each"], "memory_weight": 0.32,           
+"memory_tier": "warm", "p95_distance": 0.10782934427261352, "member_count": 8,  
+"days_inactive": 48}, {"cluster_id": 1, "label": "Verification of Prescribing   
+Physician", "keywords": ["verify", "agent", "agent did", "did", "did verify",   
+"prescribing physician", "physician", "prescribing"], "exemplars": ["Agent did  
+not verify prescribing physician for medications", "agent did not verify        
+prescribing physician", "Agent did not verify prescribing physician", "Agent did
+not verify prescribing physician", "Agent did not verify medications            
+individually or verify prescribing physician"], "memory_weight":                
+0.03999999999999998, "memory_tier": "cold", "p95_distance": 0.17837824821472156,
+"member_count": 7, "days_inactive": 76}, {"cluster_id": 2, "label":             
+"Verification of Prescribing Physician", "keywords": ["verify", "did", "did     
+verify", "agent", "physician", "prescribing physician", "prescribing", "agent   
+did"], "exemplars": ["Agent did not verify prescribing physician for all        
+medications.", "Agent did not verify prescribing physician for each             
+medication.", "Agent did not confirm all dosages and prescribing physician for  
+each medication.", "Agent does not verify prescribing physician for all meds.", 
+"Agent verified some meds together and did not verify prescribing physician."], 
+"memory_weight": 0.010000000000000009, "memory_tier": "cold", "p95_distance":   
+0.1720273256301879, "member_count": 7, "days_inactive": 79}, {"cluster_id": 3,  
+"label": "Verification of Agent Elements", "keywords": ["elements", "agent",    
+"verify", "agent did", "did", "did verify", "verify elements", "dosages"],      
+"exemplars": ["Agent did verify all elements", "agent did verify all elements", 
+"Agent did verify all dosages.", "Agent did verify all medication names, dosages
+and prescribing physicians", "Agent did verify medication name, dosage, pharmacy
+and prescribing physician"], "memory_weight": 0.28, "memory_tier": "cold",      
+"p95_distance": 0.32031798362731934, "member_count": 6, "days_inactive": 52},   
+{"cluster_id": 4, "label": "Verification of Prescribing Physician", "keywords": 
+["verify prescribing", "agent did", "did", "did verify", "verify", "prescribing 
+physician", "prescribing", "physician"], "exemplars": ["Agent did verify        
+prescribing physician for each medication", "Agent did verify prescribing       
+physician for each", "Agent did verify prescribing physician, she just says,    
+\\"same doctor\\"", "Agent verified prescribing physician for each medication.  
+If it was the same provider as the medication she just called out she would say,
+\\"same doctor?\\""], "memory_weight": 0.0, "memory_tier": "cold",              
+"p95_distance": 0.05518505871295929, "member_count": 4, "days_inactive": 144}], 
+"cluster_version": "20260304-141253"}, {"score_id": "44549", "score_name":      
+"Patient Allergies", "items_processed": 4, "topics": [{"cluster_id": 0, "label":
+"Agent Verification of Allergies", "keywords": ["agent", "agent did", "did      
+verify", "did", "verify", "15", "15 58", "58"], "exemplars": ["agent did verify 
+allergies, but the customer could not remember what it was.", "Agent asked and  
+customer had a lot of allergies and it was best to get a list from her          
+provider.", "agent did verify", "15:58"], "memory_weight": 0.0, "memory_tier":  
+"cold", "p95_distance": 0.5585818842053413, "member_count": 4, "days_inactive": 
+121}], "cluster_version": "20260304-141254"}, {"score_id": "44550",             
+"score_name": "Prescriber Information", "items_processed": 2, "topics":         
+[{"cluster_id": 0, "label": "Prescribing Physician Verification Issues",        
+"keywords": ["prescribing physician", "prescribing", "physician", "agent",      
+"verified prescribing", "verified", "agent verified", "verify prescribing"],    
+"exemplars": ["agent did not verify prescribing physician, only PCP", "agent    
+verified prescribing physician for each"], "memory_weight": 0.0, "memory_tier": 
+"cold", "p95_distance": 0.05845159292221069, "member_count": 2, "days_inactive":
+144}], "cluster_version": "20260304-141254"}, {"score_id": "45813",             
+"score_name": "Agent Misrepresentation", "items_processed": 28, "topics":       
+[{"cluster_id": 0, "label": "SRx Benefits and Miscommunication Issues",         
+"keywords": ["agent", "did", "srx", "agent did", "srx primary", "primary",      
+"concerns", "pharmacy"], "exemplars": ["Agent did not state the benefits of SRx,
+but did not mention it was free. Agent is not required to discuss copays",      
+"Agent made it seem as if SRX was mandatory and that customer did not have an   
+option.. She did not ask customer if switching would be a benefit. Agent also   
+advised cstr that her medication copays would be the same.", "agent makes it    
+seem as if SRX is completely free to the cstr with no", "No concerns found. SRX 
+not pitched so cost/pharmacy was not relevant. Agent did say, \\" The agent     
+stated, \\"your co pay will be $0,\\". Agent does have access to this           
+information.", "disagree; agent correctly explained SRX would be primary        
+pharmacy and that she could still use her current pharmacy for emergencies."],  
+"memory_weight": 0.29000000000000004, "memory_tier": "cold", "p95_distance":    
+0.3911143541336059, "member_count": 9, "days_inactive": 51}, {"cluster_id": 1,  
+"label": "Misleading Cost Information", "keywords": ["free", "service", "cost", 
+"ll", "plan", "insurance", "selectrx", "agent"], "exemplars": ["\\"5:25 \\"Now  
+SelectRX is available to you because of your plan with United, so it comes at no
+fee and because of the medications you\'re taking.\\"\\n\\n7:02 \\"And all of   
+that is available to you at no additional cost because of your plan with        
+UnitedHealthcare.\\"\\" This is misleading and makes it seem as if eve\\u2026", 
+"\\"9:42 \\" Your insurance recommend a service called SelectRx. It\'s a        
+specialized medication management pharmacy for clients that are on multiple     
+medications so that you can have a more personalized and organized pharmacy     
+experience.\\" Agent stated that her insurance recommended this service. This is
+in\\u2026", "agent misrepresentation; \\"so that\'s a free service for you      
+now\\"\' there\'s no fee for this service\\" this is misleading the cstr into   
+thinking everything is completely free and no copays apply. Agent also made     
+incorrect claims about insurance. \\"They have their own national pharmacy. This
+is who UnitedH\\u2026", "\\" You would also be receiving that from SelectRx as  
+well. So you\'ll get those free too shipped out to you.\\" This statement makes 
+it seem as if the patient will be getting her Lantus and Novolog for free.",    
+"incorrect cost discussion. \\"10:20 \\" And this will be delivered right to    
+your door at no additional cost on your part. Also, the delivery as well as the 
+services of a licensed pharmacist is at no cost on your part, and it will be    
+automatically refilled for you for a 90 day supply.\\"\\n\\n10:48  \\"And       
+these\\u2026"], "memory_weight": 0.36, "memory_tier": "warm", "p95_distance":   
+0.32995815575122833, "member_count": 6, "days_inactive": 44}, {"cluster_id": 2, 
+"label": "Cost Share Clarification", "keywords": ["pay", "cost", "cost share",  
+"share", "ll", "paying", "don", "don pay"], "exemplars": ["Incorrect cost share:
+\\" If you have co payments now for your medications, that stays the same.      
+Nothing changes. If you don\'t pay anything now, then you don\'t pay anything.  
+Okay?\\"", "Incorrect cost share. \\"What they charge, it would be the same     
+thing that you would pay at Walgreens for medications. So if you have any co    
+pays, that\'s what you would pay. And even then, some of the medications, if you
+do have a co pay, are a little bit cheaper than what you would pay at Walgreens.
+\\u2026", "Incorrect cost share- \\" So whatever you\'re paying right now for   
+your your prescriptions and everything, that\'s what you\'ll that\'s you\'ll    
+just keep paying that with your insurance. Okay?\\"", "No agent                 
+misrepresentation found; great explanation of cost share and pharmacy change."],
+"memory_weight": 0.010000000000000009, "memory_tier": "cold", "p95_distance":   
+0.2017974644899368, "member_count": 4, "days_inactive": 79}, {"cluster_id": 3,  
+"label": "Clarification on Fees and Support", "keywords": ["fees associated",   
+"associated whatsoever", "whatsoever", "fees", "associated", "customer", "pay", 
+"help"], "exemplars": ["\\"There\'s no fees associated with this whatsoever.    
+\\"", "\\"there\'s no fees associated with this whatsoever.\\"", "\\"they have  
+dedicated business specialists, and they there\'s no financing, and they work   
+with you on things to help you with those co pay, like different options and    
+things that are available that can help you with your co pay.\\"", "Customer    
+asked what is charged and if there were any charges. Agent told customer there  
+were no charges and it was at no additional cost to him. Agent never mentioned  
+co-pays even after customer asked what was charged."], "memory_weight": 0.0,    
+"memory_tier": "cold", "p95_distance": 0.269707253575325, "member_count": 4,    
+"days_inactive": 96}, {"cluster_id": 4, "label": "Agent Misrepresentation       
+Feedback", "keywords": ["agent", "misrepresentation heard", "misrepresentation",
+"heard", "agent misrepresentation", "pays", "customer pays", "customer"],       
+"exemplars": ["No agent misrepresentation heard on call", "Agent advised        
+customer that whatever she pays now will be the same"], "memory_weight": 0.0,   
+"memory_tier": "cold", "p95_distance": 0.16419654488563537, "member_count": 2,  
+"days_inactive": 128}], "cluster_version": "20260304-141256"}], "summary":      
+"Processed 106 items across 10 scores, 21 clusters total.", "items_processed":  
+106, "cache_hit_rate": null, "index_name": "topic-memory-20260304-141236",      
+"indexed_doc_ids": ["51460353-d273-4539-8c5a-3bd7364cd47b",                     
+"049d7acd-32bd-4767-9a1f-80b379273e59", "94412b34-2512-476b-8a0d-eecbb93fe059", 
+"8100603d-8d1c-4506-b2b8-c73e0848b176", "2702239b-b457-4231-b420-7d1ea2af5cb2", 
+"4e41a90e-022d-4a01-9f12-329337d891e9", "5c859f80-8f05-4a55-a3c2-815e7dfbafc8", 
+"18e7097a-e432-4f94-85d2-06e7a8469e2c", "09cc6e17-3893-4189-9402-87ac5d912817", 
+"e6667c7d-16bd-4311-92bb-0a174e4bdf2f", "a8260392-ef74-414e-beea-f1afc9c84aea", 
+"da85916d-b23d-439e-98b4-c489b38ab132", "1759f69f-192f-4067-a51d-5aa9e255a711", 
+"fe1fa00a-9022-458e-bd1d-aca06140485a", "1e267fd9-8bca-453b-9da7-4d4f9059a308", 
+"6d892b4e-a322-4030-98ee-9709980afbb6", "ec7aefb3-5b83-4fe5-b12e-4b50804ace77", 
+"cd5da84b-e95c-4c28-9f7b-e1bb8acd7516", "19d07706-8711-46e4-83e0-3a3a6d6bb03d", 
+"75957969-6184-4d3c-95c6-7c381a438759", "d3fb5c77-6134-43b4-b641-f4fb97ad83d7", 
+"53a0d8b0-87b9-4138-bc9b-faf0d6927148", "b80c3aea-65a6-4c49-b655-bf350a6ce86b", 
+"2739845e-dd42-4434-9c96-a57691f4c4d5", "c912a68a-14be-4337-84ef-334431b5ebb6", 
+"24fa606d-9847-465a-916e-c066b5f1abe4", "cbaf5f35-f0bb-4966-be5d-f5757cb5e2cb", 
+"e9fad4c7-cb24-40ca-87ea-51e475dc3e84", "2b760598-cd5e-417a-a330-55d348cdade3", 
+"2b8b71f1-b114-4c92-83a9-cd782a6f7481", "4e8ca1b4-5301-4b38-a37a-8dfbe4eedaf6", 
+"1834e31f-e8a0-4951-86c6-dd3646a8ac17", "e7acea33-598b-4714-b323-ab63e9b8ab8e", 
+"bca904b5-fdc2-42e0-a41a-f08f330bfe94", "3c72d661-8e2f-4b92-92e8-fb6a4199bd5e", 
+"fa033ad1-b96f-4b68-8862-ad2338e99ab2", "16280406-c206-42a2-9fa5-22bb93591572", 
+"4d107f4c-6748-408f-8b79-48060382ae59", "8937cf14-d99f-41ac-9f1a-10abd53bf7e4", 
+"f7339197-195c-45db-8a34-321794cb7a55", "1f9581ce-1067-441a-a749-c44b45b45118", 
+"558dd98d-5ea3-4002-b3b4-55bd361077de", "5ab906d4-a09b-4042-9d72-137322fd19f0", 
+"1695c1e5-1691-4673-a53e-f0679c60fe29", "8ebdac5a-8acd-4f94-9327-abd665416b6e", 
+"6bf60ccd-f25a-4472-95de-099e4694490e", "db52c550-6ff6-4c1a-9f5f-b69ec6c9c663", 
+"dd53cd4a-8315-4ac7-abe8-43579f58ece8", "8670b738-0432-411b-9d94-d26e338d5429", 
+"aacf2527-6ca8-469b-81de-f1b3a92e0656", "b7288424-7e40-46fd-bd8d-d046c87a0e63", 
+"0446d9dc-37d9-4d3a-a962-9f429cd56d94", "ca87dda5-c09a-4400-b03d-4505cdc77f10", 
+"3de02572-d815-46cb-9e5d-79248273d738", "7f385f49-3bc9-4962-a37c-b9353eec1eaa", 
+"ae056159-68ba-4b38-bfc0-d4e322a14bf1", "7ce7dde7-9948-4362-8225-69b7a5e6f8db", 
+"7581f317-5110-41b8-ba2b-fae25973cff6", "349ad94b-fd38-4a0c-8956-fb114c2cfdbb", 
+"aa67cad2-f7bf-4b28-af73-b380b9c8301f", "9283a5ea-2777-49e9-96ca-ccb83ad08568", 
+"5e425f5a-9fa1-4cb1-ae5a-1d6b431a6f3d", "7cbf9925-291c-4a20-acf0-fff5abf26b7b", 
+"03209c69-b83b-4bb1-a313-0b733da4e231", "11d5fac7-955c-40c2-9b10-df5fc741b24a", 
+"69c88053-38c7-4af6-bd8f-de5b6bb999d0", "4a5ce29c-7ed7-49b2-a7df-f139b05c02cf", 
+"96199aad-dc7e-4afc-bd32-ea7cc8aedfc3", "32119a94-5924-45ec-8c46-4a96b10b6fe4", 
+"6f9ef70b-6c8e-4c44-9043-cf22834a0bb9", "a03bb56a-b932-4e2d-8969-b0472b3ea0f8", 
+"0ed3addc-fc42-471b-92cd-93b1c4b54d9f", "c41c1413-f00e-4a56-93ac-33a40eab8fb0", 
+"4f226a7b-0f1b-47a4-8792-37ed91cdd1e2", "8cb7d98f-d1be-4c62-a06a-51873bde6b26", 
+"720fda3b-2a0a-4609-81e3-05f6a918c7ac", "e01610e8-40af-4d08-8261-c18e0a58b169", 
+"0d089f70-f471-47f5-a888-04033bc6421b", "38c139a8-246c-4bda-b32b-9cccefe2798d", 
+"0580735b-6bfa-4851-b3a1-239f48f96bcb", "f35444ed-fe95-46fe-ab72-3310eb5a6cde", 
+"bba006b3-a27a-4888-852d-74c27f2dc81c", "52fb85e0-4ddb-428d-bec1-f1b28a1ad306", 
+"823002bc-14fe-4ed7-b868-75e873c54b32", "9556afd4-28cb-4efe-a631-cdae32d51eac", 
+"2a74953b-ed72-49ad-8148-0f0f80e3cd5f", "e12cefff-19da-4b54-a023-1487f52678fd", 
+"d0903ce3-acec-413c-b7d0-42679a78ba21", "f3447882-b04a-4989-82b7-dfe0ebfef5e3", 
+"2598c3b8-b9b8-404c-bca2-402f5e5ec241", "54630dc0-3862-43de-b457-16cd20a5e7bd", 
+"77d462ca-fa74-4474-a0ef-638ee1b46719", "4071562f-42dc-46b8-b360-43bfb460cc99", 
+"1638579a-3b6d-4001-8767-bc9a3cf9afab", "4c283215-4d7d-48d5-86cb-dfa5ed3c2a99", 
+"2e0f85ad-9595-4696-92a9-06a1967870a6", "494a1dec-3eea-44d5-9710-45fa7af4bdc2", 
+"7d6cb2c3-ba55-44a4-b29a-bb3e6ff752e8", "465bb90c-b91b-40dc-a038-2e5660bd6649", 
+"32c9f37e-69b1-43bf-bd5f-072ed4596394", "4f1b387e-cec4-4ac9-87ed-12915d1fc80e", 
+"e786a413-9abc-4de5-953c-07b81441f3ed", "2410c7c0-c2e3-4a0f-93fb-909c1cdfd4bb", 
+"9f40ab7f-7865-43c0-a359-9f5601e48171", "795350b9-7c25-4e46-9907-1eb79145036b", 
+"10c13a0f-8b75-4ed4-9b74-8a991d9a0cd7"]}', 'log': 'See log.txt in               
+attachedFiles.', 'attachedFiles':                                               
+['reportblocks/c41859e9-d49f-47af-93a3-af785c7416df/log.txt'], 'dataSetId':     
+None, 'createdAt': '2026-03-04T14:11:51.711Z', 'updatedAt':                     
+'2026-03-04T14:13:05.089Z'}                                                     
+2026-03-04 09:13:05,293  [INFO] attachedFiles after update:                     
+['reportblocks/c41859e9-d49f-47af-93a3-af785c7416df/log.txt']                   
+2026-03-04 09:13:05,294  [INFO] Set attachedFiles attribute on instance:        
+['reportblocks/c41859e9-d49f-47af-93a3-af785c7416df/log.txt']                   
+2026-03-04 09:13:05,294  [INFO] Successfully updated ReportBlock                
+c41859e9-d49f-47af-93a3-af785c7416df                                            
+2026-03-04 09:13:05,294  [INFO] [RunScript] Successfully finalized ReportBlock  
+c41859e9-d49f-47af-93a3-af785c7416df. attachedFiles:                            
+['reportblocks/c41859e9-d49f-47af-93a3-af785c7416df/log.txt']                   
+2026-03-04 09:13:05,295  [INFO] [RunScript] Completed processing for block      
+block_0 (ID: c41859e9-d49f-47af-93a3-af785c7416df)                              
+2026-03-04 09:13:05,295  [INFO] Updated stage Processing Report Blocks processed
+count to 1                                                                      
+2026-03-04 09:13:05,295  [INFO] Set stage Processing Report Blocks processed    
+count to 1                                                                      
+2026-03-04 09:13:06,262  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:13:06,262  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:13:08,333  [INFO] [RunScript] All block processing and ReportBlock
+record finalization completed in the main loop.                                 
+2026-03-04 09:13:11,818  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:13:11,819  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:13:13,665  [INFO] [RunScript] Report generation core logic        
+finished.                                                                       
+2026-03-04 09:13:13,665  [INFO] [RunScript] All report blocks completed and     
+results saved successfully.                                                     
+2026-03-04 09:13:35,059  [INFO] [RunScript] Report generation completed         
+successfully: 25a94a1c-16b1-49c5-9c96-7ee65d6a6726                              
+Report completed successfully!
+Report ID: 25a94a1c-16b1-49c5-9c96-7ee65d6a6726
+Task ID: 2d31029e-0da5-434b-a000-aa0958955a92
+
+View at: /lab/reports or /reports/25a94a1c-16b1-49c5-9c96-7ee65d6a6726
