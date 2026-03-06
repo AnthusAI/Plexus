@@ -573,4 +573,50 @@ class TestFetchScoreResultsForScoreCache:
         client_two.execute.assert_not_called()
         assert len(feedback_utils._score_results_window_cache) == 1
 
+    @pytest.mark.asyncio
+    async def test_cache_evicts_oldest_when_capacity_exceeded(self, monkeypatch):
+        monkeypatch.setattr(feedback_utils, "_SCORE_RESULTS_WINDOW_CACHE_MAX_ENTRIES", 1)
+        monkeypatch.setattr(feedback_utils, "_SCORE_RESULTS_WINDOW_CACHE_TTL_SECONDS", 3600)
+
+        start_date = datetime.now(timezone.utc) - timedelta(days=7)
+        end_date = datetime.now(timezone.utc)
+        page = {
+            "listScoreResultByScorecardIdAndUpdatedAt": {
+                "items": [
+                    {
+                        "id": "sr-1",
+                        "scoreId": "score-1",
+                        "scorecardId": "scorecard-1",
+                        "accountId": "test-account-id",
+                        "updatedAt": start_date.isoformat(),
+                    }
+                ],
+                "nextToken": None,
+            }
+        }
+
+        client = MagicMock()
+        client.execute = MagicMock(return_value=page)
+
+        await feedback_utils.fetch_score_results_for_score(
+            client,
+            "test-account-id",
+            "scorecard-1",
+            "score-1",
+            start_date,
+            end_date,
+        )
+        await feedback_utils.fetch_score_results_for_score(
+            client,
+            "test-account-id",
+            "scorecard-2",
+            "score-1",
+            start_date,
+            end_date,
+        )
+
+        # Only the newest window should remain when max entries is 1.
+        assert len(feedback_utils._score_results_window_cache) == 1
+        remaining_key = next(iter(feedback_utils._score_results_window_cache.keys()))
+        assert remaining_key[1] == "scorecard-2"
 

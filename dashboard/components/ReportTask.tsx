@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FileBarChart, Clock, Square, Columns2, X } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -100,7 +100,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   isSelected
 }) => {
   // Helper to transform raw blocks into ReportBlock format
-  const transformBlocks = (rawBlocks: Array<{ type?: string; name?: string; position: number; output?: any; log?: string; config?: any; attachedFiles?: any[]; dataSet?: any }>): ReportBlock[] => {
+  const transformBlocks = useCallback((rawBlocks: Array<{ type?: string; name?: string; position: number; output?: any; log?: string; config?: any; attachedFiles?: any[]; dataSet?: any }>): ReportBlock[] => {
     return rawBlocks.map(blockProp => {
       const parsedOutput = parseOutputString(blockProp.output);
       const blockTypeToUse = blockProp.type || (typeof parsedOutput === 'object' && parsedOutput?.class) || 'unknown';
@@ -116,7 +116,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         dataSet: blockProp.dataSet || null
       };
     });
-  };
+  }, []);
 
   // Initialize from task.data.reportBlocks when available (avoids empty flash for detail view)
   const initialBlocks = task.data?.reportBlocks && task.data.reportBlocks.length > 0
@@ -190,7 +190,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     if (task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
       setReportBlocks(transformBlocks(task.data.reportBlocks));
     }
-  }, [task.data?.id, task.data?.reportBlocks?.length, task.data?.reportBlocks]);
+  }, [task.data?.id, task.data?.reportBlocks?.length, task.data?.reportBlocks, transformBlocks]);
 
   // (Bare mode uses the same sync effect above - task.data.reportBlocks is the primary source)
 
