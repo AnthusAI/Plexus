@@ -2972,9 +2972,11 @@ class FeedbackEvaluation(Evaluation):
             # Get AC1 from analysis and store as "Alignment" to match existing convention
             ac1 = overall_analysis.get("ac1")
             if ac1 is not None:
-                # Alignment is Gwet's AC1, ranges from -1 to 1
-                # Store as-is (no mapping needed - this matches accuracy evaluation behavior)
-                metrics_for_api.append({"name": "Alignment", "value": ac1})
+                # Keep native AC1 in analysis payloads, but map evaluation metric payload
+                # to the legacy-compatible [0, 100] range for dashboard consistency.
+                metrics_for_api.append(
+                    {"name": "Alignment", "value": self._format_alignment_metric_value(ac1)}
+                )
             
             accuracy = overall_analysis.get("accuracy")
             if accuracy is not None:
