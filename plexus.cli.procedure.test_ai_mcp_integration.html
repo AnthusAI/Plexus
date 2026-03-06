@@ -1,0 +1,268 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.test_ai_mcp_integration module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.test_hypothesis_with_insights_context module" href="plexus.cli.procedure.test_hypothesis_with_insights_context.html" />
+    <link rel="prev" title="plexus.cli.procedure.test_actual_runtime_flow module" href="plexus.cli.procedure.test_actual_runtime_flow.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.test_ai_mcp_integration module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.test_ai_mcp_integration.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.test_ai_mcp_integration">
+<span id="plexus-cli-procedure-test-ai-mcp-integration-module"></span><h1>plexus.cli.procedure.test_ai_mcp_integration module<a class="headerlink" href="#module-plexus.cli.procedure.test_ai_mcp_integration" title="Link to this heading"></a></h1>
+<p>Comprehensive end-to-end test for AI + MCP integration in experiments.</p>
+<p>This test validates that:
+1. MCP transport works with all Plexus tools
+2. LangChain can successfully use MCP tools
+3. AI models can interact with real Plexus data
+4. The complete procedure run workflow functions properly</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_ai_mcp_integration.</span></span><span class="sig-name descname"><span class="pre">TestAIMCPIntegration</span></span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test class for AI + MCP integration.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.experiment_context">
+<span class="sig-name descname"><span class="pre">experiment_context</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.experiment_context" title="Link to this definition"></a></dt>
+<dd><p>Sample procedure context for testing.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.experiment_service">
+<span class="sig-name descname"><span class="pre">experiment_service</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_client</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.experiment_service" title="Link to this definition"></a></dt>
+<dd><p>Create an procedure service with mock client.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.mock_client">
+<span class="sig-name descname"><span class="pre">mock_client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.mock_client" title="Link to this definition"></a></dt>
+<dd><p>Create a mock client for testing.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_error_handling_without_openai_key">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">test_error_handling_without_openai_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">experiment_context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_error_handling_without_openai_key" title="Link to this definition"></a></dt>
+<dd><p>Test proper error handling when OpenAI key is not available.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_full_experiment_run_with_ai_mocked">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">test_full_experiment_run_with_ai_mocked</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_full_experiment_run_with_ai_mocked" title="Link to this definition"></a></dt>
+<dd><p>Test the full procedure run workflow with mocked AI.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_langchain_adapter_loads_tools">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">test_langchain_adapter_loads_tools</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">experiment_context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_langchain_adapter_loads_tools" title="Link to this definition"></a></dt>
+<dd><p>Test that LangChain adapter can load MCP tools.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_mcp_server_creation_with_plexus_tools">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">test_mcp_server_creation_with_plexus_tools</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">experiment_context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_mcp_server_creation_with_plexus_tools" title="Link to this definition"></a></dt>
+<dd><p>Test that MCP server can be created with all Plexus tools.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_mcp_tools_can_be_called">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">test_mcp_tools_can_be_called</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">experiment_context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_mcp_tools_can_be_called" title="Link to this definition"></a></dt>
+<dd><p>Test that MCP tools can be called successfully.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_mock_ai_execution_with_tools">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">test_mock_ai_execution_with_tools</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">experiment_context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_mock_ai_execution_with_tools" title="Link to this definition"></a></dt>
+<dd><p>Test AI execution with mocked LangChain components.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_procedure_ai_runner_setup">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">test_procedure_ai_runner_setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">experiment_context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_procedure_ai_runner_setup" title="Link to this definition"></a></dt>
+<dd><p>Test that ProcedureSOPAgent can be set up properly.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_procedure_yaml_parsing">
+<span class="sig-name descname"><span class="pre">test_procedure_yaml_parsing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_procedure_yaml_parsing" title="Link to this definition"></a></dt>
+<dd><p>Test that procedure YAML is properly parsed.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_tool_execution_simulation">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">test_tool_execution_simulation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">experiment_context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.TestAIMCPIntegration.test_tool_execution_simulation" title="Link to this definition"></a></dt>
+<dd><p>Test that individual tools can be executed and return proper results.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_ai_mcp_integration.run_integration_test">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_ai_mcp_integration.</span></span><span class="sig-name descname"><span class="pre">run_integration_test</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_ai_mcp_integration.run_integration_test" title="Link to this definition"></a></dt>
+<dd><p>Run a comprehensive integration test manually.
+This can be called directly to test the system end-to-end.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.test_actual_runtime_flow.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.test_actual_runtime_flow module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.test_hypothesis_with_insights_context.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.test_hypothesis_with_insights_context module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

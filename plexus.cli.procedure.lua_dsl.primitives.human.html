@@ -1,0 +1,412 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.lua_dsl.primitives.human module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.lua_dsl.primitives.json module" href="plexus.cli.procedure.lua_dsl.primitives.json.html" />
+    <link rel="prev" title="plexus.cli.procedure.lua_dsl.primitives.graph module" href="plexus.cli.procedure.lua_dsl.primitives.graph.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.lua_dsl.html">plexus.cli.procedure.lua_dsl package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.lua_dsl.primitives.html">plexus.cli.procedure.lua_dsl.primitives package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.lua_dsl.primitives.human module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.lua_dsl.primitives.human.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.lua_dsl.primitives.human">
+<span id="plexus-cli-procedure-lua-dsl-primitives-human-module"></span><h1>plexus.cli.procedure.lua_dsl.primitives.human module<a class="headerlink" href="#module-plexus.cli.procedure.lua_dsl.primitives.human" title="Link to this heading"></a></h1>
+<p>Human Primitive - Human-in-the-Loop (HITL) operations.</p>
+<p>Provides:
+- Human.approve(opts) - Request yes/no approval (blocking)
+- Human.input(opts) - Request free-form input (blocking)
+- Human.review(opts) - Request review with options (blocking)
+- Human.notify(opts) - Send notification (non-blocking)
+- Human.escalate(opts) - Escalate to human (blocking)</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.human.</span></span><span class="sig-name descname"><span class="pre">HumanPrimitive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_context</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hitl_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages human-in-the-loop operations for procedures.</p>
+<p>Enables procedures to:
+- Request approval from humans
+- Get input from humans
+- Send notifications
+- Escalate issues</p>
+<p>All blocking methods support timeouts and defaults.</p>
+<p>Initialize Human primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder for recording messages
+execution_context: ExecutionContext for blocking HITL operations
+hitl_config: Optional HITL declarations from YAML</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_context</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hitl_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize Human primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder for recording messages
+execution_context: ExecutionContext for blocking HITL operations
+hitl_config: Optional HITL declarations from YAML</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.approve">
+<span class="sig-name descname"><span class="pre">approve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.approve" title="Link to this definition"></a></dt>
+<dd><p>Request yes/no approval from human (BLOCKING).</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Message to show human</p></li>
+<li><p>context: Dict - Additional context</p></li>
+<li><p>timeout: int - Timeout in seconds (None = no timeout)</p></li>
+<li><p>default: bool - Default if timeout (default: False)</p></li>
+<li><p>config_key: str - Reference to hitl: declaration</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>bool - True if approved, False if rejected/timeout</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local approved = Human.approve({</dt><dd><p>message = “Deploy to production?”,
+context = {environment = “prod”},
+timeout = 3600,
+default = false</p>
+</dd>
+</dl>
+<p>})</p>
+<dl class="simple">
+<dt>if approved then</dt><dd><p>deploy()</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.escalate">
+<span class="sig-name descname"><span class="pre">escalate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.escalate" title="Link to this definition"></a></dt>
+<dd><p>Escalate to human (BLOCKING).</p>
+<p>Stops workflow execution until human resolves the issue.
+Unlike approve/input/review, escalate has NO timeout - it blocks
+indefinitely until a human manually resumes the procedure.</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Escalation message</p></li>
+<li><p>context: Dict - Error context</p></li>
+<li><p>severity: str - Severity level (info/warning/error/critical)</p></li>
+<li><p>config_key: str - Reference to hitl: declaration</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>None - Execution resumes when human resolves</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl>
+<dt>if attempts &gt; 3 then</dt><dd><dl class="simple">
+<dt>Human.escalate({</dt><dd><p>message = “Cannot resolve automatically”,
+context = {attempts = attempts, error = last_error},
+severity = “error”</p>
+</dd>
+</dl>
+<p>})
+– Workflow continues here after human resolves</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.flush_recordings">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">flush_recordings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.flush_recordings" title="Link to this definition"></a></dt>
+<dd><p>Flush all queued messages to chat recorder.</p>
+<p>This is called by the runtime after workflow execution to
+record all Human.notify() messages to the chat session.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.input">
+<span class="sig-name descname"><span class="pre">input</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.input" title="Link to this definition"></a></dt>
+<dd><p>Request free-form input from human (BLOCKING).</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Prompt for human</p></li>
+<li><p>placeholder: str - Input placeholder</p></li>
+<li><p>timeout: int - Timeout in seconds</p></li>
+<li><p>default: str - Default if timeout</p></li>
+<li><p>config_key: str - Reference to hitl: declaration</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>str or None - Human’s input, or None if timeout with no default</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local topic = Human.input({</dt><dd><p>message = “What topic?”,
+placeholder = “Enter topic…”,
+timeout = 600</p>
+</dd>
+</dl>
+<p>})</p>
+<dl class="simple">
+<dt>if topic then</dt><dd><p>State.set(“topic”, topic)</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.notify">
+<span class="sig-name descname"><span class="pre">notify</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.notify" title="Link to this definition"></a></dt>
+<dd><p>Send notification to human (NON-BLOCKING).</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Notification message (required)</p></li>
+<li><p>content: str - Rich markdown content (optional, overrides message in UI)</p></li>
+<li><p>details: List[Dict] - Collapsible sections with title and content</p></li>
+<li><p>level: str - info, warning, error (default: info)</p></li>
+<li><p>context: Dict - Additional context (deprecated, use details instead)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Example (Lua):</dt><dd><p>– Simple notification
+Human.notify({</p>
+<blockquote>
+<div><p>message = “Processing complete”</p>
+</div></blockquote>
+<p>})</p>
+<p>– Rich notification with details
+Human.notify({</p>
+<blockquote>
+<div><p>message = “Phase 2 complete”,
+content = “<strong>Status</strong>: Phase 2 processing finishednnProcessed 150 items successfully”,
+details = {</p>
+<blockquote>
+<div><p>{title = “Statistics”, content = “<strong>Success</strong>: 148n**Failed**: 2n**Duration**: 5 min”},
+{title = “Next Steps”, content = “Starting phase 3 validation”}</p>
+</div></blockquote>
+<p>}</p>
+</div></blockquote>
+<p>})</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.review">
+<span class="sig-name descname"><span class="pre">review</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.human.HumanPrimitive.review" title="Link to this definition"></a></dt>
+<dd><p>Request human review (BLOCKING).</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>options: Dict with:</dt><dd><ul class="simple">
+<li><p>message: str - Review prompt</p></li>
+<li><p>artifact: Any - Thing to review</p></li>
+<li><p>artifact_type: str - Type of artifact</p></li>
+<li><p>options: List[str] - Available actions</p></li>
+<li><p>timeout: int - Timeout in seconds</p></li>
+<li><p>config_key: str - Reference to hitl: declaration</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict with:</dt><dd><ul class="simple">
+<li><p>decision: str - Selected option</p></li>
+<li><p>edited_artifact: Any - Modified artifact (if edited)</p></li>
+<li><p>feedback: str - Human feedback</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local review = Human.review({</dt><dd><p>message = “Review this document”,
+artifact = document,
+artifact_type = “document”,
+options = {“approve”, “edit”, “reject”}</p>
+</dd>
+</dl>
+<p>})</p>
+<dl class="simple">
+<dt>if review.decision == “approve” then</dt><dd><p>publish(review.artifact)</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.lua_dsl.primitives.graph.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.lua_dsl.primitives.graph module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.lua_dsl.primitives.json.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.lua_dsl.primitives.json module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,504 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.analysis.metrics package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.analysis.metrics.accuracy module" href="plexus.analysis.metrics.accuracy.html" />
+    <link rel="prev" title="plexus.analysis package" href="plexus.analysis.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.html#plexus.analysis.Accuracy"><code class="docutils literal notranslate"><span class="pre">Accuracy</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.html#plexus.analysis.GwetAC1"><code class="docutils literal notranslate"><span class="pre">GwetAC1</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.html#plexus.analysis.Precision"><code class="docutils literal notranslate"><span class="pre">Precision</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.html#plexus.analysis.Recall"><code class="docutils literal notranslate"><span class="pre">Recall</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.analysis.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.analysis.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.analysis.html">plexus.analysis package</a></li>
+      <li class="breadcrumb-item active">plexus.analysis.metrics package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.analysis.metrics.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.analysis.metrics">
+<span id="plexus-analysis-metrics-package"></span><h1>plexus.analysis.metrics package<a class="headerlink" href="#module-plexus.analysis.metrics" title="Link to this heading"></a></h1>
+<p>Metrics module for Plexus.</p>
+<p>This module provides various metrics for measuring agreement and accuracy
+between predicted and reference values.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Accuracy">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.analysis.metrics.</span></span><span class="sig-name descname"><span class="pre">Accuracy</span></span><a class="headerlink" href="#plexus.analysis.metrics.Accuracy" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric" title="plexus.analysis.metrics.metric.Metric"><code class="xref py py-class docutils literal notranslate"><span class="pre">Metric</span></code></a></p>
+<p>Implementation of accuracy metric for classification tasks.</p>
+<p>Accuracy is calculated as the number of correct predictions divided by
+the total number of predictions, expressed as a value between 0 and 1.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Accuracy.calculate">
+<span class="sig-name descname"><span class="pre">calculate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Input" title="plexus.analysis.metrics.metric.Metric.Input"><span class="pre">Input</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result" title="plexus.analysis.metrics.metric.Metric.Result"><span class="pre">Result</span></a></span></span><a class="headerlink" href="#plexus.analysis.metrics.Accuracy.calculate" title="Link to this definition"></a></dt>
+<dd><p>Calculate accuracy between prediction and reference data.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>input_data: Metric.Input containing reference and prediction lists</p>
+</dd>
+<dt>Returns:</dt><dd><p>Metric.Result with the accuracy value and metadata</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.GwetAC1">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.analysis.metrics.</span></span><span class="sig-name descname"><span class="pre">GwetAC1</span></span><a class="headerlink" href="#plexus.analysis.metrics.GwetAC1" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric" title="plexus.analysis.metrics.metric.Metric"><code class="xref py py-class docutils literal notranslate"><span class="pre">Metric</span></code></a></p>
+<p>Implementation of Gwet’s AC1 statistic for measuring inter-rater agreement.</p>
+<p>Gwet’s AC1 is an alternative to Cohen’s Kappa and Fleiss’ Kappa that is more
+robust to the “Kappa paradox” where high observed agreement can result in low
+or negative Kappa values when there is high class imbalance.</p>
+<p>References:
+- Gwet, K. L. (2008). Computing inter-rater reliability and its variance in the</p>
+<blockquote>
+<div><p>presence of high agreement. British Journal of Mathematical and Statistical Psychology,
+61(1), 29-48.</p>
+</div></blockquote>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.GwetAC1.calculate">
+<span class="sig-name descname"><span class="pre">calculate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Input" title="plexus.analysis.metrics.metric.Metric.Input"><span class="pre">Input</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result" title="plexus.analysis.metrics.metric.Metric.Result"><span class="pre">Result</span></a></span></span><a class="headerlink" href="#plexus.analysis.metrics.GwetAC1.calculate" title="Link to this definition"></a></dt>
+<dd><p>Calculate Gwet’s AC1 agreement coefficient.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>input_data: Metric.Input containing reference and prediction lists</p>
+</dd>
+<dt>Returns:</dt><dd><p>Metric.Result with the Gwet’s AC1 value and metadata</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.analysis.metrics.</span></span><span class="sig-name descname"><span class="pre">Metric</span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
+<p>Abstract base class for implementing evaluation metrics in Plexus.</p>
+<p>Metric is the foundation for standardized evaluation metrics. Each implementation
+represents a specific way to measure agreement or performance, such as:</p>
+<ul class="simple">
+<li><p>Agreement coefficients (Gwet’s AC1, Cohen’s Kappa)</p></li>
+<li><p>Accuracy metrics (raw accuracy, F1 score)</p></li>
+<li><p>Distance metrics (RMSE, MAE)</p></li>
+</ul>
+<p>The Metric class provides:
+- Standard input/output interfaces using Pydantic models
+- Consistent calculation methods
+- Range information for proper visualization</p>
+<p>Common usage patterns:
+1. Creating a custom metric:</p>
+<blockquote>
+<div><dl>
+<dt>class MyMetric(Metric):</dt><dd><dl>
+<dt>def calculate(self, input_data: Metric.Input) -&gt; Metric.Result:</dt><dd><p># Custom metric calculation logic
+return Metric.Result(</p>
+<blockquote>
+<div><p>name=”My Custom Metric”,
+value=calculated_value,
+range=[0, 1]</p>
+</div></blockquote>
+<p>)</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</div></blockquote>
+<ol class="arabic" start="2">
+<li><dl>
+<dt>Using a metric:</dt><dd><p>metric = MyMetric()
+result = metric.calculate(Metric.Input(</p>
+<blockquote>
+<div><p>reference=[“Yes”, “No”, “Yes”],
+predictions=[“Yes”, “No”, “No”]</p>
+</div></blockquote>
+<p>))</p>
+</dd>
+</dl>
+</li>
+</ol>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Input">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Input</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predictions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Input" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Standard input structure for all metric calculations in Plexus.</p>
+<p>The Input class standardizes how data is passed to metric calculations,
+typically consisting of two lists: reference (ground truth) and predictions.</p>
+<dl>
+<dt>Attributes:</dt><dd><p>reference: List of reference/gold standard values
+predictions: List of predicted values to compare against reference</p>
+</dd>
+<dt>Common usage:</dt><dd><dl class="simple">
+<dt>input_data = Metric.Input(</dt><dd><p>reference=[“Yes”, “No”, “Yes”, “Yes”],
+predictions=[“Yes”, “No”, “No”, “Yes”]</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
+<p>Create a new model by parsing and validating input data from keyword arguments.</p>
+<p>Raises [<cite>ValidationError</cite>][pydantic_core.ValidationError] if the input data cannot be
+validated to form a valid model.</p>
+<p><cite>self</cite> is explicitly positional-only to allow <cite>self</cite> as a field name.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Input.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'protected_namespaces':</span> <span class="pre">()}</span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Input.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Input.predictions">
+<span class="sig-name descname"><span class="pre">predictions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Input.predictions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Input.reference">
+<span class="sig-name descname"><span class="pre">reference</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Input.reference" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Result">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Result" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Standard output structure for all metric calculations in Plexus.</p>
+<p>The Result class provides a consistent way to represent metric outcomes,
+including the metric name, calculated value, and valid range.</p>
+<dl>
+<dt>Attributes:</dt><dd><p>name: The name of the metric (e.g., “Gwet’s AC1”)
+value: The calculated metric value
+range: Valid range for the metric as [min, max]
+metadata: Optional additional information about the calculation</p>
+</dd>
+<dt>Common usage:</dt><dd><dl class="simple">
+<dt>result = Metric.Result(</dt><dd><p>name=”Accuracy”,
+value=0.75,
+range=[0, 1],
+metadata={“sample_size”: 100}</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
+<p>Create a new model by parsing and validating input data from keyword arguments.</p>
+<p>Raises [<cite>ValidationError</cite>][pydantic_core.ValidationError] if the input data cannot be
+validated to form a valid model.</p>
+<p><cite>self</cite> is explicitly positional-only to allow <cite>self</cite> as a field name.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Result.metadata">
+<span class="sig-name descname"><span class="pre">metadata</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Result.metadata" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Result.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'protected_namespaces':</span> <span class="pre">()}</span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Result.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Result.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Result.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Result.range">
+<span class="sig-name descname"><span class="pre">range</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Result.range" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.Result.value">
+<span class="sig-name descname"><span class="pre">value</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric.Result.value" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Metric.calculate">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">calculate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Input" title="plexus.analysis.metrics.metric.Metric.Input"><span class="pre">Input</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result" title="plexus.analysis.metrics.metric.Metric.Result"><span class="pre">Result</span></a></span></span><a class="headerlink" href="#plexus.analysis.metrics.Metric.calculate" title="Link to this definition"></a></dt>
+<dd><p>Calculate the metric value based on the provided input data.</p>
+<p>This abstract method must be implemented by all concrete metric classes.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>input_data: Metric.Input object containing reference and prediction data</p>
+</dd>
+<dt>Returns:</dt><dd><p>Metric.Result object with the calculated metric value and metadata</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Precision">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.analysis.metrics.</span></span><span class="sig-name descname"><span class="pre">Precision</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">positive_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.analysis.metrics.Precision" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric" title="plexus.analysis.metrics.metric.Metric"><code class="xref py py-class docutils literal notranslate"><span class="pre">Metric</span></code></a></p>
+<p>Implementation of precision metric for binary classification tasks.</p>
+<p>Precision is calculated as the number of true positives divided by
+the total number of items predicted as positive (true positives + false positives).
+It represents the ability of a classifier to avoid labeling negative samples as positive.</p>
+<p>For binary classification, labels must be strings like ‘yes’/’no’ or ‘true’/’false’.
+The first label in self.positive_labels is considered the “positive” class.</p>
+<p>Initialize the Precision metric with specified positive labels.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>positive_labels: List of values to consider as positive class.</dt><dd><p>If None, defaults to [‘yes’, ‘true’, ‘1’, 1, True]</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Precision.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">positive_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.analysis.metrics.Precision.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the Precision metric with specified positive labels.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>positive_labels: List of values to consider as positive class.</dt><dd><p>If None, defaults to [‘yes’, ‘true’, ‘1’, 1, True]</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Precision.calculate">
+<span class="sig-name descname"><span class="pre">calculate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Input" title="plexus.analysis.metrics.metric.Metric.Input"><span class="pre">Input</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result" title="plexus.analysis.metrics.metric.Metric.Result"><span class="pre">Result</span></a></span></span><a class="headerlink" href="#plexus.analysis.metrics.Precision.calculate" title="Link to this definition"></a></dt>
+<dd><p>Calculate precision between prediction and reference data.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>input_data: Metric.Input containing reference and prediction lists</p>
+</dd>
+<dt>Returns:</dt><dd><p>Metric.Result with the precision value and metadata</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Recall">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.analysis.metrics.</span></span><span class="sig-name descname"><span class="pre">Recall</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">positive_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.analysis.metrics.Recall" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric" title="plexus.analysis.metrics.metric.Metric"><code class="xref py py-class docutils literal notranslate"><span class="pre">Metric</span></code></a></p>
+<p>Implementation of recall metric for binary classification tasks.</p>
+<p>Recall is calculated as the number of true positives divided by
+the total number of actual positive instances (true positives + false negatives).
+It represents the ability of a classifier to find all positive samples.</p>
+<p>For binary classification, labels must be strings like ‘yes’/’no’ or ‘true’/’false’.
+The first label in self.positive_labels is considered the “positive” class.</p>
+<p>Initialize the Recall metric with specified positive labels.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>positive_labels: List of values to consider as positive class.</dt><dd><p>If None, defaults to [‘yes’, ‘true’, ‘1’, 1, True]</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Recall.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">positive_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.analysis.metrics.Recall.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the Recall metric with specified positive labels.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>positive_labels: List of values to consider as positive class.</dt><dd><p>If None, defaults to [‘yes’, ‘true’, ‘1’, 1, True]</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.analysis.metrics.Recall.calculate">
+<span class="sig-name descname"><span class="pre">calculate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Input" title="plexus.analysis.metrics.metric.Metric.Input"><span class="pre">Input</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result" title="plexus.analysis.metrics.metric.Metric.Result"><span class="pre">Result</span></a></span></span><a class="headerlink" href="#plexus.analysis.metrics.Recall.calculate" title="Link to this definition"></a></dt>
+<dd><p>Calculate recall between prediction and reference data.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>input_data: Metric.Input containing reference and prediction lists</p>
+</dd>
+<dt>Returns:</dt><dd><p>Metric.Result with the recall value and metadata</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.analysis.metrics.accuracy.html">plexus.analysis.metrics.accuracy module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.analysis.metrics.accuracy.html#plexus.analysis.metrics.accuracy.Accuracy"><code class="docutils literal notranslate"><span class="pre">Accuracy</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.metrics.accuracy.html#plexus.analysis.metrics.accuracy.Accuracy.calculate"><code class="docutils literal notranslate"><span class="pre">Accuracy.calculate()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.analysis.metrics.gwet_ac1.html">plexus.analysis.metrics.gwet_ac1 module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.analysis.metrics.gwet_ac1.html#plexus.analysis.metrics.gwet_ac1.GwetAC1"><code class="docutils literal notranslate"><span class="pre">GwetAC1</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.metrics.gwet_ac1.html#plexus.analysis.metrics.gwet_ac1.GwetAC1.calculate"><code class="docutils literal notranslate"><span class="pre">GwetAC1.calculate()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.analysis.metrics.metric.html">plexus.analysis.metrics.metric module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric"><code class="docutils literal notranslate"><span class="pre">Metric</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Input"><code class="docutils literal notranslate"><span class="pre">Metric.Input</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Input.model_config"><code class="docutils literal notranslate"><span class="pre">Metric.Input.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Input.predictions"><code class="docutils literal notranslate"><span class="pre">Metric.Input.predictions</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Input.reference"><code class="docutils literal notranslate"><span class="pre">Metric.Input.reference</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result"><code class="docutils literal notranslate"><span class="pre">Metric.Result</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result.metadata"><code class="docutils literal notranslate"><span class="pre">Metric.Result.metadata</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result.model_config"><code class="docutils literal notranslate"><span class="pre">Metric.Result.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result.name"><code class="docutils literal notranslate"><span class="pre">Metric.Result.name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result.range"><code class="docutils literal notranslate"><span class="pre">Metric.Result.range</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.Result.value"><code class="docutils literal notranslate"><span class="pre">Metric.Result.value</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.metrics.metric.html#plexus.analysis.metrics.metric.Metric.calculate"><code class="docutils literal notranslate"><span class="pre">Metric.calculate()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.analysis.metrics.precision.html">plexus.analysis.metrics.precision module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.analysis.metrics.precision.html#plexus.analysis.metrics.precision.Precision"><code class="docutils literal notranslate"><span class="pre">Precision</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.metrics.precision.html#plexus.analysis.metrics.precision.Precision.__init__"><code class="docutils literal notranslate"><span class="pre">Precision.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.metrics.precision.html#plexus.analysis.metrics.precision.Precision.calculate"><code class="docutils literal notranslate"><span class="pre">Precision.calculate()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.analysis.metrics.recall.html">plexus.analysis.metrics.recall module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.analysis.metrics.recall.html#plexus.analysis.metrics.recall.Recall"><code class="docutils literal notranslate"><span class="pre">Recall</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.metrics.recall.html#plexus.analysis.metrics.recall.Recall.__init__"><code class="docutils literal notranslate"><span class="pre">Recall.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.metrics.recall.html#plexus.analysis.metrics.recall.Recall.calculate"><code class="docutils literal notranslate"><span class="pre">Recall.calculate()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.analysis.html" class="btn btn-neutral float-left" title="plexus.analysis package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.analysis.metrics.accuracy.html" class="btn btn-neutral float-right" title="plexus.analysis.metrics.accuracy module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
