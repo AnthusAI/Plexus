@@ -1,28 +1,13 @@
 import os
 import json
 import pandas as pd
-import numpy as np
-import inspect
-import functools
 from pydantic import BaseModel, ValidationError, field_validator, ConfigDict
-from typing import Optional, Union, List, Any
+from typing import Optional, Union, List
 from abc import ABC, abstractmethod
-import matplotlib.pyplot as plt
-import seaborn as sns
 # from tensorflow.keras.utils import plot_model
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import roc_curve, auc, precision_recall_curve
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
-from sklearn.calibration import calibration_curve
-import matplotlib.ticker as ticker
-from rich.table import Table
-from rich.panel import Panel
-from rich.columns import Columns
-from rich.text import Text
-from plexus.CustomLogging import logging, console
-from sklearn.preprocessing import LabelBinarizer
+from plexus.CustomLogging import logging
 from collections import Counter
-import xgboost as xgb
 
 from plexus.Registries import scorecard_registry
 from plexus.scores.core.ScoreData import ScoreData
@@ -115,6 +100,7 @@ class Score(ABC,
         label_field: Optional[str] = None
 
         @field_validator('data')
+        @classmethod
         def convert_data_percentage(cls, value):
             """
             Convert the percentage value in the data dictionary to a float.
@@ -290,17 +276,6 @@ class Score(ABC,
             The full path to the report file with spaces replaced by underscores.
         """
         return os.path.join(self.report_directory_path(), file_name).replace(' ', '_')
-
-    def train_model(self):
-        """
-        Train the model on the training data.
-
-        Returns
-        -------
-        object
-            The trained model.
-        """
-        pass
 
     def predict_validation(self):
         """
@@ -807,7 +782,54 @@ class Score(ABC,
         return score_class(**score_parameters)
 
     @staticmethod
-    def apply_processors_to_text(text: str, processors_config: list) -> str:
+    def apply_processors(
+        score_input: "Score.Input", processors_config: list
+    ) -> "Score.Input":
+        """
+        Apply a list of processors to a Score.Input and return the transformed Score.Input.
+
+        Args:
+            score_input: Input object containing text/metadata/results.
+            processors_config: List of processor configurations.
+
+        Returns:
+            Transformed Score.Input after all configured processors run.
+        """
+        if not processors_config or not score_input:
+            return score_input
+
+        # Import here to avoid circular dependency
+        from plexus.processors import ProcessorFactory
+
+        processed_input = score_input
+
+        # Apply each processor in sequence
+        for processor_config in processors_config:
+            processor_class = processor_config.get("class")
+            if not processor_class:
+                logging.warning(
+                    f"Processor config missing 'class' field: {processor_config}"
+                )
+                continue
+
+            processor_parameters = processor_config.get("parameters", {})
+
+            try:
+                processor_instance = ProcessorFactory.create_processor(
+                    processor_class, **processor_parameters
+                )
+                processed_input = processor_instance.process(processed_input)
+            except Exception as e:
+                logging.error(f"Error applying processor {processor_class}: {e}")
+                # Continue with other processors even if one fails
+                continue
+
+        return processed_input
+
+    @staticmethod
+    def apply_processors_to_text(
+        text: str, processors_config: list, metadata: dict = None
+    ) -> str:
         """
         Apply a list of processors to text for production predictions.
 
@@ -834,33 +856,7 @@ class Score(ABC,
         if not processors_config or not text:
             return text
 
-        # Import here to avoid circular dependency
-        from plexus.processors import ProcessorFactory
-
-        # Create Score.Input
-        score_input = Score.Input(text=text, metadata={})
-
-        # Apply each processor in sequence
-        for processor_config in processors_config:
-            processor_class = processor_config.get('class')
-            if not processor_class:
-                logging.warning(f"Processor config missing 'class' field: {processor_config}")
-                continue
-
-            processor_parameters = processor_config.get('parameters', {})
-
-            try:
-                processor_instance = ProcessorFactory.create_processor(
-                    processor_class,
-                    **processor_parameters
-                )
-                score_input = processor_instance.process(score_input)
-            except Exception as e:
-                logging.error(f"Error applying processor {processor_class}: {e}")
-                # Continue with other processors even if one fails
-                continue
-
-        # Extract the processed text from the Score.Input
-        return score_input.text
+        score_input = Score.Input(text=text, metadata=metadata or {})
+        return Score.apply_processors(score_input, processors_config).text
 
 Score.Result.model_rebuild()
