@@ -3,7 +3,7 @@
   "title": "Verify and fix AC1 dashboard scale regression report",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -25,7 +25,7 @@
     }
   ],
   "created_at": "2026-03-06T17:52:28.679849Z",
-  "updated_at": "2026-03-06T17:55:06.232709Z",
-  "closed_at": null,
+  "updated_at": "2026-03-06T17:55:19.117573Z",
+  "closed_at": "2026-03-06T17:55:19.117573Z",
   "custom": {}
 }
