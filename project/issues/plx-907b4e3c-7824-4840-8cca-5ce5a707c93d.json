@@ -1,0 +1,31 @@
+{
+  "id": "plx-907b4e3c-7824-4840-8cca-5ce5a707c93d",
+  "title": "Fix Scorecard missing-score return contract and ReportTask effect deps",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "39b373bd-183b-4e49-bb8c-2a6fd5106e18",
+      "author": "ryan.porter",
+      "text": "Verified both reports. Scorecard has an early return for score_class None, but get_score_result still relies on a redundant if score_class is not None block. Adding explicit defensive fallback return to enforce list-return contract. In ReportTask, removing reportBlocks array reference from useEffect deps to prevent reference-churn reruns.",
+      "created_at": "2026-03-06T17:56:01.445781Z"
+    },
+    {
+      "id": "8f897be9-517a-4907-a846-307869c97431",
+      "author": "ryan.porter",
+      "text": "Validation: .venv/bin/pytest -q plexus/Scorecard_test.py tests/test_scorecard_integration.py -> 10 passed.",
+      "created_at": "2026-03-06T17:56:40.223041Z"
+    }
+  ],
+  "created_at": "2026-03-06T17:55:43.048607Z",
+  "updated_at": "2026-03-06T17:56:40.223041Z",
+  "closed_at": null,
+  "custom": {}
+}
