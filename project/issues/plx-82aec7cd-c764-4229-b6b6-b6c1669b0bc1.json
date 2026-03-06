@@ -1,0 +1,31 @@
+{
+  "id": "plx-82aec7cd-c764-4229-b6b6-b6c1669b0bc1",
+  "title": "Verify and fix AC1 dashboard scale regression report",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8ed0822f-b735-46cb-b34f-bc0f4b94cb97",
+      "author": "ryan.porter",
+      "text": "Verified cited path: accuracy evaluation alignment payload already mapped via _format_alignment_metric_value. Found remaining inconsistency in feedback evaluation path where Alignment AC1 was still sent raw [-1,1]. Updated that payload path to the same formatter for [0,100] compatibility.",
+      "created_at": "2026-03-06T17:55:05.979092Z"
+    },
+    {
+      "id": "e33c0058-385a-40a3-a099-b855190956f8",
+      "author": "ryan.porter",
+      "text": "Validation: .venv/bin/pytest -q plexus/Evaluation_feedback_test.py -k alignment_metric_to_percentage -> 1 passed; .venv/bin/pytest -q tests/cli/test_evaluation_scoreversion_association.py -k AlignmentFormatting -> 4 passed.",
+      "created_at": "2026-03-06T17:55:06.232709Z"
+    }
+  ],
+  "created_at": "2026-03-06T17:52:28.679849Z",
+  "updated_at": "2026-03-06T17:55:06.232709Z",
+  "closed_at": null,
+  "custom": {}
+}

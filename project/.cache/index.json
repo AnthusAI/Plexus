@@ -1,8 +1,7 @@
 {
-  "built_at": "2026-03-06T17:45:20Z",
+  "built_at": "2026-03-06T17:52:19Z",
   "file_mtimes": {
     "plx-0144c92e-99a9-4e6b-983b-75fd8f11902a.json": 1772589869.698945,
-    "plx-0197ecbc-e6b3-49c3-a5fd-68bd463d667e.json": 1772819120.540808,
     "plx-04f4aec4-819d-4fb3-af97-3028914b702d.json": 1772589869.699015,
     "plx-076788c0-2927-4f65-bddb-3115531e73c5.json": 1772589869.699105,
     "plx-085286b2-0ecd-42fc-ac6f-d711f873eb69.json": 1772628920.388139,
@@ -31,6 +30,7 @@
     "plx-237a49ff-f70e-4157-bf6a-87e0337df94c.json": 1772589869.700487,
     "plx-25fbd48c-e4c9-46ef-af93-a3851fd86c58.json": 1772589869.700644,
     "plx-299022da-7c7c-4eab-8868-8526d15a0d56.json": 1772644432.821235,
+    "plx-29d00888-aa80-46f4-8329-961b451ee4f8.json": 1772819526.775442,
     "plx-2ae63544-4ffc-4877-a86d-1675149a4b78.json": 1772594330.958014,
     "plx-2b053565-ed74-4fe1-996c-aa11eace2349.json": 1772728798.031091,
     "plx-2bce0fa7-f083-40f4-abeb-13725ebf02fe.json": 1772594330.259328,
@@ -102,6 +102,7 @@
     "plx-84101569-b171-4c33-b7c8-d750487c8a4f.json": 1772589869.704757,
     "plx-86010df1-b51d-4e49-b764-613467db663a.json": 1772589869.704854,
     "plx-8769be73-96fa-4751-a925-d37e26be7101.json": 1772589869.704944,
+    "plx-88c50883-81a4-49a4-a257-4f4de155187b.json": 1772819363.280346,
     "plx-89185928-1692-4c0b-a0de-9edb16199388.json": 1772644304.886258,
     "plx-89eeb50a-6c77-43c2-a563-c4a652dc8793.json": 1772589869.705051,
     "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a.json": 1772589869.705135,
@@ -1083,6 +1084,43 @@
       "title": "Remove OpenSearch runtime/config/dependency references",
       "type": "task",
       "updated_at": "2026-03-04T17:13:52.821114Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": "2026-03-06T17:52:06.775250Z",
+      "comments": [
+        {
+          "author": "ryan.porter",
+          "created_at": "2026-03-06T17:50:06.655700Z",
+          "id": "ea3bc6f3-12a1-4fce-884c-c708e1a9f618",
+          "text": "Verified issue: AC1 storage/display path is inconsistent (raw [-1,1] at add, asymmetric scaling fallback path). Implementing unified mapping to legacy-compatible range for metric payloads and verifying check_report.py remains removed/ignored."
+        },
+        {
+          "author": "ryan.porter",
+          "created_at": "2026-03-06T17:51:58.878603Z",
+          "id": "e97146f2-b9b1-45fa-a7d7-5c80a4696437",
+          "text": "Fixed AC1 metric inconsistency: keep native AC1 internally, convert to legacy-compatible percentage payload via Evaluation._format_alignment_metric_value() for all Alignment metric write paths (primary, forced-add, and default metrics). Verified check_report.py is absent and ignored via .gitignore."
+        },
+        {
+          "author": "ryan.porter",
+          "created_at": "2026-03-06T17:51:58.965019Z",
+          "id": "f1212947-fa4f-4f41-aaf2-e0ec59b1ab9c",
+          "text": "Validation: .venv/bin/pytest -q tests/cli/test_evaluation_scoreversion_association.py -k AlignmentFormatting -> 4 passed (18 deselected). Full file run shows 2 pre-existing environment-dependent failures requiring account_key, unrelated to this change."
+        }
+      ],
+      "created_at": "2026-03-06T17:49:46.182107Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-29d00888-aa80-46f4-8329-961b451ee4f8",
+      "labels": [],
+      "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+      "priority": 1,
+      "status": "closed",
+      "title": "Fix AC1 alignment range/display inconsistency in Evaluation",
+      "type": "bug",
+      "updated_at": "2026-03-06T17:52:06.775250Z"
     },
     {
       "assignee": null,
@@ -3826,6 +3864,31 @@
       "title": "plexus/metrics/requirements.txt",
       "type": "task",
       "updated_at": "2026-02-26T00:13:56.242570283Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": "2026-03-06T17:49:23.280224Z",
+      "comments": [
+        {
+          "author": "ryan.porter",
+          "created_at": "2026-03-06T17:49:14.681975Z",
+          "id": "ec801449-f95f-48cb-ad6e-0c729cd4f87f",
+          "text": "Resolved parser failure by removing malformed issue file plx-0197ec and associated event artifacts that caused 'trailing characters at line 31 column 2'. Confirmed kbs validate passes."
+        }
+      ],
+      "created_at": "2026-03-06T17:49:10.019017Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-88c50883-81a4-49a4-a257-4f4de155187b",
+      "labels": [],
+      "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+      "priority": 1,
+      "status": "closed",
+      "title": "Repair malformed Kanbus issue JSON artifact",
+      "type": "chore",
+      "updated_at": "2026-03-06T17:49:23.280224Z"
     },
     {
       "assignee": null,
