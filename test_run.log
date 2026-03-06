@@ -1,0 +1,277 @@
+2026-03-04 08:22:24,368  [WARNING] AWS region not set, CloudWatch metrics       
+disabled                                                                        
+Creating client...
+2026-03-04 08:22:28,577  [INFO] Loaded Plexus configuration from 2 file(s):     
+/Users/ryan.porter/.plexus/config.yaml,                                         
+/Users/ryan.porter/Projects/Plexus/.plexus/config.yaml - Set 37 environment     
+variables                                                                       
+Account ID: 9c929f25-a91f-4db7-8943-5aa93498b8e9
+Resolved config by name: 'Vector Topic Memory' to ID 
+2e6dcc26-ff55-4c7d-a906-def69a5ee528
+Syncing config from /Users/ryan.porter/Projects/Plexus/vector_topic_memory_report.md...
+Using config: 2e6dcc26-ff55-4c7d-a906-def69a5ee528 (Vector Topic Memory)
+Running report for score_id: 45285 (Vector Topic Memory only)...
+2026-03-04 08:22:33,576  [INFO] [RunScript] Loading configuration               
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:22:33,577  [INFO] Loading report configuration from API:          
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:22:34,516  [INFO] Successfully loaded configuration:              
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:22:34,517  [INFO] [RunScript] Loaded configuration: Vector Topic  
+Memory                                                                          
+2026-03-04 08:22:34,518  [INFO] [RunScript] Configuration requires 3 parameters 
+2026-03-04 08:22:34,518  [INFO] [RunScript] Parameters validated: {'scorecard': 
+'1438', 'score_id': '45285', 'days': 90}                                        
+2026-03-04 08:22:40,458  [INFO] [RunScript] Parameters enriched with names:     
+{'scorecard': '1438', 'score_id': '45285', 'days': 90, 'scorecard_name':        
+'SelectQuote HCS Medium-Risk', 'score_id_name': 'Medication Review'}            
+2026-03-04 08:22:40,460  [INFO] [RunScript] Configuration rendered with         
+parameters                                                                      
+2026-03-04 08:22:41,323  [INFO] [RunScript] Created task:                       
+af69690c-ab9a-4c77-958e-c8dd4bc4effd                                            
+2026-03-04 08:22:41,324  [INFO] [RunScript] Progress tracker initialized        
+2026-03-04 08:22:41,325  [INFO] [RunScript] Executing report generation core    
+logic                                                                           
+2026-03-04 08:22:41,325  [INFO] [RunScript] Starting core report generation     
+logic.                                                                          
+2026-03-04 08:22:41,326  [INFO] Loading report configuration from API:          
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:22:42,179  [INFO] Successfully loaded configuration:              
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:22:42,179  [INFO] [RunScript] Using provided configuration content
+override (e.g., rendered with parameters)                                       
+2026-03-04 08:22:42,179  [INFO] [RunScript] Loaded ReportConfiguration: Vector  
+Topic Memory (2e6dcc26-ff55-4c7d-a906-def69a5ee528)                             
+2026-03-04 08:22:42,180  [INFO] [RunScript] Added account_id to run_parameters: 
+9c929f25-a91f-4db7-8943-5aa93498b8e9                                            
+2026-03-04 08:22:42,373  [INFO] Creating 5 stages in batch for task             
+af69690c-ab9a-4c77-958e-c8dd4bc4effd                                            
+2026-03-04 08:22:42,374  [INFO] Executing batch TaskStage creation for 5 stages 
+2026-03-04 08:22:44,469  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:22:44,469  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:22:45,884  [INFO] ==== STAGE: Loading Configuration ====          
+2026-03-04 08:22:45,885  [INFO] Successfully created 5 stages in batch          
+2026-03-04 08:22:46,399  [INFO] [RunScript] Creating Report DB record: 'Vector  
+Topic Memory - March 04, 2026 13:22 UTC'                                        
+2026-03-04 08:22:46,400  [INFO] [RunScript] repr(config_markdown) before        
+Report.create:                                                                  
+'# Vector Topic Memory Report\n## Scorecard: SelectQuote HCS Medium-Risk\n##    
+Score: Medication Review\n## Last 90 days\n\nRebuilds topic memory from **edit  
+comments** (reviewer feedback) in this scorecard and date range. Clusters what  
+reviewers are saying when they correct scores. Re-indexes into OpenSearch with  
+S3 embedding cache, global clustering, and memory weights.\n\n```block          
+name="Vector Topic Memory"\nclass: VectorTopicMemory\nscorecard: 1438\nscore_id:
+45285\ndays: 90\ndata:\n  content_source: edit_comment\nopensearch:\n  region:  
+us-west-2\nclustering:\n  min_topic_size: 2\n  min_samples: 2\n                 
+cluster_selection_method: eom\n  cluster_selection_epsilon: 0.5\nlabel:\n       
+use_llm: true\n  model: gpt-4o-mini\n  api_key_env_var: OPENAI_API_KEY\n```'    
+2026-03-04 08:22:46,401  [INFO] [RunScript] Actual content (first 100 chars): # 
+Vector Topic Memory Report                                                      
+## Scorecard: SelectQuote HCS Medium-Risk                                       
+## Score: Medication Review                                                     
+#                                                                               
+2026-03-04 08:22:46,401  [INFO] [RunScript] Content contains literal newlines:  
+False                                                                           
+2026-03-04 08:22:46,401  [INFO] [RunScript] Content contains actual newlines:   
+True                                                                            
+2026-03-04 08:22:47,433  [INFO] [RunScript] Report content after creation (first
+100 chars): # Vector Topic Memory Report                                        
+## Scorecard: SelectQuote HCS Medium-Risk                                       
+## Score: Medication Review                                                     
+#                                                                               
+2026-03-04 08:22:47,434  [INFO] [RunScript] Report content contains literal     
+newlines: False                                                                 
+2026-03-04 08:22:47,434  [INFO] [RunScript] Report content contains actual      
+newlines: True                                                                  
+2026-03-04 08:22:47,434  [INFO] [RunScript] Successfully created Report record  
+with ID: 1b403bec-2e5e-42e3-8a33-dae44703e124                                   
+2026-03-04 08:22:51,093  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:22:51,094  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:22:53,026  [INFO] [RunScript] Parsing configuration markdown to   
+extract blocks.                                                                 
+2026-03-04 08:22:53,028  [INFO] [RunScript] Found 1 blocks to process.          
+2026-03-04 08:22:56,589  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:22:56,589  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:22:58,731  [INFO] [RunScript] Starting processing of 1 report     
+blocks.                                                                         
+2026-03-04 08:22:59,674  [INFO] [RunScript] Preparing block 1/1: block_0 (Class:
+VectorTopicMemory, Pos: 0)                                                      
+2026-03-04 08:22:59,675  [INFO] [RunScript] Creating initial ReportBlock record 
+for block_0                                                                     
+2026-03-04 08:22:59,676  [INFO] ReportBlock create sizes - Total input: 178     
+bytes                                                                           
+2026-03-04 08:22:59,676  [INFO] ReportBlock create sizes - Output field: 21     
+bytes                                                                           
+2026-03-04 08:22:59,676  [INFO] ReportBlock create sizes - Other fields: 157    
+bytes                                                                           
+2026-03-04 08:23:00,722  [INFO] [RunScript] Created ReportBlock ID              
+2b39b990-d71e-4185-8775-3149b55de702 for block_0                                
+2026-03-04 08:23:00,723  [INFO] Instantiating block: VectorTopicMemory with     
+config: {'scorecard': 1438, 'score_id': 45285, 'days': 90, 'data':              
+{'content_source': 'edit_comment'}, 'opensearch': {'region': 'us-west-2'},      
+'clustering': {'min_topic_size': 2, 'min_samples': 2,                           
+'cluster_selection_method': 'eom', 'cluster_selection_epsilon': 0.5}, 'label':  
+{'use_llm': True, 'model': 'gpt-4o-mini', 'api_key_env_var': 'OPENAI_API_KEY'}} 
+2026-03-04 08:23:00,724  [INFO] Set report_block_id                             
+'2b39b990-d71e-4185-8775-3149b55de702' on block instance 'VectorTopicMemory'    
+2026-03-04 08:23:00,724  [INFO] No running event loop. Creating new loop for    
+block 'VectorTopicMemory' generation.                                           
+2026-03-04 08:23:00,725  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Resolving scorecard: 1438, days: 90       
+2026-03-04 08:23:00,725  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Targeting specific score: 45285           
+2026-03-04 08:23:00,725  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Date range: 2025-12-04 to 2026-03-04      
+2026-03-04 08:23:00,726  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Content source: edit_comment              
+2026-03-04 08:23:02,147  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Found scorecard: SelectQuote HCS          
+Medium-Risk                                                                     
+2026-03-04 08:23:02,148  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Looking up specific Plexus Score: 45285 on
+Scorecard: 59125ba2-670c-4aa5-b796-c2085cf38a0c                                 
+2026-03-04 08:23:03,039  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Found specific Plexus Score: 'Medication  
+Review'                                                                         
+2026-03-04 08:23:04,201  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Resolved 12 feedback items with edit      
+comments (mismatches only).                                                     
+2026-03-04 08:23:04,202  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Loaded 12 documents from feedback items.  
+2026-03-04 08:23:07,919  [INFO] GET                                             
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_cluster/health                                                 
+2026-03-04 08:23:08,394  [INFO] PUT                                             
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-132307                                    
+2026-03-04 08:23:08,919  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 08:23:09,112  [WARNING] GET                                          
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_alias/topic-memory-live                                        
+2026-03-04 08:23:09,113  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Indexed 12 documents.                     
+OMP: Info #276: omp_set_nested routine deprecated, please use omp_set_max_active_levels instead.
+2026-03-04 08:23:19,071  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 08:23:19,235  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-132307/_update/cluster-0                  
+2026-03-04 08:23:19,403  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-132307/_update/cluster-1                  
+2026-03-04 08:23:19,616  [INFO] [ReportBlock                                    
+2b39b990-d71e-4185-8775-3149b55de702] Processed 12 items, 2 clusters.           
+2026-03-04 08:23:19,619  [INFO] Block 'block_0' executed. Log output length: 918
+2026-03-04 08:23:19,619  [INFO] [RunScript] Re-fetching ReportBlock ID          
+2b39b990-d71e-4185-8775-3149b55de702 after block execution.                     
+2026-03-04 08:23:21,170  [INFO] [RunScript] Fetched DB state. Current           
+attachedFiles: None                                                             
+2026-03-04 08:23:21,170  [INFO] [RunScript] Uploading log.txt for ReportBlock   
+2b39b990-d71e-4185-8775-3149b55de702                                            
+2026-03-04 08:23:21,171  [INFO] Starting S3 upload for block                    
+2b39b990-d71e-4185-8775-3149b55de702, file log.txt                              
+2026-03-04 08:23:21,171  [INFO] Using S3 bucket:                                
+amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l                 
+2026-03-04 08:23:21,204  [INFO] Creating temporary file for content (content    
+length: 918)                                                                    
+2026-03-04 08:23:21,205  [INFO] Created temp file at                            
+/var/folders/gb/d2rz0yr907x6sl234fhp7mbm0000gn/T/tmpy8lcerfk_log.txt            
+2026-03-04 08:23:21,205  [INFO] Starting S3 upload to                           
+s3://amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l/reportblock
+s/2b39b990-d71e-4185-8775-3149b55de702/log.txt with args: {'ContentType':       
+'text/plain'}                                                                   
+2026-03-04 08:23:22,367  [INFO] Successfully uploaded log.txt to                
+s3://amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l/reportblock
+s/2b39b990-d71e-4185-8775-3149b55de702/log.txt                                  
+2026-03-04 08:23:22,368  [INFO] Removing temp file                              
+/var/folders/gb/d2rz0yr907x6sl234fhp7mbm0000gn/T/tmpy8lcerfk_log.txt            
+2026-03-04 08:23:22,369  [INFO] [RunScript] Appended log.txt info. New          
+attachedFiles list:                                                             
+['reportblocks/2b39b990-d71e-4185-8775-3149b55de702/log.txt']                   
+2026-03-04 08:23:22,369  [INFO] [RunScript] Performing final update for         
+ReportBlock 2b39b990-d71e-4185-8775-3149b55de702                                
+2026-03-04 08:23:22,370  [INFO] ReportBlock update: Converted 'output' dict to  
+JSON string (1957 bytes)                                                        
+2026-03-04 08:23:22,370  [INFO] ReportBlock update: attachedFiles before        
+processing - Type: <class 'list'>, Value:                                       
+['reportblocks/2b39b990-d71e-4185-8775-3149b55de702/log.txt']                   
+2026-03-04 08:23:23,510  [INFO] Update result for ReportBlock                   
+2b39b990-d71e-4185-8775-3149b55de702: {'id':                                    
+'2b39b990-d71e-4185-8775-3149b55de702', 'reportId':                             
+'1b403bec-2e5e-42e3-8a33-dae44703e124', 'name': 'block_0', 'position': 0,       
+'type': 'VectorTopicMemory', 'output': '{"type": "VectorTopicMemory", "status": 
+"ok", "cluster_version": "20260304-132318", "topics": [{"cluster_id": 0,        
+"label": "Medication Verification Process", "keywords": ["prescribing",         
+"medication", "agent", "verified", "verified medication", "cstr", "agent cstr", 
+"cstr verified"], "exemplars": ["Agent and cstr verified all medication names,  
+dosages and prescribing physicians for each", "Agent/cstr verified all          
+medication names, dosages and prescribing physician for each.", "Agent and cstr 
+verified all medication name, dosage and prescribing physician together.",      
+"Agent did verify all medication names, dosages and prescribing physicians",    
+"Agent verified medication name, dosage and prescribing phyisican for all       
+medications"], "memory_weight": 0.5, "memory_tier": "warm", "p95_distance":     
+0.1933240443468094, "member_count": 6}, {"cluster_id": 1, "label": "Verification
+of Prescribing Practices", "keywords": ["verify", "agent", "agent did", "did",  
+"did verify", "physician", "verify prescribing", "prescribing"], "exemplars":   
+["Agent did not verify medications individually or verify prescribing           
+physician", "agent did not verify prescribing physician", "Agent did not verify 
+dosage for all medications."], "memory_weight": 0.5, "memory_tier": "warm",     
+"p95_distance": 0.1325628638267517, "member_count": 3}], "summary": "Processed  
+12 items, 2 clusters.", "items_processed": 12, "cache_hit_rate": null,          
+"index_name": "topic-memory-20260304-132307", "indexed_doc_ids":                
+["8937cf14-d99f-41ac-9f1a-10abd53bf7e4", "f7339197-195c-45db-8a34-321794cb7a55",
+"1f9581ce-1067-441a-a749-c44b45b45118", "558dd98d-5ea3-4002-b3b4-55bd361077de", 
+"5ab906d4-a09b-4042-9d72-137322fd19f0", "1695c1e5-1691-4673-a53e-f0679c60fe29", 
+"8ebdac5a-8acd-4f94-9327-abd665416b6e", "6bf60ccd-f25a-4472-95de-099e4694490e", 
+"db52c550-6ff6-4c1a-9f5f-b69ec6c9c663", "dd53cd4a-8315-4ac7-abe8-43579f58ece8", 
+"8670b738-0432-411b-9d94-d26e338d5429",                                         
+"aacf2527-6ca8-469b-81de-f1b3a92e0656"]}', 'log': 'See log.txt in               
+attachedFiles.', 'attachedFiles':                                               
+['reportblocks/2b39b990-d71e-4185-8775-3149b55de702/log.txt'], 'dataSetId':     
+None, 'createdAt': '2026-03-04T13:23:00.633Z', 'updatedAt':                     
+'2026-03-04T13:23:23.372Z'}                                                     
+2026-03-04 08:23:23,511  [INFO] attachedFiles after update:                     
+['reportblocks/2b39b990-d71e-4185-8775-3149b55de702/log.txt']                   
+2026-03-04 08:23:23,512  [INFO] Set attachedFiles attribute on instance:        
+['reportblocks/2b39b990-d71e-4185-8775-3149b55de702/log.txt']                   
+2026-03-04 08:23:23,512  [INFO] Successfully updated ReportBlock                
+2b39b990-d71e-4185-8775-3149b55de702                                            
+2026-03-04 08:23:23,512  [INFO] [RunScript] Successfully finalized ReportBlock  
+2b39b990-d71e-4185-8775-3149b55de702. attachedFiles:                            
+['reportblocks/2b39b990-d71e-4185-8775-3149b55de702/log.txt']                   
+2026-03-04 08:23:23,513  [INFO] [RunScript] Completed processing for block      
+block_0 (ID: 2b39b990-d71e-4185-8775-3149b55de702)                              
+2026-03-04 08:23:23,513  [INFO] Updated stage Processing Report Blocks processed
+count to 1                                                                      
+2026-03-04 08:23:23,513  [INFO] Set stage Processing Report Blocks processed    
+count to 1                                                                      
+2026-03-04 08:23:25,173  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:23:25,173  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:23:27,793  [INFO] [RunScript] All block processing and ReportBlock
+record finalization completed in the main loop.                                 
+2026-03-04 08:23:31,465  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:23:31,466  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:23:33,458  [INFO] [RunScript] Report generation core logic        
+finished.                                                                       
+2026-03-04 08:23:33,458  [INFO] [RunScript] All report blocks completed and     
+results saved successfully.                                                     
+2026-03-04 08:23:55,057  [INFO] [RunScript] Report generation completed         
+successfully: 1b403bec-2e5e-42e3-8a33-dae44703e124                              
+Report completed successfully!
+Report ID: 1b403bec-2e5e-42e3-8a33-dae44703e124
+Task ID: af69690c-ab9a-4c77-958e-c8dd4bc4effd
+
+View at: /lab/reports or /reports/1b403bec-2e5e-42e3-8a33-dae44703e124

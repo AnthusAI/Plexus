@@ -327,7 +327,7 @@ async def fetch_score_results_for_score(
     score_id_str = str(score_id)
     start_time_iso = start_date.isoformat()
     end_time_iso = end_date.isoformat()
-    cache_key = (id(api_client), str(account_id), scorecard_id_str, start_time_iso, end_time_iso)
+    cache_key = (str(account_id), scorecard_id_str, start_time_iso, end_time_iso)
 
     if cache_key not in _score_results_window_cache:
         query = """
