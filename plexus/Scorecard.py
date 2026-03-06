@@ -1,31 +1,21 @@
 import os
 import re
 import yaml
-import json
-import requests
-import json
-import rich
 import logging
-import pandas as pd
 import importlib.util
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, List, Dict, Union, Any
+from typing import Optional, List, Dict, Any
 import asyncio
-import boto3
-from botocore.exceptions import ClientError
 import tiktoken
-from os import getenv
 from ruamel.yaml import YAML
 from datetime import datetime
 
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
-import plexus.scores
 from plexus.scores.Score import Score
 from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
 from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
-from plexus.utils.dict_utils import truncate_dict_strings_inner, truncate_dict_strings
 
 
 class Scorecard:
@@ -632,9 +622,15 @@ class Scorecard:
                 if processors_config:
                     try:
                         original_text_preview = text[:100] if text else ""
-                        processed_text = Score.apply_processors_to_text(
-                            text, processors_config
+                        processed_input = Score.apply_processors(
+                            Score.Input(
+                                text=text,
+                                metadata=metadata or {},
+                                results=converted_results,
+                            ),
+                            processors_config,
                         )
+                        processed_text = processed_input.text
                         processed_text_preview = (
                             processed_text[:100] if processed_text else ""
                         )
@@ -648,6 +644,7 @@ class Scorecard:
                             f"Processed text preview: {processed_text_preview}..."
                         )
                         text = processed_text
+                        metadata = processed_input.metadata or {}
                     except Exception as e:
                         logging.error(
                             f"Error applying processors for score '{score}': {e}"
@@ -781,6 +778,21 @@ class Scorecard:
                     scorecard_dimensions,
                 )
 
+                # Persist the final text that was sent to the model (after input source/processors)
+                # so downstream consumers (e.g., evaluation dashboard views) can show what was scored.
+                if isinstance(score_result, list):
+                    for single_result in score_result:
+                        if isinstance(single_result, Score.Result):
+                            if single_result.metadata is None:
+                                single_result.metadata = {}
+                            if isinstance(single_result.metadata, dict):
+                                single_result.metadata["text"] = text
+                elif isinstance(score_result, Score.Result):
+                    if score_result.metadata is None:
+                        score_result.metadata = {}
+                    if isinstance(score_result.metadata, dict):
+                        score_result.metadata["text"] = text
+
                 # Ensure we always return a list of results
                 if isinstance(score_result, list):
                     return score_result
@@ -793,11 +805,6 @@ class Scorecard:
                     f"BatchProcessingPause caught in get_score_result for {score}"
                 )
                 raise
-
-        else:
-            error_string = f'No score found for question: "{score}"'
-            logging.error(error_string)
-            return [Score.Result(value="ERROR", error=error_string)]
 
     async def score_entire_text(
         self,
