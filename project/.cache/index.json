@@ -1,7 +1,8 @@
 {
-  "built_at": "2026-03-06T17:12:53Z",
+  "built_at": "2026-03-06T17:45:20Z",
   "file_mtimes": {
     "plx-0144c92e-99a9-4e6b-983b-75fd8f11902a.json": 1772589869.698945,
+    "plx-0197ecbc-e6b3-49c3-a5fd-68bd463d667e.json": 1772819120.540808,
     "plx-04f4aec4-819d-4fb3-af97-3028914b702d.json": 1772589869.699015,
     "plx-076788c0-2927-4f65-bddb-3115531e73c5.json": 1772589869.699105,
     "plx-085286b2-0ecd-42fc-ac6f-d711f873eb69.json": 1772628920.388139,
@@ -48,6 +49,7 @@
     "plx-3bbd589b-0b82-4560-a7cb-d15244dcafbe.json": 1772589869.701114,
     "plx-3d2aea0e-e547-4f29-a041-9297f8e140d4.json": 1772589869.701206,
     "plx-4081dc7f-bcfd-4bb4-8786-1f85c9c5d03d.json": 1772674600.799878,
+    "plx-40cc430c-186b-40f7-92d7-84524397e6b1.json": 1772819099.346359,
     "plx-4127a8f5-c5aa-4358-b7cf-9fe9aa23c7dd.json": 1772589869.7013,
     "plx-42852570-c1cd-4e62-8ad4-09e9c1cdaa34.json": 1772589869.701397,
     "plx-46723f50-117a-404a-963e-8753dd84bf70.json": 1772595097.911207,
@@ -57,6 +59,7 @@
     "plx-51ae6fb8-c209-47c3-8933-8de508c62833.json": 1772677209.649559,
     "plx-51fdb29b-22f8-4d13-8088-14539dabb257.json": 1772589869.701741,
     "plx-5244afb6-3e16-42e3-86ed-162a7be676b6.json": 1772594331.662451,
+    "plx-55cc5016-6518-422f-8b4f-c23120e97210.json": 1772819022.780032,
     "plx-56335b77-ad2b-4d8e-b81b-79fe373c21ce.json": 1772589869.701878,
     "plx-568ac39d-679f-4b17-95d3-9059c48f44e1.json": 1772594332.326796,
     "plx-56d83d40-7d3e-4f51-bb10-1ab707973e8f.json": 1772589869.701986,
@@ -82,6 +85,7 @@
     "plx-737114ba-df92-4101-9b86-1b29cd004696.json": 1772589869.703893,
     "plx-73df4c32-cde5-4aea-aaf8-da652f4c7273.json": 1772681045.377223,
     "plx-7575f9c7-faf3-469e-a791-5415a50e3b19.json": 1772589869.703996,
+    "plx-75848e2a-a524-4d62-93dc-152a1796e669.json": 1772819022.780113,
     "plx-75c7857e-17f4-44ff-834b-17f9ed42efea.json": 1772589869.704083,
     "plx-78a89cd2-c315-4c1b-b9b9-f0724a8d936f.json": 1772589869.704168,
     "plx-7aca2476-5a08-40e0-9f5e-95d822832f9c.json": 1772589869.704268,
@@ -134,6 +138,7 @@
     "plx-b6809ada-0463-45a8-b3e5-f2f38b0d1f28.json": 1772589869.707002,
     "plx-b8850595-7e6c-46a3-8ed0-ba73236ebf0c.json": 1772589869.707081,
     "plx-b8bac83b-b685-4780-9ab4-f9ca89061550.json": 1772589869.707178,
+    "plx-bc3c9860-bb07-4fb0-a2cf-a76821b48a15.json": 1772819022.780195,
     "plx-bc9fb5aa-8825-4690-b2f4-fcdf42fd4507.json": 1772589869.707258,
     "plx-be9cda46-2367-4d8c-8092-cb274fa00919.json": 1772629892.715706,
     "plx-c141470a-cd0a-4c92-a6b9-94ec4728a629.json": 1772629892.835767,
@@ -143,11 +148,14 @@
     "plx-c2ddeff3-4b32-4b68-a134-1fa458e99bc4.json": 1772589869.707642,
     "plx-c44703e1-f188-4a11-b0f7-480cc7b093dd.json": 1772589869.707767,
     "plx-c6f5a11c-0665-4eb6-93e8-a85551e54751.json": 1772589869.707881,
+    "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc.json": 1772819022.780264,
     "plx-ca3d353e-a672-44de-a394-713522a5fc63.json": 1772589869.707976,
     "plx-cae3ce00-b5ed-4340-8f9f-5fc13d8aa7f7.json": 1772589869.708073,
     "plx-cb54e515-c6e6-46b0-9aa3-0ba15325d39a.json": 1772594327.747647,
     "plx-cefacb2b-8e46-49d0-84d5-7810da790e1b.json": 1772589869.708181,
+    "plx-d0936fbe-41ba-4c21-a97a-c03b42a73501.json": 1772819022.780333,
     "plx-d1ca5313-47cf-4295-a0b9-4c860b8af011.json": 1772589869.708272,
+    "plx-d2195f58-7e95-4148-bbfa-4f3c66f4e4c2.json": 1772819022.780436,
     "plx-d21b85b4-13ee-433e-8ec4-1a3d959787a4.json": 1772589869.708373,
     "plx-d4e3d4e0-12d6-4bb6-b2cb-a0df02ac7d22.json": 1772589869.708466,
     "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53.json": 1772677239.543488,
@@ -1971,6 +1979,43 @@
     },
     {
       "assignee": null,
+      "closed_at": "2026-03-06T17:44:48.154992Z",
+      "comments": [
+        {
+          "author": "ryan.porter",
+          "created_at": "2026-03-06T17:43:29.449109Z",
+          "id": "b4285ed5-74fa-47da-81d9-696ddd4ca5ac",
+          "text": "Starting integration: checkpointing full working tree (including project artifacts) on feature/reinforcement-memory, then merging origin/dev and resolving conflicts."
+        },
+        {
+          "author": "ryan.porter",
+          "created_at": "2026-03-06T17:44:43.004668Z",
+          "id": "8ba0076a-9daa-43ad-b801-209f3cbfee64",
+          "text": "Validation: git diff --check clean; no unresolved merge markers for <<<<<<< or >>>>>>> in repo content scan; targeted tests passed in venv: .venv/bin/pytest -q plexus/reports/blocks/vector_topic_memory_test.py plexus/reports/blocks/feedback_utils_test.py plexus/reports/tests/test_service_output_compaction.py -> 41 passed in 8.81s."
+        },
+        {
+          "author": "ryan.porter",
+          "created_at": "2026-03-06T17:44:59.346190Z",
+          "id": "f9808844-d3f8-4848-a290-11a4853fcac3",
+          "text": "Checkpoint+merge details: checkpoint commit ec1b1edf; merge commit f341f31a; one conflict in project/.cache/index.json resolved by keeping ours."
+        }
+      ],
+      "created_at": "2026-03-06T17:43:26.863560Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-40cc430c-186b-40f7-92d7-84524397e6b1",
+      "labels": [],
+      "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+      "priority": 1,
+      "status": "closed",
+      "title": "Integrate origin/dev into feature/reinforcement-memory",
+      "type": "task",
+      "updated_at": "2026-03-06T17:44:59.346190Z"
+    },
+    {
+      "assignee": null,
       "closed_at": null,
       "comments": [],
       "created_at": "2026-02-26T00:13:56.245507887Z",
@@ -2213,6 +2258,37 @@
       "title": "Cluster record persistence in OpenSearch",
       "type": "story",
       "updated_at": "2026-03-04T03:18:51.661967Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": null,
+      "comments": [
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T19:54:38.324429766Z",
+          "id": "dd3350e5-d85e-4073-965b-de77d55bc98c",
+          "text": "Removed validated unused imports from plexus/Evaluation.py only. Fresh rcql --files Evaluation.py dropped findings from 50 to 18 (unused-import warnings cleared). Targeted tests passed: tests/cli/test_evaluation_item_lookup.py and tests/cli/test_evaluation_scoreversion_association.py (24 passed)."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T20:10:54.588769235Z",
+          "id": "94bada86-074f-4f25-ac55-592d6f163ab5",
+          "text": "Follow-up cleanup in Evaluation.py: fixed py/catch-base-exception by replacing bare except in trace parsing with specific decode exceptions, and fixed py/empty-except by explicit debug logging in cleanup wait timeout/cancel path. Fresh rcql --files Evaluation.py now shows 3 findings, all py/mixed-returns. Targeted evaluation tests pass (24 passed)."
+        }
+      ],
+      "created_at": "2026-03-05T19:48:37.264390470Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-55cc5016-6518-422f-8b4f-c23120e97210",
+      "labels": [],
+      "parent": null,
+      "priority": 2,
+      "status": "in_progress",
+      "title": "Clean Evaluation.py CodeQL findings (start with unused imports)",
+      "type": "task",
+      "updated_at": "2026-03-05T20:10:54.588769235Z"
     },
     {
       "assignee": null,
@@ -3242,6 +3318,24 @@
       "title": "[Snyk] SNYK-DEBIAN13-SHADOW-8551157 in shadow/login.defs@1:4.17.4-2",
       "type": "sub-task",
       "updated_at": "2026-02-26T00:13:56.244403563Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": null,
+      "comments": [],
+      "created_at": "2026-03-05T20:14:27.534292516Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-75848e2a-a524-4d62-93dc-152a1796e669",
+      "labels": [],
+      "parent": null,
+      "priority": 2,
+      "status": "in_progress",
+      "title": "Clean Score.py CodeQL findings",
+      "type": "task",
+      "updated_at": "2026-03-05T20:14:31.005293755Z"
     },
     {
       "assignee": null,
@@ -4869,6 +4963,61 @@
     {
       "assignee": null,
       "closed_at": null,
+      "comments": [
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:14:16.486267867Z",
+          "id": "14186e70-b262-4146-bef3-6ff22393c657",
+          "text": "Investigating CodeQL scanning of vendored paths (e.g., dashboard/node_modules/aws-cdk templates) and preparing exclusion config for repo."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:14:35.634690598Z",
+          "id": "db7b54da-2dbf-4b4d-9bfb-2db5f4dc8304",
+          "text": "Added  with  entries for vendored/generated directories including . Next: share exact CodeQL CLI flags to ensure this config is applied in local runs and GitHub Actions."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:14:38.052457341Z",
+          "id": "2c58dff7-043a-425c-b672-637c9a440815",
+          "text": "Added .github/codeql/codeql-config.yml with paths-ignore rules for vendored/generated directories including **/node_modules/**. Preparing handoff instructions for local CodeQL and GitHub Action usage."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:14:41.879830428Z",
+          "id": "ed5f2bef-eea8-4d64-b08e-f6ea0473f852",
+          "text": "Closed after adding CodeQL ignore config and confirming file creation."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:23:11.653330995Z",
+          "id": "5ce4ab1c-68e0-45e3-953e-1524bdd1dd18",
+          "text": "Reopened to add .codeql exclusion after user reported warnings from .codeql/db-python snapshot paths."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-04T21:23:23.159115186Z",
+          "id": "2b38b65e-4616-49e5-a741-6cfea69272b5",
+          "text": "Implemented .codeql exclusion in both .github/codeql/codeql-config.yml (paths-ignore) and .gitignore to prevent scanning/noise from local CodeQL databases."
+        }
+      ],
+      "created_at": "2026-03-04T21:13:51.589783386Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-bc3c9860-bb07-4fb0-a2cf-a76821b48a15",
+      "labels": [],
+      "parent": "plx-dce57ac5-051d-4a53-abd0-04dff69e7ca2",
+      "priority": 2,
+      "status": "in_progress",
+      "title": "CodeQL exclude config for node_modules scan noise",
+      "type": "chore",
+      "updated_at": "2026-03-04T21:23:23.159115186Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": null,
       "comments": [],
       "created_at": "2026-02-26T00:13:56.245839916Z",
       "creator": null,
@@ -5088,6 +5237,24 @@
       "assignee": null,
       "closed_at": null,
       "comments": [],
+      "created_at": "2026-03-05T21:41:01.623723886Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+      "labels": [],
+      "parent": null,
+      "priority": 1,
+      "status": "open",
+      "title": "CI Performance Improvements",
+      "type": "epic",
+      "updated_at": "2026-03-05T21:41:01.623723886Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": null,
+      "comments": [],
       "created_at": "2026-02-26T00:13:56.243039097Z",
       "creator": null,
       "custom": {
@@ -5176,6 +5343,31 @@
     {
       "assignee": null,
       "closed_at": null,
+      "comments": [
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T18:40:35.981715873Z",
+          "id": "849657ec-017a-43d0-9ee6-015585883374",
+          "text": "Validated and fixed Scorecard.py CodeQL findings: removed unused imports and removed unreachable else branch in get_score_result. rcql --files Scorecard.py now exits clean; targeted scorecard tests pass (15 passed)."
+        }
+      ],
+      "created_at": "2026-03-05T18:37:21.106269738Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-d0936fbe-41ba-4c21-a97a-c03b42a73501",
+      "labels": [],
+      "parent": null,
+      "priority": 2,
+      "status": "in_progress",
+      "title": "Clean valid CodeQL findings in plexus/Scorecard.py",
+      "type": "task",
+      "updated_at": "2026-03-05T18:40:35.981715873Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": null,
       "comments": [],
       "created_at": "2026-02-26T00:13:56.245435836Z",
       "creator": null,
@@ -5196,6 +5388,109 @@
       "title": "[Snyk] SNYK-PYTHON-NLTK-15317401 in nltk@3.8.1",
       "type": "sub-task",
       "updated_at": "2026-02-26T00:13:56.245435836Z"
+    },
+    {
+      "assignee": null,
+      "closed_at": null,
+      "comments": [
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T21:41:10.823970665Z",
+          "id": "59cc8352-2212-485a-8ae7-5e9e8b09ed3a",
+          "text": "Started work. Goal: reduce CI wall time by parallelizing test execution in GitHub Actions while preserving sequential order for AWS-related stages."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T21:41:58.329056548Z",
+          "id": "e5599a52-05a6-422f-8b55-387cf06b93b8",
+          "text": "Implemented workflow parallelization in .github/workflows/ci.yaml:\n- Split monolithic test job into python-tests, dashboard-unit-tests, and dashboard-storybook-tests so they run concurrently.\n- Kept semantic-release in python-tests to preserve current release gating behavior on push branches.\n- Updated trigger-deployment to depend on all three test jobs, so AWS pipeline triggers remain after successful test completion.\n- Verified YAML parses successfully (YAML_OK)."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T21:51:02.438628064Z",
+          "id": "9e89db54-b082-41f7-b2ae-8b1ea41fa47b",
+          "text": "Follow-up request: run Python test suite against both Python 3.11 and 3.12 in CI. Implementing matrix strategy while ensuring semantic-release still runs exactly once."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T21:51:15.680892607Z",
+          "id": "3f54bec9-f52f-4ac8-8db2-d63334cd5828",
+          "text": "Updated CI to run Python tests on a matrix of Python versions (3.11 and 3.12) in parallel. Added matrix guards so Initialize Version Tag and Semantic Release execute only on the 3.11 leg, preventing duplicate release operations. Workflow YAML validated successfully (YAML_OK)."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T22:10:15.838836787Z",
+          "id": "749cddc5-a62b-46f5-bb03-deace5415181",
+          "text": "Follow-up: branch protection/ruleset currently requires old  check. Updating required status checks to new CI job names."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T22:10:39.495111367Z",
+          "id": "a11d8d69-e622-44dc-b17d-6071699aa508",
+          "text": "Updated GitHub repository ruleset main-branch-protection (ID: 13251390) required status checks to match new CI jobs: Python Tests (3.11), Python Tests (3.12), Dashboard Unit Tests, Dashboard Storybook Tests. Removed obsolete test context."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T22:16:28.605905707Z",
+          "id": "0acd3b4d-a1b7-48a5-a42f-c7801412a09f",
+          "text": "Follow-up: eliminate duplicate CI runs by narrowing  trigger to long-lived branches only, since main is protected and staging pushes are rare."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T22:23:07.092991572Z",
+          "id": "5e133d9c-45f2-4ed7-93c7-aebff11c6576",
+          "text": "Applying agreed trigger change: run CI on push only for main and staging; keep pull_request trigger for all branches to preserve pre-merge validation."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T22:23:14.435100675Z",
+          "id": "57c09b48-2f7e-464c-b7c1-0343d55798fe",
+          "text": "Updated .github/workflows/ci.yaml triggers: push now limited to main and staging; pull_request remains all branches. This removes duplicate push+PR runs for feature/dev branches while preserving required pre-merge CI checks. YAML validated (YAML_OK)."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T22:58:43.763316063Z",
+          "id": "bf52adf6-1f45-430c-ac77-c390629da438",
+          "text": "Emergency rollback to restore CI signal: broadening push trigger again because pull_request checks are not being created for feature/deepgram-input-source (no github-actions suite on latest PR SHA)."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T22:58:50.926849608Z",
+          "id": "c7ee048a-fcd8-4255-840b-f62a25c5b1cf",
+          "text": "Rolled back push trigger filter to ** in .github/workflows/ci.yaml so CI runs on feature branch pushes again. This is an immediate reliability fix while PR-trigger behavior is investigated. YAML validated (YAML_OK)."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T23:05:48.431743232Z",
+          "id": "5933bfbb-34cc-41ef-b028-4b482cbb256f",
+          "text": "Operational cleanup requested: clear Actions backlog by canceling stale queued CodeQL runs and obsolete CI runs, while preserving the newest PR validation run."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T23:07:48.685533963Z",
+          "id": "8f4c7329-5778-4fc0-a2de-5f8ed77811ee",
+          "text": "Reverting temporary rollback: restricting CI push trigger back to main/staging to avoid duplicate push+PR runs on feature branches."
+        },
+        {
+          "author": "derek",
+          "created_at": "2026-03-05T23:07:56.650839993Z",
+          "id": "042d80c5-2db6-4a3d-83b7-cf4442520083",
+          "text": "Temporary push-all rollback removed. CI trigger is now push on main/staging only, plus pull_request on all branches. This prevents duplicate runs on feature/dev branches while keeping PR validation checks."
+        }
+      ],
+      "created_at": "2026-03-05T21:41:06.420470202Z",
+      "creator": null,
+      "custom": {},
+      "dependencies": [],
+      "description": "",
+      "id": "plx-d2195f58-7e95-4148-bbfa-4f3c66f4e4c2",
+      "labels": [],
+      "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+      "priority": 1,
+      "status": "in_progress",
+      "title": "Parallelize GitHub Actions tests while keeping AWS steps sequential",
+      "type": "task",
+      "updated_at": "2026-03-05T23:07:56.650839993Z"
     },
     {
       "assignee": null,
