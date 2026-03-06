@@ -1,0 +1,31 @@
+{
+  "id": "plx-55cc5016-6518-422f-8b4f-c23120e97210",
+  "title": "Clean Evaluation.py CodeQL findings (start with unused imports)",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "dd3350e5-d85e-4073-965b-de77d55bc98c",
+      "author": "derek",
+      "text": "Removed validated unused imports from plexus/Evaluation.py only. Fresh rcql --files Evaluation.py dropped findings from 50 to 18 (unused-import warnings cleared). Targeted tests passed: tests/cli/test_evaluation_item_lookup.py and tests/cli/test_evaluation_scoreversion_association.py (24 passed).",
+      "created_at": "2026-03-05T19:54:38.324429766Z"
+    },
+    {
+      "id": "94bada86-074f-4f25-ac55-592d6f163ab5",
+      "author": "derek",
+      "text": "Follow-up cleanup in Evaluation.py: fixed py/catch-base-exception by replacing bare except in trace parsing with specific decode exceptions, and fixed py/empty-except by explicit debug logging in cleanup wait timeout/cancel path. Fresh rcql --files Evaluation.py now shows 3 findings, all py/mixed-returns. Targeted evaluation tests pass (24 passed).",
+      "created_at": "2026-03-05T20:10:54.588769235Z"
+    }
+  ],
+  "created_at": "2026-03-05T19:48:37.264390470Z",
+  "updated_at": "2026-03-05T20:10:54.588769235Z",
+  "closed_at": null,
+  "custom": {}
+}
