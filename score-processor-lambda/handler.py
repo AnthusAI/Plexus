@@ -199,13 +199,17 @@ class LambdaJobProcessor:
                     item = await asyncio.to_thread(Item.get_by_id, item_id, self.client)
                 except Exception as e:
                     logging.warning(f"Could not fetch Item {item_id}: {e}")
+                if not item:
+                    raise Exception(
+                        f"Item {item_id} not found. Item is required for item-based input sources."
+                    )
 
                 transcript_text = ""
                 if item and item.text:
                     transcript_text = item.text
                 else:
                     transcript_text = await get_text_from_item(item_id, self.client)
-                if not transcript_text and not item:
+                if not transcript_text:
                     raise Exception(f"No transcript found for item {item_id}")
 
                 metadata = await get_metadata_from_item(item_id, self.client)

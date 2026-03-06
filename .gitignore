@@ -14,6 +14,7 @@ tmp/
 .plexus_training_data_cache/
 /scorecards/
 .plexus/
+.codeql/
 node_modules
 node_modules/*
 plexus/scores/reports/Test_scorecard/None/configuration.json
@@ -30,3 +31,6 @@ dashboard/public/brands
 /tsconfig.json
 /package.json
 /package-lock.json
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.cursor/rules/snyk_rules.mdc
