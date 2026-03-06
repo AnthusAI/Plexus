@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b35f348c-5454-410a-8dbe-dac02847e12a",
+  "issue_id": "plx-29d00888-aa80-46f4-8329-961b451ee4f8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-06T17:49:46.182Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix AC1 alignment range/display inconsistency in Evaluation"
+  }
+}

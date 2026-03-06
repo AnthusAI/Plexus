@@ -1,0 +1,37 @@
+{
+  "id": "plx-29d00888-aa80-46f4-8329-961b451ee4f8",
+  "title": "Fix AC1 alignment range/display inconsistency in Evaluation",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ea3bc6f3-12a1-4fce-884c-c708e1a9f618",
+      "author": "ryan.porter",
+      "text": "Verified issue: AC1 storage/display path is inconsistent (raw [-1,1] at add, asymmetric scaling fallback path). Implementing unified mapping to legacy-compatible range for metric payloads and verifying check_report.py remains removed/ignored.",
+      "created_at": "2026-03-06T17:50:06.655700Z"
+    },
+    {
+      "id": "e97146f2-b9b1-45fa-a7d7-5c80a4696437",
+      "author": "ryan.porter",
+      "text": "Fixed AC1 metric inconsistency: keep native AC1 internally, convert to legacy-compatible percentage payload via Evaluation._format_alignment_metric_value() for all Alignment metric write paths (primary, forced-add, and default metrics). Verified check_report.py is absent and ignored via .gitignore.",
+      "created_at": "2026-03-06T17:51:58.878603Z"
+    },
+    {
+      "id": "f1212947-fa4f-4f41-aaf2-e0ec59b1ab9c",
+      "author": "ryan.porter",
+      "text": "Validation: .venv/bin/pytest -q tests/cli/test_evaluation_scoreversion_association.py -k AlignmentFormatting -> 4 passed (18 deselected). Full file run shows 2 pre-existing environment-dependent failures requiring account_key, unrelated to this change.",
+      "created_at": "2026-03-06T17:51:58.965019Z"
+    }
+  ],
+  "created_at": "2026-03-06T17:49:46.182107Z",
+  "updated_at": "2026-03-06T17:51:58.965019Z",
+  "closed_at": null,
+  "custom": {}
+}
