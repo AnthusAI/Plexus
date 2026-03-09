@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0ac853af-1ad2-4c54-85e0-f57d9b8b61ea",
+  "issue_id": "plx-a7d876f2-8100-4812-8dec-e49ccf9f3651",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-09T16:00:58.827Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "DeepgramInputSource misorders speaker turns in paragraph formatting"
+  }
+}
