@@ -117,12 +117,61 @@ class DeepgramFormatProcessor(Processor):
         results.sort(key=lambda x: x[0])
         return results
 
-    def _get_speaker_label(self, channel_idx: int, para_or_word: dict) -> str:
-        """Get speaker label, preferring 'speaker' field, falling back to channel."""
+    def _get_speaker_label(
+        self, channel_idx: int, para_or_word: dict, use_channel_labels: bool
+    ) -> str:
+        """
+        Get speaker label for an entry.
+
+        In multi-channel merges, channel labels are more stable because diarization
+        speaker IDs may restart per channel.
+        """
+        if use_channel_labels:
+            return f"Speaker {channel_idx}"
         speaker = para_or_word.get('speaker')
         if speaker is not None:
             return f"Speaker {speaker}"
         return f"Channel {channel_idx}"
+
+    def _should_use_channel_labels(
+        self, deepgram: dict, channel_filter: Optional[int]
+    ) -> bool:
+        channels = deepgram.get('results', {}).get('channels', [])
+        return channel_filter is None and len(channels) > 1
+
+    def _collect_sentence_segments(
+        self, deepgram: dict, channel_filter: Optional[int]
+    ) -> List[Tuple[float, int, dict, str]]:
+        """
+        Collect sentence-level segments from all channels, sorted by start time.
+
+        This preserves chronology even when Deepgram paragraphs contain sentence
+        groups that overlap with other channels.
+        """
+        segments: List[Tuple[float, int, dict, str]] = []
+        channels = deepgram.get('results', {}).get('channels', [])
+        for ch_idx, channel in enumerate(channels):
+            if channel_filter is not None and ch_idx != channel_filter:
+                continue
+            for alt in channel.get('alternatives', []):
+                paras = alt.get('paragraphs', {}).get('paragraphs', [])
+                for para in paras:
+                    sentences = para.get('sentences', [])
+                    if sentences:
+                        for sentence in sentences:
+                            text = sentence.get('text', '').strip()
+                            if not text:
+                                continue
+                            start = sentence.get('start', para.get('start', 0.0))
+                            segments.append((start, ch_idx, para, text))
+                    else:
+                        text = para.get('text', '').strip()
+                        if not text:
+                            continue
+                        segments.append((para.get('start', 0.0), ch_idx, para, text))
+
+        segments.sort(key=lambda x: x[0])
+        return segments
 
     def _format_paragraphs(
         self,
@@ -131,6 +180,7 @@ class DeepgramFormatProcessor(Processor):
         include_timestamps: bool,
         channel_filter: Optional[int],
     ) -> str:
+        use_channel_labels = self._should_use_channel_labels(deepgram, channel_filter)
         paragraphs = self._collect_paragraphs(deepgram, channel_filter)
         lines = []
         for start_time, ch_idx, para in paragraphs:
@@ -146,12 +196,11 @@ class DeepgramFormatProcessor(Processor):
                 continue
 
             if speaker_labels:
-                label = self._get_speaker_label(ch_idx, para)
+                label = self._get_speaker_label(ch_idx, para, use_channel_labels)
                 text = f"{label}: {text}"
 
             if include_timestamps:
                 text = f"[{start_time:.2f}s] {text}"
-
             lines.append(text)
 
         return '\n\n'.join(lines)
@@ -163,29 +212,22 @@ class DeepgramFormatProcessor(Processor):
         include_timestamps: bool,
         channel_filter: Optional[int],
     ) -> str:
-        paragraphs = self._collect_paragraphs(deepgram, channel_filter)
+        use_channel_labels = self._should_use_channel_labels(deepgram, channel_filter)
+        sentence_segments = self._collect_sentence_segments(deepgram, channel_filter)
         lines = []
-        for _, ch_idx, para in paragraphs:
-            sentences = para.get('sentences', [])
-            if not sentences:
-                # Fall back to paragraph text as a single "sentence"
-                text = para.get('text', '')
-                if text:
-                    sentences = [{'text': text, 'start': para.get('start', 0.0)}]
+        for start_time, ch_idx, para, sentence_text in sentence_segments:
+            text = sentence_text
 
-            for sentence in sentences:
-                text = sentence.get('text', '')
-                if not text:
-                    continue
+            if speaker_labels:
+                label = self._get_speaker_label(
+                    ch_idx, para, use_channel_labels
+                )
+                text = f"{label}: {text}"
 
-                if speaker_labels:
-                    label = self._get_speaker_label(ch_idx, para)
-                    text = f"{label}: {text}"
+            if include_timestamps:
+                text = f"[{start_time:.2f}s] {text}"
 
-                if include_timestamps:
-                    text = f"[{sentence.get('start', 0.0):.2f}s] {text}"
-
-                lines.append(text)
+            lines.append(text)
 
         return '\n'.join(lines)
 
@@ -196,6 +238,7 @@ class DeepgramFormatProcessor(Processor):
         include_timestamps: bool,
         channel_filter: Optional[int],
     ) -> str:
+        use_channel_labels = self._should_use_channel_labels(deepgram, channel_filter)
         words = self._collect_words(deepgram, channel_filter)
 
         if not speaker_labels and not include_timestamps:
@@ -207,7 +250,7 @@ class DeepgramFormatProcessor(Processor):
             if include_timestamps:
                 text = f"{text}[{start_time:.2f}]"
             if speaker_labels:
-                label = self._get_speaker_label(ch_idx, word)
+                label = self._get_speaker_label(ch_idx, word, use_channel_labels)
                 text = f"{label}: {text}"
             parts.append(text)
 
