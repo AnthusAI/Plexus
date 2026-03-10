@@ -2,8 +2,7 @@ name: session_demo
 version: 1.0.0
 description: Demonstration of Session primitives for conversation management
 
-class: LuaDSL
-
+class: Tactus
 params:
   topic:
     type: string
@@ -29,7 +28,7 @@ stages:
   - conversation
   - complete
 
-workflow: |
+code: |
   Log.info("Session management demonstration", {
     topic = params.topic
   })

@@ -2,7 +2,7 @@
 Procedure Executor - Routes procedure execution based on class field.
 
 Supports multiple procedure execution engines:
-- LuaDSL: New Lua-based DSL runtime
+- Tactus: Lua-based DSL runtime
 - SOPAgent: Existing SOP agent system (default)
 """
 
@@ -26,7 +26,7 @@ async def execute_procedure(
 
     Args:
         procedure_id: Procedure ID
-        procedure_code: Procedure code (Lua DSL format or legacy YAML)
+        procedure_code: Procedure YAML (Tactus or SOPAgent)
         client: PlexusDashboardClient instance
         mcp_server: MCP server for tool access
         context: Optional context dict with pre-loaded data
@@ -36,45 +36,24 @@ async def execute_procedure(
         Execution results dict
     """
     try:
-        # Auto-detect format: Lua DSL vs legacy YAML
-        code_stripped = procedure_code.strip()
-        is_lua_dsl = (
-            code_stripped.startswith('--') or  # Lua comment
-            'name(' in code_stripped or  # Lua DSL declaration
-            'procedure(function' in code_stripped or  # Old Lua DSL procedure syntax
-            'procedure({' in code_stripped or  # Old Lua DSL procedure syntax
-            'procedure("' in code_stripped or  # New Lua DSL procedure syntax with name
-            'agent(' in code_stripped  # Lua DSL agent
-        )
-
-        if is_lua_dsl:
-            # Route to Lua DSL runtime
-            logger.info(f"Routing procedure {procedure_id} to executor: LuaDSL (auto-detected)")
-            return await _execute_lua_dsl(
-                procedure_id,
-                procedure_code,
-                client,
-                mcp_server,
-                context,
-                **options
-            )
-
-        # Try parsing as legacy YAML
+        # Parse YAML procedure wrapper
         config = yaml.safe_load(procedure_code)
 
         if not isinstance(config, dict):
             raise ValueError("Invalid YAML: root must be a dictionary")
 
         # Check class field to determine executor
-        procedure_class = config.get('class', 'SOPAgent')  # Default to SOPAgent for backward compatibility
+        procedure_class = config.get('class', '')
 
         logger.info(f"Routing procedure {procedure_id} to executor: {procedure_class}")
 
-        if procedure_class == 'LuaDSL':
-            # Route to Lua DSL runtime
-            return await _execute_lua_dsl(
+        if procedure_class == 'Tactus':
+            code = config.get('code')
+            if not isinstance(code, str) or not code.strip():
+                raise ValueError("Tactus procedure requires non-empty 'code' field")
+            return await _execute_tactus(
                 procedure_id,
-                procedure_code,
+                code,
                 client,
                 mcp_server,
                 context,
@@ -94,7 +73,7 @@ async def execute_procedure(
 
         else:
             # Unknown class
-            error_msg = f"Unknown procedure class: {procedure_class}. Supported: LuaDSL, SOPAgent"
+            error_msg = f"Unknown procedure class: {procedure_class}. Supported: Tactus, SOPAgent"
             logger.error(error_msg)
             return {
                 'success': False,
@@ -121,9 +100,9 @@ async def execute_procedure(
         }
 
 
-async def _execute_lua_dsl(
+async def _execute_tactus(
     procedure_id: str,
-    procedure_code: str,
+    code: str,
     client,
     mcp_server,
     context: Optional[Dict[str, Any]],
@@ -134,7 +113,7 @@ async def _execute_lua_dsl(
 
     Args:
         procedure_id: Procedure ID
-        procedure_code: Lua DSL procedure code
+        code: Tactus procedure code
         client: PlexusDashboardClient
         mcp_server: MCP server
         context: Optional context
@@ -175,18 +154,18 @@ async def _execute_lua_dsl(
             openai_api_key=openai_api_key
         )
 
-        # Execute workflow with Lua DSL format
-        result = await runtime.execute(procedure_code, context, format="lua")
+        # Execute workflow with Tactus Lua format
+        result = await runtime.execute(code, context, format="lua")
 
         logger.info(f"Tactus execution complete: {result.get('success')}")
         return result
 
     except Exception as e:
-        logger.error(f"Lua DSL execution error: {e}", exc_info=True)
+        logger.error(f"Tactus execution error: {e}", exc_info=True)
         return {
             'success': False,
             'procedure_id': procedure_id,
-            'error': f"Lua DSL execution error: {e}"
+            'error': f"Tactus execution error: {e}"
         }
 
 
