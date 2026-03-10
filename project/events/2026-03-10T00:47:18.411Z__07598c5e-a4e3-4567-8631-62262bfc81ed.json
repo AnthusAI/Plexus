@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "07598c5e-a4e3-4567-8631-62262bfc81ed",
+  "issue_id": "plx-3fdf73f5-c61e-4446-a254-602736f70326",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T00:47:18.411Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement scorecard_create procedure and MCP extensions in Tactus format"
+  }
+}
