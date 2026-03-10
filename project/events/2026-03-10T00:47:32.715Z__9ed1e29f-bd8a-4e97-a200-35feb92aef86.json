@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "9ed1e29f-bd8a-4e97-a200-35feb92aef86",
+  "issue_id": "plx-3fdf73f5-c61e-4446-a254-602736f70326",
+  "event_type": "field_updated",
+  "occurred_at": "2026-03-10T00:47:32.715Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## User Intent\nAs an AQA lab worker, create a scorecard + classifier scores from unstructured briefs via a Tactus procedure that plans, validates guidelines, gates on human approval, and then creates resources in Plexus.\n\n## Scope\n- New MCP tool: `plexus_guidelines_validate`\n- `plexus_scorecards_list` pagination metadata (`next_token`, `return_metadata`)\n- Agent state reset support (`Agent.reset`) for per-score drafting isolation\n- New `scorecard_create` procedure in Tactus format\n- Procedure/runtime wiring updates for `class: Tactus` + `code:`\n\n## Out of Scope\n- Backward compatibility migration path for `LuaDSL`\n- Non-classifier score generation in this create flow\n\n## Verification\n- Unit tests for MCP additions\n- Unit tests for list paging behavior\n- Procedure dry-run behavior check\n- Real integration creation of sample scorecard + 3 classifiers"
+      }
+    }
+  }
+}
