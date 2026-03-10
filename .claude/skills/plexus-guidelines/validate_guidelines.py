@@ -130,7 +130,8 @@ def get_required_sections(classifier_type: str, classes_metadata: Dict[str, any]
             'Classes',
             'Definition of Yes',
             'Conditions for Yes',
-            'Definition of No'
+            'Definition of No',
+            'Conditions for No'
         ]
 
     elif classifier_type == 'binary_with_abstentions':

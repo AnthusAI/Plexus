@@ -1,0 +1,31 @@
+{
+  "id": "plx-9aa7c28f-8b7b-46f5-9eac-690827f58745",
+  "title": "Fix binary guidelines required sections missing 'Conditions for No'",
+  "description": "## Problem\n`get_required_sections` for binary classifier guidelines omits `Conditions for No`, which causes validation mismatches for correct Yes/No guidelines.\n\n## Expected Behavior\nBinary required sections include both `Definition of No` and `Conditions for No`.\n\n## Acceptance Criteria\n- `get_required_sections` for binary returns `Conditions for No`.\n- Validation output reports missing sections correctly for binary docs.\n- Automated tests cover this requirement.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "16f194e8-6074-437c-b877-beef38a7b43c",
+      "author": "ryan",
+      "text": "Investigating .claude/skills/plexus-guidelines/validate_guidelines.py:get_required_sections and adding regression test.",
+      "created_at": "2026-03-10T00:53:40.977146112Z"
+    },
+    {
+      "id": "4d3d3969-89c1-44e3-90fa-295eb782864c",
+      "author": "ryan",
+      "text": "Implemented fix and regression coverage.\n\n- Updated `get_required_sections` for binary classifiers to require `Conditions for No`.\n- Added test assertion that valid binary guidelines no longer classify `Conditions for No` as unknown.\n- Added regression test: missing only `Conditions for No` now yields `is_valid=false` with that section in `missing_sections`.\n- Verification: `pytest -q MCP/tools/score/guidelines_test.py` -> 4 passed.",
+      "created_at": "2026-03-10T00:54:27.031491436Z"
+    }
+  ],
+  "created_at": "2026-03-10T00:53:39.338663941Z",
+  "updated_at": "2026-03-10T00:54:27.031491436Z",
+  "closed_at": null,
+  "custom": {}
+}
