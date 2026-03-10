@@ -202,10 +202,16 @@
       "author": "unknown",
       "text": "2026-03-05 12:03 ET monitoring: task bbbe683a-2045-42ca-adc7-4884d6420872 is in stage 4 (Processing Report Blocks) status RUNNING/PENDING; last stage update 19:57:20Z. Watching for forward progress and applying 45-minute stale relaunch policy if needed.",
       "created_at": "2026-03-05T20:03:36.731652Z"
+    },
+    {
+      "id": "90293323-82f0-4b81-a7ec-5eaab09de887",
+      "author": "ryan.porter",
+      "text": "2026-03-06 09:27 ET completion: task bbbe683a-2045-42ca-adc7-4884d6420872 COMPLETED. Report 0503f133-efdf-4f7b-a8a7-fba71621b137 finalized with VectorTopicMemory output status=ok; summary: processed 8,655 items across 26 scores, 84 clusters total. Output stored as attachment reportblocks/165955c0-c25a-4d79-a9e6-2306d5587631/output-165955c0-c25a-4d79-a9e6-2306d5587631.json. Report URL: https://lab.callcriteria.com/lab/reports/0503f133-efdf-4f7b-a8a7-fba71621b137",
+      "created_at": "2026-03-06T18:26:50.364789Z"
     }
   ],
   "created_at": "2026-03-05T03:28:39.965602Z",
-  "updated_at": "2026-03-05T20:03:36.731652Z",
+  "updated_at": "2026-03-06T18:26:50.364789Z",
   "closed_at": null,
   "custom": {}
 }

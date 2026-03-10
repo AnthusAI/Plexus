@@ -117,7 +117,7 @@ class TopicMemoryVectorStore:
         Rebuild index contents by clearing existing vectors and writing new items.
 
         `old_index_for_swap` is accepted for API compatibility with the previous
-        OpenSearch adapter and intentionally ignored.
+        vector store adapter and intentionally ignored.
         """
         _ = old_index_for_swap
         index_name = self.index_name
@@ -326,7 +326,7 @@ class TopicMemoryVectorStore:
 
         Returns results ordered by descending similarity with compatibility fields.
         `threshold` is interpreted as a minimum similarity score, matching
-        OpenSearch adapter behavior.
+        prior vector store adapter behavior.
         """
         emb_list = _to_float_list(embedding)
         if len(emb_list) != EMBEDDING_DIM:

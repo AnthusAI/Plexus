@@ -3,7 +3,7 @@
   "title": "OpenSearch Decommission After S3 Vectors Stabilization",
   "description": "Plan and execute removal of the prototype OpenSearch vector store once S3 Vectors is proven stable in real-world operation.\n\n## Goal\nRetire OpenSearch from this feature path and run only on S3 Vectors while preserving report correctness and operational safety.\n\n## Readiness Gate (must pass before removal)\n- S3 Vectors path is green in CI and production-like report runs.\n- No unresolved severity-1/0 defects attributable to S3 vector storage/query behavior.\n- Real-world report quality is validated across representative scorecards and date windows.\n- Rollback procedure is documented and tested.\n\n## Definition of Done\n- OpenSearch resources are removed from the prototype CDK stack.\n- OpenSearch runtime/config/dependency references are removed from this feature path.\n- Post-removal deployment and regression validation complete successfully.\n- kbs records contain evidence, links, and a rollback note.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -40,10 +40,16 @@
       "author": "unknown",
       "text": "2026-03-05 12:04 ET status update: still in_progress. Decommission readiness gate remains open pending completion of current 60-day S3 report reruns (Andersen task d0a734cd-8b39-4165-a1e3-744b2d6ff0c3, AW task bbbe683a-2045-42ca-adc7-4884d6420872) and quality validation. Not ready to remove OpenSearch resource yet.",
       "created_at": "2026-03-05T20:02:56.928178Z"
+    },
+    {
+      "id": "6f0d3087-5dbe-4a86-b1d8-75c784a28781",
+      "author": "ryan.porter",
+      "text": "2026-03-06 09:28 ET: Epic completion summary. Readiness gate met (AW 60-day S3 vectors report completed: task bbbe683a-2045-42ca-adc7-4884d6420872, report 0503f133-efdf-4f7b-a8a7-fba71621b137, output status=ok). OpenSearch fully removed from code/config: deleted opensearch_client module+tests, removed CDK OpenSearch context flag, scrubbed remaining OpenSearch mentions in analysis comments. Related tasks closed: plx-299022, plx-1f3c55.",
+      "created_at": "2026-03-06T18:26:55.753393Z"
     }
   ],
   "created_at": "2026-03-04T17:13:38.283088Z",
-  "updated_at": "2026-03-05T20:02:56.928178Z",
-  "closed_at": null,
+  "updated_at": "2026-03-06T18:26:59.609634Z",
+  "closed_at": "2026-03-06T18:26:59.609634Z",
   "custom": {}
 }
