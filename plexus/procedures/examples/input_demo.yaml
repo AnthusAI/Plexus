@@ -2,8 +2,7 @@ name: input_demo
 version: 1.0.0
 description: Simple demonstration of Human-in-the-Loop input collection
 
-class: LuaDSL
-
+class: Tactus
 params:
   question:
     type: string
@@ -37,7 +36,7 @@ stages:
   - processing
   - complete
 
-workflow: |
+code: |
   Human.notify({
     message = "📝 Requesting user input...",
     level = "info"

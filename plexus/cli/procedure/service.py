@@ -49,33 +49,33 @@ def _validate_yaml_template(template_data):
         return False
 
     # Detect procedure class
-    procedure_class = template_data.get('class', 'SOPAgent')
+    procedure_class = template_data.get('class')
 
-    if procedure_class == 'LuaDSL':
-        # Validate Lua DSL structure
-        required_keys = ['name', 'version', 'agents', 'workflow']
+    if procedure_class == 'Tactus':
+        required_keys = ['name', 'version', 'class', 'code']
         for key in required_keys:
             if key not in template_data:
-                logger.warning(f"Lua DSL template missing required key: {key}")
+                logger.warning(f"Tactus template missing required key: {key}")
                 return False
 
-        # Validate agents is dict with at least one agent
-        agents = template_data.get('agents', {})
-        if not isinstance(agents, dict) or not agents:
-            logger.warning("Lua DSL template must have at least one agent in 'agents' section")
+        code = template_data.get('code', '')
+        if not isinstance(code, str) or not code.strip():
+            logger.warning("Tactus template must have non-empty 'code' section")
             return False
 
-        # Validate workflow is non-empty
-        workflow = template_data.get('workflow', '')
-        if not workflow or not workflow.strip():
-            logger.warning("Lua DSL template must have non-empty 'workflow' section")
+        if 'workflow' in template_data:
+            logger.warning("Tactus templates use 'code', not 'workflow'")
             return False
 
-        logger.info("Lua DSL validation passed")
+        logger.info("Tactus validation passed")
         return True
 
-    else:
-        # Validate SOP Agent structure (backward compatibility)
+    if procedure_class == 'LuaDSL':
+        logger.warning("LuaDSL procedure class is no longer supported. Use class: Tactus with code.")
+        return False
+
+    # Validate SOP Agent-style structures (SOPAgent and legacy classes like BeamSearch)
+    if procedure_class != 'Tactus':
         required_keys = ['class', 'prompts']
         for key in required_keys:
             if key not in template_data:
@@ -95,6 +95,9 @@ def _validate_yaml_template(template_data):
 
         logger.info("SOP Agent validation passed")
         return True
+
+    logger.warning(f"Unknown or missing procedure class: {procedure_class}")
+    return False
 
 # NO DEFAULT TEMPLATE - procedures must have YAML in database
 # Users MUST provide their own YAML via Procedure.code or ProcedureTemplate
@@ -253,7 +256,7 @@ class ProcedureService:
                                 procedure=None,
                                 root_node=None,
                                 success=False,
-                                message="YAML configuration is missing required sections (class, prompts with worker_system_prompt, worker_user_prompt, manager_system_prompt)"
+                                message="YAML configuration is invalid for its procedure class. Tactus requires class/name/version/code; SOPAgent requires class/prompts."
                             )
                     except yaml.YAMLError as e:
                         return ProcedureCreationResult(
@@ -469,7 +472,7 @@ class ProcedureService:
                 yaml_data = yaml.safe_load(yaml_config)
                 # Enhanced validation - check for required structure
                 if not _validate_yaml_template(yaml_data):
-                    return False, "YAML configuration is missing required sections (class, prompts with worker_system_prompt, worker_user_prompt, manager_system_prompt)"
+                    return False, "YAML configuration is invalid for its procedure class. Tactus requires class/name/version/code; SOPAgent requires class/prompts."
             except yaml.YAMLError as e:
                 return False, f"Invalid YAML configuration: {str(e)}"
             
@@ -809,23 +812,16 @@ You can query the current guidelines using the `plexus_score_info` tool with the
             
             logger.info(f"Found experiment: {procedure_id} (Scorecard: {procedure_info.scorecard_name})")
 
-            # Check if this is a Lua DSL procedure and route accordingly
+            # Check if this is a Tactus procedure and route accordingly
             yaml_config = self.get_procedure_yaml(procedure_id)
             if yaml_config:
                 import yaml as yaml_lib
                 try:
                     config = yaml_lib.safe_load(yaml_config)
-                    procedure_class = config.get('class', 'SOPAgent') if isinstance(config, dict) else 'SOPAgent'
+                    procedure_class = config.get('class') if isinstance(config, dict) else None
 
-                    if procedure_class == 'LuaDSL':
-                        logger.info(f"Routing procedure {procedure_id} to Lua DSL runtime")
-
-                        # Route to Lua DSL executor
-                        from .procedure_executor import execute_procedure
-                        from .mcp_transport import create_procedure_mcp_server
-
-                        # Get MCP server instance
-                        mcp_server = await create_procedure_mcp_server()
+                    if procedure_class == 'Tactus':
+                        logger.info(f"Routing procedure {procedure_id} to Tactus runtime")
 
                         # Build context with procedure info
                         context = {
@@ -836,23 +832,35 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                             'score_id': procedure_info.procedure.scoreId,
                         }
 
-                        # Execute with Lua DSL runtime
+                        from .procedure_executor import execute_procedure
+                        from .mcp_transport import create_procedure_mcp_server
+
+                        mcp_server = await create_procedure_mcp_server(
+                            experiment_context=context
+                        )
+
                         result = await execute_procedure(
                             procedure_id=procedure_id,
-                            yaml_config=yaml_config,
+                            procedure_code=yaml_config,
                             client=self.client,
                             mcp_server=mcp_server,
                             context=context,
                             **options
                         )
 
-                        # Return result (skip all SOP agent logic)
                         return result
+
+                    if procedure_class == 'LuaDSL':
+                        return {
+                            'procedure_id': procedure_id,
+                            'status': 'error',
+                            'error': "Unsupported procedure class: LuaDSL."
+                        }
 
                 except Exception as e:
                     logger.warning(f"Error checking procedure class: {e}, falling back to SOP Agent")
 
-            # Continue with existing SOP Agent logic for non-LuaDSL procedures
+            # Continue with existing SOP Agent logic for non-Tactus procedures
             # Handle restart from root node option
             if options.get('restart_from_root_node'):
                 from .states import STATE_START
