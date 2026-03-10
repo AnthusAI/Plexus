@@ -78,6 +78,27 @@ Default class: No
 The agent does not confirm compliance, or the confirmation is missing.
 """
 
+    def _get_binary_missing_conditions_for_no(self) -> str:
+        return """# Guidelines for Test Classifier
+
+## Objective
+Determine whether the transcript contains a clear compliance confirmation.
+
+## Classes
+Valid labels: [Yes, No]
+Target class: Yes
+Default class: No
+
+## Definition of Yes
+The agent explicitly confirms compliance with the requirement.
+
+## Conditions for Yes
+- The agent states the compliance confirmation clearly.
+
+## Definition of No
+The agent does not confirm compliance, or the confirmation is missing.
+"""
+
     def test_guidelines_validate_success(self):
         """Valid binary guidelines should validate successfully."""
         from tools.score.guidelines import register_guidelines_tools
@@ -103,6 +124,7 @@ The agent does not confirm compliance, or the confirmation is missing.
         assert result["success"] is True
         assert result["is_valid"] is True
         assert result["classifier_type"] == "binary"
+        assert "Conditions for No" not in result["unknown_sections"]
 
     def test_guidelines_validate_missing_section(self):
         """Missing required sections should fail validation."""
@@ -129,3 +151,29 @@ The agent does not confirm compliance, or the confirmation is missing.
         assert result["success"] is True
         assert result["is_valid"] is False
         assert "Definition of Yes" in result["missing_sections"]
+
+    def test_guidelines_validate_requires_conditions_for_no(self):
+        """Binary guidelines missing Conditions for No should fail validation."""
+        from tools.score.guidelines import register_guidelines_tools
+
+        mock_mcp = Mock()
+        registered_tools = {}
+
+        def mock_tool_decorator():
+            def decorator(func):
+                registered_tools[func.__name__] = func
+                return func
+            return decorator
+
+        mock_mcp.tool = mock_tool_decorator
+        register_guidelines_tools(mock_mcp)
+
+        plexus_guidelines_validate = registered_tools['plexus_guidelines_validate']
+
+        result = asyncio.get_event_loop().run_until_complete(
+            plexus_guidelines_validate(guidelines_markdown=self._get_binary_missing_conditions_for_no())
+        )
+
+        assert result["success"] is True
+        assert result["is_valid"] is False
+        assert "Conditions for No" in result["missing_sections"]

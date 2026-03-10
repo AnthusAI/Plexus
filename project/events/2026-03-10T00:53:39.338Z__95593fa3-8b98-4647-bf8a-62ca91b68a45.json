@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "95593fa3-8b98-4647-bf8a-62ca91b68a45",
+  "issue_id": "plx-9aa7c28f-8b7b-46f5-9eac-690827f58745",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T00:53:39.338Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Problem\n`get_required_sections` for binary classifier guidelines omits `Conditions for No`, which causes validation mismatches for correct Yes/No guidelines.\n\n## Expected Behavior\nBinary required sections include both `Definition of No` and `Conditions for No`.\n\n## Acceptance Criteria\n- `get_required_sections` for binary returns `Conditions for No`.\n- Validation output reports missing sections correctly for binary docs.\n- Automated tests cover this requirement.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix binary guidelines required sections missing 'Conditions for No'"
+  }
+}
