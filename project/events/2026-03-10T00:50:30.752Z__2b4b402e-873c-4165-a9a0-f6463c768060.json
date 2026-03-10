@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2b4b402e-873c-4165-a9a0-f6463c768060",
+  "issue_id": "plx-bcf8131e-83a7-4259-afd8-a1216ce1c277",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T00:50:30.752Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## User Story\nAs an AQA lab worker, I want to generate missing score code implementations for an existing scorecard from its guidelines, so that I can move configured scorecards into runnable production scoring faster.\n\n## Feature\nFeature: Create Score code for existing scorecard\n\nScenario: Plan and apply missing score code updates\nGiven a scorecard exists with guidelines on all scores and at least one score missing code\nWhen I run the create-score-code procedure with stakeholder context\nThen the procedure observes available scorecards and score details via tools\nAnd orients to identify the intended scorecard\nAnd fails with an error if no matching scorecard is found\nAnd decides a per-score code implementation plan with sub-agent isolation\nAnd validates each drafted implementation by confirming predictions can run\nAnd requests human approval before changes are applied\nAnd applies score code updates programmatically when approved\n\n## Acceptance Criteria\n- Observe stage builds a context pack from scorecard/score listing tool outputs, including instructions for paging and detail retrieval.\n- Orient stage resolves the target scorecard from stakeholder brief + context pack, or exits with clear not-found error.\n- Decide stage produces a plan for updating only scores missing implementations.\n- Per-score drafting runs in isolated sub-agent context and returns implementation payload by explicit completion convention.\n- Validation loop verifies drafted code supports successful prediction execution before finalization.\n- Human approval gate is required before Act stage writes updates.\n- Act stage updates score code through MCP tools and returns update IDs/results.\n- Dry-run mode returns plan without applying updates.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+    "priority": 1,
+    "status": "open",
+    "title": "Create Score code from guidelines via procedure"
+  }
+}
