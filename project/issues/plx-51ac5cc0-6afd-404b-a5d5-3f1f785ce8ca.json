@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Tracking implementation in task `plx-3fdf73` on branch `feature/tactus-procedure` (commit `a14786ffb229a552bb59091fd2ce259c5b7cb6dd`). Epic remains `in_progress` until PR merge.",
       "created_at": "2026-03-10T00:47:50.526876921Z"
+    },
+    {
+      "id": "c38cd1b9-a4b8-4992-9296-f5ec784c7594",
+      "author": "ryan",
+      "text": "Added story plx-bcf813: Create Score code from guidelines via procedure.",
+      "created_at": "2026-03-10T00:50:37.537464536Z"
     }
   ],
   "created_at": "2026-03-10T00:47:16.853450293Z",
-  "updated_at": "2026-03-10T00:47:50.526876921Z",
+  "updated_at": "2026-03-10T00:50:37.537464536Z",
   "closed_at": null,
   "custom": {}
 }
