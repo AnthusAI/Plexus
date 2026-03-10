@@ -3,16 +3,23 @@
   "title": "Remove OpenSearch runtime/config/dependency references",
   "description": "Remove remaining OpenSearch runtime/config/dependency references from the feature path.\n\nScope:\n- code paths and clients\n- env/config keys\n- dependency entries\n- docs/templates/scripts references",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "be1c25e1-1f7e-4165-8e4d-0b1e7ea3d86d",
+      "author": "ryan.porter",
+      "text": "2026-03-06 09:18 ET: OpenSearch cleanup implemented. Removed OpenSearch client + tests (plexus/analysis/opensearch_client.py, plexus/analysis/opensearch_client_test.py), removed CDK context flag @aws-cdk/aws-opensearchservice:enableOpensearchMultiAzWithStandby from infrastructure/cdk.json, and scrubbed OpenSearch mentions from s3vectors_client/topic_clusterer/embedding_cache comments. Repo now has no OpenSearch references outside historical logs.",
+      "created_at": "2026-03-06T18:26:02.094164Z"
+    }
+  ],
   "created_at": "2026-03-04T17:13:52.821114Z",
-  "updated_at": "2026-03-04T17:13:52.821114Z",
-  "closed_at": null,
+  "updated_at": "2026-03-06T18:26:04.057668Z",
+  "closed_at": "2026-03-06T18:26:04.057668Z",
   "custom": {}
 }

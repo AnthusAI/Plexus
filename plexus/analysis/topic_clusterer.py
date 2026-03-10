@@ -233,7 +233,7 @@ class TopicClusterer:
             return []
 
     def get_cluster_records(self) -> List[Dict[str, Any]]:
-        """Build cluster records for OpenSearch persistence."""
+        """Build cluster records for vector store persistence."""
         centroids = self.cluster_centroids()
         boundaries = self.cluster_boundaries()
         labels = self.generate_labels()
