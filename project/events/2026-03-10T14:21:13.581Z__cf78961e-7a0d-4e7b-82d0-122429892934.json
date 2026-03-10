@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cf78961e-7a0d-4e7b-82d0-122429892934",
+  "issue_id": "plx-7c1db65e-115c-476f-b063-d90b4d91a0d0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T14:21:13.581Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** report consumer, **I want** the FeedbackAnalysis block to render a collapsible \"Topic Memories\" section below the confusion matrix detail, **so that** I can see clustered feedback patterns in context with the agreement metrics.\n\n## Background\n\nWith Story plx-3d5cea, the FeedbackAnalysis backend now produces a `memories` key in its output containing per-score topic lists with enriched exemplars. With Story plx-17451f, a shared `TopicList` component exists to render topics with keywords, memory tiers, lifecycle flags, and exemplars. With Story plx-7826af, exemplars render with `IdentifierDisplay` Item links. This story wires all the pieces together in the FeedbackAnalysis frontend.\n\nThe FeedbackAnalysis rendering chain is: `FeedbackAnalysis.tsx` -> `FeedbackAnalysisDisplay` -> `ScorecardReport`. The memories section is added in `FeedbackAnalysis.tsx`, rendered below the `FeedbackAnalysisDisplay` component. In single-scorecard mode, it appears directly after the analysis display. In all-scorecards mode, it appears inside each expanded scorecard's detail view.\n\n## Solution\n\n1. In `FeedbackAnalysis.tsx`, after the `<FeedbackAnalysisDisplay>` component, check if `feedbackData.memories` exists and has content\n2. If present, render a collapsible section with header \"Topic Memories\" using the same expand/collapse pattern (ChevronUp/ChevronDown) used elsewhere in the component\n3. Inside the collapsible, render `<TopicList>` (from Story plx-17451f) for each score's topics\n4. The section is collapsed by default — the agreement metrics remain the primary content\n5. In all-scorecards mode, the memories section appears within each scorecard's expanded detail, after the `FeedbackAnalysisDisplay`\n\n## Data Shape\n\nThe `memories` key in `feedbackData` has this structure:\n\n```typescript\nmemories?: {\n  scores: Array<{\n    score_name: string;\n    score_id: string;\n    topics: Array<{\n      topic_id: number;\n      label: string;\n      keywords: string[];\n      exemplars: Array<{\n        text: string;\n        item_id?: string;\n        identifiers?: Record<string, string>;\n      }>;\n      member_count: number;\n      memory_weight: number;\n      memory_tier: \"hot\" | \"warm\" | \"cold\";\n      lifecycle_tier: \"new\" | \"trending\" | \"established\";\n      is_new: boolean;\n      is_trending: boolean;\n    }>;\n  }>;\n}\n```\n\n## Key Files\n\n- Modify: `dashboard/components/blocks/FeedbackAnalysis.tsx` — add memories section in both single and all-scorecards modes\n- Import: shared `TopicList` component from `dashboard/components/ui/topic-list.tsx` (Story plx-17451f)\n- Type: extend `FeedbackAnalysisData` interface with optional `memories` field\n\n## Dependencies\n\n- Story plx-3d5cea (FeedbackAnalysis runs memory analysis — backend data)\n- Story plx-17451f (Extract shared TopicList component — rendering)\n- Story plx-7826af (Exemplars render with IdentifierDisplay — Item links)",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+    "priority": 2,
+    "status": "open",
+    "title": "FeedbackAnalysis renders memories below confusion matrix"
+  }
+}
