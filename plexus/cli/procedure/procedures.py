@@ -475,16 +475,16 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
 
     You can run a procedure in two ways:
     1. By ID: plexus procedure run <procedure-id>
-    2. From YAML: plexus procedure run --yaml workflow.yaml
+    2. From YAML: plexus procedure run --yaml procedure.yaml
 
     Running from YAML is like executing a script - it creates the procedure
     (if needed) and immediately runs it.
 
     Examples:
-        # Run from YAML file (recommended for Lua DSL workflows)
-        plexus procedure run --yaml my_workflow.yaml
-        plexus procedure run --yaml my_workflow.yaml --dry-run
-        plexus procedure run -y workflow.yaml --max-iterations 50
+        # Run from YAML file (recommended for Tactus procedures)
+        plexus procedure run --yaml my_procedure.yaml
+        plexus procedure run --yaml my_procedure.yaml --dry-run
+        plexus procedure run -y procedure.yaml --max-iterations 50
 
         # Run by ID (for existing procedures)
         plexus procedure run abc123def456
@@ -496,14 +496,14 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
     if not procedure_id and not yaml_file:
         console.print("[red]Error: Either provide a procedure ID or use --yaml flag[/red]")
         console.print("Examples:")
-        console.print("  plexus procedure run --yaml workflow.yaml")
+        console.print("  plexus procedure run --yaml procedure.yaml")
         console.print("  plexus procedure run <procedure-id>")
         return
 
     if procedure_id and yaml_file:
         console.print("[red]Error: Cannot specify both procedure ID and --yaml flag[/red]")
         console.print("Use one or the other:")
-        console.print("  plexus procedure run --yaml workflow.yaml")
+        console.print("  plexus procedure run --yaml procedure.yaml")
         console.print("  plexus procedure run <procedure-id>")
         return
 
@@ -534,13 +534,13 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             console.print("[red]Error: PLEXUS_ACCOUNT_KEY environment variable must be set[/red]")
             return
 
-        # Check if this is a Lua DSL procedure
+        # Check if this is a Tactus procedure
         import yaml as yaml_lib
         try:
             config = yaml_lib.safe_load(yaml_config)
-            is_lua_dsl = config.get('class') == 'LuaDSL'
+            is_tactus = config.get('class') == 'Tactus'
         except:
-            is_lua_dsl = False
+            is_tactus = False
 
         console.print("Creating procedure from YAML...")
         result = service.create_procedure(
@@ -549,7 +549,7 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             score_identifier=None,
             yaml_config=yaml_config,
             featured=False,
-            create_root_node=not is_lua_dsl  # Don't create root node for Lua DSL
+            create_root_node=not is_tactus  # Don't create root node for Tactus procedures
         )
 
         if not result.success:

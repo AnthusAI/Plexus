@@ -2,8 +2,7 @@ name: procedure_demo
 version: 1.0.0
 description: Demonstration of Procedure primitive for sub-procedure orchestration
 
-class: LuaDSL
-
+class: Tactus
 params:
   test_mode:
     type: string
@@ -24,7 +23,7 @@ agents:
     initial_message: "Starting"
     tools: []
 
-workflow: |
+code: |
   Log.info("Procedure primitive demonstration")
 
   local tests_count = 0

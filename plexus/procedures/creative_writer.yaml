@@ -1,6 +1,6 @@
 name: creative_writer
 version: 4.0.0
-class: LuaDSL
+class: Tactus
 description: "Multi-agent creative writing - demonstrates sequential agent collaboration"
 
 params:
@@ -97,7 +97,7 @@ stages:
   - writing
   - complete
 
-workflow: |
+code: |
   -- Get parameters
   local topic = "artificial intelligence"
   local style = "scientific"

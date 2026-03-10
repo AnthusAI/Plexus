@@ -2,8 +2,7 @@ name: stage_demo
 version: 1.0.0
 description: Demonstration of Stage primitive for workflow progress tracking
 
-class: LuaDSL
-
+class: Tactus
 params:
   phases:
     type: number
@@ -31,7 +30,7 @@ stages:
   - phase3
   - completion
 
-workflow: |
+code: |
   Log.info("Stage tracking demonstration", {
     total_phases = params.phases
   })
