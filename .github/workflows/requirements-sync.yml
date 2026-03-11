@@ -1,0 +1,57 @@
+name: Sync requirements.txt
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - pyproject.toml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export-direct-deps:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Export direct dependencies to requirements.txt
+        run: |
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+          dependencies = pyproject["project"]["dependencies"]
+          Path("requirements.txt").write_text("\n".join(dependencies) + "\n")
+          print(f"Wrote {len(dependencies)} direct dependencies to requirements.txt")
+          PY
+
+      - name: Commit and push if changed
+        env:
+          ANTHUSBOT_GH_TOKEN: ${{ secrets.ANTHUSBOT_GH_TOKEN }}
+        run: |
+          if ! git diff --quiet -- requirements.txt; then
+            if [ -z "${ANTHUSBOT_GH_TOKEN}" ]; then
+              echo "Missing secret: ANTHUSBOT_GH_TOKEN" >&2
+              exit 1
+            fi
+            git config user.name "anthusbot"
+            git config user.email "anthusbot@users.noreply.github.com"
+            git remote set-url origin "https://x-access-token:${ANTHUSBOT_GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            git add requirements.txt
+            git commit -m "chore: update requirements"
+            git pull --rebase
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi

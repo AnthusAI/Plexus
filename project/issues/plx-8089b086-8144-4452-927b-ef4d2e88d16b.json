@@ -1,0 +1,25 @@
+{
+  "id": "plx-8089b086-8144-4452-927b-ef4d2e88d16b",
+  "title": "[Snyk] SNYK-PYTHON-SETUPTOOLS-9964606 in setuptools@40.5.0",
+  "description": "## Directory Traversal\n\n**Severity:** medium\n**Package:** setuptools@40.5.0\n**File:** `requirements.txt`\n\n**CVSS Score:** 6.8  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 661/1000\n\n### CVEs\n- [CVE-2025-47273](https://nvd.nist.gov/vuln/detail/CVE-2025-47273)\n\n**Fix:** Pin `setuptools` to version 78.1.1 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Directory Traversal through the `‎PackageIndex._download_url` method. Due to insufficient sanitization of special characters, an attacker can write files to arbitrary locations on the filesystem with the permissions of the process running the Python code. In certain scenarios, an attacker could potentially escalate to remote code execution by leveraging malicious URLs present in a package index.\n## PoC\n```sh\r\npython poc.py\r\n# Payload file: http://localhost:8000/%2fhome%2fuser%2f.ssh%2fauthorized_keys\r\n# Written to: /home/user/.ssh/authorized_keys\r\n```\n\n## Details\n\nA Directory Traversal attack (also known as path traversal) aims to access files and directories that are stored outside the intended folder. By manipulating files with \"dot-dot-slash (../)\" sequences and its variations, or by using absolute file paths, it may be possible to access arbitrary files and directories stored on file system, including application source code, configuration, and other critical system files.\n\nDirectory Traversal vulnerabilities can be generally divided into two types:\n\n- **Information Disclosure**: Allows the attacker to gain information about the folder structure or read the contents of sensitive files on the system.\n\n`st` is a module for serving static files on web pages, and contains a [vulnerability of this type](https://snyk.io/vuln/npm:st:20140206). In our example, we will serve files from the `public` route.\n\nIf an attacker requests the following URL from our server, it will in turn leak the sensitive private key of the root user.\n\n```\ncurl http://localhost:8080/public/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/root/.ssh/id_rsa\n```\n**Note** `%2e` is the URL encoded version of `.` (dot).\n\n- **Writing arbitrary files**: Allows the attacker to create or replace existing files. This type of vulnerability is also known as `Zip-Slip`. \n\nOne way to achieve this is by using a malicious `zip` archive that holds path traversal filenames. When each filename in the zip archive gets concatenated to the target extraction folder, without validation, the final path ends up outside of the target folder. If an executable or a configuration file is overwritten with a file containing malicious code, the problem can turn into an arbitrary code execution issue quite easily.\n\nThe following is an example of a `zip` archive with one benign file and one malicious file. Extracting the malicious file will result in traversing out of the target folder, ending up in `/root/.ssh/` overwriting the `authorized_keys` file:\n\n```\n2018-04-15 22:04:29 .....           19           19  good.txt\n2018-04-15 22:04:42 .....           20           20  ../../../../../../root/.ssh/authorized_keys\n```\n\n## Remediation\nUpgrade `setuptools` to version 78.1.1 or higher.\n## References\n- [GitHub Commit](https://github.com/pypa/setuptools/commit/250a6d17978f9f6ac3ac887091f2d32886fbbb0b)\n- [GitHub Issue](https://github.com/pypa/setuptools/issues/4946)\n- [Vulnerable Code](https://github.com/pypa/setuptools/blob/6ead555c5fb29bc57fe6105b1bffc163f56fd558/setuptools/package_index.py#L810C1-L825C88)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-SETUPTOOLS-9964606)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7fe50b2e-f823-4b4e-acc2-a6a833603768",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T21:27:00.619567Z",
+  "updated_at": "2026-03-11T21:27:00.619567Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-SETUPTOOLS-9964606",
+    "snyk_severity": "medium",
+    "snyk_type": "package_vulnerability"
+  }
+}

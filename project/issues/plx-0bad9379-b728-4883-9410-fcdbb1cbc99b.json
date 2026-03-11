@@ -1,0 +1,30 @@
+{
+  "id": "plx-0bad9379-b728-4883-9410-fcdbb1cbc99b",
+  "title": "[Snyk Code] Hardcoded Non-Cryptographic Secret",
+  "description": "## Hardcoded Non-Cryptographic Secret\n\n**Severity:** high\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/cli/procedure/demo_ai_mcp_integration.py`\n**Location:** line 160, column 9 to line 160, column 23\n**Classes:** CWE-CWE-547\n### Snippet (plexus/cli/procedure/demo_ai_mcp_integration.py:158-162)\n```\n 158 |         procedure_id='demo-001',\n 159 |         mcp_server=mcp_server,\n 160 |         openai_api_key='demo-key'  # Won't be used in setup phase\n 161 |     )\n 162 |     \n```\n\n**Issue Key:** b1bdc548-1be2-4d4e-829e-bc7c941a9e28\n\n### Details\nHardcoded Non-Cryptographic Secret\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.687842Z",
+  "updated_at": "2026-03-11T21:27:00.584543Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 9,
+    "snyk_end_column": 23,
+    "snyk_end_line": 160,
+    "snyk_file": "plexus/cli/procedure/demo_ai_mcp_integration.py",
+    "snyk_key": "b1bdc548-1be2-4d4e-829e-bc7c941a9e28",
+    "snyk_line": 160,
+    "snyk_severity": "high",
+    "snyk_type": "code"
+  }
+}

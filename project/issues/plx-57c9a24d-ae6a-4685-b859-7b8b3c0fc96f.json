@@ -1,0 +1,25 @@
+{
+  "id": "plx-57c9a24d-ae6a-4685-b859-7b8b3c0fc96f",
+  "title": "[Snyk] SNYK-JS-MINIMATCH-15353389 in minimatch@3.1.2",
+  "description": "## Inefficient Algorithmic Complexity\n\n**Severity:** high\n**Package:** minimatch@3.1.2\n**File:** `dashboard/package.json`\n\n**CVSS Score:** 8.7  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 614/1000\n\n### CVEs\n- [CVE-2026-27903](https://nvd.nist.gov/vuln/detail/CVE-2026-27903)\n\n**Fix:** Pin `minimatch` to version 3.1.3, 4.2.5, 5.1.8, 6.2.2, 7.4.8, 8.0.6, 9.0.7, 10.2.3 or later.\n\n### Details\n## Overview\n[minimatch](https://www.npmjs.com/package/minimatch) is a minimal matching utility.\n\nAffected versions of this package are vulnerable to Inefficient Algorithmic Complexity via the `matchOne` function. An attacker can cause significant delays in processing and stall the event loop by supplying specially crafted glob patterns containing multiple non-adjacent GLOBSTAR segments.\n## Remediation\nUpgrade `minimatch` to version 3.1.3, 4.2.5, 5.1.8, 6.2.2, 7.4.8, 8.0.6, 9.0.7, 10.2.3 or higher.\n## References\n- [GitHub Commit](https://github.com/isaacs/minimatch/commit/0bf499aa45f5059b56809cc3b75ff3eafeb8d748)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-JS-MINIMATCH-15353389)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8a96ada3-dfbc-4807-8f82-b4cfb6e4a52a",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.702455Z",
+  "updated_at": "2026-03-11T21:27:00.611090Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-JS-MINIMATCH-15353389",
+    "snyk_severity": "high",
+    "snyk_type": "package_vulnerability"
+  }
+}

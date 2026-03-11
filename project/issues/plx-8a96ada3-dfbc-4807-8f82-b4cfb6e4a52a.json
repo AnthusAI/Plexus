@@ -3,21 +3,35 @@
   "title": "dashboard/package.json",
   "description": "Snyk vulnerabilities found in `dashboard/package.json`.",
   "type": "task",
-  "status": "open",
-  "priority": 1,
+  "status": "in_progress",
+  "priority": 0,
   "assignee": null,
   "creator": null,
-  "parent": "plx-dce57ac5-051d-4a53-abd0-04dff69e7ca2",
+  "parent": "plx-1f6b32f8-0d5c-4792-be56-a5caa89242a7",
   "labels": [
     "security",
     "snyk"
   ],
   "dependencies": [],
-  "comments": [],
-  "created_at": "2026-02-26T00:13:56.239956971Z",
-  "updated_at": "2026-02-26T00:13:56.239956971Z",
+  "comments": [
+    {
+      "id": "e96dec07-1d7c-4782-be8a-8de125c1eb52",
+      "author": "derek.norrbom",
+      "text": "Starting critical remediation for SNYK-JS-IMMUTABLE-15423650 (immutable). I will update package constraints/lockfile in dashboard and run the dashboard test/lint checks needed to validate dependency integrity.",
+      "created_at": "2026-03-11T20:50:06.948769Z"
+    },
+    {
+      "id": "2bf6a8fc-bdc3-49f3-a3b0-d740057073aa",
+      "author": "derek.norrbom",
+      "text": "Progress update:\n- Added targeted override in dashboard/package.json:\n  - overrides.sass.immutable = ^4.3.8\n- Regenerated lockfile with: npm install --package-lock-only\n- Dependency verification:\n  - npm ls immutable --all\n  - Result shows immutable@4.3.8 at top-level path (prior vulnerable 4.3.7 path removed); immutable@3.7.6 remains nested under relay-compiler where required by that package line.\n- Test validation:\n  - npm run test -- --runInBand components/ui/__tests__/confidence-formatting.test.ts\n  - Result: 1 suite passed, 17 tests passed.",
+      "created_at": "2026-03-11T20:52:57.430084Z"
+    }
+  ],
+  "created_at": "2026-02-26T00:13:56.239956Z",
+  "updated_at": "2026-03-11T20:52:57.430084Z",
   "closed_at": null,
   "custom": {
+    "snyk_category": "dependency",
     "snyk_target_file": "dashboard/package.json"
   }
 }
