@@ -2938,8 +2938,10 @@ class FeedbackEvaluation(Evaluation):
             end_date = datetime.now(timezone.utc)
             start_date = end_date - timedelta(days=self.days)
             
-            # Get scorecard
-            DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
+            # Validate scorecard exists
+            scorecard = DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
+            if scorecard is None:
+                raise ValueError(f"Scorecard {self.scorecard_id} not found")
             
             # Feedback evaluation MUST have a score_id
             if not self.score_id:
