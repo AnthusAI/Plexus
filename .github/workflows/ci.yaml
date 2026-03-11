@@ -84,8 +84,8 @@ jobs:
         echo "Conda environment: $CONDA_DEFAULT_ENV"
         invoke ci
 
-    - name: Semantic Release
-      if: matrix.python-version == '3.11' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/dev')
+    - name: Semantic Release Safety Check
+      if: matrix.python-version == '3.11' && github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
         python - <<'PY'
         import re
@@ -131,7 +131,7 @@ jobs:
         PY
 
     - name: Semantic Release
-      if: matrix.python-version == '3.11' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/dev')
+      if: matrix.python-version == '3.11' && github.event_name == 'push' && github.ref == 'refs/heads/main'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
