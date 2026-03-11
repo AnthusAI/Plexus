@@ -1,0 +1,381 @@
+2026-03-04 08:57:53,401  [WARNING] AWS region not set, CloudWatch metrics       
+disabled                                                                        
+Creating client...
+2026-03-04 08:57:57,558  [INFO] Loaded Plexus configuration from 2 file(s):     
+/Users/ryan.porter/.plexus/config.yaml,                                         
+/Users/ryan.porter/Projects/Plexus/.plexus/config.yaml - Set 37 environment     
+variables                                                                       
+Account ID: 9c929f25-a91f-4db7-8943-5aa93498b8e9
+Resolved config by name: 'Vector Topic Memory' to ID 
+2e6dcc26-ff55-4c7d-a906-def69a5ee528
+Syncing config from /Users/ryan.porter/Projects/Plexus/vector_topic_memory_report.md...
+Using config: 2e6dcc26-ff55-4c7d-a906-def69a5ee528 (Vector Topic Memory)
+Running report for all scores in scorecard 1438 (Vector Topic Memory only)...
+2026-03-04 08:58:02,736  [INFO] [RunScript] Loading configuration               
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:58:02,737  [INFO] Loading report configuration from API:          
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:58:03,971  [INFO] Successfully loaded configuration:              
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:58:03,971  [INFO] [RunScript] Loaded configuration: Vector Topic  
+Memory                                                                          
+2026-03-04 08:58:03,972  [INFO] [RunScript] Configuration requires 3 parameters 
+2026-03-04 08:58:03,972  [INFO] [RunScript] Parameters validated: {'scorecard': 
+'1438', 'days': 180}                                                            
+2026-03-04 08:58:08,059  [INFO] [RunScript] Parameters enriched with names:     
+{'scorecard': '1438', 'days': 180, 'scorecard_name': 'SelectQuote HCS           
+Medium-Risk'}                                                                   
+2026-03-04 08:58:08,061  [INFO] [RunScript] Configuration rendered with         
+parameters                                                                      
+2026-03-04 08:58:09,365  [INFO] [RunScript] Created task:                       
+010e2eab-ae3b-4c88-b435-8941fd34df7a                                            
+2026-03-04 08:58:09,367  [INFO] [RunScript] Progress tracker initialized        
+2026-03-04 08:58:09,368  [INFO] [RunScript] Executing report generation core    
+logic                                                                           
+2026-03-04 08:58:09,368  [INFO] [RunScript] Starting core report generation     
+logic.                                                                          
+2026-03-04 08:58:09,369  [INFO] Loading report configuration from API:          
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:58:10,600  [INFO] Creating 5 stages in batch for task             
+010e2eab-ae3b-4c88-b435-8941fd34df7a                                            
+2026-03-04 08:58:10,600  [INFO] Executing batch TaskStage creation for 5 stages 
+2026-03-04 08:58:11,077  [INFO] Successfully loaded configuration:              
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:58:11,078  [INFO] [RunScript] Using provided configuration content
+override (e.g., rendered with parameters)                                       
+2026-03-04 08:58:11,078  [INFO] [RunScript] Loaded ReportConfiguration: Vector  
+Topic Memory (2e6dcc26-ff55-4c7d-a906-def69a5ee528)                             
+2026-03-04 08:58:11,078  [INFO] [RunScript] Added account_id to run_parameters: 
+9c929f25-a91f-4db7-8943-5aa93498b8e9                                            
+2026-03-04 08:58:14,654  [INFO] ==== STAGE: Loading Configuration ====          
+2026-03-04 08:58:14,654  [INFO] Successfully created 5 stages in batch          
+2026-03-04 08:58:15,597  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:58:15,597  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:58:17,743  [INFO] [RunScript] Creating Report DB record: 'Vector  
+Topic Memory - March 04, 2026 13:58 UTC'                                        
+2026-03-04 08:58:17,744  [INFO] [RunScript] repr(config_markdown) before        
+Report.create:                                                                  
+'# Vector Topic Memory Report\n## Scorecard: SelectQuote HCS Medium-Risk\n##    
+Last 180 days\n\nRebuilds topic memory from **edit comments** (reviewer         
+feedback) in this scorecard and date range. Clusters what reviewers are saying  
+when they correct scores. Re-indexes into OpenSearch with S3 embedding cache,   
+global clustering, and memory weights.\n\n```block name="Vector Topic           
+Memory"\nclass: VectorTopicMemory\nscorecard: 1438\ndays: 180\ndata:\n          
+content_source: edit_comment\nopensearch:\n  region: us-west-2\nclustering:\n   
+min_topic_size: 2\n  min_samples: 2\n  cluster_selection_method: eom\n          
+cluster_selection_epsilon: 0.5\nlabel:\n  use_llm: true\n  model: gpt-4o-mini\n 
+api_key_env_var: OPENAI_API_KEY\n```'                                           
+2026-03-04 08:58:17,744  [INFO] [RunScript] Actual content (first 100 chars): # 
+Vector Topic Memory Report                                                      
+## Scorecard: SelectQuote HCS Medium-Risk                                       
+## Last 180 days                                                                
+                                                                                
+Rebuilds to                                                                     
+2026-03-04 08:58:17,745  [INFO] [RunScript] Content contains literal newlines:  
+False                                                                           
+2026-03-04 08:58:17,745  [INFO] [RunScript] Content contains actual newlines:   
+True                                                                            
+2026-03-04 08:58:18,626  [INFO] [RunScript] Report content after creation (first
+100 chars): # Vector Topic Memory Report                                        
+## Scorecard: SelectQuote HCS Medium-Risk                                       
+## Last 180 days                                                                
+                                                                                
+Rebuilds to                                                                     
+2026-03-04 08:58:18,627  [INFO] [RunScript] Report content contains literal     
+newlines: False                                                                 
+2026-03-04 08:58:18,627  [INFO] [RunScript] Report content contains actual      
+newlines: True                                                                  
+2026-03-04 08:58:18,627  [INFO] [RunScript] Successfully created Report record  
+with ID: adba402a-e725-4aa6-9eec-8f93cab74182                                   
+2026-03-04 08:58:23,018  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:58:23,018  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:58:25,196  [INFO] [RunScript] Parsing configuration markdown to   
+extract blocks.                                                                 
+2026-03-04 08:58:25,198  [INFO] [RunScript] Found 1 blocks to process.          
+2026-03-04 08:58:29,197  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:58:29,198  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:58:31,833  [INFO] [RunScript] Starting processing of 1 report     
+blocks.                                                                         
+2026-03-04 08:58:32,870  [INFO] [RunScript] Preparing block 1/1: block_0 (Class:
+VectorTopicMemory, Pos: 0)                                                      
+2026-03-04 08:58:32,871  [INFO] [RunScript] Creating initial ReportBlock record 
+for block_0                                                                     
+2026-03-04 08:58:32,871  [INFO] ReportBlock create sizes - Total input: 178     
+bytes                                                                           
+2026-03-04 08:58:32,872  [INFO] ReportBlock create sizes - Output field: 21     
+bytes                                                                           
+2026-03-04 08:58:32,872  [INFO] ReportBlock create sizes - Other fields: 157    
+bytes                                                                           
+2026-03-04 08:58:34,539  [INFO] [RunScript] Created ReportBlock ID              
+d565821c-7457-4043-95be-933666ec8d76 for block_0                                
+2026-03-04 08:58:34,539  [INFO] Instantiating block: VectorTopicMemory with     
+config: {'scorecard': 1438, 'days': 180, 'data': {'content_source':             
+'edit_comment'}, 'opensearch': {'region': 'us-west-2'}, 'clustering':           
+{'min_topic_size': 2, 'min_samples': 2, 'cluster_selection_method': 'eom',      
+'cluster_selection_epsilon': 0.5}, 'label': {'use_llm': True, 'model':          
+'gpt-4o-mini', 'api_key_env_var': 'OPENAI_API_KEY'}}                            
+2026-03-04 08:58:34,540  [INFO] Set report_block_id                             
+'d565821c-7457-4043-95be-933666ec8d76' on block instance 'VectorTopicMemory'    
+2026-03-04 08:58:34,540  [INFO] No running event loop. Creating new loop for    
+block 'VectorTopicMemory' generation.                                           
+2026-03-04 08:58:34,541  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolving scorecard: 1438, days: 180      
+2026-03-04 08:58:34,542  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Date range: 2025-09-05 to 2026-03-04      
+2026-03-04 08:58:34,543  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Content source: edit_comment              
+2026-03-04 08:58:35,476  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Found scorecard: SelectQuote HCS          
+Medium-Risk                                                                     
+2026-03-04 08:58:35,477  [INFO] Fetching scores for scorecard                   
+59125ba2-670c-4aa5-b796-c2085cf38a0c                                            
+2026-03-04 08:58:36,451  [INFO] Found 18 scores with externalIds for scorecard  
+59125ba2-670c-4aa5-b796-c2085cf38a0c                                            
+2026-03-04 08:58:37,391  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 5 items for score Pharmacy       
+Information.                                                                    
+2026-03-04 08:58:41,844  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 3 items for score Patient        
+Interest.                                                                       
+2026-03-04 08:58:42,942  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 1 items for score HCS Membership 
+Satisfaction.                                                                   
+2026-03-04 08:58:44,191  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 9 items for score HCS Membership 
+Understanding.                                                                  
+2026-03-04 08:58:46,731  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 17 items for score Patient       
+Cognition.                                                                      
+2026-03-04 08:58:47,918  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 3 items for score Patient        
+Understanding.                                                                  
+2026-03-04 08:58:50,203  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 34 items for score Medication    
+Review.                                                                         
+2026-03-04 08:58:51,392  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 4 items for score Patient        
+Allergies.                                                                      
+2026-03-04 08:58:52,403  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 2 items for score Prescriber     
+Information.                                                                    
+2026-03-04 08:58:54,707  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Resolved 28 items for score Agent         
+Misrepresentation.                                                              
+2026-03-04 08:59:18,818  [INFO] GET                                             
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_cluster/health                                                 
+2026-03-04 08:59:19,363  [INFO] PUT                                             
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-135918                                    
+2026-03-04 08:59:20,422  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 08:59:20,539  [WARNING] GET                                          
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_alias/topic-memory-live                                        
+2026-03-04 08:59:20,540  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Indexed 106 documents.                    
+2026-03-04 08:59:20,544  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Clustering 5 items for score Pharmacy     
+Information...                                                                  
+OMP: Info #276: omp_set_nested routine deprecated, please use omp_set_max_active_levels instead.
+2026-03-04 08:59:30,318  [WARNING] HDBSCAN returned all outliers; falling back  
+to KMeans on raw embeddings                                                     
+2026-03-04 08:59:30,784  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 08:59:31,124  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-135918/_update/cluster-0                  
+2026-03-04 08:59:31,250  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-135918/_update/cluster-1                  
+2026-03-04 08:59:31,251  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Clustering 3 items for score Patient      
+Interest...                                                                     
+2026-03-04 08:59:31,260  [WARNING] HDBSCAN returned all outliers; falling back  
+to KMeans on raw embeddings                                                     
+2026-03-04 08:59:31,465  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 08:59:32,704  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-135918/_update/cluster-0                  
+2026-03-04 08:59:32,833  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-135918/_update/cluster-1                  
+2026-03-04 08:59:32,834  [INFO] [ReportBlock                                    
+d565821c-7457-4043-95be-933666ec8d76] Clustering 1 items for score HCS          
+Membership Satisfaction...                                                      
+2026-03-04 08:59:32,837  [ERROR] [ReportBlock                                   
+d565821c-7457-4043-95be-933666ec8d76] Error: k must be less than or equal to the
+number of training points                                                       
+2026-03-04 08:59:32,844  [INFO] Block 'block_0' executed. Log output length:    
+1663                                                                            
+2026-03-04 08:59:32,844  [INFO] [RunScript] Re-fetching ReportBlock ID          
+d565821c-7457-4043-95be-933666ec8d76 after block execution.                     
+2026-03-04 08:59:34,585  [INFO] [RunScript] Fetched DB state. Current           
+attachedFiles: None                                                             
+2026-03-04 08:59:34,585  [INFO] [RunScript] Uploading log.txt for ReportBlock   
+d565821c-7457-4043-95be-933666ec8d76                                            
+2026-03-04 08:59:34,586  [INFO] Starting S3 upload for block                    
+d565821c-7457-4043-95be-933666ec8d76, file log.txt                              
+2026-03-04 08:59:34,586  [INFO] Using S3 bucket:                                
+amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l                 
+2026-03-04 08:59:34,623  [INFO] Creating temporary file for content (content    
+length: 1663)                                                                   
+2026-03-04 08:59:34,624  [INFO] Created temp file at                            
+/var/folders/gb/d2rz0yr907x6sl234fhp7mbm0000gn/T/tmpbe2mdt76_log.txt            
+2026-03-04 08:59:34,624  [INFO] Starting S3 upload to                           
+s3://amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l/reportblock
+s/d565821c-7457-4043-95be-933666ec8d76/log.txt with args: {'ContentType':       
+'text/plain'}                                                                   
+2026-03-04 08:59:35,513  [INFO] Successfully uploaded log.txt to                
+s3://amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l/reportblock
+s/d565821c-7457-4043-95be-933666ec8d76/log.txt                                  
+2026-03-04 08:59:35,513  [INFO] Removing temp file                              
+/var/folders/gb/d2rz0yr907x6sl234fhp7mbm0000gn/T/tmpbe2mdt76_log.txt            
+2026-03-04 08:59:35,514  [INFO] [RunScript] Appended log.txt info. New          
+attachedFiles list:                                                             
+['reportblocks/d565821c-7457-4043-95be-933666ec8d76/log.txt']                   
+2026-03-04 08:59:35,515  [INFO] [RunScript] Performing final update for         
+ReportBlock d565821c-7457-4043-95be-933666ec8d76                                
+2026-03-04 08:59:35,515  [INFO] ReportBlock update: Converted 'output' dict to  
+JSON string (6480 bytes)                                                        
+2026-03-04 08:59:35,515  [INFO] ReportBlock update: attachedFiles before        
+processing - Type: <class 'list'>, Value:                                       
+['reportblocks/d565821c-7457-4043-95be-933666ec8d76/log.txt']                   
+2026-03-04 08:59:37,435  [INFO] Update result for ReportBlock                   
+d565821c-7457-4043-95be-933666ec8d76: {'id':                                    
+'d565821c-7457-4043-95be-933666ec8d76', 'reportId':                             
+'adba402a-e725-4aa6-9eec-8f93cab74182', 'name': 'block_0', 'position': 0,       
+'type': 'VectorTopicMemory', 'output': '{"type": "VectorTopicMemory", "status": 
+"error", "cluster_version": null, "topics": [], "scores": [{"score_id": "44548",
+"score_name": "Pharmacy Information", "items_processed": 5, "topics":           
+[{"cluster_id": 0, "label": "Optum Medication Access", "keywords": [],          
+"exemplars": ["Customer his getting meds through Optum"], "memory_weight": 0.0, 
+"memory_tier": "cold", "p95_distance": 0.0, "member_count": 1, "days_inactive": 
+121}, {"cluster_id": 1, "label": "Pharmacy Verification by Agent", "keywords":  
+["agent", "pharmacy", "agent did", "did", "verified pharmacy", "verified",      
+"agent verified", "confirm"], "exemplars": ["Agent did confirm pharmacy", "agent
+verified pharmacy", "Agent did verify last known pharmacy", "Agent verifies     
+Lukes Pharmacy"], "memory_weight": 0.0, "memory_tier": "cold", "p95_distance":  
+0.17489599883556362, "member_count": 4, "days_inactive": 118}],                 
+"cluster_version": "20260304-135930"}, {"score_id": "45281", "score_name":      
+"Patient Interest", "items_processed": 3, "topics": [{"cluster_id": 0, "label": 
+"Customer Declined SRX Enrollment", "keywords": ["enroll", "srx", "declined",   
+"customer declined", "customer", "enroll srx", "declined enroll", "wanted       
+enroll"], "exemplars": ["Customer declined to enroll into SRX.", "Customer      
+declined SRX and was never re-asked if she wanted to enroll. Agent almost made  
+it seem as if she had to enroll."], "memory_weight": 0.0, "memory_tier": "cold",
+"p95_distance": 0.04478829801082611, "member_count": 2, "days_inactive": 128},  
+{"cluster_id": 1, "label": "Customer Disinterest in Services", "keywords": [],  
+"exemplars": ["While the customer and his wife did remain positive throughout   
+the call, the level of interest was not there. Customer expressed he was calling
+for something else. When agent mentions meeting with a doctor, it completely    
+confused him and he was not understanding why. Based off of the call, I would   
+s\\u2026"], "memory_weight": 0.0, "memory_tier": "cold", "p95_distance": 0.0,   
+"member_count": 1, "days_inactive": 118}], "cluster_version":                   
+"20260304-135931"}], "summary": "k must be less than or equal to the number of  
+training points", "items_processed": 106, "cache_hit_rate": null, "index_name": 
+"topic-memory-20260304-135918", "indexed_doc_ids":                              
+["51460353-d273-4539-8c5a-3bd7364cd47b", "049d7acd-32bd-4767-9a1f-80b379273e59",
+"94412b34-2512-476b-8a0d-eecbb93fe059", "8100603d-8d1c-4506-b2b8-c73e0848b176", 
+"2702239b-b457-4231-b420-7d1ea2af5cb2", "4e41a90e-022d-4a01-9f12-329337d891e9", 
+"5c859f80-8f05-4a55-a3c2-815e7dfbafc8", "18e7097a-e432-4f94-85d2-06e7a8469e2c", 
+"09cc6e17-3893-4189-9402-87ac5d912817", "e6667c7d-16bd-4311-92bb-0a174e4bdf2f", 
+"a8260392-ef74-414e-beea-f1afc9c84aea", "da85916d-b23d-439e-98b4-c489b38ab132", 
+"1759f69f-192f-4067-a51d-5aa9e255a711", "fe1fa00a-9022-458e-bd1d-aca06140485a", 
+"1e267fd9-8bca-453b-9da7-4d4f9059a308", "6d892b4e-a322-4030-98ee-9709980afbb6", 
+"ec7aefb3-5b83-4fe5-b12e-4b50804ace77", "cd5da84b-e95c-4c28-9f7b-e1bb8acd7516", 
+"19d07706-8711-46e4-83e0-3a3a6d6bb03d", "75957969-6184-4d3c-95c6-7c381a438759", 
+"d3fb5c77-6134-43b4-b641-f4fb97ad83d7", "53a0d8b0-87b9-4138-bc9b-faf0d6927148", 
+"b80c3aea-65a6-4c49-b655-bf350a6ce86b", "2739845e-dd42-4434-9c96-a57691f4c4d5", 
+"c912a68a-14be-4337-84ef-334431b5ebb6", "24fa606d-9847-465a-916e-c066b5f1abe4", 
+"cbaf5f35-f0bb-4966-be5d-f5757cb5e2cb", "e9fad4c7-cb24-40ca-87ea-51e475dc3e84", 
+"2b760598-cd5e-417a-a330-55d348cdade3", "2b8b71f1-b114-4c92-83a9-cd782a6f7481", 
+"4e8ca1b4-5301-4b38-a37a-8dfbe4eedaf6", "1834e31f-e8a0-4951-86c6-dd3646a8ac17", 
+"e7acea33-598b-4714-b323-ab63e9b8ab8e", "bca904b5-fdc2-42e0-a41a-f08f330bfe94", 
+"3c72d661-8e2f-4b92-92e8-fb6a4199bd5e", "fa033ad1-b96f-4b68-8862-ad2338e99ab2", 
+"16280406-c206-42a2-9fa5-22bb93591572", "4d107f4c-6748-408f-8b79-48060382ae59", 
+"8937cf14-d99f-41ac-9f1a-10abd53bf7e4", "f7339197-195c-45db-8a34-321794cb7a55", 
+"1f9581ce-1067-441a-a749-c44b45b45118", "558dd98d-5ea3-4002-b3b4-55bd361077de", 
+"5ab906d4-a09b-4042-9d72-137322fd19f0", "1695c1e5-1691-4673-a53e-f0679c60fe29", 
+"8ebdac5a-8acd-4f94-9327-abd665416b6e", "6bf60ccd-f25a-4472-95de-099e4694490e", 
+"db52c550-6ff6-4c1a-9f5f-b69ec6c9c663", "dd53cd4a-8315-4ac7-abe8-43579f58ece8", 
+"8670b738-0432-411b-9d94-d26e338d5429", "aacf2527-6ca8-469b-81de-f1b3a92e0656", 
+"b7288424-7e40-46fd-bd8d-d046c87a0e63", "0446d9dc-37d9-4d3a-a962-9f429cd56d94", 
+"ca87dda5-c09a-4400-b03d-4505cdc77f10", "3de02572-d815-46cb-9e5d-79248273d738", 
+"7f385f49-3bc9-4962-a37c-b9353eec1eaa", "ae056159-68ba-4b38-bfc0-d4e322a14bf1", 
+"7ce7dde7-9948-4362-8225-69b7a5e6f8db", "7581f317-5110-41b8-ba2b-fae25973cff6", 
+"349ad94b-fd38-4a0c-8956-fb114c2cfdbb", "aa67cad2-f7bf-4b28-af73-b380b9c8301f", 
+"9283a5ea-2777-49e9-96ca-ccb83ad08568", "5e425f5a-9fa1-4cb1-ae5a-1d6b431a6f3d", 
+"7cbf9925-291c-4a20-acf0-fff5abf26b7b", "03209c69-b83b-4bb1-a313-0b733da4e231", 
+"11d5fac7-955c-40c2-9b10-df5fc741b24a", "69c88053-38c7-4af6-bd8f-de5b6bb999d0", 
+"4a5ce29c-7ed7-49b2-a7df-f139b05c02cf", "96199aad-dc7e-4afc-bd32-ea7cc8aedfc3", 
+"32119a94-5924-45ec-8c46-4a96b10b6fe4", "6f9ef70b-6c8e-4c44-9043-cf22834a0bb9", 
+"a03bb56a-b932-4e2d-8969-b0472b3ea0f8", "0ed3addc-fc42-471b-92cd-93b1c4b54d9f", 
+"c41c1413-f00e-4a56-93ac-33a40eab8fb0", "4f226a7b-0f1b-47a4-8792-37ed91cdd1e2", 
+"8cb7d98f-d1be-4c62-a06a-51873bde6b26", "720fda3b-2a0a-4609-81e3-05f6a918c7ac", 
+"e01610e8-40af-4d08-8261-c18e0a58b169", "0d089f70-f471-47f5-a888-04033bc6421b", 
+"38c139a8-246c-4bda-b32b-9cccefe2798d", "0580735b-6bfa-4851-b3a1-239f48f96bcb", 
+"f35444ed-fe95-46fe-ab72-3310eb5a6cde", "bba006b3-a27a-4888-852d-74c27f2dc81c", 
+"52fb85e0-4ddb-428d-bec1-f1b28a1ad306", "823002bc-14fe-4ed7-b868-75e873c54b32", 
+"9556afd4-28cb-4efe-a631-cdae32d51eac", "2a74953b-ed72-49ad-8148-0f0f80e3cd5f", 
+"e12cefff-19da-4b54-a023-1487f52678fd", "d0903ce3-acec-413c-b7d0-42679a78ba21", 
+"f3447882-b04a-4989-82b7-dfe0ebfef5e3", "2598c3b8-b9b8-404c-bca2-402f5e5ec241", 
+"54630dc0-3862-43de-b457-16cd20a5e7bd", "77d462ca-fa74-4474-a0ef-638ee1b46719", 
+"4071562f-42dc-46b8-b360-43bfb460cc99", "1638579a-3b6d-4001-8767-bc9a3cf9afab", 
+"4c283215-4d7d-48d5-86cb-dfa5ed3c2a99", "2e0f85ad-9595-4696-92a9-06a1967870a6", 
+"494a1dec-3eea-44d5-9710-45fa7af4bdc2", "7d6cb2c3-ba55-44a4-b29a-bb3e6ff752e8", 
+"465bb90c-b91b-40dc-a038-2e5660bd6649", "32c9f37e-69b1-43bf-bd5f-072ed4596394", 
+"4f1b387e-cec4-4ac9-87ed-12915d1fc80e", "e786a413-9abc-4de5-953c-07b81441f3ed", 
+"2410c7c0-c2e3-4a0f-93fb-909c1cdfd4bb", "9f40ab7f-7865-43c0-a359-9f5601e48171", 
+"795350b9-7c25-4e46-9907-1eb79145036b",                                         
+"10c13a0f-8b75-4ed4-9b74-8a991d9a0cd7"]}', 'log': 'See log.txt in               
+attachedFiles.', 'attachedFiles':                                               
+['reportblocks/d565821c-7457-4043-95be-933666ec8d76/log.txt'], 'dataSetId':     
+None, 'createdAt': '2026-03-04T13:58:34.434Z', 'updatedAt':                     
+'2026-03-04T13:59:37.345Z'}                                                     
+2026-03-04 08:59:37,437  [INFO] attachedFiles after update:                     
+['reportblocks/d565821c-7457-4043-95be-933666ec8d76/log.txt']                   
+2026-03-04 08:59:37,438  [INFO] Set attachedFiles attribute on instance:        
+['reportblocks/d565821c-7457-4043-95be-933666ec8d76/log.txt']                   
+2026-03-04 08:59:37,438  [INFO] Successfully updated ReportBlock                
+d565821c-7457-4043-95be-933666ec8d76                                            
+2026-03-04 08:59:37,438  [INFO] [RunScript] Successfully finalized ReportBlock  
+d565821c-7457-4043-95be-933666ec8d76. attachedFiles:                            
+['reportblocks/d565821c-7457-4043-95be-933666ec8d76/log.txt']                   
+2026-03-04 08:59:37,439  [INFO] [RunScript] Completed processing for block      
+block_0 (ID: d565821c-7457-4043-95be-933666ec8d76)                              
+2026-03-04 08:59:37,439  [INFO] Updated stage Processing Report Blocks processed
+count to 1                                                                      
+2026-03-04 08:59:37,439  [INFO] Set stage Processing Report Blocks processed    
+count to 1                                                                      
+2026-03-04 08:59:38,822  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:59:38,822  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:59:40,932  [INFO] [RunScript] All block processing and ReportBlock
+record finalization completed in the main loop.                                 
+2026-03-04 08:59:45,138  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 08:59:45,139  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 08:59:46,951  [INFO] [RunScript] Report generation core logic        
+finished.                                                                       
+2026-03-04 08:59:46,951  [INFO] [RunScript] All report blocks completed and     
+results saved successfully.                                                     
+2026-03-04 09:00:09,365  [INFO] [RunScript] Report generation completed         
+successfully: adba402a-e725-4aa6-9eec-8f93cab74182                              
+Report completed successfully!
+Report ID: adba402a-e725-4aa6-9eec-8f93cab74182
+Task ID: 010e2eab-ae3b-4c88-b435-8941fd34df7a
+
+View at: /lab/reports or /reports/adba402a-e725-4aa6-9eec-8f93cab74182

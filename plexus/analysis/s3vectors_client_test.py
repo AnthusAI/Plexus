@@ -123,3 +123,47 @@ def test_bulk_update_cluster_weights_updates_metadata():
     assert updated["metadata"]["memory_weight"] == 0.8
     assert updated["metadata"]["memory_tier"] == "hot"
     assert updated["metadata"]["score_id"] == "97"
+
+
+def test_find_nearest_clusters_orders_by_similarity_and_applies_similarity_threshold():
+    mock_client = MagicMock()
+    mock_client.query_vectors.return_value = {
+        "vectors": [
+            {
+                "key": "cluster:2",
+                "distance": 0.30,
+                "metadata": {"record_type": "cluster", "cluster_id": "2"},
+            },
+            {
+                "key": "cluster:1",
+                "distance": 0.10,
+                "metadata": {"record_type": "cluster", "cluster_id": "1"},
+            },
+            {
+                "key": "item:d1",
+                "distance": 0.01,
+                "metadata": {"record_type": "item", "cluster_id": ""},
+            },
+            {
+                "key": "cluster:3",
+                "distance": 0.80,
+                "metadata": {"record_type": "cluster", "cluster_id": "3"},
+            },
+        ]
+    }
+
+    store = TopicMemoryVectorStore(
+        bucket_name="plexus-vectors-development",
+        index_name="topic-memory-idx-development",
+        region="us-west-2",
+        client=mock_client,
+    )
+    emb = np.zeros(EMBEDDING_DIM, dtype=np.float32)
+
+    results = store.find_nearest_clusters(emb, k=5, threshold=0.5)
+
+    # Similarity is 1 - distance and filtered with similarity threshold.
+    assert [r["cluster_id"] for r in results] == ["1", "2"]
+    assert results[0]["similarity_score"] > results[1]["similarity_score"]
+    assert results[0]["similarity_score"] == 0.9
+    assert results[1]["similarity_score"] == 0.7
