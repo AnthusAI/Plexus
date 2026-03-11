@@ -192,7 +192,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     if (task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
       setReportBlocks(transformBlocks(task.data.reportBlocks));
     }
-  }, [task.data?.id, task.data?.reportBlocks?.length, transformBlocks]);
+  }, [task.data?.id, task.data?.reportBlocks, transformBlocks]);
 
   // (Bare mode uses the same sync effect above - task.data.reportBlocks is the primary source)
 
