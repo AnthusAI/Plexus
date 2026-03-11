@@ -158,13 +158,15 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       })
 
       if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
-        const blocks = response.data.getReport.reportBlocks.items.map((block: any) => ({
-          ...block,
-          output: parseOutput(block.output),
-          config: {},  // Add empty config object by default
-          // Ensure attachedFiles is always an array
-          attachedFiles: Array.isArray(block.attachedFiles) ? block.attachedFiles : []
-        }))
+        const blocks = response.data.getReport.reportBlocks.items.map((block: any) => {
+          const parsedOutput = parseOutput(block.output);
+          return {
+            ...block,
+            output: parsedOutput,
+            config: block.config || (typeof parsedOutput === 'object' ? parsedOutput : {}),
+            attachedFiles: Array.isArray(block.attachedFiles) ? block.attachedFiles : []
+          };
+        })
         setReportBlocks(blocks)
       } else {
         console.warn('No blocks found in API response for report', reportId)
@@ -316,9 +318,18 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       const firstLine = content.split('\n')[0] || '';
       const classMatch = firstLine.match(/class:\s*(\S+)/);
       const blockClass = classMatch ? classMatch[1].trim() : '';
-      
-      // Match by block type: find the block whose type matches the class in the markdown
-      const blockData = reportBlocks.find(b => b.type === blockClass) ?? null;
+
+      // Extract name from code fence meta string (e.g. ```block name="Feedback Analysis")
+      const meta: string = node?.data?.meta || '';
+      const nameFromMeta = meta.match(/name=["']([^"']+)["']/)?.[1] ?? '';
+
+      // Match by type + name when name is present (handles multiple blocks of same type)
+      const blockData = (
+        nameFromMeta
+          ? reportBlocks.find(b => b.type === blockClass && b.name === nameFromMeta)
+            ?? reportBlocks.find(b => b.type === blockClass)
+          : reportBlocks.find(b => b.type === blockClass)
+      ) ?? null;
 
       if (blockData) {
         // Check if the report is complete

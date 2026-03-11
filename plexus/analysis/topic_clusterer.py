@@ -186,8 +186,14 @@ class TopicClusterer:
                 labels[tid] = f"Topic {tid}"
         return labels
 
-    def _get_representative_docs(self, topic_id: int, n: int = 5) -> List[str]:
-        """Get representative documents for a cluster (closest to centroid)."""
+    def get_representative_exemplars(
+        self, topic_id: int, n: int = 5
+    ) -> List[Tuple[int, str]]:
+        """Return (original_index, text) pairs for the n docs closest to the centroid.
+
+        The original_index is the position in the list passed to cluster(), allowing
+        callers to map back to doc_ids, item IDs, or other per-document metadata.
+        """
         if self._documents is None or self._embeddings is None:
             return []
         mask = self._topics == topic_id
@@ -196,10 +202,14 @@ class TopicClusterer:
         if centroid is None:
             return []
         distances = [
-            (_cosine_distance(self._embeddings[i], centroid), i) for i in indices
+            (_cosine_distance(self._embeddings[i], centroid), int(i)) for i in indices
         ]
         distances.sort(key=lambda x: x[0])
-        return [self._documents[i] for _, i in distances[:n]]
+        return [(idx, self._documents[idx]) for _, idx in distances[:n]]
+
+    def _get_representative_docs(self, topic_id: int, n: int = 5) -> List[str]:
+        """Get representative documents for a cluster (closest to centroid)."""
+        return [doc for _, doc in self.get_representative_exemplars(topic_id, n=n)]
 
     def get_keywords(self, topic_id: int, n: int = 8) -> List[str]:
         """Extract top keywords for a cluster via TF-IDF on cluster documents."""

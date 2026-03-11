@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import type { DetailFile } from '../blocks/ReportBlock';
 import { FeedbackItemsList, FeedbackItemsView, type FeedbackItem } from '@/components/ui/feedback-item-view';
 import { useFeedbackItemsByAnswers, type FeedbackItemWithRelations } from '@/hooks/use-feedback-items-by-answers';
+import { TopicList } from '@/components/ui/topic-list';
 
 // Export the AC1 gauge segments for reuse in other components
 export const ac1GaugeSegments: Segment[] = [
@@ -45,6 +46,18 @@ export interface ScorecardReportEvaluationData {
   warning?: string;
   notes?: string;
   discussion?: string;
+  topics?: Array<{
+    topic_id?: number;
+    label: string;
+    keywords?: string[];
+    exemplars?: Array<{ text: string; item_id?: string | null; identifiers?: Record<string, string> | null }>;
+    member_count: number;
+    memory_weight: number;
+    memory_tier: string;
+    lifecycle_tier?: string;
+    is_new?: boolean;
+    is_trending?: boolean;
+  }>;
   editorName?: string;
   editedAt?: string;
   item?: {
@@ -307,7 +320,8 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const hasConfusionMatrixData = score.confusion_matrix && score.confusion_matrix.matrix && score.confusion_matrix.labels && score.confusion_matrix.matrix.length > 0;
   const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || hasConfusionMatrixData;
   
-  const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasConfusionMatrixData || hasDiscussion || hasItems;
+  const hasTopics = !!(score.topics && score.topics.length > 0);
+  const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasConfusionMatrixData || hasDiscussion || hasItems || hasTopics;
   
   const parsedIdentifiers = useMemo(() => {
     if (score.item?.identifiers) {
@@ -602,6 +616,11 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
               <div className="text-sm prose-sm max-w-none">
                 <p>{score.discussion}</p>
               </div>
+            </div>
+          )}
+          {score.topics && score.topics.length > 0 && (
+            <div className="mt-6">
+              <TopicList topics={score.topics} />
             </div>
           )}
         </div>
