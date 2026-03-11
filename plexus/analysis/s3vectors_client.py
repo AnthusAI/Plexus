@@ -117,7 +117,7 @@ class TopicMemoryVectorStore:
         Rebuild index contents by clearing existing vectors and writing new items.
 
         `old_index_for_swap` is accepted for API compatibility with the previous
-        OpenSearch adapter and intentionally ignored.
+        vector store adapter and intentionally ignored.
         """
         _ = old_index_for_swap
         index_name = self.index_name
@@ -324,7 +324,9 @@ class TopicMemoryVectorStore:
         """
         Query nearest cluster vectors.
 
-        Returns results ordered by ascending distance with compatibility fields.
+        Returns results ordered by descending similarity with compatibility fields.
+        `threshold` is interpreted as a minimum similarity score, matching
+        prior vector store adapter behavior.
         """
         emb_list = _to_float_list(embedding)
         if len(emb_list) != EMBEDDING_DIM:
@@ -349,19 +351,21 @@ class TopicMemoryVectorStore:
                 continue
 
             distance = hit.get("distance")
-            if threshold is not None and distance is not None and distance > threshold:
+            similarity = None if distance is None else (1.0 - float(distance))
+            if threshold is not None and similarity is not None and similarity < threshold:
                 continue
 
             results.append(
                 {
                     "cluster_id": metadata.get("cluster_id", ""),
                     "doc_id": hit.get("key", ""),
-                    "similarity_score": None if distance is None else (1.0 - float(distance)),
+                    "similarity_score": similarity,
                     "distance": distance,
                 }
             )
 
         results.sort(
-            key=lambda r: float("inf") if r.get("distance") is None else r["distance"]
+            key=lambda r: float("-inf") if r.get("similarity_score") is None else r["similarity_score"],
+            reverse=True,
         )
         return results

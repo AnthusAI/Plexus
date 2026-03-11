@@ -1,0 +1,163 @@
+{
+  "id": "plx-af68f58a-0634-4038-83e2-b431ac687288",
+  "title": "Run 60-day Semantic Reinforcement Memory for Prime - EDU 3rd Party",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b23af953-74e5-42c0-b5b8-02ceb76c639f",
+      "author": "unknown",
+      "text": "Run initialized. Target scorecard: Prime - EDU 3rd Party (externalId=97, id=f08e6d18-4e05-45d1-a2ec-dafa21116bc8). Next: dispatch 60-day ScoreResult No-explanation Semantic Reinforcement Memory report and track task/report IDs live.",
+      "created_at": "2026-03-05T06:32:44.296826Z"
+    },
+    {
+      "id": "8512b235-79a9-4970-a109-eee72c6f6757",
+      "author": "unknown",
+      "text": "Run dispatched and active. report_id=df4a890e-2eb0-4842-85cf-1ba7f2191e6a task_id=816194d6-8565-46bd-bf92-731630046662 report_block_id=819f7a67-3550-43e1-9584-1174c79e2e56. Current state: stage 4/5 (Processing Report Blocks) RUNNING.",
+      "created_at": "2026-03-05T06:35:40.331720Z"
+    },
+    {
+      "id": "9eed4890-98b0-41ad-9995-417ad7716795",
+      "author": "unknown",
+      "text": "Execution checkpoint: VectorTopicMemory block started (report_block_id=819f7a67-3550-43e1-9584-1174c79e2e56) and resolved 5 score definitions on Prime - EDU 3rd Party for the 60-day window.",
+      "created_at": "2026-03-05T06:37:17.870937Z"
+    },
+    {
+      "id": "fdfbd307-5a6c-451e-b1bd-3dd97794e425",
+      "author": "unknown",
+      "text": "Extraction checkpoint: run is actively pulling large ScoreResult-No populations (examples: PS Mismatch - Program retained 6501 of 13734, Agent Branding retained 1009, PS Mismatch - Modality retained 822). Pipeline still in stage 4 processing.",
+      "created_at": "2026-03-05T06:39:35.966698Z"
+    },
+    {
+      "id": "758e1978-5c57-4dba-9e81-b6c82edf4152",
+      "author": "unknown",
+      "text": "Runtime checkpoint: worker process remains active (~10m elapsed), still in stage 4 block processing after high-volume extraction. No failure signal yet.",
+      "created_at": "2026-03-05T06:43:40.538542Z"
+    },
+    {
+      "id": "dc65340c-e1c4-4bb2-825f-725aaab992d1",
+      "author": "unknown",
+      "text": "Failure confirmed from task backend at 2026-03-05T07:34Z. Stage 4 completed, Stage 5 Finalizing Report failed with: \"Failed to finalize block block_0: 'dict' object has no attribute 'encode'\". Root cause appears to be output-artifact upload path assuming string output while block output is a dict. Hotfix in progress; will rerun after patch.",
+      "created_at": "2026-03-05T12:28:36.755773Z"
+    },
+    {
+      "id": "bf61b79a-0822-485e-9d9a-cae0a64b7e96",
+      "author": "unknown",
+      "text": "Hotfix applied for finalization regression (dict output normalization before attachment upload); focused tests passed (20). Relaunching this scorecard on fixed code path.",
+      "created_at": "2026-03-05T12:30:22.194349Z"
+    },
+    {
+      "id": "c29753f2-4553-4d65-b9af-a0cd5b8fa5b5",
+      "author": "unknown",
+      "text": "Rerun dispatched on hotfix build. New task_id=6908bb13-5ac1-4ff9-9e7b-89c8bc95ed30 new report_id=701fc21e-8124-4549-9562-547d1912ca4b report_block_id=dd270611-7a31-4dfc-8822-9b6785953960. Processing now.",
+      "created_at": "2026-03-05T12:31:45.681243Z"
+    },
+    {
+      "id": "364547ac-8735-4dfe-b370-e49c0b6c5dfb",
+      "author": "unknown",
+      "text": "Hotfix rerun succeeded. task_id=6908bb13-5ac1-4ff9-9e7b-89c8bc95ed30 completed successfully and report_id=701fc21e-8124-4549-9562-547d1912ca4b is now available.",
+      "created_at": "2026-03-05T13:02:53.971663Z"
+    },
+    {
+      "id": "97b22702-7e4b-4a1e-b8e0-9c27e627e602",
+      "author": "unknown",
+      "text": "Hotfix rerun completed successfully. report_id=701fc21e-8124-4549-9562-547d1912ca4b task_id=6908bb13-5ac1-4ff9-9e7b-89c8bc95ed30.",
+      "created_at": "2026-03-05T13:03:13.218480Z"
+    },
+    {
+      "id": "a7965edd-fd68-4ca2-9f2a-5a1077795cf8",
+      "author": "unknown",
+      "text": "Execution restart: using Prime as canary for config-sync + quality validation before fanout.",
+      "created_at": "2026-03-05T14:07:31.849223Z"
+    },
+    {
+      "id": "4cf7763d-01a2-4853-a05a-a1762d7c30d6",
+      "author": "unknown",
+      "text": "Canary launched with config sync. task_id=9d5d4a3c-5d68-4a5d-8fb1-615b9d32f795 scorecard=97 days=60 config_id=6236bc69-beca-4e37-970f-5891096b5b3e.",
+      "created_at": "2026-03-05T14:08:26.602994Z"
+    },
+    {
+      "id": "e0223234-2a90-4c21-a39f-7104798ea951",
+      "author": "unknown",
+      "text": "Canary validation checkpoint: synced report content now shows new config contract in live report e2c53073-f8ad-4aa3-8a13-b37bc502746a (min_topic_size=10, coarse_min_topic_fraction=0.02, coarse_target_max_topics_per_score=12, batch_one_pass=true, batch_model=gpt-4o). Task still running in stage 4.",
+      "created_at": "2026-03-05T14:08:54.822317Z"
+    },
+    {
+      "id": "7c391451-be14-42ff-a9fd-1983ff7ed952",
+      "author": "unknown",
+      "text": "Canary still active: task 9d5d4a3c-5d68-4a5d-8fb1-615b9d32f795 remains in stage 4 (Processing Report Blocks) since 2026-03-05T14:08:39Z. Monitoring for progress and enforcing 45-minute no-progress timeout.",
+      "created_at": "2026-03-05T14:12:30.413195Z"
+    },
+    {
+      "id": "80d785d4-e04c-4d17-b2ca-96da78eec796",
+      "author": "unknown",
+      "text": "Canary progress update: block execution is active and fetching/retaining ScoreResult-No explanations successfully (examples so far: Good Call=20, PS Mismatch Program=6498, Program Level=105, Agent Branding=1010, Modality=820).",
+      "created_at": "2026-03-05T14:14:47.383415Z"
+    },
+    {
+      "id": "9484f5ba-1350-4d01-8463-67a4a7c4ec6c",
+      "author": "unknown",
+      "text": "Canary diagnostic: process sampling shows main thread blocked in SSL read during external LLM call. Applying code fix to enforce LLM request timeouts + fallback so runs do not hang indefinitely.",
+      "created_at": "2026-03-05T14:24:46.922710Z"
+    },
+    {
+      "id": "eca6fe78-f55f-4228-9783-03315a3a5e42",
+      "author": "unknown",
+      "text": "Timeout hotfix landed to prevent indefinite LLM-label hangs (45s single/batch request timeouts + fallback path). Relaunching canary with synced updated config next.",
+      "created_at": "2026-03-05T14:26:22.566906Z"
+    },
+    {
+      "id": "5ae5afac-ce14-4fd6-84dc-5b6c21e30180",
+      "author": "unknown",
+      "text": "Superseding canary task 9d5d4a3c-5d68-4a5d-8fb1-615b9d32f795/report e2c53073-f8ad-4aa3-8a13-b37bc502746a after diagnosing SSL-read hang during LLM labeling. Relaunching with timeout hotfix and same parameters.",
+      "created_at": "2026-03-05T14:26:38.185319Z"
+    },
+    {
+      "id": "990e962f-801a-4f19-9ac8-8aab490d32dc",
+      "author": "unknown",
+      "text": "Relaunched canary after timeout hotfix. new_task_id=0bb82d1a-3918-4f3e-aec2-44a5c43c4901 new_report_id=6abaaa79-0ef3-48b6-a52b-d629c8d36ad1 (Prime 60d).",
+      "created_at": "2026-03-05T14:27:19.476575Z"
+    },
+    {
+      "id": "939d8f15-9770-434f-b045-a7c3ae22b52d",
+      "author": "unknown",
+      "text": "Canary relaunch progress: source extraction completed again (Good Call=20, Program=6498, Program Level=105, Agent Branding=1010, Modality=820). Proceeding into embedding/index/cluster phases.",
+      "created_at": "2026-03-05T14:33:54.852129Z"
+    },
+    {
+      "id": "b90c8d7a-f2c6-4c12-adec-f00a9f6dbc67",
+      "author": "unknown",
+      "text": "Superseding local canary run task 0bb82d1a-3918-4f3e-aec2-44a5c43c4901/report 6abaaa79-0ef3-48b6-a52b-d629c8d36ad1 due persistent SSL wait in local script path. Relaunching via MCP report dispatch against same synced config.",
+      "created_at": "2026-03-05T14:43:19.326731Z"
+    },
+    {
+      "id": "ed682f29-01cc-43d4-bc44-2ac8ea31a115",
+      "author": "unknown",
+      "text": "Relaunching canary again via local sync script and allowing full execution window. Previous supersedes were applied before reaching the 45-minute no-progress threshold for this workload.",
+      "created_at": "2026-03-05T14:50:14.214972Z"
+    },
+    {
+      "id": "db89b5f0-0beb-42b1-84c6-2ac7383ba4a9",
+      "author": "unknown",
+      "text": "Current active canary run: task_id=6a3ad9e4-7ffc-471d-8e26-b131f6e6be15 report_id=3aab0913-d245-42e1-a7d6-966364c63d2f (Prime, 60d). Monitoring through full 45-minute threshold window.",
+      "created_at": "2026-03-05T14:50:55.788037Z"
+    },
+    {
+      "id": "02c197a4-8982-4869-bfb2-caf2f31b6b54",
+      "author": "unknown",
+      "text": "Canary update (active run task 6a3ad9e4-7ffc-471d-8e26-b131f6e6be15): block ade28f58-0513-4af1-b9b2-aa9ebb8996cd completed score-result extraction at 09:55 with retained counts 20/6498/105/1010/820 and moved into downstream embedding/index phases.",
+      "created_at": "2026-03-05T14:56:07.924313Z"
+    }
+  ],
+  "created_at": "2026-03-05T06:32:37.441575Z",
+  "updated_at": "2026-03-05T14:56:07.924313Z",
+  "closed_at": "2026-03-05T13:03:13.088308Z",
+  "custom": {}
+}

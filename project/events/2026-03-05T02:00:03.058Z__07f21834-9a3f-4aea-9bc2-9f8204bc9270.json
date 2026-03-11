@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "07f21834-9a3f-4aea-9bc2-9f8204bc9270",
+  "issue_id": "plx-51ae6fb8-c209-47c3-8933-8de508c62833",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T02:00:03.058Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Execute no-answer explanation report for entire scorecard 1438 (no score_id filter) and capture report/task IDs and output summary.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Run full-scorecard ScoreResult-No report for HCS Medium-Risk"
+  }
+}

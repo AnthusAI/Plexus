@@ -1,0 +1,175 @@
+{
+  "id": "plx-2b053565-ed74-4fe1-996c-aa11eace2349",
+  "title": "Run 60-day Semantic Reinforcement Memory for Moore Holdings - Traditional",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "260ebcd5-e349-4028-989a-4c11a93c6bcb",
+      "author": "unknown",
+      "text": "Run initialized. Target scorecard: Moore Holdings - Traditional (externalId=765, id=06a9614d-9f44-4885-8f7e-a5fe34333bd5). Next: dispatch 60-day ScoreResult No-explanation Semantic Reinforcement Memory report and track task/report IDs live.",
+      "created_at": "2026-03-05T06:32:12.573873Z"
+    },
+    {
+      "id": "7f3a4297-4bc0-4c1e-b98b-d8fdc30a728d",
+      "author": "unknown",
+      "text": "Run dispatched and active. report_id=83fd540a-e40d-4961-9021-f46916e0b4a5 task_id=82638cfb-72a5-4ea0-8e8e-4c3cb8f5847d. Current state: stage 4/5 (Processing Report Blocks) RUNNING.",
+      "created_at": "2026-03-05T06:35:40.084647Z"
+    },
+    {
+      "id": "7d1d2489-652e-4fbb-8b54-74ba3e935fc9",
+      "author": "unknown",
+      "text": "Execution checkpoint: VectorTopicMemory block started (report_block_id=cb29e681-c6f2-4e03-a828-522dc508e0a2) and resolved 68 score definitions on Moore Holdings - Traditional for the 60-day window.",
+      "created_at": "2026-03-05T06:37:17.663902Z"
+    },
+    {
+      "id": "fb96812e-0440-4aae-8b98-15a6e3e6f342",
+      "author": "unknown",
+      "text": "Runtime checkpoint: worker process remains active (~10m elapsed, ~11% CPU), still in stage 4 block processing. No failure signal yet.",
+      "created_at": "2026-03-05T06:43:40.343973Z"
+    },
+    {
+      "id": "0edab051-4de1-42e3-9fa6-abc5001f9185",
+      "author": "unknown",
+      "text": "Failure confirmed from task backend at 2026-03-05T08:18Z. Stage 4 completed, Stage 5 Finalizing Report failed with: \"Failed to finalize block block_0: 'dict' object has no attribute 'encode'\". Root cause appears to be output-artifact upload path assuming string output while block output is a dict. Hotfix in progress; will rerun after patch.",
+      "created_at": "2026-03-05T12:28:36.549509Z"
+    },
+    {
+      "id": "8fb62e69-0bf6-4335-be0e-91321b8c9c61",
+      "author": "unknown",
+      "text": "Hotfix applied for finalization regression (dict output normalization before attachment upload); focused tests passed (20). Relaunching this scorecard on fixed code path.",
+      "created_at": "2026-03-05T12:30:21.993671Z"
+    },
+    {
+      "id": "0195a952-f435-450c-8e12-fc89b5213d1d",
+      "author": "unknown",
+      "text": "Rerun dispatched on hotfix build. New task_id=3d6197ba-1262-4862-8c2c-517c2c992db4 new report_id=40867996-2877-4853-908b-d28abb802746 report_block_id=4c8bb72c-27d5-4f71-b9b0-a80f1dff01df. Processing now.",
+      "created_at": "2026-03-05T12:31:45.493719Z"
+    },
+    {
+      "id": "2379e309-2688-4ddd-9d00-631777e85f15",
+      "author": "unknown",
+      "text": "Current status: hotfix rerun task_id=3d6197ba-1262-4862-8c2c-517c2c992db4 still RUNNING in stage 4/5.",
+      "created_at": "2026-03-05T13:03:13.415155Z"
+    },
+    {
+      "id": "b0e5fee2-2841-4369-94c1-a26dc105a19c",
+      "author": "unknown",
+      "text": "Update: task_id=3d6197ba-1262-4862-8c2c-517c2c992db4 remains active in stage 4/5.",
+      "created_at": "2026-03-05T13:03:41.059132Z"
+    },
+    {
+      "id": "0be5626e-834f-4c2d-9fb4-d5c9a103d070",
+      "author": "unknown",
+      "text": "Watchdog active: polling every 3 minutes; auto-rerun enabled on crash (max retries=2). Current task_id=3d6197ba-1262-4862-8c2c-517c2c992db4.",
+      "created_at": "2026-03-05T13:04:55.823651Z"
+    },
+    {
+      "id": "9a62ccd0-9ac0-49bf-9262-6c53e96982df",
+      "author": "unknown",
+      "text": "Watchdog status change: task_id=3d6197ba-1262-4862-8c2c-517c2c992db4 status=PENDING.",
+      "created_at": "2026-03-05T13:04:58.150046Z"
+    },
+    {
+      "id": "83a1c2de-f35f-43c5-8b83-11020d7450d0",
+      "author": "unknown",
+      "text": "Watchdog status change: task_id=3d6197ba-1262-4862-8c2c-517c2c992db4 status=COMPLETED.",
+      "created_at": "2026-03-05T13:32:26.970128Z"
+    },
+    {
+      "id": "c3340af8-bd5f-4dd3-a2ce-9274eee3997f",
+      "author": "unknown",
+      "text": "Watchdog completion confirmed. task_id=3d6197ba-1262-4862-8c2c-517c2c992db4 report_id=40867996-2877-4853-908b-d28abb802746.",
+      "created_at": "2026-03-05T13:32:27.056215Z"
+    },
+    {
+      "id": "f565d22c-e2b7-4c22-806c-c01839d0673e",
+      "author": "unknown",
+      "text": "Execution restart: revalidating Moore run output under synced coarse+batch config and new monitoring policy.",
+      "created_at": "2026-03-05T14:07:31.845476Z"
+    },
+    {
+      "id": "eedb6d22-40f4-4cb5-85b8-500241120953",
+      "author": "unknown",
+      "text": "[2026-03-05 10:31 ET] Relaunched 60-day SRM validation run after coarse+batch naming sync. New report/task created: report=6238332e-bc5e-4cef-9a94-c180d320f3c6, task=af047f7f-9efd-4332-bcdf-7f683413d23c. Status: running (stage processing started).",
+      "created_at": "2026-03-05T15:31:22.731345Z"
+    },
+    {
+      "id": "59a6b28a-c063-4a80-b740-c802d8cc92e2",
+      "author": "unknown",
+      "text": "[2026-03-05 10:31 ET] Progress: task af047f7f-9efd-4332-bcdf-7f683413d23c advanced into block processing (stage 4). ReportBlock created: 59328698-eb80-4e25-835b-576c477aa833. Runtime confirms S3 vectors defaults + coarse/batch label config loaded from synced template.",
+      "created_at": "2026-03-05T15:31:46.514472Z"
+    },
+    {
+      "id": "3af3a87b-8c88-4597-bad1-6d24a186d80a",
+      "author": "unknown",
+      "text": "[2026-03-05 10:43 ET] Monitoring heartbeat: task af047f7f-9efd-4332-bcdf-7f683413d23c remains in stage 4 RUNNING; report block still pending. No-progress window ~12 minutes so far (below 45-minute relaunch threshold).",
+      "created_at": "2026-03-05T15:43:24.844442Z"
+    },
+    {
+      "id": "420f2479-a570-475b-b1d3-4e81f0eb586b",
+      "author": "unknown",
+      "text": "[2026-03-05 10:47 ET] Task af047f7f-9efd-4332-bcdf-7f683413d23c still stage4=RUNNING; no task timestamp movement for ~16 minutes. Continuing monitor; timeout relaunch threshold is 45 minutes.",
+      "created_at": "2026-03-05T15:47:09.024382Z"
+    },
+    {
+      "id": "4c9a5a94-fb54-4feb-9678-9d2d0848449b",
+      "author": "unknown",
+      "text": "[2026-03-05 10:52 ET] Heartbeat: still stage4 RUNNING for task af047f7f-9efd-4332-bcdf-7f683413d23c (~22 min in stage 4, no error). Continuing monitor.",
+      "created_at": "2026-03-05T15:52:55.062205Z"
+    },
+    {
+      "id": "2cb4e200-da4c-4359-aae6-c04488be7f56",
+      "author": "unknown",
+      "text": "[2026-03-05 10:55 ET] Detailed progress: stage-4 logs show active ScoreResult ingestion/filtering across many scores (examples: Names=555 retained, HO & Decision Makers=1225 retained, Closing Statement=514 retained). This run is making forward progress; timeout/relaunch not triggered.",
+      "created_at": "2026-03-05T15:55:11.826655Z"
+    },
+    {
+      "id": "9f6842ef-0ddd-4dd4-9507-7278e7526bc9",
+      "author": "unknown",
+      "text": "[2026-03-05 10:57 ET] Continued forward progress in stage 4: active ScoreResult ingestion across additional scores (e.g., Privacy Statement=521 retained, 2 Party Commitment=459 retained, Cross Street=554 retained). No relaunch needed.",
+      "created_at": "2026-03-05T15:59:24.136465Z"
+    },
+    {
+      "id": "a706d2ed-9132-444f-b78f-a46103b31c10",
+      "author": "unknown",
+      "text": "[2026-03-05 11:08 ET] Moore process remains alive with no error signal, currently in a quiet phase (no new block log lines in recent minutes), likely network-bound/API I/O. Continuing timeout watch; relaunch only if no forward signal exceeds threshold.",
+      "created_at": "2026-03-05T16:09:57.914708Z"
+    },
+    {
+      "id": "d671bbca-ec7f-4f0e-beba-6a046b99b293",
+      "author": "unknown",
+      "text": "[2026-03-05 11:15 ET] Current state: process remains alive in stage 4, now in a quiet network-bound phase after earlier active ingestion. No explicit error; continuing monitor.",
+      "created_at": "2026-03-05T16:14:48.869854Z"
+    },
+    {
+      "id": "2dcd512b-37ac-40d6-9ae6-6305229fbb53",
+      "author": "unknown",
+      "text": "[2026-03-05 11:20 ET] Still running in stage 4. Process is alive (CPU/memory stable) but no fresh block logs in the last ~25 minutes; continuing toward 45-minute no-progress threshold before relaunch.",
+      "created_at": "2026-03-05T16:25:29.020578Z"
+    },
+    {
+      "id": "8382c9e9-777f-41cf-a7d5-dfb5951c41bc",
+      "author": "unknown",
+      "text": "[2026-03-05 11:34 ET] ✅ Run completed successfully. report=6238332e-bc5e-4cef-9a94-c180d320f3c6 task=af047f7f-9efd-4332-bcdf-7f683413d23c url=/reports/6238332e-bc5e-4cef-9a94-c180d320f3c6 task_url=/lab/tasks/af047f7f-9efd-4332-bcdf-7f683413d23c. Block summary: items_processed=11946, score_count=53, cluster_count=140, index=topic-memory-idx-development. Batch naming evidence: 116/116 labels via one gpt-4o call. Oversized output persisted as attached artifact + compact inline preview.",
+      "created_at": "2026-03-05T16:36:00.691840Z"
+    },
+    {
+      "id": "1b61dbda-aa70-4158-888c-b72ed16ab412",
+      "author": "unknown",
+      "text": "[2026-03-05 11:38 ET] Validation vs prior Moore run: previous report 40867996-2877-4853-908b-d28abb802746 had 192 clusters over 11,926 items/53 scores; new report 6238332e-bc5e-4cef-9a94-c180d320f3c6 has 140 clusters over 11,946 items/53 scores (27.1% fewer clusters at similar volume). Prior run had no batched naming log; new run applied batched one-pass naming 116/116 labels in one gpt-4o call.",
+      "created_at": "2026-03-05T16:39:58.030661Z"
+    }
+  ],
+  "created_at": "2026-03-05T06:32:05.828424Z",
+  "updated_at": "2026-03-05T16:39:58.030661Z",
+  "closed_at": "2026-03-05T13:32:27.149731Z",
+  "custom": {}
+}

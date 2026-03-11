@@ -1,0 +1,49 @@
+{
+  "id": "plx-db7e2907-5dce-4cea-808d-628b26a411af",
+  "title": "Fix S3 Vectors auto-configuration fallback for Vector Topic Memory",
+  "description": "Observed runtime error in recent report runs:\n\n`Vector Topic Memory: S3 Vectors not configured — set s3_vectors.bucket_name and s3_vectors.index_name.`\n\nGoal:\n- make Semantic Reinforcement Memory resolve S3 vector bucket/index defaults automatically for the prototype stack when explicit config is absent\n- keep explicit `s3_vectors.*` config/env override behavior intact\n- verify with targeted tests and a local run path check",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9139b340-ff53-4fc0-98ec-1937fde568bc",
+      "author": "unknown",
+      "text": "Starting fix: updating VectorTopicMemory config resolution so S3 vectors bucket/index default from prototype naming convention when explicit config/env is absent.",
+      "created_at": "2026-03-04T18:01:26.055757Z"
+    },
+    {
+      "id": "e6d3650d-9143-4fbc-ac70-2628fb117ed6",
+      "author": "unknown",
+      "text": "Root cause identified: report templates provide s3_vectors.region only, while block currently requires explicit bucket/index. Implementing fallback to prototype naming convention based on ENVIRONMENT with explicit config/env taking precedence.",
+      "created_at": "2026-03-04T18:02:02.828042Z"
+    },
+    {
+      "id": "d2c42115-d6c2-4f07-9f83-8040955cd388",
+      "author": "unknown",
+      "text": "Code patch complete: VectorTopicMemory now resolves default S3 vector bucket/index from ENVIRONMENT when explicit settings are absent; tests updated for new behavior. Running targeted pytest now.",
+      "created_at": "2026-03-04T18:02:32.398712Z"
+    },
+    {
+      "id": "015f733d-7bc6-440a-b4d5-4cc5dcd37b2b",
+      "author": "unknown",
+      "text": "Validation: pytest targeted suite passes (9 passed). Runtime-path sanity check confirms defaults resolve to bucket=plexus-vectors-development and index=topic-memory-idx-development when explicit settings are absent.",
+      "created_at": "2026-03-04T18:03:15.178700Z"
+    },
+    {
+      "id": "42e59d0c-efef-4e07-b568-2d0ae93f3b59",
+      "author": "unknown",
+      "text": "Fix delivered in commit 1a4126b8 (pushed to origin/feature/reinforcement-memory): VectorTopicMemory now auto-resolves S3 vector bucket/index defaults from ENVIRONMENT for prototype runs, while preserving explicit overrides.",
+      "created_at": "2026-03-04T18:03:44.869596Z"
+    }
+  ],
+  "created_at": "2026-03-04T18:01:20.727369Z",
+  "updated_at": "2026-03-04T18:03:44.977288Z",
+  "closed_at": "2026-03-04T18:03:44.977288Z",
+  "custom": {}
+}

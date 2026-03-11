@@ -7,9 +7,30 @@ import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
 import { ac1GaugeSegments } from '@/components/ui/scorecard-evaluation';
 import { RawAgreementBar } from '@/components/RawAgreementBar';
 import { ChevronUp, ChevronDown } from 'lucide-react';
+import { TopicList } from '@/components/ui/topic-list';
 
 // Re-export the interface for backward compatibility
-export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {}
+export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
+  memories_file?: string;
+  memories?: {
+    scores: Array<{
+      score_name: string;
+      score_id: string;
+      topics: Array<{
+        topic_id: number;
+        label: string;
+        keywords: string[];
+        exemplars: Array<{ text: string; item_id?: string | null; identifiers?: Record<string, string> | null }>;
+        member_count: number;
+        memory_weight: number;
+        memory_tier: "hot" | "warm" | "cold";
+        lifecycle_tier: string;
+        is_new: boolean;
+        is_trending: boolean;
+      }>;
+    }>;
+  };
+}
 
 /**
  * Renders a Feedback Analysis block showing Gwet's AC1 agreement scores.
@@ -23,29 +44,53 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {}
  * in a structured before/after format with toggleable raw JSON view.
  */
 const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
+  const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
+
+  // Parse output unconditionally so hooks always run in the same order
+  let feedbackData: FeedbackAnalysisData | null = null;
+  let parseError = false;
+  if (props.output) {
+    try {
+      if (typeof props.output === 'string') {
+        feedbackData = yaml.load(props.output) as FeedbackAnalysisData;
+      } else {
+        feedbackData = props.output as FeedbackAnalysisData;
+      }
+    } catch (error) {
+      console.error('❌ FeedbackAnalysis: Failed to parse output data:', error);
+      parseError = true;
+    }
+  }
+
+  const memoriesFile = feedbackData?.memories_file ?? null;
+  React.useEffect(() => {
+    if (!memoriesFile || loadedMemories) return;
+    (async () => {
+      try {
+        const { downloadData } = await import('aws-amplify/storage');
+        const result = await downloadData({
+          path: memoriesFile,
+          options: { bucket: 'reportBlockDetails' as any },
+        }).result;
+        const text = await result.body.text();
+        const parsed = yaml.load(text) as FeedbackAnalysisData['memories'];
+        setLoadedMemories(parsed ?? null);
+      } catch (e) {
+        console.warn('FeedbackAnalysis: failed to load memories_file', e);
+      }
+    })();
+  }, [memoriesFile, loadedMemories]);
+
   if (!props.output) {
     return <p>No feedback analysis data available or data is loading.</p>;
   }
-
-  // Parse YAML if output is string, otherwise use as object (legacy support)
-  let feedbackData: FeedbackAnalysisData;
-  try {
-    if (typeof props.output === 'string') {
-      // New format: parse YAML string
-      feedbackData = yaml.load(props.output) as FeedbackAnalysisData;
-    } else {
-      // Legacy format: use object directly
-      feedbackData = props.output as FeedbackAnalysisData;
-    }
-  } catch (error) {
-    console.error('❌ FeedbackAnalysis: Failed to parse output data:', error);
+  if (parseError) {
     return (
       <div className="p-4 text-center text-destructive">
         Error parsing feedback analysis data. Please check the report generation.
       </div>
     );
   }
-
   if (!feedbackData) {
     return <p>No feedback analysis data available after parsing.</p>;
   }
@@ -60,6 +105,10 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
 
     // State to track which scorecard is currently expanded
     const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
+    // State to track which scorecard's memories section is expanded
+    const [expandedMemoryIds, setExpandedMemoryIds] = React.useState<Set<string>>(new Set());
+    const toggleMemory = (id: string) =>
+      setExpandedMemoryIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
     return (
       <div className="space-y-8">
@@ -190,6 +239,35 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
                         position={props.position}
                         config={props.config}
                       />
+                      {(() => {
+                        const scMemories = (scorecardData as any).memories;
+                        const hasScMemories = scMemories && scMemories.scores && scMemories.scores.length > 0;
+                        if (!hasScMemories) return null;
+                        const scMemExpanded = expandedMemoryIds.has(scorecardId);
+                        return (
+                          <div className="mt-4">
+                            <button
+                              type="button"
+                              onClick={() => toggleMemory(scorecardId)}
+                              className="w-full flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                            >
+                              <span className="font-medium text-sm">Topic Memories</span>
+                              {scMemExpanded ? (
+                                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </button>
+                            {scMemExpanded && (
+                              <div className="mt-3 space-y-6 px-1">
+                                {scMemories.scores.map((sd: any) => (
+                                  <TopicList key={sd.score_id} topics={sd.topics} label={sd.score_name} />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -201,21 +279,34 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
     );
   }
 
-  // Single scorecard mode
+  // Single scorecard mode — merge memory topics into each score entry
+  const singleMemories = loadedMemories ?? feedbackData.memories;
+  const memoriesByScoreId = singleMemories
+    ? Object.fromEntries(singleMemories.scores.map(s => [s.score_id, s.topics]))
+    : {};
+  const feedbackDataWithTopics = singleMemories ? {
+    ...feedbackData,
+    scores: feedbackData.scores?.map((s: any) => ({
+      ...s,
+      topics: memoriesByScoreId[s.score_id] ?? s.topics,
+    })),
+  } : feedbackData;
+
   return (
-    <FeedbackAnalysisDisplay
-      data={feedbackData}
-      title={title}
-      subtitle={feedbackData.block_description}
-      showPrecisionRecall={false} // Don't show precision/recall gauges in feedback analysis
-      // Pass through all ReportBlock props for attachments, logs, etc.
-      attachedFiles={props.attachedFiles}
-      log={props.log}
-      rawOutput={typeof props.output === 'string' ? props.output : undefined}
-      id={props.id}
-      position={props.position}
-      config={props.config}
-    />
+    <div>
+      <FeedbackAnalysisDisplay
+        data={feedbackDataWithTopics as any}
+        title={title}
+        subtitle={feedbackData.block_description}
+        showPrecisionRecall={false}
+        attachedFiles={props.attachedFiles}
+        log={props.log}
+        rawOutput={typeof props.output === 'string' ? props.output : undefined}
+        id={props.id}
+        position={props.position}
+        config={props.config}
+      />
+    </div>
   );
 };
 

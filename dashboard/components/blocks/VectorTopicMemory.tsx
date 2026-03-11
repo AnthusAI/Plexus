@@ -1,29 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { ReportBlockProps, BlockComponent } from "./ReportBlock";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { parseOutputString } from "@/lib/utils";
-
-interface Topic {
-  cluster_id: number;
-  label: string;
-  keywords?: string[];
-  exemplars?: string[];
-  memory_weight: number;
-  memory_tier: string;
-  lifecycle_tier?: string;
-  is_new?: boolean;
-  is_trending?: boolean;
-  has_short_term_memory?: boolean;
-  has_medium_term_memory?: boolean;
-  has_long_term_memory?: boolean;
-  p95_distance: number;
-  member_count: number;
-  days_inactive?: number;
-}
+import { TopicList, type Topic } from "@/components/ui/topic-list";
 
 interface ScoreData {
   score_id: string;
@@ -47,76 +29,6 @@ interface VectorTopicMemoryData {
   indexed_doc_ids?: string[];
 }
 
-function TopicItem({
-  topic,
-}: {
-  topic: Topic;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const hasDetails = (topic.keywords?.length ?? 0) > 0 || (topic.exemplars?.length ?? 0) > 0 || topic.days_inactive !== undefined;
-
-  return (
-    <li className="pb-3">
-      <button
-        type="button"
-        onClick={() => hasDetails && setExpanded((e) => !e)}
-        className="w-full flex items-center justify-between py-2 text-left hover:bg-muted/30 rounded px-2 -mx-2"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          {hasDetails ? (
-            expanded ? (
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-            )
-          ) : null}
-          <span className="font-medium truncate">{topic.label}</span>
-        </div>
-        <div className="flex gap-2 text-sm text-muted-foreground shrink-0 ml-2">
-          {topic.days_inactive !== undefined && (
-             <Badge variant="secondary" className="font-mono text-xs bg-muted/50 hover:bg-muted/50 border-0">{topic.days_inactive}d inactive</Badge>
-          )}
-          {topic.lifecycle_tier && topic.lifecycle_tier !== "established" && (
-            <Badge
-              variant={topic.lifecycle_tier === "new" ? "default" : "secondary"}
-              className={topic.lifecycle_tier === "trending" ? "bg-muted/50 hover:bg-muted/50 border-0" : "border-0"}
-            >
-              {topic.lifecycle_tier}
-            </Badge>
-          )}
-          <Badge variant={topic.memory_tier === 'hot' ? "default" : "secondary"} className={topic.memory_tier === 'warm' ? "bg-muted/50 hover:bg-muted/50 border-0" : "border-0"}>
-            {topic.memory_tier}
-          </Badge>
-          <span>{topic.member_count} comment{topic.member_count !== 1 ? "s" : ""}</span>
-        </div>
-      </button>
-      {expanded && hasDetails && (
-        <div className="pl-6 pr-2 space-y-3 text-sm">
-          {topic.keywords && topic.keywords.length > 0 && (
-            <div>
-              <span className="font-medium text-muted-foreground">Keywords: </span>
-              <span className="text-foreground">
-                {topic.keywords.join(", ")}
-              </span>
-            </div>
-          )}
-          {topic.exemplars && topic.exemplars.length > 0 && (
-            <div>
-              <div className="font-medium text-muted-foreground mb-1">Exemplars</div>
-              <ul className="space-y-2 list-disc list-inside">
-                {topic.exemplars.map((ex, i) => (
-                  <li key={i} className="text-muted-foreground italic">
-                    &quot;{ex}&quot;
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </li>
-  );
-}
 
 function ScoreSection({ score }: { score: ScoreData }) {
   const hasClusters = (score.topics?.length ?? 0) > 0;
@@ -148,11 +60,7 @@ function ScoreSection({ score }: { score: ScoreData }) {
       </div>
       <div className="p-4">
         {hasClusters ? (
-          <ul className="space-y-2">
-            {sortedTopics.map((t) => (
-              <TopicItem key={t.cluster_id} topic={t} />
-            ))}
-          </ul>
+          <TopicList topics={sortedTopics} />
         ) : (
           <p className="text-sm text-muted-foreground italic text-center py-4">
             No clusters formed for this score (processed {score.items_processed} items).
@@ -293,11 +201,7 @@ const VectorTopicMemory: React.FC<ReportBlockProps> = ({
                 <p className="text-sm text-muted-foreground mb-4">
                   Themes from reviewer edit comments. Each topic groups similar feedback.
                 </p>
-                <ul className="space-y-2">
-                  {sortedSingleTopics.map((t) => (
-                    <TopicItem key={t.cluster_id} topic={t} />
-                  ))}
-                </ul>
+                <TopicList topics={sortedSingleTopics} />
               </div>
             )}
 

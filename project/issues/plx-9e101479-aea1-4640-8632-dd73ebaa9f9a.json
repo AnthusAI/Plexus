@@ -1,0 +1,18 @@
+{
+  "id": "plx-9e101479-aea1-4640-8632-dd73ebaa9f9a",
+  "title": "Run extended S3 Vectors validation window",
+  "description": "Execute the readiness gate by running scheduled real-world Semantic Reinforcement Memory reports on S3 Vectors only.\n\nTrack:\n- Report IDs and outcomes\n- Performance notes and regressions\n- Defects found and remediation status",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-04T17:13:52.567981Z",
+  "updated_at": "2026-03-04T17:13:52.567981Z",
+  "closed_at": null,
+  "custom": {}
+}

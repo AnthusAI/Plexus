@@ -1,9 +1,9 @@
 {
   "id": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
   "title": "Persistent Vector Topic Memory for Plexus Reports",
-  "description": "Add a new ReportBlock that rebuilds a full topic memory view by re-indexing an entire dataset into an AWS OpenSearch vector index. Reuses cached embeddings so re-indexing does not mean re-embedding. Supports periodic global re-clustering (stable buckets), incremental assignment of new items into existing buckets between global runs, and memory weights (reinforcement + decay) stored as derived metadata. Two deployables: (1) a separate infra repo with a Python CDK stack provisioning OpenSearch + IAM, and (2) the Plexus repo with a new VectorTopicMemory ReportBlock, S3-backed embedding cache, OpenSearch client wrapper, clustering engine, and memory weight logic.",
+  "description": "# Persistent Vector Topic Memory / Semantic Reinforcement Memory\n\n## Outcome Summary\nThis initiative now includes a completed S3 Vectors migration path while keeping OpenSearch available in the prototype CDK stack for side-by-side operation.\n\n## What Was Implemented\n### 1. Kanbus Scope Added and Executed\n- Epic: `plx-736728` — S3 Vectors cutover and validation\n- Tasks:\n  - `plx-2e3a3d` — dual-store infrastructure update\n  - `plx-891859` — runtime migration from OpenSearch to S3 Vectors\n  - `plx-2e3c35` — deployment and real-world validation runs\n\n### 2. Infrastructure (Dual Store)\n- Prototype stack now provisions and retains both:\n  - OpenSearch domain\n  - S3 Vectors bucket/index\n  - Embeddings S3 bucket\n- Stack deployment verified in `us-west-2` with `UPDATE_COMPLETE`.\n- Confirmed outputs include `OpenSearchEndpoint`, `S3VectorBucketName`, `S3VectorIndexName`, and `EmbeddingsBucketName`.\n\n### 3. Runtime Migration\n- Semantic Reinforcement Memory runtime now uses S3 Vectors for vector indexing/query paths.\n- Added S3 Vectors adapter and tests.\n- Updated report templates/config mappings to `s3_vectors.*` configuration keys.\n- Fixed live-run bug where S3 Vectors API rejected requests containing both `indexArn` and bucket/index simultaneously.\n\n### 4. Validation Evidence\n- Local targeted tests:\n  - `pytest -q plexus/reports/blocks/vector_topic_memory_test.py plexus/analysis/s3vectors_client_test.py`\n  - Result: `8 passed`\n- Real-world report validations completed successfully, including:\n  - `d60f2f2f-076a-4477-888a-af438a44a75e`\n  - `cccd9ddf-5231-4f21-91ca-4a1f7f7bcec2`\n  - `f0ee6a94-bc18-49fe-b453-bc09a6c47731`\n  - `947ee187-c0b2-4ed0-b108-c651b0e05487`\n  - `44b42144-c34f-43b2-bd69-592f0447fce7`\n  - post-dual-store validation: `4a502e52-545b-4af1-8b4f-7a787cee2282`\n\n## Delivery Artifacts\n- Primary implementation commit: `c3d96997`\n- CI follow-up fix commit: `22ba0295`\n- PR: https://github.com/AnthusAI/Plexus/pull/94\n- PR checks: passing (tests, CodeQL, Snyk, Bugbot)\n\n## Current Initiative Status\n- Related S3 cutover epic and tasks are closed.\n- This initiative remains open/in-progress for any remaining broader scope outside the completed S3 cutover track.",
   "type": "initiative",
-  "status": "closed",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -34,10 +34,94 @@
       "author": "ryan.porter",
       "text": "All stories and epics have been completed. The VectorTopicMemory report block now successfully clusters mismatched feedback edit comments, extracts TF-IDF keywords, generates LLM topic labels, and supports filtering by specific score IDs. Work committed to feature/reinforcement-memory branch.",
       "created_at": "2026-03-04T13:12:07.379610Z"
+    },
+    {
+      "id": "19702adf-6cf1-466a-bdad-cf4d4cb0f591",
+      "author": "unknown",
+      "text": "S3 Vectors cutover epic 736728 completed: prototype stack now keeps OpenSearch + S3 Vectors in parallel, Semantic Reinforcement Memory runtime uses S3 Vectors, and real-world report runs validated the path.",
+      "created_at": "2026-03-04T16:02:42.924425Z"
+    },
+    {
+      "id": "13a01d5d-7940-4635-985b-3801679e48fd",
+      "author": "unknown",
+      "text": "Process update: I will post real-time progress comments while working (start of step, major action taken, result, and next action) so progress is visible continuously in kbs.",
+      "created_at": "2026-03-04T16:04:00.347138Z"
+    },
+    {
+      "id": "c0dd632a-01ac-4d5c-8e8e-672cc6fb17da",
+      "author": "unknown",
+      "text": "Realtime update: implementing requirement correction to keep dual vector stores (OpenSearch + S3 Vectors) in prototype stack while Semantic Reinforcement Memory runtime remains on S3 vectors.",
+      "created_at": "2026-03-04T16:09:53.204979Z"
+    },
+    {
+      "id": "598b535b-a959-4176-9986-9c2a032d8966",
+      "author": "unknown",
+      "text": "Realtime completion update: dual-store requirement has been implemented and validated. CDK stack now exposes OpenSearch + S3 vectors in parallel, runtime uses S3 vectors, and post-deploy real-world report 4a502e52-545b-4af1-8b4f-7a787cee2282 completed successfully.",
+      "created_at": "2026-03-04T16:30:42.120869Z"
+    },
+    {
+      "id": "803e6a6a-7bca-4a7e-9f68-60993b59eba0",
+      "author": "unknown",
+      "text": "Implementation committed on feature/reinforcement-memory as c3d96997 for S3 vectors runtime + dual-store stack alignment.",
+      "created_at": "2026-03-04T16:33:28.321242Z"
+    },
+    {
+      "id": "d4d8fd25-bcd6-4d88-8be1-1ddda39f5589",
+      "author": "unknown",
+      "text": "Landed update: commit c3d96997 is now pushed to origin/feature/reinforcement-memory for the S3 vectors + dual-store implementation.",
+      "created_at": "2026-03-04T16:34:04.248300Z"
+    },
+    {
+      "id": "c1a165d4-f0f1-40fe-9c2c-7d447644232e",
+      "author": "unknown",
+      "text": "Tracking link: https://github.com/AnthusAI/Plexus/pull/94 contains the S3 vectors + dual-store implementation for this initiative path.",
+      "created_at": "2026-03-04T16:35:39.017979Z"
+    },
+    {
+      "id": "73fd49d2-9785-4a2b-9af0-9f9d78371c57",
+      "author": "unknown",
+      "text": "PR #94 checks now all passing after CI fix commit 22ba0295.",
+      "created_at": "2026-03-04T17:10:10.768067Z"
+    },
+    {
+      "id": "b569ae91-6c69-4e18-b72b-6c3514582e99",
+      "author": "unknown",
+      "text": "Initiative detail refresh complete: description now documents S3 cutover epic/tasks, dual-store infrastructure outcome, runtime migration to S3 vectors, validation report IDs, commits (c3d96997, 22ba0295), and PR #94 status.",
+      "created_at": "2026-03-04T17:12:47.595231Z"
+    },
+    {
+      "id": "a60d9486-3525-43a3-9236-1a6f22c4b620",
+      "author": "unknown",
+      "text": "Added new epic for near-term OpenSearch retirement planning: plx-1f795c with five child tasks (plx-1f3c55, plx-9e1014, plx-4081dc, plx-299022, plx-2db4be).",
+      "created_at": "2026-03-04T17:14:07.223649Z"
+    },
+    {
+      "id": "b2ee1769-dc24-4c87-b63e-b53ec2e560cb",
+      "author": "unknown",
+      "text": "Bug fix landed for missing S3 vectors config error: commit 1a4126b8 adds prototype default fallback (bucket/index) and prevents shell-mode failure when only region is provided.",
+      "created_at": "2026-03-04T18:03:45.067716Z"
+    },
+    {
+      "id": "dbfcdd0d-e247-4342-9009-ca1f60ca588e",
+      "author": "unknown",
+      "text": "Verification update (2026-03-04): S3 Vectors path is working end-to-end in production data runs. Confirmed S3 vectors index exists (plexus-vectors-development/topic-memory-idx-development), and live report run completed: report_id=92809f11-1b61-4382-a9e5-64baac91bcd1 task_id=5f3f900b-9ed1-4c36-b769-50405582b63f status=COMPLETED. Report block output is status=ok, processed 166 items across 4 scores and 18 clusters.",
+      "created_at": "2026-03-04T19:13:37.188879Z"
+    },
+    {
+      "id": "0f9303b8-cac0-4cc0-ac6a-aff7584b70c8",
+      "author": "unknown",
+      "text": "Realtime update: kicked off OpenSearch decommission execution tasks. In progress now: plx-4081dc (remove OpenSearch resources), plx-9a4736 (move vector infra into Amplify CDK extension), and plx-b64ee6 under new epic plx-d51c9a (No-value ScoreResult explanation analysis mode).",
+      "created_at": "2026-03-05T00:46:13.156204Z"
+    },
+    {
+      "id": "79e95d69-f130-4d70-9ee8-60b85ae906a4",
+      "author": "unknown",
+      "text": "Initiative update: S3 vectors path is now validated with live ScoreResult-No explanation analysis. Added schema-safe + cached ScoreResult query fix (commit b70b2424), pushed to feature branch, and merged into staging (ba91f933). Verified report output includes embeddings, S3 index writes, and clustering results in live run f715b6a6-ebc0-46aa-b967-355a05cf2202.",
+      "created_at": "2026-03-05T01:36:40.813335Z"
     }
   ],
   "created_at": "2026-03-04T02:19:24.636720Z",
-  "updated_at": "2026-03-04T13:23:30.485836Z",
-  "closed_at": "2026-03-04T13:23:30.485836Z",
+  "updated_at": "2026-03-05T01:36:40.813335Z",
+  "closed_at": null,
   "custom": {}
 }

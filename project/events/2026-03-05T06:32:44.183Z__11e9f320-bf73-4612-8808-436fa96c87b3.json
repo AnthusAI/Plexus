@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "11e9f320-bf73-4612-8808-436fa96c87b3",
+  "issue_id": "plx-af68f58a-0634-4038-83e2-b431ac687288",
+  "event_type": "state_transition",
+  "occurred_at": "2026-03-05T06:32:44.183Z",
+  "actor_id": "unknown",
+  "payload": {
+    "from_status": "open",
+    "to_status": "in_progress"
+  }
+}

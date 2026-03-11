@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a79fa698-ef93-4be3-b89d-dc2a53b7a5ab",
+  "issue_id": "plx-89185928-1692-4c0b-a0de-9edb16199388",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T15:32:24.389Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Replace OpenSearch client path in VectorTopicMemory/Semantic Reinforcement Memory with S3 Vectors client operations for index, query, and metadata updates. Remove OpenSearch runtime dependency for this feature path and update config/env mappings.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-7367286f-c80c-443c-9790-3946cfe2f78f",
+    "priority": 1,
+    "status": "open",
+    "title": "Semantic Reinforcement Memory runtime: migrate vector store from OpenSearch to S3 Vectors"
+  }
+}

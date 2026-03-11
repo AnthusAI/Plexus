@@ -1,0 +1,25 @@
+{
+  "id": "plx-ce35564a-6914-4a32-a19f-925f9c2b3221",
+  "title": "TopicClusterer returns exemplar indices alongside text",
+  "description": "**As a** memory analysis pipeline, **I want** the TopicClusterer to return the dataset indices of representative documents alongside the text, **so that** calling code can look up the corresponding Item IDs and identifiers for each exemplar.\n\n## Background\n\n`TopicClusterer._get_representative_docs(topic_id, n)` currently returns `List[str]` — the text of the n documents closest to the cluster centroid. The calling code in `VectorTopicMemory` has a parallel `doc_ids` list where `doc_ids[i]` corresponds to `documents[i]`, but the clusterer discards the indices after selecting representative docs. Without the indices, there is no way to trace an exemplar back to its source Item.\n\n## Solution\n\nAdd `_get_representative_doc_indices(topic_id, n)` that returns `List[int]` — the indices into the original documents list for the n most representative documents. The existing `_get_representative_docs` can be reimplemented in terms of this method. The caller then uses `doc_ids[index]` to get the Item ID.\n\n## Key Files\n\n- Modify: `plexus/analysis/topic_clusterer.py`\n- Modify: `plexus/analysis/topic_clusterer_test.py`\n\n## Dependencies\n\nNone. First story in the epic.",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "61a2b8e7-2e8c-4af9-af7b-4da9be42d7ff",
+      "author": "ryan.porter",
+      "text": "Feature: TopicClusterer returns exemplar indices\n\n  Scenario: Representative doc indices map to the original documents list\n    Given a TopicClusterer fitted with 100 documents and their embeddings\n    And topic 0 has 20 member documents\n    When _get_representative_doc_indices(topic_id=0, n=5) is called\n    Then 5 integer indices are returned\n    And each index is in the range 0 to 99\n    And documents[index] for each index is a member of topic 0\n\n  Scenario: Indices are ordered by proximity to centroid\n    Given a TopicClusterer fitted with documents and embeddings\n    And topic 0 has a known centroid\n    When _get_representative_doc_indices(topic_id=0, n=3) is called\n    Then the first index corresponds to the document closest to the centroid\n    And the second index is the next closest\n    And the third index is the next closest\n\n  Scenario: _get_representative_docs returns the same texts as indexed lookup\n    Given a TopicClusterer fitted with documents\n    When _get_representative_doc_indices(topic_id=0, n=5) returns indices\n    And _get_representative_docs(topic_id=0, n=5) returns texts\n    Then documents[indices[i]] equals texts[i] for all i\n\n  Scenario: Requesting more exemplars than members returns all members\n    Given a topic with only 3 member documents\n    When _get_representative_doc_indices(topic_id, n=5) is called\n    Then 3 indices are returned\n\n  Scenario: Empty or missing topic returns empty list\n    Given a topic_id that has no members\n    When _get_representative_doc_indices(topic_id, n=5) is called\n    Then an empty list is returned\n",
+      "created_at": "2026-03-10T13:44:31.235257Z"
+    }
+  ],
+  "created_at": "2026-03-10T13:44:03.998591Z",
+  "updated_at": "2026-03-10T13:44:31.235257Z",
+  "closed_at": null,
+  "custom": {}
+}
