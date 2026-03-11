@@ -1,0 +1,30 @@
+{
+  "id": "plx-ff90583b-1b07-4278-963c-4067079aaca7",
+  "title": "[Snyk Code] Jinja auto-escape is set to false.",
+  "description": "## Jinja auto-escape is set to false.\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/reports/parameter_utils.py`\n**Location:** line 175, column 11 to line 175, column 22\n**Classes:** CWE-CWE-79\n### Snippet (plexus/reports/parameter_utils.py:173-177)\n```\n 173 |     \n 174 |     # Create Jinja2 environment\n 175 |     env = Environment(\n 176 |         undefined=StrictUndefined if strict else None,\n 177 |         trim_blocks=True,\n```\n\n**Issue Key:** 3a4836e9-f454-4b8f-9451-6a63403aeefa\n\n### Details\nJinja auto-escape is set to false.\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.693590Z",
+  "updated_at": "2026-03-11T21:27:00.593835Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 11,
+    "snyk_end_column": 22,
+    "snyk_end_line": 175,
+    "snyk_file": "plexus/reports/parameter_utils.py",
+    "snyk_key": "3a4836e9-f454-4b8f-9451-6a63403aeefa",
+    "snyk_line": 175,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}

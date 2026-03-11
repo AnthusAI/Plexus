@@ -1,0 +1,30 @@
+{
+  "id": "plx-6d0ed5e3-e9e3-4113-ad50-1253abbab5a4",
+  "title": "[Snyk Code] Path Traversal",
+  "description": "## Path Traversal\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `.claude/skills/plexus-guidelines/validate_guidelines.py`\n**Location:** line 319, column 16 to line 319, column 20\n**Classes:** CWE-CWE-23\n### Snippet (.claude/skills/plexus-guidelines/validate_guidelines.py:317-321)\n```\n 317 |         sys.exit(1)\n 318 |     \n 319 |     filepath = Path(sys.argv[1])\n 320 |     result = validate_guidelines(filepath)\n 321 |     display_validation_results(result, filepath)\n```\n\n**Issue Key:** 20f1127f-f52e-4cbc-9d01-0036a00ca034\n\n### Details\nPath Traversal\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.691285Z",
+  "updated_at": "2026-03-11T21:27:00.589138Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 16,
+    "snyk_end_column": 20,
+    "snyk_end_line": 319,
+    "snyk_file": ".claude/skills/plexus-guidelines/validate_guidelines.py",
+    "snyk_key": "20f1127f-f52e-4cbc-9d01-0036a00ca034",
+    "snyk_line": 319,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}
