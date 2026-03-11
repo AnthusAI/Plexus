@@ -1104,9 +1104,8 @@ def generate_report_with_parameters(
                 # Check if required but missing
                 if param_def.get('required', False):
                     raise ValueError(f"Required parameter '{param_name}' not provided")
-                # Use default if available
-                if 'default' in param_def:
-                    normalized_params[param_name] = param_def['default']
+                # Use default if available, otherwise empty string so Jinja2 renders cleanly
+                normalized_params[param_name] = param_def.get('default', '')
 
         # Validate all parameters
         is_valid, errors = validate_all_parameters(param_defs, normalized_params)

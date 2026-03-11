@@ -357,9 +357,16 @@ class VectorTopicMemory(BaseReportBlock):
                         
                     tier = tier_from_weight(weight)
                     
-                    exemplars = clusterer._get_representative_docs(tid, n=5)
+                    raw_exemplars = clusterer.get_representative_exemplars(tid, n=5)
                     keywords = clusterer.get_keywords(tid, n=8)
-                    exemplars_truncated = [(ex[:300] + "…" if len(ex) > 300 else ex) for ex in exemplars]
+                    exemplars_truncated = []
+                    for ex_idx, ex_text in raw_exemplars:
+                        item_id = ds["doc_ids"][ex_idx] if ex_idx < len(ds["doc_ids"]) else None
+                        truncated = ex_text[:300] + "…" if len(ex_text) > 300 else ex_text
+                        exemplars_truncated.append({
+                            "text": truncated,
+                            "item_id": item_id,
+                        })
 
                     topic_key = f"{str(ds['score_id'])}::{int(tid)}"
                     label = self._fallback_topic_label(
@@ -390,14 +397,14 @@ class VectorTopicMemory(BaseReportBlock):
                         use_llm_labels
                         and openai_key
                         and tid in llm_label_topic_ids
-                        and (keywords or exemplars)
+                        and (keywords or exemplars_truncated)
                     ):
                         llm_label_inputs.append({
                             "topic_key": topic_key,
                             "score_name": ds["score_name"],
                             "cluster_id": int(tid),
                             "keywords": keywords[:8],
-                            "exemplars": exemplars[:3],
+                            "exemplars": [e["text"] for e in exemplars_truncated[:3]],
                             "member_count": member_count,
                         })
                     
