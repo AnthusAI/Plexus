@@ -175,7 +175,8 @@ class TestGenerateReportCore:
     @patch('plexus.reports.service._parse_report_configuration')
     @patch('plexus.reports.service.ReportBlock.create')
     @patch('plexus.reports.service._instantiate_and_run_block')
-    def test_generate_report_core_success(self, mock_run_block, mock_block_create, mock_parse, 
+    @patch('plexus.reports.service._persist_output_artifact_and_compact_if_needed')
+    def test_generate_report_core_success(self, mock_persist, mock_run_block, mock_block_create, mock_parse,
                                          mock_report_create, mock_load_config):
         """Test successful core report generation."""
         # Setup mocks
@@ -216,6 +217,9 @@ class TestGenerateReportCore:
         
         # Mock block execution
         mock_run_block.return_value = ({"result": "success"}, "Block executed", "dataset-123")
+
+        # Mock S3 artifact persistence
+        mock_persist.return_value = ('{"result": "success"}', [], None)
         
         # Execute function
         report_id, error = _generate_report_core(

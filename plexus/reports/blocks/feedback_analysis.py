@@ -274,7 +274,8 @@ class FeedbackAnalysis(BaseReportBlock):
                     if fi.initialAnswerValue != fi.finalAnswerValue
                 ]
                 for fi in mismatches_for_score:
-                    text = (fi.editCommentValue or fi.finalCommentValue or "").strip()
+                    _raw = fi.editCommentValue or fi.finalCommentValue or ""
+                    text = _raw.strip() if isinstance(_raw, str) else ""
                     if text:
                         score_edit_comments.append((fi.id or fi.itemId or "", text, fi.itemId, fi.editedAt))
                 if mismatches_for_score:
