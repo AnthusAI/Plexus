@@ -639,25 +639,27 @@ class FeedbackAnalysis(BaseReportBlock):
                     weight = 0.5  # Baseline for FeedbackAnalysis memories
                     tier = tier_from_weight(weight)
 
-                    # Derive lifecycle tier from age of first (oldest) occurrence
+                    # Derive lifecycle tier from member timestamps (same windowed logic as VectorTopicMemory)
                     _SHORT_TERM = 14
                     _MEDIUM_TERM = 30
-                    if cluster_edited_ats:
-                        _oldest = min(
-                            _ea if _ea.tzinfo else _ea.replace(tzinfo=_tz.utc)
-                            for _ea in cluster_edited_ats
-                        )
-                        _first_seen_days = max(0, (now - _oldest).days)
-                        if _first_seen_days <= _SHORT_TERM:
-                            _lifecycle_tier = "new"
-                        elif _first_seen_days <= _MEDIUM_TERM:
-                            _lifecycle_tier = "trending"
+                    _has_short = _has_medium = _has_long = False
+                    for _ea in cluster_edited_ats:
+                        _ea_aware = _ea if _ea.tzinfo else _ea.replace(tzinfo=_tz.utc)
+                        _age = max(0, (now - _ea_aware).days)
+                        if _age <= _SHORT_TERM:
+                            _has_short = True
+                        elif _age <= _MEDIUM_TERM:
+                            _has_medium = True
                         else:
-                            _lifecycle_tier = "known"
+                            _has_long = True
+                    _is_new = _has_short and not _has_medium and not _has_long
+                    _is_trending = (_has_short or _has_medium) and not _has_long
+                    if _is_new:
+                        _lifecycle_tier = "new"
+                    elif _is_trending:
+                        _lifecycle_tier = "trending"
                     else:
                         _lifecycle_tier = "established"
-                    _is_new = _lifecycle_tier == "new"
-                    _is_trending = _lifecycle_tier == "trending"
 
                     topic_entry: Dict = {
                         "topic_id": int(tid),
