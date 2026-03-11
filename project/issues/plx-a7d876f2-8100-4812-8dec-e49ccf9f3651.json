@@ -1,0 +1,67 @@
+{
+  "id": "plx-a7d876f2-8100-4812-8dec-e49ccf9f3651",
+  "title": "DeepgramInputSource misorders speaker turns in paragraph formatting",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "58af96de-dc42-4d27-8ce5-bff3fd0cd866",
+      "author": "derek",
+      "text": "Investigating report 303354422: Deepgram input in paragraph format appears to reorder turns from expected S0,S1,S0 to S0,S0,S1. Reproducing with DeepgramTimeSliceProcessor(end=120) + DeepgramFormatProcessor(format=paragraphs,speaker_labels=true).",
+      "created_at": "2026-03-09T16:01:03.459486682Z"
+    },
+    {
+      "id": "abbbfbc9-09da-46fd-b9f0-75c6c25ea2f8",
+      "author": "derek",
+      "text": "Reproduced using items/303354422/deepgram.json. Root cause confirmed: DeepgramFormatProcessor._format_paragraphs sorts entire paragraphs by paragraph start. In this file, paragraph 1 starts at 1.04s but contains a sentence at 24.79s, while another speaker paragraph starts at 6.72s. Result becomes A(1s+24s merged) before B(6s), causing apparent turn misordering (A,A,B instead of A,B,A). Proceeding with fix to preserve sentence-level chronology while keeping paragraph-style output.",
+      "created_at": "2026-03-09T16:02:30.532180334Z"
+    },
+    {
+      "id": "6f566fba-8499-490b-a4d9-f6a3251c5106",
+      "author": "derek",
+      "text": "Implemented fix in DeepgramFormatProcessor and added regression tests. Changes: (1) paragraphs format now builds from sentence-level segments sorted by sentence start time, then emits paragraph-style blocks to preserve conversational chronology across channels; (2) speaker labeling now uses channel index when merging multiple channels (avoids ambiguous speaker IDs that reset per channel). Verified with pytest: tests/test_processors/test_deepgram_processors.py => 29 passed. Re-ran with items/303354422/deepgram.json + TimeSlice(end=120) + Format(paragraphs,speaker_labels=true): output now starts Speaker 0 -> Speaker 1 -> Speaker 0 in proper turn order.",
+      "created_at": "2026-03-09T16:04:38.232051071Z"
+    },
+    {
+      "id": "cdb96803-18d4-43b6-9cc3-0ce8d96da198",
+      "author": "derek",
+      "text": "Follow-up refactor requested: remove formatting concerns from DeepgramInputSource. Plan is to make InputSource a pure loader (fetch Deepgram JSON + minimal raw transcript text) and move all formatting/time slicing responsibilities to processors.",
+      "created_at": "2026-03-09T16:34:38.609040116Z"
+    },
+    {
+      "id": "8d55566c-8e87-4d6c-a048-43b3b6f96015",
+      "author": "derek",
+      "text": "Made a hard-cut refactor per request: DeepgramInputSource is now loader-only (no format/timestamps/speaker/time-range logic). It always returns channel-0 transcript as baseline text and always includes metadata['deepgram'] for downstream processors. Updated tests accordingly and validated: pytest -q tests/test_input_sources/test_deepgram_input_source.py tests/test_input_sources/test_scorecard_integration.py tests/test_processors/test_deepgram_processors.py => 44 passed.",
+      "created_at": "2026-03-09T16:36:43.096808286Z"
+    },
+    {
+      "id": "d4c09770-2d31-4360-a0e2-5b5ecaa8c96c",
+      "author": "derek",
+      "text": "New bug confirmed: DeepgramFormatProcessor format=sentences can still misorder turns because it loops sorted paragraphs and then emits each paragraph's sentence list, instead of globally sorting all sentences across channels. Implementing sentence-level global ordering fix + regression test.",
+      "created_at": "2026-03-09T16:41:07.075341192Z"
+    },
+    {
+      "id": "26064add-92bc-4817-8654-a17428df82c4",
+      "author": "derek",
+      "text": "Applied second ordering fix: format=sentences now uses globally time-sorted sentence segments (_collect_sentence_segments) rather than paragraph-ordered iteration. Added regression test test_sentences_preserve_global_sentence_chronology. Verified with pytest -q tests/test_processors/test_deepgram_processors.py => 30 passed. Spot-check on items/303354422 with timestamps now shows chronological order by sentence start time.",
+      "created_at": "2026-03-09T16:41:52.879304866Z"
+    },
+    {
+      "id": "1079e6d0-1651-43ab-978a-2d34a83d9951",
+      "author": "derek",
+      "text": "Reverted paragraph-specific ordering changes per request. Paragraph format now uses paragraph-level grouping/sort semantics again. Kept sentence-ordering bugfix (global sentence timestamp ordering). Removed paragraph chronology regression test; retained sentence chronology test. Verified with pytest -q tests/test_processors/test_deepgram_processors.py => 29 passed.",
+      "created_at": "2026-03-09T17:05:07.018692297Z"
+    }
+  ],
+  "created_at": "2026-03-09T16:00:58.827218617Z",
+  "updated_at": "2026-03-09T17:05:07.018692297Z",
+  "closed_at": null,
+  "custom": {}
+}
