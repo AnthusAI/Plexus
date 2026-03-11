@@ -1,0 +1,31 @@
+{
+  "id": "plx-a411b729-31a1-4395-943b-4727da2274c1",
+  "title": "Fix batch_embed ordering mismatch when None embeddings occur",
+  "description": "Verify and fix bug in plexus/analysis/embedding_cache.py where batch_embed filters out None embeddings and can break input-output positional alignment used by VectorTopicMemory. Add tests to lock ordering behavior.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b64ee626-4de0-43b6-9287-ab0c7a91c257",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fb99471b-8538-4816-858a-ab51d2251f88",
+      "author": "unknown",
+      "text": "Confirmed defect in current code: batch_embed returns [r for r in result if r is not None], which can shrink output and break positional alignment. Implementing fix + tests now.",
+      "created_at": "2026-03-05T01:37:51.827579Z"
+    },
+    {
+      "id": "6a56accd-55a2-434b-ad33-5f55696a7cbe",
+      "author": "unknown",
+      "text": "Fix implemented: batch_embed now validates miss-batch cardinality, fills result positions without compaction, and raises RuntimeError on unresolved slots to prevent positional corruption. Added regression test test_batch_embed_raises_when_model_returns_short_batch; embedding_cache_test.py now passes (18 passed).",
+      "created_at": "2026-03-05T01:38:58.291368Z"
+    }
+  ],
+  "created_at": "2026-03-05T01:37:40.245373Z",
+  "updated_at": "2026-03-05T01:39:22.162224Z",
+  "closed_at": "2026-03-05T01:39:22.162224Z",
+  "custom": {}
+}

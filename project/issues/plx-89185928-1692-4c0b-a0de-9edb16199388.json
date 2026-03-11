@@ -1,0 +1,55 @@
+{
+  "id": "plx-89185928-1692-4c0b-a0de-9edb16199388",
+  "title": "Semantic Reinforcement Memory runtime: migrate vector store from OpenSearch to S3 Vectors",
+  "description": "Replace OpenSearch client path in VectorTopicMemory/Semantic Reinforcement Memory with S3 Vectors client operations for index, query, and metadata updates. Remove OpenSearch runtime dependency for this feature path and update config/env mappings.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7367286f-c80c-443c-9790-3946cfe2f78f",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "087aff3c-3789-480c-8ce5-661e380d7010",
+      "author": "unknown",
+      "text": "Starting Task 2. Implemented new S3 Vectors client and rewired VectorTopicMemory config/runtime path to use s3_vectors.* keys and S3 vector store operations.",
+      "created_at": "2026-03-04T15:36:59.865213Z"
+    },
+    {
+      "id": "8bac78d8-7292-4313-a48a-364170d60d75",
+      "author": "unknown",
+      "text": "Validation: pytest -q plexus/reports/blocks/vector_topic_memory_test.py plexus/analysis/s3vectors_client_test.py -> 8 passed. Runtime path and new S3 vectors client tests are green.",
+      "created_at": "2026-03-04T15:37:24.494250Z"
+    },
+    {
+      "id": "788929ac-1d5a-4185-b87d-0968d96bb93e",
+      "author": "unknown",
+      "text": "Updated report templates and config loader to s3_vectors keys and removed OpenSearch package dependencies from pyproject for this feature path.",
+      "created_at": "2026-03-04T15:41:17.244465Z"
+    },
+    {
+      "id": "90f6f39c-b8af-4fbe-a3bb-d944b8842b3b",
+      "author": "unknown",
+      "text": "Updated report templates and config loader to s3_vectors keys and removed OpenSearch package dependencies from pyproject for this feature path.",
+      "created_at": "2026-03-04T15:41:27.771545Z"
+    },
+    {
+      "id": "746760dc-2582-4313-ad61-5d3dc574bd14",
+      "author": "unknown",
+      "text": "Found and fixed runtime bug during live run: S3 Vectors GetIndex rejected requests when indexArn and bucket/index were both sent. Updated _vector_ref to send either indexArn OR bucket+index. Retested: 8 pytest cases pass.",
+      "created_at": "2026-03-04T15:49:42.955211Z"
+    },
+    {
+      "id": "3c3e2eda-cb45-4a5a-ae78-f1c0c53234e8",
+      "author": "unknown",
+      "text": "Completed: runtime switched to S3 vectors client, config/env mappings updated to s3_vectors keys, templates updated, and targeted pytest suite green.",
+      "created_at": "2026-03-04T16:02:36.298084Z"
+    }
+  ],
+  "created_at": "2026-03-04T15:32:24.389725Z",
+  "updated_at": "2026-03-04T17:11:44.886036Z",
+  "closed_at": "2026-03-04T16:02:36.404476Z",
+  "custom": {}
+}

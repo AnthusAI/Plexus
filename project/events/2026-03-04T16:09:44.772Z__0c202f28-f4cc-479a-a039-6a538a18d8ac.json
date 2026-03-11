@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "0c202f28-f4cc-479a-a039-6a538a18d8ac",
+  "issue_id": "plx-2e3a3ddd-ee3f-40be-82e9-8ee2948a4832",
+  "event_type": "field_updated",
+  "occurred_at": "2026-03-04T16:09:44.772Z",
+  "actor_id": "unknown",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Update prototype CDK stack in-place to provision S3 Vectors (vector bucket + index) and remove OpenSearch domain resources. Keep embeddings cache bucket and expose S3 vector outputs for runtime configuration.",
+        "to": "Update prototype CDK stack to provision S3 Vectors (vector bucket + index) while retaining existing OpenSearch domain resources. Keep embeddings cache bucket and expose outputs for both stores."
+      },
+      "title": {
+        "from": "Prototype CDK stack: replace OpenSearch with S3 Vectors resources",
+        "to": "Prototype CDK stack: add S3 Vectors alongside OpenSearch resources"
+      }
+    }
+  }
+}

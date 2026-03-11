@@ -805,6 +805,15 @@ class Scorecard:
                     f"BatchProcessingPause caught in get_score_result for {score}"
                 )
                 raise
+        else:
+            # Defensive fallback to guarantee list return contract.
+            return [
+                Score.Result(
+                    value="ERROR",
+                    error=f"Score with name '{score}' is unavailable.",
+                    parameters=Score.Parameters(name=score),
+                )
+            ]
 
     async def score_entire_text(
         self,

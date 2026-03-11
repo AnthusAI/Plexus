@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from plexus.reports.blocks.vector_topic_memory import VectorTopicMemory
 
@@ -191,6 +192,142 @@ def test_vector_topic_memory_fallback_topic_label():
         cluster_id=7,
     )
     assert label == "shipping address / confirmation issue"
+
+
+def test_given_no_explicit_clustering_caps_when_resolving_controls_then_defaults_are_coarse():
+    """Given no explicit min fraction/target max, when controls resolve, then coarse defaults are applied."""
+    controls = VectorTopicMemory._resolve_clustering_controls({})
+
+    assert controls["min_topic_fraction"] == pytest.approx(0.02)
+    assert controls["target_max_topics_per_score"] == 12
+
+
+def test_given_explicit_clustering_caps_when_resolving_controls_then_explicit_values_win():
+    """Given explicit clustering controls, when controls resolve, then user settings are preserved."""
+    controls = VectorTopicMemory._resolve_clustering_controls(
+        {
+            "min_topic_fraction": 0.01,
+            "target_max_topics_per_score": 30,
+            "coarse_min_topic_fraction": 0.05,
+            "coarse_target_max_topics_per_score": 6,
+        }
+    )
+
+    assert controls["min_topic_fraction"] == pytest.approx(0.01)
+    assert controls["target_max_topics_per_score"] == 30
+
+
+def test_given_many_documents_when_effective_min_topic_size_is_computed_then_result_is_coarser():
+    """Given many docs, when coarse defaults are applied, then min_topic_size increases to reduce fragmentation."""
+    controls = VectorTopicMemory._resolve_clustering_controls({})
+    effective = VectorTopicMemory._resolve_effective_min_topic_size(
+        item_count=600,
+        configured_min_topic_size=8,
+        min_topic_fraction=controls["min_topic_fraction"],
+        target_max_topics_per_score=controls["target_max_topics_per_score"],
+    )
+
+    # max(8, ceil(600*0.02)=12, ceil(600/12)=50) => 50
+    assert effective == 50
+
+
+def test_given_topic_inputs_when_building_batch_prompt_then_prompt_enforces_distinct_names(
+    vector_topic_memory_block,
+):
+    """Given bucket metadata, when prompt is built, then it explicitly requires nuanced distinct naming."""
+    prompt_parts = vector_topic_memory_block._build_batch_topic_naming_prompt(
+        [
+            {
+                "topic_key": "score-1::1",
+                "cluster_id": 1,
+                "score_name": "Program Match",
+                "keywords": ["address", "confirm", "spelling"],
+                "exemplars": ["I corrected the address verification section."],
+            }
+        ]
+    )
+
+    system_prompt = prompt_parts["system"]
+    user_prompt = prompt_parts["user"]
+    assert "distinct" in system_prompt.lower()
+    assert "nuance" in system_prompt.lower()
+    assert "topic_key" in user_prompt
+
+
+def test_given_multiple_topics_when_batch_labeling_then_labels_are_resolved_in_one_call(
+    vector_topic_memory_block,
+):
+    """Given many buckets, when batched naming runs, then one LLM call returns all labels."""
+    topic_inputs = [
+        {
+            "topic_key": "score-1::1",
+            "cluster_id": 1,
+            "score_name": "Program Match",
+            "keywords": ["address", "confirm", "spelling"],
+            "exemplars": ["I corrected the address verification section."],
+        },
+        {
+            "topic_key": "score-1::2",
+            "cluster_id": 2,
+            "score_name": "Program Match",
+            "keywords": ["copay", "estimate", "benefits"],
+            "exemplars": ["Rep did not explain the copay estimate clearly."],
+        },
+    ]
+
+    vector_topic_memory_block._invoke_batch_topic_naming_llm = MagicMock(
+        return_value="""[
+            {"topic_key": "score-1::1", "label": "Address Confirmation Edits"},
+            {"topic_key": "score-1::2", "label": "Copay Estimate Clarifications"}
+        ]"""
+    )
+
+    labels = vector_topic_memory_block._generate_topic_labels_batch(
+        topic_inputs=topic_inputs,
+        model_name="gpt-4o",
+        api_key="test-key",
+    )
+
+    assert vector_topic_memory_block._invoke_batch_topic_naming_llm.call_count == 1
+    assert labels == {
+        "score-1::1": "Address Confirmation Edits",
+        "score-1::2": "Copay Estimate Clarifications",
+    }
+
+
+def test_given_batch_invoke_when_timeout_specified_then_chat_openai_receives_timeout(
+    vector_topic_memory_block,
+):
+    """Given batch invoke timeout, when calling ChatOpenAI, then timeout is applied."""
+    with patch("langchain_openai.ChatOpenAI") as mock_chat_openai:
+        mock_chat_openai.return_value.invoke.return_value = SimpleNamespace(content="[]")
+        vector_topic_memory_block._invoke_batch_topic_naming_llm(
+            system_prompt="sys",
+            user_prompt="usr",
+            model_name="gpt-4o",
+            api_key="k",
+            timeout_seconds=17,
+        )
+
+    assert mock_chat_openai.call_count == 1
+    assert mock_chat_openai.call_args.kwargs["timeout"] == 17
+
+
+def test_given_single_label_invoke_when_timeout_specified_then_chat_openai_receives_timeout(
+    vector_topic_memory_block,
+):
+    """Given per-topic timeout, when calling ChatOpenAI, then timeout is applied."""
+    with patch("langchain_openai.ChatOpenAI") as mock_chat_openai:
+        vector_topic_memory_block._generate_topic_label(
+            keywords=["one", "two"],
+            exemplars=["example"],
+            model_name="gpt-4o-mini",
+            api_key="k",
+            timeout_seconds=11,
+        )
+
+    assert mock_chat_openai.call_count == 1
+    assert mock_chat_openai.call_args.kwargs["timeout"] == 11
 
 
 @pytest.mark.asyncio

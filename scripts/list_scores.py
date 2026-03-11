@@ -10,30 +10,21 @@ client = create_client()
 account_id = resolve_account_id_for_command(client, None)
 
 async def run():
-    scorecard = Scorecard.get_by_external_id("1438", client=client)
-    if not scorecard:
-        print("Scorecard 1438 not found")
-        return
-    
-    print(f"Scorecard: {scorecard.name} (ID: {scorecard.id})")
-    
-    # Try to find Medication Verification
     query = """
-    query ListScores {
-        listScores(limit: 1000) {
+    query ListScorecards {
+        listScorecards(limit: 1000) {
             items {
                 id
                 name
                 externalId
-                scorecardId
             }
         }
     }
     """
     res = client.execute(query)
-    for item in res.get('listScores', {}).get('items', []):
-        if item and 'Medication' in item.get('name', ''):
-            print(item)
+    for item in res.get('listScorecards', {}).get('items', []):
+        if item:
+            print(f"{item.get('name')} (ID: {item.get('externalId')})")
 
 asyncio.run(run())
 
