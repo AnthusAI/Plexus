@@ -1,0 +1,115 @@
+{
+  "id": "plx-7eb0cc66-e413-4f55-97bb-44436ec834d3",
+  "title": "Run 60-day Semantic Reinforcement Memory for CMG - EDU v1.0",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a9bc3d25-150f-462d-a1b3-5f7b7a7ee364",
+      "author": "unknown",
+      "text": "Run initialized. Target scorecard: CMG - EDU v1.0 (externalId=1039, id=f4076c72-e74b-4eaf-afd6-d4f61c9f0142). Next: dispatch 60-day ScoreResult No-explanation Semantic Reinforcement Memory report and track task/report IDs live.",
+      "created_at": "2026-03-05T06:32:12.667759Z"
+    },
+    {
+      "id": "225a8ebe-1c46-40da-b6eb-759ba3159b37",
+      "author": "unknown",
+      "text": "Run dispatched and active. report_id=e9b55e8b-45ec-49bd-8d84-761bd221201e task_id=ca1d8896-b164-4d00-a1cf-6ade71198527 report_block_id=0b344576-bd6a-4b78-8678-087097d61dd1. Current state: stage 4/5 (Processing Report Blocks) RUNNING.",
+      "created_at": "2026-03-05T06:35:40.194794Z"
+    },
+    {
+      "id": "ce8e2f2c-010a-4010-b8c7-ef7a845cc955",
+      "author": "unknown",
+      "text": "Execution checkpoint: VectorTopicMemory block started (report_block_id=0b344576-bd6a-4b78-8678-087097d61dd1) and resolved 36 score definitions on CMG - EDU v1.0 for the 60-day window.",
+      "created_at": "2026-03-05T06:37:17.765649Z"
+    },
+    {
+      "id": "180398ab-9026-421e-abaa-fc1a63df143c",
+      "author": "unknown",
+      "text": "Runtime checkpoint: worker process remains active (~10m elapsed), still in stage 4 block processing. No failure signal yet.",
+      "created_at": "2026-03-05T06:43:40.441424Z"
+    },
+    {
+      "id": "7992ae2e-673b-4643-9037-6ce6d17ed046",
+      "author": "unknown",
+      "text": "Failure confirmed from task backend at 2026-03-05T07:34Z. Stage 4 completed, Stage 5 Finalizing Report failed with: \"Failed to finalize block block_0: 'dict' object has no attribute 'encode'\". Root cause appears to be output-artifact upload path assuming string output while block output is a dict. Hotfix in progress; will rerun after patch.",
+      "created_at": "2026-03-05T12:28:36.656750Z"
+    },
+    {
+      "id": "05911194-8403-42fc-84fb-c899b6ffc0d5",
+      "author": "unknown",
+      "text": "Hotfix applied for finalization regression (dict output normalization before attachment upload); focused tests passed (20). Relaunching this scorecard on fixed code path.",
+      "created_at": "2026-03-05T12:30:22.091789Z"
+    },
+    {
+      "id": "da121fb0-89b2-4af7-9016-469e89cbbdf2",
+      "author": "unknown",
+      "text": "Rerun dispatched on hotfix build. New task_id=cddeea24-ad93-4526-8a9d-182bce961e93 new report_id=e270f772-50fc-41dc-9dbd-bbec10f1aa28 report_block_id=af23ff55-e0db-445c-8ad3-cc9175e232d0. Processing now.",
+      "created_at": "2026-03-05T12:31:45.588114Z"
+    },
+    {
+      "id": "9b1582f2-0efa-4441-96fb-68a0a2c992f3",
+      "author": "unknown",
+      "text": "Current status: hotfix rerun task_id=cddeea24-ad93-4526-8a9d-182bce961e93 still RUNNING in stage 4/5.",
+      "created_at": "2026-03-05T13:03:13.514357Z"
+    },
+    {
+      "id": "96ae07c0-89b3-4451-bdd2-60bf0ea28e0d",
+      "author": "unknown",
+      "text": "Hotfix rerun succeeded. task_id=cddeea24-ad93-4526-8a9d-182bce961e93 completed successfully and report_id=e270f772-50fc-41dc-9dbd-bbec10f1aa28 is now available.",
+      "created_at": "2026-03-05T13:03:40.869895Z"
+    },
+    {
+      "id": "1789b9ed-b8e4-4730-a3aa-14756c2b2d8d",
+      "author": "unknown",
+      "text": "Execution restart: revalidating CMG run output under synced coarse+batch config and new monitoring policy.",
+      "created_at": "2026-03-05T14:07:31.847313Z"
+    },
+    {
+      "id": "5ce217cc-3bee-4dae-953a-f6c14e02c078",
+      "author": "unknown",
+      "text": "[2026-03-05 11:34 ET] Starting fresh 60-day rerun under coarse+bached naming rollout (fanout slot opened after Moore completion). Launching now for CMG - EDU v1.0 (scorecard 1039).",
+      "created_at": "2026-03-05T16:36:00.728615Z"
+    },
+    {
+      "id": "6b45256e-59a9-4df9-b56a-fabfa9851fcf",
+      "author": "unknown",
+      "text": "[2026-03-05 11:36 ET] CMG rerun launched. report=565565cf-a101-43f0-9a14-81c714c43a04 task=82ab65d8-33aa-4136-8114-031b7c859abd. Config sync confirmed in runtime logs (coarse clustering + batch_one_pass + batch_model=gpt-4o + timeout fields).",
+      "created_at": "2026-03-05T16:36:43.290390Z"
+    },
+    {
+      "id": "447d39c2-cb2a-4985-92ee-4eee14f4727b",
+      "author": "unknown",
+      "text": "[2026-03-05 11:38 ET] CMG progress: task 82ab65d8-33aa-4136-8114-031b7c859abd entered block processing (stage 4). ReportBlock=7eada2fe-d411-4b1d-97a5-8cddc50b8ab3. Runtime confirms S3 vectors defaults and coarse+batch naming config loaded.",
+      "created_at": "2026-03-05T16:39:58.083454Z"
+    },
+    {
+      "id": "5010e4fa-2c5c-45c2-87b2-d30e98648040",
+      "author": "unknown",
+      "text": "[2026-03-05 11:42 ET] CMG task remains active in stage-4 execution; process is alive and currently network-bound while pulling/processing score data.",
+      "created_at": "2026-03-05T16:42:20.919271Z"
+    },
+    {
+      "id": "23717dfe-e1e8-4077-9f49-52bb3642f02e",
+      "author": "unknown",
+      "text": "[2026-03-05 11:49 ET] CMG forward progress confirmed in stage 4: active ScoreResult ingestion/filtering across multiple scores (e.g., TCPA Consent-AI=2657 retained, Branding and Matching=1980 retained, PEC Trades Protocol=517 retained).",
+      "created_at": "2026-03-05T16:52:39.628069Z"
+    },
+    {
+      "id": "eb3b3347-332f-4ae8-b4b4-596fa3128486",
+      "author": "unknown",
+      "text": "[2026-03-05 13:13 ET] ✅ CMG run completed successfully. report=565565cf-a101-43f0-9a14-81c714c43a04 task=82ab65d8-33aa-4136-8114-031b7c859abd url=/reports/565565cf-a101-43f0-9a14-81c714c43a04. Summary: items_processed=7381, score_count=10, cluster_count=34, indexed_doc_count=7381, status=ok. Batch naming evidence: 32/32 labels in one gpt-4o call. Comparison to prior CMG run e270f772-50fc-41dc-9dbd-bbec10f1aa28: clusters reduced 52->34 at same volume.",
+      "created_at": "2026-03-05T18:13:36.212618Z"
+    }
+  ],
+  "created_at": "2026-03-05T06:32:05.941355Z",
+  "updated_at": "2026-03-05T18:13:36.212618Z",
+  "closed_at": "2026-03-05T13:03:40.742909Z",
+  "custom": {}
+}

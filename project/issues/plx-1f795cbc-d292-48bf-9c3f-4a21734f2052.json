@@ -1,0 +1,55 @@
+{
+  "id": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+  "title": "OpenSearch Decommission After S3 Vectors Stabilization",
+  "description": "Plan and execute removal of the prototype OpenSearch vector store once S3 Vectors is proven stable in real-world operation.\n\n## Goal\nRetire OpenSearch from this feature path and run only on S3 Vectors while preserving report correctness and operational safety.\n\n## Readiness Gate (must pass before removal)\n- S3 Vectors path is green in CI and production-like report runs.\n- No unresolved severity-1/0 defects attributable to S3 vector storage/query behavior.\n- Real-world report quality is validated across representative scorecards and date windows.\n- Rollback procedure is documented and tested.\n\n## Definition of Done\n- OpenSearch resources are removed from the prototype CDK stack.\n- OpenSearch runtime/config/dependency references are removed from this feature path.\n- Post-removal deployment and regression validation complete successfully.\n- kbs records contain evidence, links, and a rollback note.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9e504739-c468-4455-9278-49eed9775164",
+      "author": "unknown",
+      "text": "Planning complete: created decommission tasks and sequencing is (1) readiness gate definition -> (2) extended validation window -> (3) infra OpenSearch removal -> (4) runtime/config cleanup -> (5) post-removal deploy/regression validation.",
+      "created_at": "2026-03-04T17:14:07.124788Z"
+    },
+    {
+      "id": "023b6a53-42ec-4a1a-a5fb-281284f3f584",
+      "author": "unknown",
+      "text": "Resumed execution. Current focus is closing readiness evidence with real report runs on the S3 vector store path and then finalizing decommission cleanup tasks.",
+      "created_at": "2026-03-05T00:55:48.639947Z"
+    },
+    {
+      "id": "36ad6a0d-a13c-4092-9a54-691e5e8af36a",
+      "author": "unknown",
+      "text": "Decommission readiness evidence update: ScoreResult No-explanation S3 path is now operational with real run proof (report f715b6a6-ebc0-46aa-b967-355a05cf2202). This run used S3 vectors only and produced clustered output after embeddings/indexing.",
+      "created_at": "2026-03-05T01:34:58.906637Z"
+    },
+    {
+      "id": "299cc6b7-cc4a-4690-804b-cf5f08b19ece",
+      "author": "unknown",
+      "text": "Progress update: closed tasks 4081dc, 2db4be with evidence. Latest functional+performance fix b70b2424 merged to staging as ba91f933. Real S3 ScoreResult-No report proof: f715b6a6-ebc0-46aa-b967-355a05cf2202 (task 1fefef21-80b0-4839-897b-8a51d31f5db0).",
+      "created_at": "2026-03-05T01:36:40.807365Z"
+    },
+    {
+      "id": "e48098bd-8d33-41d7-84cc-0fa5f6d90860",
+      "author": "unknown",
+      "text": "2026-03-05 12:04 ET status update: still in_progress. Decommission readiness gate remains open pending completion of current 60-day S3 report reruns (Andersen task d0a734cd-8b39-4165-a1e3-744b2d6ff0c3, AW task bbbe683a-2045-42ca-adc7-4884d6420872) and quality validation. Not ready to remove OpenSearch resource yet.",
+      "created_at": "2026-03-05T20:02:56.928178Z"
+    },
+    {
+      "id": "6f0d3087-5dbe-4a86-b1d8-75c784a28781",
+      "author": "ryan.porter",
+      "text": "2026-03-06 09:28 ET: Epic completion summary. Readiness gate met (AW 60-day S3 vectors report completed: task bbbe683a-2045-42ca-adc7-4884d6420872, report 0503f133-efdf-4f7b-a8a7-fba71621b137, output status=ok). OpenSearch fully removed from code/config: deleted opensearch_client module+tests, removed CDK OpenSearch context flag, scrubbed remaining OpenSearch mentions in analysis comments. Related tasks closed: plx-299022, plx-1f3c55.",
+      "created_at": "2026-03-06T18:26:55.753393Z"
+    }
+  ],
+  "created_at": "2026-03-04T17:13:38.283088Z",
+  "updated_at": "2026-03-06T18:26:59.609634Z",
+  "closed_at": "2026-03-06T18:26:59.609634Z",
+  "custom": {}
+}

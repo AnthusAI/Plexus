@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e7ce8739-59fe-4b30-9704-78fd5e3f6c23",
+  "issue_id": "plx-907b4e3c-7824-4840-8cca-5ce5a707c93d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-06T17:55:43.048Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix Scorecard missing-score return contract and ReportTask effect deps"
+  }
+}

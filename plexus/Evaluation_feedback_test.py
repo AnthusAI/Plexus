@@ -3,6 +3,7 @@ Tests for FeedbackEvaluation class.
 """
 
 import pytest
+import json
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
 from plexus.Evaluation import FeedbackEvaluation
@@ -115,7 +116,8 @@ class TestFeedbackEvaluation:
             scorecard_id="scorecard-123",
             score_id="score-456",
             evaluation_id="eval-789",
-            account_id="account-123"
+            account_id="account-123",
+            account_key="test-account-key"
         )
         
         # Mock the evaluation record
@@ -151,6 +153,63 @@ class TestFeedbackEvaluation:
                     update_calls = mock_eval_record.update.call_args_list
                     final_call = update_calls[-1]
                     assert final_call[1].get('status') == 'COMPLETED' or final_call[0][0] == 'status'
+
+    @pytest.mark.asyncio
+    async def test_run_evaluation_maps_alignment_metric_to_percentage(self, mock_api_client, mock_feedback_items):
+        """Alignment metric in evaluation payload should be mapped to [0, 100]."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key"
+        )
+
+        mock_eval_record = MagicMock()
+        mock_eval_record.id = "eval-789"
+        mock_eval_record.update = MagicMock()
+
+        mock_scorecard = MagicMock()
+        mock_scorecard.id = "scorecard-123"
+
+        mapped_analysis = {
+            "ac1": -1.0,
+            "accuracy": 75.0,
+            "precision": 70.0,
+            "recall": 65.0,
+            "total_items": len(mock_feedback_items),
+            "agreements": 0,
+            "disagreements": len(mock_feedback_items),
+            "confusion_matrix": {"yes": {"yes": 0}},
+            "class_distribution": {"yes": 0, "no": len(mock_feedback_items)},
+            "predicted_class_distribution": {"yes": 0, "no": len(mock_feedback_items)},
+        }
+
+        for item in mock_feedback_items:
+            item.itemId = f"item-{item.id}"
+            item.isAgreement = item.initialAnswerValue == item.finalAnswerValue
+            item.editCommentValue = None
+            item.initialCommentValue = None
+            item.finalCommentValue = None
+            item.editedAt = datetime.now(timezone.utc)
+            item.editorName = "Test Editor"
+
+        with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+            with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
+                    with patch('plexus.analysis.feedback_analyzer.analyze_feedback_items', return_value=mapped_analysis):
+                        with patch('plexus.dashboard.api.models.score_result.ScoreResult.create', return_value=MagicMock(id="score-result-123")):
+                            await evaluation.run()
+
+        final_call = mock_eval_record.update.call_args_list[-1]
+        metrics_payload = json.loads(final_call.kwargs["metrics"])
+        alignment_metric = next((m for m in metrics_payload if m["name"] == "Alignment"), None)
+        assert alignment_metric is not None
+        assert alignment_metric["value"] == 0.0
     
     @pytest.mark.asyncio
     async def test_run_evaluation_without_score_id(self, mock_api_client):
@@ -412,4 +471,3 @@ class TestFeedbackEvaluation:
                         # Verify ScoreResult.create was called for each feedback item
                         assert mock_create.call_count == len(mock_feedback_items)
                         assert result["status"] == "success"
-

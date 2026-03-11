@@ -235,6 +235,17 @@ class Evaluation:
         self.total_questions = 0
         self.total_skipped = 0  # Track scores skipped due to unmet conditions
 
+    @staticmethod
+    def _format_alignment_metric_value(alignment_value: Optional[float]) -> float:
+        """
+        Convert native Gwet's AC1 [-1, 1] into legacy-compatible percentage [0, 100].
+        """
+        if alignment_value is None:
+            return 0.0
+        # Clamp to valid AC1 range before mapping to avoid drift from floating point noise.
+        clamped = max(-1.0, min(1.0, float(alignment_value)))
+        return ((clamped + 1.0) / 2.0) * 100.0
+
 
     def __enter__(self):
         return self
@@ -639,7 +650,7 @@ class Evaluation:
                 )
                 result = gwet_calculator.calculate(metric_input)
                 gwet_ac1_value = result.value
-                # AC1 remains in its native [-1, 1] range.
+                # Keep native AC1 [-1, 1] internally; convert only when formatting for API/UI payloads.
             except Exception as e:
                 self.logging.error(f"Error calculating Gwet's AC1: {str(e)}")
                 gwet_ac1_value = 0
@@ -1482,8 +1493,7 @@ class Evaluation:
         # Format metrics for API
         metrics_for_api = []
         if metrics.get("alignment") is not None:
-            # For alignment (Gwet's AC1), store the raw value in range [-1, 1]
-            alignment_value = metrics["alignment"]
+            alignment_value = self._format_alignment_metric_value(metrics["alignment"])
             metrics_for_api.append({"name": "Alignment", "value": alignment_value})
             # Added alignment to metrics
         if metrics.get("accuracy") is not None:
@@ -1536,9 +1546,8 @@ class Evaluation:
             has_alignment = any(m["name"] == "Alignment" for m in metrics_for_api)
             if "alignment" in metrics and not has_alignment:
                 # Force add alignment if missing
-                alignment_value = metrics["alignment"]
-                display_value = 0 if alignment_value < 0 else alignment_value * 100
-                metrics_for_api.append({"name": "Alignment", "value": display_value})
+                alignment_value = self._format_alignment_metric_value(metrics["alignment"])
+                metrics_for_api.append({"name": "Alignment", "value": alignment_value})
             
             # Additional validation to ensure all required metrics are included
             metric_names = [m["name"] for m in metrics_for_api]
@@ -1556,7 +1565,7 @@ class Evaluation:
         else:
             # Create default metrics list with all required metrics if empty
             default_metrics = [
-                {"name": "Alignment", "value": metrics.get("alignment", 0)},
+                {"name": "Alignment", "value": self._format_alignment_metric_value(metrics.get("alignment", 0))},
                 {"name": "Accuracy", "value": metrics.get("accuracy", 0) * 100},
                 {"name": "Precision", "value": metrics.get("precision", 0) * 100},
                 {"name": "Recall", "value": metrics.get("recall", 0) * 100}
@@ -2207,7 +2216,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                         else:
                             score_result.metadata['correct'] = None  # No label to compare against
                         # Preserve scorecard-provided scoring text if available; fallback to original row text.
-                        score_result.metadata['text'] = score_result.metadata.get('text') or text
+                        if 'text' not in score_result.metadata:
+                            score_result.metadata['text'] = text
 
                         # Add to filtered results only if we get here (i.e., all conditions are met)
                         filtered_results[score_identifier] = score_result
@@ -2928,8 +2938,10 @@ class FeedbackEvaluation(Evaluation):
             end_date = datetime.now(timezone.utc)
             start_date = end_date - timedelta(days=self.days)
             
-            # Get scorecard
-            DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
+            # Validate scorecard exists
+            scorecard = DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
+            if scorecard is None:
+                raise ValueError(f"Scorecard {self.scorecard_id} not found")
             
             # Feedback evaluation MUST have a score_id
             if not self.score_id:
@@ -2963,9 +2975,11 @@ class FeedbackEvaluation(Evaluation):
             # Get AC1 from analysis and store as "Alignment" to match existing convention
             ac1 = overall_analysis.get("ac1")
             if ac1 is not None:
-                # Alignment is Gwet's AC1, ranges from -1 to 1
-                # Store as-is (no mapping needed - this matches accuracy evaluation behavior)
-                metrics_for_api.append({"name": "Alignment", "value": ac1})
+                # Keep native AC1 in analysis payloads, but map evaluation metric payload
+                # to the legacy-compatible [0, 100] range for dashboard consistency.
+                metrics_for_api.append(
+                    {"name": "Alignment", "value": self._format_alignment_metric_value(ac1)}
+                )
             
             accuracy = overall_analysis.get("accuracy")
             if accuracy is not None:
