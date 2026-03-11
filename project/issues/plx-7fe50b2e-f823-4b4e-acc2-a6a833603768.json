@@ -1,0 +1,49 @@
+{
+  "id": "plx-7fe50b2e-f823-4b4e-acc2-a6a833603768",
+  "title": "requirements.txt",
+  "description": "Snyk vulnerabilities found in `requirements.txt`.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f6b32f8-0d5c-4792-be56-a5caa89242a7",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8d7672a6-add0-40b5-b865-c2617770cc0a",
+      "author": "derek.norrbom",
+      "text": "Investigating mismatch between pyproject.toml and root requirements.txt after re-import. Goal: explain why Snyk findings differ from score-processor-lambda requirements and verify whether root requirements is a faithful pip-compile output of pyproject direct dependencies plus resolved transitive pins.",
+      "created_at": "2026-03-11T21:31:51.143141Z"
+    },
+    {
+      "id": "2a4c157f-b2fb-4137-bb1f-25866a81328e",
+      "author": "derek.norrbom",
+      "text": "Findings from comparison:\n- Root requirements.txt is a full pip-compile lock generated from pyproject.toml (`pip-compile --strip-extras pyproject.toml`).\n- Direct dependency mapping is exact: 66 direct deps in pyproject and 66 entries in requirements tagged `via plexus (pyproject.toml)`.\n- requirements.txt contains many additional packages (359 total) because it includes resolved transitives.\n\nWhy findings differ from score-processor-lambda:\n- score-processor-lambda/requirements.txt is a manually curated subset, not a lock generated from pyproject.toml.\n- It omits many pyproject direct deps (e.g., pytest/sphinx/etc.) and therefore omits their transitive graph and related findings.\n- Root requirements is pinned/full-resolution; score-processor-lambda file is mostly unpinned, so Snyk resolution behavior and vulnerability set differ.\n\nImportant discrepancy spotted in imported tasks:\n- New subtasks under this task reference versions like protobuf@4.24.4 and setuptools@40.5.0.\n- Current root requirements.txt now resolves protobuf==6.33.5 and does not include setuptools as a pinned requirement line, suggesting imported findings are from an older snapshot/scan context.",
+      "created_at": "2026-03-11T21:33:24.471536Z"
+    },
+    {
+      "id": "751269ea-ae44-4b8c-9cb9-10846f764d79",
+      "author": "derek.norrbom",
+      "text": "Applied change to make root requirements.txt a direct-dependency manifest from pyproject.toml (for Snyk free-tier pyproject parity) instead of a pip-compile lock. Updated workflow .github/workflows/requirements-sync.yml to export  via Python/tomllib. Regenerated requirements.txt now contains 67 direct dependency lines.",
+      "created_at": "2026-03-11T21:46:06.713056Z"
+    },
+    {
+      "id": "8c328378-75a5-4d11-b8b7-9d797b5600c0",
+      "author": "derek.norrbom",
+      "text": "Applied change to make root requirements.txt a direct-dependency manifest from pyproject.toml for Snyk free-tier parity, instead of a pip-compile lockfile.\n- Updated .github/workflows/requirements-sync.yml to export project dependencies with Python/tomllib.\n- Regenerated requirements.txt.\n- Current root requirements.txt now has 67 direct dependency lines.",
+      "created_at": "2026-03-11T21:46:11.551792Z"
+    }
+  ],
+  "created_at": "2026-03-11T21:27:00.617011Z",
+  "updated_at": "2026-03-11T21:46:11.551792Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_category": "dependency",
+    "snyk_target_file": "requirements.txt"
+  }
+}

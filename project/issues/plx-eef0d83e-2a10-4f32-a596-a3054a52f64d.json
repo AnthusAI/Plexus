@@ -1,0 +1,30 @@
+{
+  "id": "plx-eef0d83e-2a10-4f32-a596-a3054a52f64d",
+  "title": "[Snyk Code] Insecure Temporary File",
+  "description": "## Insecure Temporary File\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/utils/score_result_s3_utils.py`\n**Location:** line 235, column 29 to line 235, column 44\n**Classes:** CWE-CWE-377\n### Snippet (plexus/utils/score_result_s3_utils.py:233-237)\n```\n 233 |             \n 234 |             # Try to download it\n 235 |             download_path = tempfile.mktemp()\n 236 |             s3_client.download_file(\n 237 |                 Bucket=bucket_name,\n```\n\n**Issue Key:** 81035d65-325f-4194-be9b-bb86688373fd\n\n### Details\nInsecure Temporary File\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.693308Z",
+  "updated_at": "2026-03-11T21:27:00.592305Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 29,
+    "snyk_end_column": 44,
+    "snyk_end_line": 235,
+    "snyk_file": "plexus/utils/score_result_s3_utils.py",
+    "snyk_key": "81035d65-325f-4194-be9b-bb86688373fd",
+    "snyk_line": 235,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}

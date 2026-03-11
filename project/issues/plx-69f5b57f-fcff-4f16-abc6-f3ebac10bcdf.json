@@ -1,0 +1,30 @@
+{
+  "id": "plx-69f5b57f-fcff-4f16-abc6-f3ebac10bcdf",
+  "title": "[Snyk Code] Hardcoded Non-Cryptographic Secret",
+  "description": "## Hardcoded Non-Cryptographic Secret\n\n**Severity:** low\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/metrics/test_calculator.py`\n**Location:** line 21, column 9 to line 21, column 26\n**Classes:** CWE-CWE-547\n### Snippet (plexus/metrics/test_calculator.py:19-23)\n```\n  19 |         \"\"\"Set up test fixtures.\"\"\"\n  20 |         self.test_endpoint = \"https://api.example.com/graphql\"\n  21 |         self.test_api_key = \"test-api-key-123\"\n  22 |         self.test_account_id = \"test-account-123\"\n  23 |         \n```\n\n**Issue Key:** aebab646-bc68-41d4-8c6f-ecb04c9bceaf\n\n### Details\nHardcoded Non-Cryptographic Secret\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.698428Z",
+  "updated_at": "2026-03-11T21:27:00.606391Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 9,
+    "snyk_end_column": 26,
+    "snyk_end_line": 21,
+    "snyk_file": "plexus/metrics/test_calculator.py",
+    "snyk_key": "aebab646-bc68-41d4-8c6f-ecb04c9bceaf",
+    "snyk_line": 21,
+    "snyk_severity": "low",
+    "snyk_type": "code"
+  }
+}

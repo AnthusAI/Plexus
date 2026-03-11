@@ -15,10 +15,11 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-02-26T00:13:56.240389258Z",
-  "updated_at": "2026-02-26T00:13:56.240389258Z",
+  "updated_at": "2026-03-11T21:27:00.610538Z",
   "closed_at": null,
   "custom": {
     "snyk_key": "SNYK-JS-NEXT-15104645",
-    "snyk_severity": "high"
+    "snyk_severity": "high",
+    "snyk_type": "package_vulnerability"
   }
 }

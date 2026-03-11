@@ -1,0 +1,30 @@
+{
+  "id": "plx-659fc46a-e3c5-4e27-9b5a-522c9b2b01d3",
+  "title": "[Snyk Code] Hardcoded Non-Cryptographic Secret",
+  "description": "## Hardcoded Non-Cryptographic Secret\n\n**Severity:** low\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/cli/procedure/lua_dsl/tests/test_procedure_primitives.py`\n**Location:** line 66, column 13 to line 66, column 27\n**Classes:** CWE-CWE-547\n### Snippet (plexus/cli/procedure/lua_dsl/tests/test_procedure_primitives.py:64-68)\n```\n  64 |             parent_procedure_id='parent-proc-456',\n  65 |             mcp_server=mock_mcp_server,\n  66 |             openai_api_key='test-key-789',\n  67 |             lua_sandbox=mock_lua_sandbox\n  68 |         )\n```\n\n**Issue Key:** aa2abb9b-4993-4bb0-9a0c-047032857f2e\n\n### Details\nHardcoded Non-Cryptographic Secret\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.697336Z",
+  "updated_at": "2026-03-11T21:27:00.605010Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 13,
+    "snyk_end_column": 27,
+    "snyk_end_line": 66,
+    "snyk_file": "plexus/cli/procedure/lua_dsl/tests/test_procedure_primitives.py",
+    "snyk_key": "aa2abb9b-4993-4bb0-9a0c-047032857f2e",
+    "snyk_line": 66,
+    "snyk_severity": "low",
+    "snyk_type": "code"
+  }
+}

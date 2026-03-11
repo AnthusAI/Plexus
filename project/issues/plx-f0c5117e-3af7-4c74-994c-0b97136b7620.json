@@ -1,0 +1,25 @@
+{
+  "id": "plx-f0c5117e-3af7-4c74-994c-0b97136b7620",
+  "title": "[Snyk] SNYK-PYTHON-SETUPTOOLS-7448482 in setuptools@40.5.0",
+  "description": "## Improper Control of Generation of Code ('Code Injection')\n\n**Severity:** high\n**Package:** setuptools@40.5.0\n**File:** `requirements.txt`\n\n**CVSS Score:** 7.5  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 696/1000\n\n### CVEs\n- [CVE-2024-6345](https://nvd.nist.gov/vuln/detail/CVE-2024-6345)\n\n**Fix:** Pin `setuptools` to version 70.0.0 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Improper Control of Generation of Code ('Code Injection') through the `package_index` module's download functions due to the unsafe usage of `os.system`. An attacker can execute arbitrary commands on the system by providing malicious URLs or manipulating the URLs retrieved from package index servers.\r\n\r\n**Note**\r\n\r\nBecause `easy_install` and `package_index` are deprecated, the exploitation surface is reduced, but it's conceivable through social engineering or minor compromise to a package index could grant remote access.\n## Remediation\nUpgrade `setuptools` to version 70.0.0 or higher.\n## References\n- [GitHub Commit](https://github.com/pypa/setuptools/commit/88807c7062788254f654ea8c03427adc859321f0)\n- [GitHub Issue](https://github.com/pypa/setuptools/issues/4331)\n- [GitHub PR](https://github.com/pypa/setuptools/pull/4332)\n- [PoC](https://huntr.com/bounties/d6362117-ad57-4e83-951f-b8141c6e7ca5)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-SETUPTOOLS-7448482)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7fe50b2e-f823-4b4e-acc2-a6a833603768",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T21:27:00.617276Z",
+  "updated_at": "2026-03-11T21:27:00.617276Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-SETUPTOOLS-7448482",
+    "snyk_severity": "high",
+    "snyk_type": "package_vulnerability"
+  }
+}
