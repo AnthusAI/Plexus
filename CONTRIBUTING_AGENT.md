@@ -42,7 +42,7 @@ Editing project/ directly is hacking the data and is a sin against The Way. Do n
 
 All work is structured.
 
-Project key prefix: kanbus.
+Project key prefix: plx.
 
 Hierarchy: initiative -> epic -> task -> sub-task.
 
