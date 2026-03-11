@@ -50,7 +50,7 @@ export interface ScorecardReportEvaluationData {
     topic_id?: number;
     label: string;
     keywords?: string[];
-    exemplars?: Array<{ text: string; item_id?: string | null; identifiers?: Record<string, string> | null }>;
+    exemplars?: Array<{ text: string; item_id?: string | null; identifiers?: Array<{ name: string; value: string; url?: string }> | null }>;
     member_count: number;
     memory_weight: number;
     memory_tier: string;
