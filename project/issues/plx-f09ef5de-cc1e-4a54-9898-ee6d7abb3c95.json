@@ -1,0 +1,30 @@
+{
+  "id": "plx-f09ef5de-cc1e-4a54-9898-ee6d7abb3c95",
+  "title": "[Snyk Code] Hardcoded Non-Cryptographic Secret",
+  "description": "## Hardcoded Non-Cryptographic Secret\n\n**Severity:** low\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/test_evaluation_metrics.py`\n**Location:** line 106, column 13 to line 106, column 24\n**Classes:** CWE-CWE-547\n### Snippet (plexus/test_evaluation_metrics.py:104-108)\n```\n 104 |             scorecard=MockScorecard(),\n 105 |             labeled_samples_filename=\"test.csv\",\n 106 |             account_key=\"test-account\"\n 107 |         )\n 108 |         evaluation.subset_of_score_names = [\"test_score\"]\n```\n\n**Issue Key:** e0fecb7b-f0ce-4f0a-925e-5146abeb2b8e\n\n### Details\nHardcoded Non-Cryptographic Secret\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.696879Z",
+  "updated_at": "2026-03-11T21:27:00.604454Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 13,
+    "snyk_end_column": 24,
+    "snyk_end_line": 106,
+    "snyk_file": "plexus/test_evaluation_metrics.py",
+    "snyk_key": "e0fecb7b-f0ce-4f0a-925e-5146abeb2b8e",
+    "snyk_line": 106,
+    "snyk_severity": "low",
+    "snyk_type": "code"
+  }
+}

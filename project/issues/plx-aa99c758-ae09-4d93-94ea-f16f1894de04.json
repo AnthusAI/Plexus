@@ -15,10 +15,11 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-02-26T00:13:56.243838577Z",
-  "updated_at": "2026-02-26T00:13:56.243838577Z",
+  "updated_at": "2026-03-11T21:27:00.622163Z",
   "closed_at": null,
   "custom": {
     "snyk_key": "SNYK-DEBIAN13-GLIBC-5681256",
-    "snyk_severity": "low"
+    "snyk_severity": "low",
+    "snyk_type": "package_vulnerability"
   }
 }

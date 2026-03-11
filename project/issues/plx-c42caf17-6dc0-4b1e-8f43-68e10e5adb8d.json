@@ -1,0 +1,30 @@
+{
+  "id": "plx-c42caf17-6dc0-4b1e-8f43-68e10e5adb8d",
+  "title": "[Snyk Code] Jinja auto-escape is set to false.",
+  "description": "## Jinja auto-escape is set to false.\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/scores/composite/GoogleGemini.py`\n**Location:** line 293, column 34 to line 293, column 45\n**Classes:** CWE-CWE-79\n### Snippet (plexus/scores/composite/GoogleGemini.py:291-295)\n```\n 291 |         context = self.get_element_by_name(name='context')['prompt']\n 292 |  \n 293 |         system_prompt_template = Environment().from_string(context)\n 294 |         context = system_prompt_template.render(transcript=transcript)\n 295 | \n```\n\n**Issue Key:** ba205916-9148-4006-8f50-5dd2f0fd472e\n\n### Details\nJinja auto-escape is set to false.\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.689257Z",
+  "updated_at": "2026-03-11T21:27:00.586291Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 34,
+    "snyk_end_column": 45,
+    "snyk_end_line": 293,
+    "snyk_file": "plexus/scores/composite/GoogleGemini.py",
+    "snyk_key": "ba205916-9148-4006-8f50-5dd2f0fd472e",
+    "snyk_line": 293,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}

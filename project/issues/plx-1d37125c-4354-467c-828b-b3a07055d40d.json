@@ -1,0 +1,30 @@
+{
+  "id": "plx-1d37125c-4354-467c-828b-b3a07055d40d",
+  "title": "[Snyk Code] Path Traversal",
+  "description": "## Path Traversal\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/data/AWSDataLakeCache.py`\n**Location:** line 148, column 22 to line 148, column 26\n**Classes:** CWE-CWE-23\n### Snippet (plexus/data/AWSDataLakeCache.py:146-150)\n```\n 146 |                 \n 147 |                 os.makedirs(os.path.dirname(local_path), exist_ok=True)\n 148 |                 with open(local_path, 'w') as file:\n 149 |                     file.write(file_content)\n 150 |                 \n```\n\n**Issue Key:** b4082acc-1ce4-478f-b1e9-57ce25513155\n\n### Details\nPath Traversal\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.689916Z",
+  "updated_at": "2026-03-11T21:27:00.587362Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 22,
+    "snyk_end_column": 26,
+    "snyk_end_line": 148,
+    "snyk_file": "plexus/data/AWSDataLakeCache.py",
+    "snyk_key": "b4082acc-1ce4-478f-b1e9-57ce25513155",
+    "snyk_line": 148,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}
