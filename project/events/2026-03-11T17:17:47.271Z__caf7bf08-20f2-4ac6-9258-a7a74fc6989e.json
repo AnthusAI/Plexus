@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "caf7bf08-20f2-4ac6-9258-a7a74fc6989e",
+  "issue_id": "plx-33aa56e7-3501-4a89-962d-1800461ee620",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-11T17:17:47.271Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+    "priority": 1,
+    "status": "open",
+    "title": "Add requirements sync workflow and fix semantic-release package versioning"
+  }
+}
