@@ -2216,7 +2216,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                         else:
                             score_result.metadata['correct'] = None  # No label to compare against
                         # Preserve scorecard-provided scoring text if available; fallback to original row text.
-                        score_result.metadata['text'] = score_result.metadata.get('text') or text
+                        if 'text' not in score_result.metadata:
+                            score_result.metadata['text'] = text
 
                         # Add to filtered results only if we get here (i.e., all conditions are met)
                         filtered_results[score_identifier] = score_result
