@@ -46,36 +46,24 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
 const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
   const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
 
-  if (!props.output) {
-    return <p>No feedback analysis data available or data is loading.</p>;
-  }
-
-  // Parse YAML if output is string, otherwise use as object (legacy support)
-  let feedbackData: FeedbackAnalysisData;
-  try {
-    if (typeof props.output === 'string') {
-      // New format: parse YAML string
-      feedbackData = yaml.load(props.output) as FeedbackAnalysisData;
-    } else {
-      // Legacy format: use object directly
-      feedbackData = props.output as FeedbackAnalysisData;
+  // Parse output unconditionally so hooks always run in the same order
+  let feedbackData: FeedbackAnalysisData | null = null;
+  let parseError = false;
+  if (props.output) {
+    try {
+      if (typeof props.output === 'string') {
+        feedbackData = yaml.load(props.output) as FeedbackAnalysisData;
+      } else {
+        feedbackData = props.output as FeedbackAnalysisData;
+      }
+    } catch (error) {
+      console.error('❌ FeedbackAnalysis: Failed to parse output data:', error);
+      parseError = true;
     }
-  } catch (error) {
-    console.error('❌ FeedbackAnalysis: Failed to parse output data:', error);
-    return (
-      <div className="p-4 text-center text-destructive">
-        Error parsing feedback analysis data. Please check the report generation.
-      </div>
-    );
   }
 
-  if (!feedbackData) {
-    return <p>No feedback analysis data available after parsing.</p>;
-  }
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const memoriesFile = feedbackData?.memories_file ?? null;
   React.useEffect(() => {
-    const memoriesFile = feedbackData.memories_file;
     if (!memoriesFile || loadedMemories) return;
     (async () => {
       try {
@@ -91,8 +79,21 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
         console.warn('FeedbackAnalysis: failed to load memories_file', e);
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedbackData.memories_file]);
+  }, [memoriesFile, loadedMemories]);
+
+  if (!props.output) {
+    return <p>No feedback analysis data available or data is loading.</p>;
+  }
+  if (parseError) {
+    return (
+      <div className="p-4 text-center text-destructive">
+        Error parsing feedback analysis data. Please check the report generation.
+      </div>
+    );
+  }
+  if (!feedbackData) {
+    return <p>No feedback analysis data available after parsing.</p>;
+  }
 
   // Use a meaningful name, ignoring generic block names
   const title = (props.name && !props.name.startsWith('block_')) ? props.name : 'Feedback Analysis';
