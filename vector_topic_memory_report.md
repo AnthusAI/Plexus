@@ -41,12 +41,18 @@ data:
 s3_vectors:
   region: us-west-2
 clustering:
-  min_topic_size: 2
+  min_topic_size: 8
+  coarse_min_topic_fraction: 0.02
+  coarse_target_max_topics_per_score: 12
   min_samples: 2
   cluster_selection_method: eom
   cluster_selection_epsilon: 0.5
 label:
   use_llm: true
   model: gpt-4o-mini
+  batch_one_pass: true
+  batch_model: gpt-4o
+  request_timeout_seconds: 45
+  batch_request_timeout_seconds: 45
   api_key_env_var: OPENAI_API_KEY
 ```

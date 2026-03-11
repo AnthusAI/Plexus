@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "53cfd81f-6bd2-4556-98e1-c36e66be6d09",
+  "issue_id": "plx-4081dc7f-bcfd-4bb4-8786-1f85c9c5d03d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T17:13:52.692Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "After readiness gate passes, remove OpenSearch domain/resources and related outputs from the prototype CDK stack while preserving S3 Vectors and embeddings bucket.\n\nInclude a rollback note in task comments.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+    "priority": 1,
+    "status": "open",
+    "title": "Remove OpenSearch resources from prototype CDK stack"
+  }
+}

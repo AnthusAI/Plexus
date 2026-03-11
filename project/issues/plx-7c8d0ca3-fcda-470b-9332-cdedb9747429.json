@@ -1,0 +1,37 @@
+{
+  "id": "plx-7c8d0ca3-fcda-470b-9332-cdedb9747429",
+  "title": "Rename Vector Topic Memory to Semantic Reinforcement Memory and Re-run Reports",
+  "description": "",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d4c2bea1-d51a-4789-8d2f-79f67d94844e",
+      "author": "ryan.porter",
+      "text": "I am starting work on renaming the report and interpolating the scorecard name into the report name. After that, I will re-run the reports for the requested scorecards.",
+      "created_at": "2026-03-04T14:47:42.050529Z"
+    },
+    {
+      "id": "74440b10-5059-4764-9a1a-cb2008b0db6e",
+      "author": "ryan.porter",
+      "text": "I have updated the report generation service to interpolate the scorecard name into the Report's DB record name, using the 'scorecard_name' parameter. I also updated the report template to use the new name 'Semantic Reinforcement Memory Report' and changed the UI to say 'Inferred Topics'. Now running the requested reports.",
+      "created_at": "2026-03-04T14:48:54.280958Z"
+    },
+    {
+      "id": "6e0c81b7-65a0-4f7b-9d20-6e9145854b68",
+      "author": "ryan.porter",
+      "text": "The report renaming is complete, scorecard names are successfully interpolating into the report titles, and the script to run all requested scorecards over 180 days is now running in the background.",
+      "created_at": "2026-03-04T14:56:19.330834Z"
+    }
+  ],
+  "created_at": "2026-03-04T14:47:29.023508Z",
+  "updated_at": "2026-03-04T14:56:19.330834Z",
+  "closed_at": "2026-03-04T14:56:07.993006Z",
+  "custom": {}
+}

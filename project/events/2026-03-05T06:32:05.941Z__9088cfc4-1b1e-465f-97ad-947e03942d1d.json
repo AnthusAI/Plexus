@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9088cfc4-1b1e-465f-97ad-947e03942d1d",
+  "issue_id": "plx-7eb0cc66-e413-4f55-97bb-44436ec834d3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T06:32:05.941Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Run 60-day Semantic Reinforcement Memory for CMG - EDU v1.0"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-1f3c5520-6e0f-44ef-8a99-648d06b29823",
+  "title": "Define readiness gate for OpenSearch decommission",
+  "description": "Define explicit pass/fail criteria to authorize OpenSearch removal.\n\nInclude:\n- Required validation duration and run frequency\n- Minimum successful run threshold across representative scorecards\n- Error budget / incident threshold\n- Required evidence links to reports and CI",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "967df83a-ca2a-4c8c-a76d-5e5c7c8d6e00",
+      "author": "ryan.porter",
+      "text": "2026-03-06 09:19 ET: Readiness gate (fast path) defined: approve decommission once (1) OpenSearch is unused in feature path (no code/config references), (2) at least one completed 60-day S3 vectors report run exists as evidence (use latest completed report), and (3) rollback note in epic remains valid. Current status: OpenSearch references removed from code/config; awaiting completed 60-day S3 report evidence to finalize gate.",
+      "created_at": "2026-03-06T18:26:06.970175Z"
+    },
+    {
+      "id": "282b72fd-5fb3-48c8-977c-e007c00b2b98",
+      "author": "ryan.porter",
+      "text": "2026-03-06 09:28 ET: Readiness gate satisfied (fast path). OpenSearch is now unused in feature path (no code/config references); evidence report: AW 60-day S3 vectors run completed (task bbbe683a-2045-42ca-adc7-4884d6420872, report 0503f133-efdf-4f7b-a8a7-fba71621b137, output status=ok). Rollback note in epic remains valid.",
+      "created_at": "2026-03-06T18:26:55.718576Z"
+    }
+  ],
+  "created_at": "2026-03-04T17:13:52.424493Z",
+  "updated_at": "2026-03-06T18:26:55.734146Z",
+  "closed_at": "2026-03-06T18:26:55.734146Z",
+  "custom": {}
+}

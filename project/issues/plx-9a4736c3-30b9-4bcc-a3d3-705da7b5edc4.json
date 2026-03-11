@@ -1,0 +1,43 @@
+{
+  "id": "plx-9a4736c3-30b9-4bcc-a3d3-705da7b5edc4",
+  "title": "Move topic-memory vector infra into Amplify CDK extension",
+  "description": "Move standalone topic-memory vector stack from infrastructure/ into dashboard/amplify backend.createStack() extension, and validate staging branch deployment path.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6aa89feb-8f7d-448b-acd0-8efa82d2bf20",
+      "author": "unknown",
+      "text": "Implementation progress: added Amplify CDK extension stack at dashboard/amplify/semantic-memory/vector_store_stack.ts and wired it into dashboard/amplify/backend.ts via backend.createStack('TopicMemoryVectorStoreStack'). Environment name now resolves from ENVIRONMENT/AMPLIFY_ENV/AWS_BRANCH.",
+      "created_at": "2026-03-05T00:49:49.315898Z"
+    },
+    {
+      "id": "9143f475-2dc6-4466-8a2a-15404058de3c",
+      "author": "unknown",
+      "text": "Validation: dashboard typecheck passes after Amplify extension changes (\n> aws-amplify-gen2@0.1.0 typecheck\n> tsc --noEmit --pretty --diagnostics\n\nFiles:             6258\nLines:          1124008\nIdentifiers:     942683\nSymbols:         489943\nTypes:               89\nInstantiations:       0\nMemory used:    875271K\nI/O read:         0.47s\nI/O write:        0.00s\nParse time:       2.47s\nBind time:        0.43s\nCheck time:       0.00s\nEmit time:        0.00s\nTotal time:       2.90s).",
+      "created_at": "2026-03-05T00:51:54.942441Z"
+    },
+    {
+      "id": "838b35ab-92f8-4715-bc7b-0ee1d6d07e79",
+      "author": "unknown",
+      "text": "Validation update: dashboard TypeScript typecheck completed successfully after Amplify extension changes.",
+      "created_at": "2026-03-05T00:53:20.493696Z"
+    },
+    {
+      "id": "870cf98a-eca6-4a5f-bc1f-1bd53d5e783f",
+      "author": "unknown",
+      "text": "Code pushed on feature branch: Amplify extension stack migration is in commit 3a3bc527. Starting staging merge/deploy validation now.",
+      "created_at": "2026-03-05T00:54:16.612681Z"
+    }
+  ],
+  "created_at": "2026-03-05T00:45:50.985007Z",
+  "updated_at": "2026-03-05T01:37:07.305436Z",
+  "closed_at": "2026-03-05T01:37:07.305436Z",
+  "custom": {}
+}

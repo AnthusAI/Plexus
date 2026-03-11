@@ -1,4 +1,5 @@
 prefix: plx
+console_port: 4251
 hierarchy:
 - initiative
 - epic
