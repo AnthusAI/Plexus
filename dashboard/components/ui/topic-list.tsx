@@ -20,6 +20,7 @@ export interface Topic {
   memory_weight: number;
   memory_tier: string;
   lifecycle_tier?: string;
+  cause?: string;
   is_new?: boolean;
   is_trending?: boolean;
   has_short_term_memory?: boolean;
@@ -39,7 +40,8 @@ function TopicItem({ topic }: TopicItemProps) {
   const hasDetails =
     (topic.keywords?.length ?? 0) > 0 ||
     (topic.exemplars?.length ?? 0) > 0 ||
-    topic.days_inactive !== undefined;
+    topic.days_inactive !== undefined ||
+    !!topic.cause;
 
   return (
     <li className="pb-3">
@@ -85,6 +87,12 @@ function TopicItem({ topic }: TopicItemProps) {
       </button>
       {expanded && hasDetails && (
         <div className="pl-6 pr-2 space-y-3 text-sm">
+          {topic.cause && (
+            <div>
+              <span className="font-medium text-muted-foreground">Root cause: </span>
+              <span className="text-foreground">{topic.cause}</span>
+            </div>
+          )}
           {topic.keywords && topic.keywords.length > 0 && (
             <div>
               <span className="font-medium text-muted-foreground">Keywords: </span>
