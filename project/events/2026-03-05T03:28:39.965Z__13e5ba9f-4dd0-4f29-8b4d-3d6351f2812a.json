@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "13e5ba9f-4dd0-4f29-8b4d-3d6351f2812a",
+  "issue_id": "plx-60ed21f8-1026-4bba-a6b4-bf8a5b0b71b5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T03:28:39.965Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Execute full-scorecard 60-day ScoreResult-No semantic memory report for AW Confirmation and capture report/task IDs plus output summary and lifecycle distribution.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Run 60-day Semantic Reinforcement Memory for AW Confirmation"
+  }
+}

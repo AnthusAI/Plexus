@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bfa09a31-c850-4531-b24e-ce758628db44",
+  "issue_id": "plx-31806e24-a3d3-44ee-8748-e5a67b437d75",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T15:14:37.867Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 2,
+    "status": "open",
+    "title": "Track background report generation progress"
+  }
+}

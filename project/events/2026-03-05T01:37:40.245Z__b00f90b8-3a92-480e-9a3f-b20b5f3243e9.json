@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b00f90b8-3a92-480e-9a3f-b20b5f3243e9",
+  "issue_id": "plx-a411b729-31a1-4395-943b-4727da2274c1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T01:37:40.245Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Verify and fix bug in plexus/analysis/embedding_cache.py where batch_embed filters out None embeddings and can break input-output positional alignment used by VectorTopicMemory. Add tests to lock ordering behavior.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-b64ee626-4de0-43b6-9287-ab0c7a91c257",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix batch_embed ordering mismatch when None embeddings occur"
+  }
+}

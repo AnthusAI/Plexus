@@ -1,0 +1,79 @@
+{
+  "id": "plx-2e3a3ddd-ee3f-40be-82e9-8ee2948a4832",
+  "title": "Prototype CDK stack: add S3 Vectors alongside OpenSearch resources",
+  "description": "Update prototype CDK stack to provision S3 Vectors (vector bucket + index) while retaining existing OpenSearch domain resources. Keep embeddings cache bucket and expose outputs for both stores.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7367286f-c80c-443c-9790-3946cfe2f78f",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c50c035a-2a89-48e0-9954-6c23eacc5e70",
+      "author": "unknown",
+      "text": "Starting Task 1. Next steps: update CDK stack resources from OpenSearch to S3 Vectors, update deploy script/docs, synth-check stack outputs.",
+      "created_at": "2026-03-04T15:32:28.937779Z"
+    },
+    {
+      "id": "8e0c94ac-c5dc-48b1-ac96-797605cb644c",
+      "author": "unknown",
+      "text": "Scanned current implementation. Identified infra touchpoints: infrastructure/stacks/opensearch_stack.py, infrastructure/deploy_opensearch.py, infrastructure/OPENSEARCH_DEPLOY.md, config/env mappings, and report templates/scripts currently referencing OpenSearch.",
+      "created_at": "2026-03-04T15:33:10.724402Z"
+    },
+    {
+      "id": "48b90bc4-7bd2-41e5-a7c2-13c6b76a3bf8",
+      "author": "unknown",
+      "text": "Implemented infrastructure migration edits: stack now provisions S3 Vectors bucket+index (float32/384/cosine), removed OpenSearch domain resources, updated deploy script and deployment doc outputs to S3 vector env vars.",
+      "created_at": "2026-03-04T15:36:55.102846Z"
+    },
+    {
+      "id": "57d0947a-9392-4296-8233-bae39bc77fc3",
+      "author": "unknown",
+      "text": "Completed: prototype stack migrated in-place to S3 Vectors, OpenSearch resources removed, deploy script/docs updated, and stack reached UPDATE_COMPLETE in us-west-2.",
+      "created_at": "2026-03-04T16:02:36.091963Z"
+    },
+    {
+      "id": "099072b5-3b45-4bbd-80cb-6df8f0c92d9a",
+      "author": "unknown",
+      "text": "Realtime update: starting infra correction. I am restoring OpenSearch resources in the prototype stack while keeping new S3 vector bucket/index outputs intact.",
+      "created_at": "2026-03-04T16:09:52.964708Z"
+    },
+    {
+      "id": "d8c28738-70ee-4044-be77-bb6b28fe56f8",
+      "author": "unknown",
+      "text": "Realtime update: beginning code edits in infrastructure/stacks/opensearch_stack.py and deploy docs/scripts to change from S3-only to dual-store provisioning (OpenSearch + S3 Vectors).",
+      "created_at": "2026-03-04T16:10:39.859066Z"
+    },
+    {
+      "id": "3276798f-4cd6-4b81-ab53-d2b718052bcc",
+      "author": "unknown",
+      "text": "Infra patch landed locally: stack now provisions OpenSearch domain + S3 vectors bucket/index + embeddings bucket, with outputs for both stores. Updating deploy docs/script accordingly.",
+      "created_at": "2026-03-04T16:11:43.828293Z"
+    },
+    {
+      "id": "f52d26fb-ed5a-4d63-817a-a93363f545a2",
+      "author": "unknown",
+      "text": "Validation update: reran targeted tests after dual-store infra patch: pytest -q plexus/reports/blocks/vector_topic_memory_test.py plexus/analysis/s3vectors_client_test.py => 8 passed.",
+      "created_at": "2026-03-04T16:24:01.263318Z"
+    },
+    {
+      "id": "a8446467-59ce-433a-8d07-69672e6c88a5",
+      "author": "unknown",
+      "text": "Deployment result: plexus-opensearch-development reached UPDATE_COMPLETE with dual-store outputs present. OpenSearchEndpoint=search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.amazonaws.com, S3VectorBucketName=plexus-vectors-development, S3VectorIndexName=topic-memory-idx-development.",
+      "created_at": "2026-03-04T16:27:58.377918Z"
+    },
+    {
+      "id": "60af2800-3a9d-438e-9cc3-1151c7b1c3f8",
+      "author": "unknown",
+      "text": "Completed infra correction: prototype stack now retains OpenSearch and provisions S3 Vectors simultaneously, and deployment reached UPDATE_COMPLETE with outputs for both stores.",
+      "created_at": "2026-03-04T16:30:41.280406Z"
+    }
+  ],
+  "created_at": "2026-03-04T15:32:24.268732Z",
+  "updated_at": "2026-03-04T16:30:41.792177Z",
+  "closed_at": "2026-03-04T16:30:41.792177Z",
+  "custom": {}
+}

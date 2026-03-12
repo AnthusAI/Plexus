@@ -1,0 +1,30 @@
+{
+  "id": "plx-c7a49b6d-f844-44fb-9374-122be8dbff1c",
+  "title": "[Snyk Code] Hardcoded Non-Cryptographic Secret",
+  "description": "## Hardcoded Non-Cryptographic Secret\n\n**Severity:** low\n**Project:** `AnthusAI/Plexus`\n**File:** `score-processor-lambda/tests/smoke_test.py`\n**Location:** line 184, column 9 to line 184, column 23\n**Classes:** CWE-CWE-547\n### Snippet (score-processor-lambda/tests/smoke_test.py:182-186)\n```\n 182 |         procedure_id=\"smoke-test\",\n 183 |         storage_backend=storage,\n 184 |         openai_api_key=\"test-key\",\n 185 |     )\n 186 |     assert runtime is not None, \"TactusRuntime failed to instantiate\"\n```\n\n**Issue Key:** 84ddebbc-a6ed-4f0e-9674-0a7eb79ba840\n\n### Details\nHardcoded Non-Cryptographic Secret\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.695248Z",
+  "updated_at": "2026-03-11T21:27:00.602758Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 9,
+    "snyk_end_column": 23,
+    "snyk_end_line": 184,
+    "snyk_file": "score-processor-lambda/tests/smoke_test.py",
+    "snyk_key": "84ddebbc-a6ed-4f0e-9674-0a7eb79ba840",
+    "snyk_line": 184,
+    "snyk_severity": "low",
+    "snyk_type": "code"
+  }
+}

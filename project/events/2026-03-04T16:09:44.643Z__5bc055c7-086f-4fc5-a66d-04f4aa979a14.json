@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "5bc055c7-086f-4fc5-a66d-04f4aa979a14",
+  "issue_id": "plx-7367286f-c80c-443c-9790-3946cfe2f78f",
+  "event_type": "field_updated",
+  "occurred_at": "2026-03-04T16:09:44.643Z",
+  "actor_id": "unknown",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Replace OpenSearch vector store with S3 Vectors for the prototype stack and Semantic Reinforcement Memory runtime. Scope: infrastructure migration in-place, runtime client migration, deployment, and real-world report validation. Definition of Done: prototype stack deployed with S3 Vectors, OpenSearch removed for this feature path, and real-world report runs confirm end-to-end behavior.",
+        "to": "Add S3 Vectors to the prototype CDK stack while keeping the existing OpenSearch vector store available. Then cut Semantic Reinforcement Memory runtime over to S3 Vectors and validate with real-world report runs."
+      }
+    }
+  }
+}

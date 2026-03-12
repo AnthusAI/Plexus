@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2f6e9a44-6268-4b2f-a515-904d4e6fdb26",
+  "issue_id": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T17:13:38.283Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Plan and execute removal of the prototype OpenSearch vector store once S3 Vectors is proven stable in real-world operation.\n\n## Goal\nRetire OpenSearch from this feature path and run only on S3 Vectors while preserving report correctness and operational safety.\n\n## Readiness Gate (must pass before removal)\n- S3 Vectors path is green in CI and production-like report runs.\n- No unresolved severity-1/0 defects attributable to S3 vector storage/query behavior.\n- Real-world report quality is validated across representative scorecards and date windows.\n- Rollback procedure is documented and tested.\n\n## Definition of Done\n- OpenSearch resources are removed from the prototype CDK stack.\n- OpenSearch runtime/config/dependency references are removed from this feature path.\n- Post-removal deployment and regression validation complete successfully.\n- kbs records contain evidence, links, and a rollback note.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 1,
+    "status": "open",
+    "title": "OpenSearch Decommission After S3 Vectors Stabilization"
+  }
+}

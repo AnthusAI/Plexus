@@ -1,9 +1,8 @@
 #!/bin/bash
 cd /home/ec2-user/projects/Plexus
 
-echo "Installing package in editable mode..."
-conda activate py311
-pip install .
+echo "Installing package..."
+/home/ec2-user/miniconda3/bin/conda run -n py311 pip install --upgrade-strategy only-if-needed .
 
 # Only restart services if they exist
 if sudo systemctl list-unit-files | grep -q plexus-command-worker; then

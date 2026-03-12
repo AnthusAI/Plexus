@@ -1,4 +1,3 @@
 DO NOT EDIT ANYTHING IN project/
 This folder is guarded by The Way.
-Do not inspect issue JSON with tools like cat or jq.
 All changes must go through Kanbus (see ../AGENTS.md and ../CONTRIBUTING_AGENT.md).

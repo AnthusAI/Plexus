@@ -1,0 +1,121 @@
+{
+  "id": "plx-7367286f-c80c-443c-9790-3946cfe2f78f",
+  "title": "S3 Vectors Cutover for Semantic Reinforcement Memory",
+  "description": "Add S3 Vectors to the prototype CDK stack while keeping the existing OpenSearch vector store available. Then cut Semantic Reinforcement Memory runtime over to S3 Vectors and validate with real-world report runs.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "37df147b-4da0-4ad1-acac-d74b6dce35eb",
+      "author": "unknown",
+      "text": "Started execution. Created child tasks 2e3a3d (infra), 891859 (runtime), 2e3c35 (deploy+validation). Beginning with infrastructure migration to S3 Vectors.",
+      "created_at": "2026-03-04T15:32:28.840851Z"
+    },
+    {
+      "id": "4f189c03-b8a3-4276-91c4-2e61d2c5c9cb",
+      "author": "unknown",
+      "text": "Code migration in progress: infra + runtime edits landed locally, targeted pytest green (8 passed). Next step is CDK synth/deploy and full report sweep validation.",
+      "created_at": "2026-03-04T15:37:24.604222Z"
+    },
+    {
+      "id": "cff79f30-76d2-4efd-9a71-4f0275c5b927",
+      "author": "unknown",
+      "text": "All child tasks closed: infra migration, runtime migration, and real-world validation completed.",
+      "created_at": "2026-03-04T16:02:36.707981Z"
+    },
+    {
+      "id": "9d3c9939-22c6-4f6b-a16f-39261c71c67a",
+      "author": "unknown",
+      "text": "Realtime update: reopening epic to align with requirement to keep both vector stores for now. Current fix in progress: CDK stack will provision OpenSearch + S3 Vectors together, while runtime stays cut over to S3 vectors.",
+      "created_at": "2026-03-04T16:09:52.862319Z"
+    },
+    {
+      "id": "caa50959-ae3c-4453-9096-cd0414c18980",
+      "author": "unknown",
+      "text": "Realtime update: implementing dual-store infra patch now; runtime remains on S3 vectors.",
+      "created_at": "2026-03-04T16:10:39.952103Z"
+    },
+    {
+      "id": "e268052c-2dbd-4ce0-ab60-58f5cceed430",
+      "author": "unknown",
+      "text": "Realtime milestone: dual-store infra deploy complete (OpenSearch + S3 vectors outputs present). Proceeding with final post-deploy report validation.",
+      "created_at": "2026-03-04T16:27:58.587610Z"
+    },
+    {
+      "id": "e901a0a3-78ec-4dfb-9288-86d671e89626",
+      "author": "unknown",
+      "text": "Completion update: requirement is now aligned to dual-store infra (OpenSearch + S3) with runtime on S3 vectors and validated real-world report execution.",
+      "created_at": "2026-03-04T16:30:41.602126Z"
+    },
+    {
+      "id": "5cc50103-0dc1-4770-b338-9b6032b0dae3",
+      "author": "unknown",
+      "text": "Realtime update: preparing final code commit with intentional files only (excluding project metadata/event files and unrelated local scratch artifacts).",
+      "created_at": "2026-03-04T16:32:37.689151Z"
+    },
+    {
+      "id": "b3b73b0f-4f02-4685-ad7f-a83b4550ea81",
+      "author": "unknown",
+      "text": "Commit created: c3d96997 (feat: add S3 vectors runtime with dual-store prototype stack). Includes dual-store CDK stack, S3 vector runtime client/migration, config/template updates, and tests.",
+      "created_at": "2026-03-04T16:33:28.113704Z"
+    },
+    {
+      "id": "4157d1cf-8129-4ec0-a995-78fde023e4f9",
+      "author": "unknown",
+      "text": "Landed remotely: pushed commit c3d96997 to origin/feature/reinforcement-memory.",
+      "created_at": "2026-03-04T16:34:04.044837Z"
+    },
+    {
+      "id": "94816f5d-2c05-49d3-b3ba-c882133ccf59",
+      "author": "unknown",
+      "text": "PR opened: https://github.com/AnthusAI/Plexus/pull/94 (base: main, head: feature/reinforcement-memory). Includes dual-store infra + S3 vectors runtime migration + validation evidence.",
+      "created_at": "2026-03-04T16:35:38.788312Z"
+    },
+    {
+      "id": "11f12304-3c1a-42c2-a0a2-a457c539e234",
+      "author": "unknown",
+      "text": "PR checks are running on #94 (GitHub Actions + Snyk + Cursor Bugbot currently pending). I will monitor and follow up if any required checks fail.",
+      "created_at": "2026-03-04T16:36:06.811034Z"
+    },
+    {
+      "id": "ff3fb80f-805c-4a44-8485-15235db58328",
+      "author": "unknown",
+      "text": "CI follow-up: PR #94 failing in TypeScript typecheck (components/ReportTask.tsx) due  prop allowing null where BlockRenderer expects string|undefined. Applying minimal frontend type fix now.",
+      "created_at": "2026-03-04T16:49:23.820613Z"
+    },
+    {
+      "id": "6b8a82f9-9b20-466b-96e9-f5cf71c19962",
+      "author": "unknown",
+      "text": "CI follow-up: PR #94 failing in TypeScript typecheck at components/ReportTask.tsx because name can be null while BlockRenderer expects string or undefined. Applying minimal frontend type fix now.",
+      "created_at": "2026-03-04T16:49:29.439226Z"
+    },
+    {
+      "id": "053fb285-17b7-4821-b978-dbf8f3d62cbe",
+      "author": "unknown",
+      "text": "CI fix applied and locally validated: dashboard/components/ReportTask.tsx now maps nullable block name to undefined for BlockRenderer props; npm run ci:typecheck passes locally.",
+      "created_at": "2026-03-04T16:50:14.932091Z"
+    },
+    {
+      "id": "be3c64bd-f3c6-4112-b5c5-d1dc1e9c77a3",
+      "author": "unknown",
+      "text": "Pushed CI fix commit 22ba0295; new CI runs triggered (push run 22679620571 and PR run 22679621161). CodeQL/Snyk/Bugbot are passing; waiting on test jobs.",
+      "created_at": "2026-03-04T16:55:55.393356Z"
+    },
+    {
+      "id": "f3546592-4389-492a-97af-618882ecbe43",
+      "author": "unknown",
+      "text": "CI is green on PR #94 after fix commit 22ba0295. All checks pass (both test runs, CodeQL JS/Python, Cursor Bugbot, Snyk); only CodePipeline triggers are skipped.",
+      "created_at": "2026-03-04T17:10:10.668260Z"
+    }
+  ],
+  "created_at": "2026-03-04T15:32:15.207919Z",
+  "updated_at": "2026-03-04T17:10:10.668260Z",
+  "closed_at": "2026-03-04T16:30:42.022316Z",
+  "custom": {}
+}

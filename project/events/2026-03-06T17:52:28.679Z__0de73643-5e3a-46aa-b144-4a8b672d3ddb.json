@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0de73643-5e3a-46aa-b144-4a8b672d3ddb",
+  "issue_id": "plx-82aec7cd-c764-4229-b6b6-b6c1669b0bc1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-06T17:52:28.679Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Verify and fix AC1 dashboard scale regression report"
+  }
+}

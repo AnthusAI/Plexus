@@ -11,16 +11,46 @@ These utilities are used by both the FeedbackAnalysis report block and
 the feedback evaluation CLI commands.
 """
 
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 import logging
 import asyncio
 from datetime import datetime, timezone
+import time
 
 from plexus.dashboard.api.models.scorecard import Scorecard
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
 
 logger = logging.getLogger(__name__)
-_score_results_window_cache: Dict[tuple, List[Dict[str, Any]]] = {}
+_SCORE_RESULTS_WINDOW_CACHE_MAX_ENTRIES = 128
+_SCORE_RESULTS_WINDOW_CACHE_TTL_SECONDS = 3600
+_score_results_window_cache: "OrderedDict[tuple, Dict[str, Any]]" = OrderedDict()
+
+
+def _get_cached_score_results_window(cache_key: tuple) -> Optional[List[Dict[str, Any]]]:
+    entry = _score_results_window_cache.get(cache_key)
+    if not entry:
+        return None
+
+    age_seconds = time.monotonic() - entry["created_at"]
+    if age_seconds > _SCORE_RESULTS_WINDOW_CACHE_TTL_SECONDS:
+        _score_results_window_cache.pop(cache_key, None)
+        return None
+
+    # Keep hottest keys at the end.
+    _score_results_window_cache.move_to_end(cache_key)
+    return entry["results"]
+
+
+def _set_cached_score_results_window(cache_key: tuple, results: List[Dict[str, Any]]) -> None:
+    _score_results_window_cache[cache_key] = {
+        "created_at": time.monotonic(),
+        "results": results,
+    }
+    _score_results_window_cache.move_to_end(cache_key)
+
+    while len(_score_results_window_cache) > _SCORE_RESULTS_WINDOW_CACHE_MAX_ENTRIES:
+        _score_results_window_cache.popitem(last=False)
 
 
 async def fetch_all_scorecards(api_client, account_id: str) -> List[Scorecard]:
@@ -327,9 +357,10 @@ async def fetch_score_results_for_score(
     score_id_str = str(score_id)
     start_time_iso = start_date.isoformat()
     end_time_iso = end_date.isoformat()
-    cache_key = (id(api_client), str(account_id), scorecard_id_str, start_time_iso, end_time_iso)
+    cache_key = (str(account_id), scorecard_id_str, start_time_iso, end_time_iso)
 
-    if cache_key not in _score_results_window_cache:
+    scorecard_window = _get_cached_score_results_window(cache_key)
+    if scorecard_window is None:
         query = """
         query ListScoreResultsByScorecardAndUpdatedAt(
             $scorecardId: String!,
@@ -413,9 +444,10 @@ async def fetch_score_results_for_score(
                 break
             seen_tokens.add(next_token)
 
-        _score_results_window_cache[cache_key] = all_results
+        _set_cached_score_results_window(cache_key, all_results)
+        scorecard_window = all_results
 
-    scorecard_window = _score_results_window_cache.get(cache_key, [])
+    scorecard_window = scorecard_window or []
     filtered_results = [sr for sr in scorecard_window if str(sr.get("scoreId") or "") == score_id_str]
     logger.debug(
         "Fetched %d score results for score %s (from cached scorecard window of %d records).",

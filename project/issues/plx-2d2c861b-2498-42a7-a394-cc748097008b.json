@@ -1,0 +1,30 @@
+{
+  "id": "plx-2d2c861b-2498-42a7-a394-cc748097008b",
+  "title": "[Snyk Code] Jinja auto-escape is set to false.",
+  "description": "## Jinja auto-escape is set to false.\n\n**Severity:** low\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/reports/tests/test_parameter_rendering.py`\n**Location:** line 28, column 11 to line 28, column 22\n**Classes:** CWE-CWE-79\n### Snippet (plexus/reports/tests/test_parameter_rendering.py:26-30)\n```\n  26 |     \"\"\"\n  27 |     # Use StrictUndefined to catch missing parameters\n  28 |     env = Environment(undefined=StrictUndefined)\n  29 |     template = env.from_string(content)\n  30 |     return template.render(**parameters)\n```\n\n**Issue Key:** 2a3fa073-00f0-418d-9d38-b3ccf424613e\n\n### Details\nJinja auto-escape is set to false.\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.697175Z",
+  "updated_at": "2026-03-11T21:27:00.604815Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 11,
+    "snyk_end_column": 22,
+    "snyk_end_line": 28,
+    "snyk_file": "plexus/reports/tests/test_parameter_rendering.py",
+    "snyk_key": "2a3fa073-00f0-418d-9d38-b3ccf424613e",
+    "snyk_line": 28,
+    "snyk_severity": "low",
+    "snyk_type": "code"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "b133a493-39ec-48bc-8d6f-2989679f421d",
+  "issue_id": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "event_type": "field_updated",
+  "occurred_at": "2026-03-04T17:12:40.455Z",
+  "actor_id": "unknown",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Persistent Vector Topic Memory / Semantic Reinforcement Memory initiative. Current architecture keeps both vector stores in the prototype stack (OpenSearch + S3 Vectors) while runtime uses S3 Vectors for indexing/querying/clustering. Embeddings remain cached in S3. Scope includes infrastructure, runtime migration, and real-world report validation tracked under epic plx-736728.",
+        "to": "# Persistent Vector Topic Memory / Semantic Reinforcement Memory\n\n## Outcome Summary\nThis initiative now includes a completed S3 Vectors migration path while keeping OpenSearch available in the prototype CDK stack for side-by-side operation.\n\n## What Was Implemented\n### 1. Kanbus Scope Added and Executed\n- Epic: `plx-736728` — S3 Vectors cutover and validation\n- Tasks:\n  - `plx-2e3a3d` — dual-store infrastructure update\n  - `plx-891859` — runtime migration from OpenSearch to S3 Vectors\n  - `plx-2e3c35` — deployment and real-world validation runs\n\n### 2. Infrastructure (Dual Store)\n- Prototype stack now provisions and retains both:\n  - OpenSearch domain\n  - S3 Vectors bucket/index\n  - Embeddings S3 bucket\n- Stack deployment verified in `us-west-2` with `UPDATE_COMPLETE`.\n- Confirmed outputs include `OpenSearchEndpoint`, `S3VectorBucketName`, `S3VectorIndexName`, and `EmbeddingsBucketName`.\n\n### 3. Runtime Migration\n- Semantic Reinforcement Memory runtime now uses S3 Vectors for vector indexing/query paths.\n- Added S3 Vectors adapter and tests.\n- Updated report templates/config mappings to `s3_vectors.*` configuration keys.\n- Fixed live-run bug where S3 Vectors API rejected requests containing both `indexArn` and bucket/index simultaneously.\n\n### 4. Validation Evidence\n- Local targeted tests:\n  - `pytest -q plexus/reports/blocks/vector_topic_memory_test.py plexus/analysis/s3vectors_client_test.py`\n  - Result: `8 passed`\n- Real-world report validations completed successfully, including:\n  - `d60f2f2f-076a-4477-888a-af438a44a75e`\n  - `cccd9ddf-5231-4f21-91ca-4a1f7f7bcec2`\n  - `f0ee6a94-bc18-49fe-b453-bc09a6c47731`\n  - `947ee187-c0b2-4ed0-b108-c651b0e05487`\n  - `44b42144-c34f-43b2-bd69-592f0447fce7`\n  - post-dual-store validation: `4a502e52-545b-4af1-8b4f-7a787cee2282`\n\n## Delivery Artifacts\n- Primary implementation commit: `c3d96997`\n- CI follow-up fix commit: `22ba0295`\n- PR: https://github.com/AnthusAI/Plexus/pull/94\n- PR checks: passing (tests, CodeQL, Snyk, Bugbot)\n\n## Current Initiative Status\n- Related S3 cutover epic and tasks are closed.\n- This initiative remains open/in-progress for any remaining broader scope outside the completed S3 cutover track."
+      }
+    }
+  }
+}

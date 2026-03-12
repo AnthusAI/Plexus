@@ -1,0 +1,43 @@
+{
+  "id": "plx-34ee238a-1392-48cf-8722-024bcd96db0d",
+  "title": "Add new/trending topic taxonomy for Semantic Reinforcement Memory",
+  "description": "Add explicit topic lifecycle flags: new=short&&!medium&&!long and trending=(short||medium)&&!long. Derive from multi-window/history signals and expose in report output/UI.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "11e3e3ad-2b71-40b6-af3b-bff2dc4711c4",
+      "author": "unknown",
+      "text": "Implementing lifecycle tiers now: new=short&&!medium&&!long and trending=(short||medium)&&!long. Updating report output and dashboard ordering/labels.",
+      "created_at": "2026-03-05T02:11:16.251214Z"
+    },
+    {
+      "id": "3b3458ef-18c3-4252-a1a8-b7acb797dcf9",
+      "author": "unknown",
+      "text": "Patched backend block and UI: VectorTopicMemory now derives lifecycle windows from cluster timestamps and emits lifecycle_tier/is_new/is_trending plus short/medium/long flags; dashboard renders lifecycle badge (new/trending). Running tests next.",
+      "created_at": "2026-03-05T02:12:29.331527Z"
+    },
+    {
+      "id": "0e2a8697-458c-4eb2-8da4-7a86c38e9c81",
+      "author": "unknown",
+      "text": "Completed implementation and validation. Report block now emits lifecycle_tier + is_new/is_trending + has_short_term_memory/has_medium_term_memory/has_long_term_memory per topic, while retaining hot/warm/cold memory_tier for severity. Verified in report output record 73268d17-ca1b-4701-adf6-773b44c9e484.",
+      "created_at": "2026-03-05T02:19:58.203090Z"
+    },
+    {
+      "id": "1d980d1e-6079-4e3e-a6f3-6b409ab76cc3",
+      "author": "unknown",
+      "text": "Code pushed to feature/reinforcement-memory in commit dda649a5. Includes backend lifecycle flags + UI lifecycle badge + tests.",
+      "created_at": "2026-03-05T02:20:39.441980Z"
+    }
+  ],
+  "created_at": "2026-03-05T02:08:13.336596Z",
+  "updated_at": "2026-03-05T02:20:39.441980Z",
+  "closed_at": "2026-03-05T02:20:09.441732Z",
+  "custom": {}
+}

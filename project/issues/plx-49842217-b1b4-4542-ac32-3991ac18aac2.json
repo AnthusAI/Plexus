@@ -15,10 +15,11 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-02-26T00:13:56.244031835Z",
-  "updated_at": "2026-02-26T00:13:56.244031835Z",
+  "updated_at": "2026-03-11T21:27:00.622587Z",
   "closed_at": null,
   "custom": {
     "snyk_key": "SNYK-DEBIAN13-UTILLINUX-5698535",
-    "snyk_severity": "low"
+    "snyk_severity": "low",
+    "snyk_type": "package_vulnerability"
   }
 }
