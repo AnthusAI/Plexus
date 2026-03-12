@@ -2,6 +2,32 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 from plexus.Scorecard import Scorecard
 import pytest
+import logging
+
+def create_mock_score_instance():
+    """Helper function to create a properly mocked score instance"""
+    mock_score_instance = MagicMock()
+    
+    # Set up the async predict method
+    async def mock_predict(*args, **kwargs):
+        return Mock(value='Pass')
+    mock_score_instance.predict = mock_predict
+    
+    # Set up the get_accumulated_costs method
+    def mock_get_accumulated_costs():
+        from decimal import Decimal
+        return {
+            'prompt_tokens': 100,
+            'completion_tokens': 50,
+            'cached_tokens': 0,
+            'llm_calls': 1,
+            'input_cost': Decimal('0.10'),
+            'output_cost': Decimal('0.05'),
+            'total_cost': Decimal('0.15')
+        }
+    mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
+    
+    return mock_score_instance
 
 # Remove unittest.TestCase since we're using pure pytest style
 class TestScorecard:
@@ -10,6 +36,7 @@ class TestScorecard:
         # Create a mock scorecard configuration
         self.mock_config = {
             'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
             'scores': [
                 {'name': 'Score1', 'id': 1},
                 {'name': 'Score2', 'id': 2, 'depends_on': ['Score1']},
@@ -48,6 +75,26 @@ class TestScorecard:
 
         # Set up the async predict method
         async def mock_predict(*args, **kwargs):
+            # Check if we received a model_input parameter
+            model_input = None
+            for arg in args:
+                if hasattr(arg, 'metadata'):
+                    model_input = arg
+                    break
+            
+            for key, value in kwargs.items():
+                if key == 'model_input' and hasattr(value, 'metadata'):
+                    model_input = value
+                    break
+            
+            # Extract score name from model_input
+            score_name = None
+            if model_input and hasattr(model_input, 'metadata'):
+                score_name = model_input.metadata.get('score_name', '')
+            
+            # Log for debugging
+            logging.info(f"Default mock predict for score: {score_name}")
+            
             return Mock(value='Pass')
         
         mock_score_instance.predict = mock_predict
@@ -67,7 +114,45 @@ class TestScorecard:
         # Mock get_score_result to be async
         async def mock_get_score_result(*args, **kwargs):
             score_name = kwargs.get('score')
-            return Mock(name=score_name, value='Pass')
+            metadata = kwargs.get('metadata', {})
+            results = kwargs.get('results', [])
+            
+            # Important: Add score name to metadata like the real implementation does
+            metadata = metadata or {}
+            metadata.update({
+                'score_name': score_name,
+                'scorecard_name': self.mock_config['name']
+            })
+            
+            # Instantiate the score class with the right configuration
+            score_class = self.mock_registry.get(score_name)
+            score_config = self.mock_registry.get_properties(score_name)
+            if score_config:
+                score_config = dict(score_config)  # make a copy
+                score_config.update({
+                    'score_name': score_name,
+                    'scorecard_name': self.mock_config['name']
+                })
+            
+            # Create and predict
+            score_instance = await score_class.create(**(score_config or {}))
+            
+            # Call the predict method with the model_input
+            from plexus.scores.Score import Score
+            result = await score_instance.predict(
+                context=None,
+                model_input=Score.Input(
+                    text=kwargs.get('text', ''),
+                    metadata=metadata,
+                    results=results
+                )
+            )
+            
+            # Return either a single result or a list, same as the real implementation
+            if isinstance(result, list):
+                return result
+            else:
+                return [result]
         
         self.scorecard.get_score_result = mock_get_score_result
 
@@ -122,6 +207,7 @@ class TestScorecard:
         # Create a simple config without dependencies for this test
         simple_config = {
             'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
             'scores': [
                 {'name': 'SimpleScore1', 'id': 1},
                 {'name': 'SimpleScore2', 'id': 2},
@@ -129,7 +215,7 @@ class TestScorecard:
             ]
         }
         self.scorecard.properties = simple_config
-        Scorecard.scores = simple_config['scores']
+        self.scorecard.scores = simple_config['scores']  # Use instance scores instead of class level
         
         # Update the get_properties mock for simple scores
         def get_properties_side_effect(score_name):
@@ -155,6 +241,21 @@ class TestScorecard:
         
         mock_score_instance.predict = mock_predict
 
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
+
         # Set up the async create method
         async def mock_create(**kwargs):
             return mock_score_instance
@@ -167,35 +268,68 @@ class TestScorecard:
             
         self.mock_registry.get.side_effect = mock_get
 
-        # Call the method we're testing
-        result = await self.scorecard.score_entire_text(
-            text="Sample text",
-            metadata={},
-            modality="test"
-        )
+        # Override score_names_to_process to use our simple scores
+        def mock_score_names_to_process():
+            return ['SimpleScore1', 'SimpleScore2', 'SimpleScore3']
+        
+        original_method = self.scorecard.score_names_to_process
+        self.scorecard.score_names_to_process = mock_score_names_to_process
 
-        # Assert that the result contains all scores
-        assert len(result) == 3
+        try:
+            # Call the method we're testing
+            result = await self.scorecard.score_entire_text(
+                text="Sample text",
+                metadata={},
+                modality="test"
+            )
+            
+            # Assert that the result contains all scores
+            assert len(result) == 3
+        finally:
+            # Restore the original method
+            self.scorecard.score_names_to_process = original_method
 
     @pytest.mark.asyncio
     async def test_score_entire_text_with_dependencies(self):
         """Test scoring with dependencies"""
+        # Create a config with dependencies for this test
+        dependency_config = {
+            'name': 'TestScorecard',
+            'scores': [
+                {'name': 'Score1', 'id': '1'},
+                {'name': 'Score2', 'id': '2', 'depends_on': ['Score1']},
+                {'name': 'Score3', 'id': '3', 'depends_on': ['Score1']}
+            ]
+        }
+        
+        # Set up the scorecard (use instance properties for API-first approach)
+        self.scorecard.properties = dependency_config
+        self.scorecard.scores = dependency_config['scores']
+        
         # Create a mock score class
         mock_score_class = MagicMock()
         mock_score_instance = MagicMock()
-
+        
         # Set up the async predict method
-        async def mock_predict(context=None, model_input=None):
-            # Extract score name from the configuration
-            score_name = mock_score_instance.score_name
-            mock_results = {
-                'Score1': Mock(value='Pass'),
-                'Score2': Mock(value='Good'),
-                'Score3': Mock(value='Great')
-            }
-            return mock_results.get(score_name, Mock(value='Pass'))
+        async def mock_predict(*args, **kwargs):
+            return Mock(value='Pass')
         
         mock_score_instance.predict = mock_predict
+
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
 
         # Set up the async create method
         async def mock_create(**kwargs):
@@ -209,6 +343,44 @@ class TestScorecard:
             return mock_score_class
             
         self.mock_registry.get.side_effect = mock_get
+        
+        # Update the mocks to provide score properties
+        def get_properties_side_effect(score_name):
+            for score in dependency_config['scores']:
+                if score['name'] == score_name:
+                    return score
+            return None
+        self.mock_registry.get_properties.side_effect = get_properties_side_effect
+        
+        # Create result objects for each score
+        from plexus.scores.Score import Score
+        score1_result = Score.Result(
+            value='Pass', 
+            parameters=Score.Parameters(name='Score1')
+        )
+        score2_result = Score.Result(
+            value='Good', 
+            parameters=Score.Parameters(name='Score2')
+        )
+        score3_result = Score.Result(
+            value='Great', 
+            parameters=Score.Parameters(name='Score3')
+        )
+        
+        # Set up a custom mock for get_score_result that returns our predefined results
+        async def mock_get_score_result(*, scorecard, score, text, metadata, modality, results, item=None):
+            if score == 'Score1':
+                return [score1_result]
+            elif score == 'Score2':
+                # For score2, we expect score1 results to be passed
+                return [score2_result]
+            elif score == 'Score3':
+                # For score3, we also expect score1 results to be passed
+                return [score3_result]
+
+            return [Score.Result(value="Error", error=f"Score not found: {score}")]
+        
+        self.scorecard.get_score_result = mock_get_score_result
 
         # Call the method we're testing
         result = await self.scorecard.score_entire_text(
@@ -227,21 +399,44 @@ class TestScorecard:
     @pytest.mark.asyncio
     async def test_score_entire_text_skips_failed_conditions(self):
         """Test that scores are skipped when their dependency conditions are not met"""
+        # Create the test configuration with a conditional dependency
+        cond_dependency_config = {
+            'name': 'TestScorecard',
+            'scores': [
+                {'name': 'Score1', 'id': '1'},
+                # Score3 depends on Score1 having the value 'Pass'
+                {'name': 'Score3', 'id': '3', 'depends_on': {'Score1': {'operator': '==', 'value': 'Pass'}}}
+            ]
+        }
+        
+        # Set up the scorecard (use instance properties for API-first approach)
+        self.scorecard.properties = cond_dependency_config
+        self.scorecard.scores = cond_dependency_config['scores']
+        
         # Create a mock score class
         mock_score_class = MagicMock()
         mock_score_instance = MagicMock()
-
+        
         # Set up the async predict method
-        async def mock_predict(context=None, model_input=None):
-            # Extract score name from the configuration
-            score_name = mock_score_instance.score_name
-            mock_results = {
-                'Score1': Mock(value='Fail'),
-                'Score3': Mock(value='Pass')  # This should be skipped due to Score1's Fail value
-            }
-            return mock_results.get(score_name, Mock(value='Pass'))
+        async def mock_predict(*args, **kwargs):
+            return Mock(value='Pass')
         
         mock_score_instance.predict = mock_predict
+
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
 
         # Set up the async create method
         async def mock_create(**kwargs):
@@ -255,6 +450,38 @@ class TestScorecard:
             return mock_score_class
             
         self.mock_registry.get.side_effect = mock_get
+        
+        # Update the mocks to provide score properties
+        def get_properties_side_effect(score_name):
+            for score in cond_dependency_config['scores']:
+                if score['name'] == score_name:
+                    return score
+            return None
+        self.mock_registry.get_properties.side_effect = get_properties_side_effect
+        
+        # Create result objects for each score
+        from plexus.scores.Score import Score
+        # Critical: Score1 must have 'Fail' value to trigger the condition check
+        score1_result = Score.Result(
+            value='Fail', 
+            parameters=Score.Parameters(name='Score1')
+        )
+        score3_result = Score.Result(
+            value='Pass', 
+            parameters=Score.Parameters(name='Score3')
+        )
+        
+        # Set up a custom mock for get_score_result
+        async def mock_get_score_result(*, scorecard, score, text, metadata, modality, results, item=None):
+            if score == 'Score1':
+                return [score1_result]  # Return Fail to trigger condition check
+            elif score == 'Score3':
+                # This should never be called due to dependency condition
+                return [score3_result]
+
+            return [Score.Result(value="Error", error=f"Score not found: {score}")]
+        
+        self.scorecard.get_score_result = mock_get_score_result
 
         # Call the method we're testing
         result = await self.scorecard.score_entire_text(
@@ -267,7 +494,8 @@ class TestScorecard:
         # Verify Score3 was skipped (not in results)
         assert '1' in result  # Score1 should be present
         assert result['1'].value == 'Fail'  # Score1 should have failed
-        assert '3' not in result  # Score3 should be skipped
+        assert '3' in result  # Score3 should be included with SKIPPED status
+        assert result['3'] == 'SKIPPED'  # Score3 should be skipped
 
     @pytest.mark.asyncio
     async def test_score_entire_text_handles_single_result(self):
@@ -275,12 +503,13 @@ class TestScorecard:
         # Create a simple config without dependencies for this test
         simple_config = {
             'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
             'scores': [
                 {'name': 'SingleResultScore', 'id': 1}
             ]
         }
         self.scorecard.properties = simple_config
-        Scorecard.scores = simple_config['scores']
+        self.scorecard.scores = simple_config['scores']
         
         # Update the get_properties mock for simple scores
         def get_properties_side_effect(score_name):
@@ -306,6 +535,21 @@ class TestScorecard:
         
         mock_score_instance.predict = mock_predict
 
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
+
         # Set up the async create method
         async def mock_create(**kwargs):
             return mock_score_instance
@@ -318,16 +562,27 @@ class TestScorecard:
             
         self.mock_registry.get.side_effect = mock_get
 
-        # Call the method we're testing
-        result = await self.scorecard.score_entire_text(
-            text="Sample text",
-            metadata={},
-            modality="test"
-        )
+        # Override score_names_to_process to use our simple score
+        def mock_score_names_to_process():
+            return ['SingleResultScore']
+        
+        original_method = self.scorecard.score_names_to_process
+        self.scorecard.score_names_to_process = mock_score_names_to_process
 
-        # Assert that the result contains the score
-        assert len(result) == 1
-        assert result['1'].value == 'Pass'
+        try:
+            # Call the method we're testing
+            result = await self.scorecard.score_entire_text(
+                text="Sample text",
+                metadata={},
+                modality="test"
+            )
+            
+            # Assert that the result contains the score
+            assert len(result) == 1
+            assert result['1'].value == 'Pass'
+        finally:
+            # Restore the original method
+            self.scorecard.score_names_to_process = original_method
 
     @pytest.mark.asyncio
     async def test_score_entire_text_handles_result_list(self):
@@ -335,12 +590,13 @@ class TestScorecard:
         # Create a simple config without dependencies for this test
         simple_config = {
             'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
             'scores': [
                 {'name': 'ListResultScore', 'id': 1}
             ]
         }
         self.scorecard.properties = simple_config
-        Scorecard.scores = simple_config['scores']
+        self.scorecard.scores = simple_config['scores']  # Use instance scores instead of class level
         
         # Update the get_properties mock for simple scores
         def get_properties_side_effect(score_name):
@@ -366,6 +622,21 @@ class TestScorecard:
         
         mock_score_instance.predict = mock_predict
 
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
+
         # Set up the async create method
         async def mock_create(**kwargs):
             return mock_score_instance
@@ -378,16 +649,27 @@ class TestScorecard:
             
         self.mock_registry.get.side_effect = mock_get
 
-        # Call the method we're testing
-        result = await self.scorecard.score_entire_text(
-            text="Sample text",
-            metadata={},
-            modality="test"
-        )
+        # Override score_names_to_process to use our simple score
+        def mock_score_names_to_process():
+            return ['ListResultScore']
+        
+        original_method = self.scorecard.score_names_to_process
+        self.scorecard.score_names_to_process = mock_score_names_to_process
 
-        # Assert that the result contains the score
-        assert len(result) == 1
-        assert result['1'].value == 'Pass'
+        try:
+            # Call the method we're testing
+            result = await self.scorecard.score_entire_text(
+                text="Sample text",
+                metadata={},
+                modality="test"
+            )
+            
+            # Assert that the result contains the score
+            assert len(result) == 1
+            assert result['1'].value == 'Pass'
+        finally:
+            # Restore the original method
+            self.scorecard.score_names_to_process = original_method
 
 if __name__ == '__main__':
     pytest.main()

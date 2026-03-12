@@ -4,7 +4,8 @@ import React from 'react'
 import { Button } from "@/components/ui/button"
 import { ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
 import { useState } from 'react'
-import SquareLogo, { LogoVariant } from '@/components/logo-square'
+import BrandableLogo from '@/components/BrandableLogo'
+import { LogoVariant } from '@/components/logo-square'
 
 export const CTASection = () => {
   const [isLoading, setIsLoading] = useState(false)
@@ -69,7 +70,7 @@ export const CTASection = () => {
                   style={{ transform: "translateZ(0)", willChange: "opacity, transform" }}
                 ></div>
                 <div className="relative z-10">
-                  <SquareLogo variant={LogoVariant.Square} className="w-full h-full" />
+                  <BrandableLogo variant={LogoVariant.Square} className="w-full h-full" />
                 </div>
               </div>
             </div>

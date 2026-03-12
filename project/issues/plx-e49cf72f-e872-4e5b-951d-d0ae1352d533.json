@@ -1,0 +1,67 @@
+{
+  "id": "plx-e49cf72f-e872-4e5b-951d-d0ae1352d533",
+  "title": "Verify S3 Vectors existence and live report execution evidence",
+  "description": "Investigate user report that no working S3 vector-store report exists.\n\nValidation scope:\n- confirm S3 Vectors bucket/index exist in AWS\n- run a real Semantic Reinforcement Memory report using S3 Vectors path\n- capture report/task IDs and status evidence",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e096b452-6cdb-49b5-a076-54740f48b5b5",
+      "author": "unknown",
+      "text": "Starting verification now: checking CloudFormation outputs + direct S3 Vectors API calls, then running a live Semantic Reinforcement Memory report for evidence.",
+      "created_at": "2026-03-04T19:09:10.513864Z"
+    },
+    {
+      "id": "604243df-e1e2-435d-9b20-10da20b81667",
+      "author": "unknown",
+      "text": "Evidence: CloudFormation stack is UPDATE_COMPLETE and outputs include S3VectorBucketName=plexus-vectors-development, S3VectorIndexName=topic-memory-idx-development, S3VectorIndexArn=arn:aws:s3vectors:us-west-2:695039645615:bucket/plexus-vectors-development/index/topic-memory-idx-development. Direct boto3 s3vectors.get_index also succeeded for that bucket/index.",
+      "created_at": "2026-03-04T19:09:32.478257Z"
+    },
+    {
+      "id": "839dddbb-e4c4-4962-9ff4-eefe9457118a",
+      "author": "unknown",
+      "text": "Live verification run started: AWS_REGION=us-west-2 ENVIRONMENT=development python scripts/run_vector_topic_memory_report.py --scorecard 97 --days 180 (testing fallback/default S3 vectors resolution).",
+      "created_at": "2026-03-04T19:09:51.141889Z"
+    },
+    {
+      "id": "273ac326-e47c-43ed-9e30-d746532a75ec",
+      "author": "unknown",
+      "text": "Live run is executing successfully so far (no shell-mode config error). Task ID created: 5f3f900b-9ed1-4c36-b769-50405582b63f. Continuing to completion to capture final report evidence.",
+      "created_at": "2026-03-04T19:10:12.226172Z"
+    },
+    {
+      "id": "435baf0a-dadc-461f-ae7d-4ad89a62f0a6",
+      "author": "unknown",
+      "text": "Live run progress: report_id=92809f11-1b61-4382-a9e5-64baac91bcd1 task_id=5f3f900b-9ed1-4c36-b769-50405582b63f. Block log confirms default S3 vectors resolution and has indexed 166 documents; clustering in progress.",
+      "created_at": "2026-03-04T19:11:26.048194Z"
+    },
+    {
+      "id": "11602d95-710d-42e9-9e1e-d5334aeee927",
+      "author": "unknown",
+      "text": "Live run completed successfully. report_id=92809f11-1b61-4382-a9e5-64baac91bcd1 task_id=5f3f900b-9ed1-4c36-b769-50405582b63f. CLI output ended with 'Report completed successfully!'. This confirms an end-to-end working report execution through the S3 Vectors configuration path.",
+      "created_at": "2026-03-04T19:12:43.938896Z"
+    },
+    {
+      "id": "ba9587f4-e108-407f-a2e6-1c2fce23d0e5",
+      "author": "unknown",
+      "text": "Persisted evidence from Plexus API: report 92809f11-1b61-4382-a9e5-64baac91bcd1 exists with VectorTopicMemory block status=ok, summary='Processed 166 items across 4 scores, 18 clusters total', and index_name=topic-memory-idx-development. Associated task 5f3f900b-9ed1-4c36-b769-50405582b63f is status=COMPLETED with all 5 stages completed and completedAt=2026-03-04T19:12:01.517597Z.",
+      "created_at": "2026-03-04T19:13:00.581811Z"
+    },
+    {
+      "id": "a0145afd-ea5e-4900-8561-315b63ccef2c",
+      "author": "unknown",
+      "text": "Checked recent Semantic Reinforcement Memory runs for config d8fa848c-3566-494f-baae-507a0cfd77df: tasks 77a45b12-25d5-41b9-b7eb-7deb8643c0ce, c7817739-20c6-420e-8aad-b5853ddfcf63, a9026d53-b6d9-44e1-8ddc-a61d1cdacf8a, 54d827e2-2b1a-4aa9-a4d2-4cdd9fee4ea7, and 5f3f900b-9ed1-4c36-b769-50405582b63f are all COMPLETED. Latest report 92809f11-1b61-4382-a9e5-64baac91bcd1 includes VectorTopicMemory status=ok and index_name=topic-memory-idx-development.",
+      "created_at": "2026-03-04T19:13:30.758426Z"
+    }
+  ],
+  "created_at": "2026-03-04T19:09:02.999805Z",
+  "updated_at": "2026-03-04T19:13:33.047023Z",
+  "closed_at": "2026-03-04T19:13:33.047023Z",
+  "custom": {}
+}

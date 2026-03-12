@@ -1,0 +1,68 @@
+# Topic Analysis Configuration Example
+# Demonstrates regex pattern support in custom_stop_words
+#
+# This example shows how to use both literal words and regex patterns
+# to filter out unwanted terms from your topic analysis.
+
+class: TopicAnalysis
+
+data:
+  source: my-data-source
+  content_column: "text"
+  sample_size: 2000
+
+bertopic_analysis:
+  # Core topic modeling parameters
+  num_topics: 8
+  min_topic_size: 15
+  top_n_words: 10
+
+  # Stop words filtering with regex support
+  remove_stop_words: true
+  stop_words_languages: ["english", "spanish"]
+
+  # Custom stop words - mix of literal words and regex patterns
+  custom_stop_words:
+    # Domain-specific literal words to exclude
+    - customer
+    - agent
+    - windows
+    - andersen
+
+    # Regex patterns to exclude
+    - '^\d+$'          # Pure numbers (123, 456, etc.)
+    - '^[A-Z]{2,}$'    # All-caps acronyms (API, USA, etc.)
+    - '^\d{3}-\d{4}$'  # Phone patterns like 555-1234
+    - '^(um|uh|hmm)$'  # Common filler words
+
+  # Minimum document frequency - helps remove very rare terms
+  min_df: 3
+
+  # N-gram configuration
+  min_ngram: 1
+  max_ngram: 2
+
+  # N-gram export - useful for verifying stop words are filtered
+  max_ngrams_per_topic: 100
+
+  # Fine-tuning with LLM (optional)
+  fine_tuning:
+    use_representation_model: true
+    provider: "openai"
+    model: "gpt-4o-mini"
+    nr_docs: 100
+    diversity: 0.1
+    doc_length: 500
+    prompt: |
+      I have a topic from call center transcripts that is described by the following keywords: [KEYWORDS]
+      In this topic, these customer-agent conversations are representative examples:
+      [DOCUMENTS]
+
+      Based on the keywords and representative examples above, provide a short, descriptive label for this topic in customer service context. Return only the label, no other text or formatting.
+
+# Notes:
+# - Regex patterns are automatically detected by the presence of regex metacharacters
+# - All literal words are case-insensitive
+# - Patterns use re.fullmatch(), so they must match the entire token
+# - Invalid regex patterns will be logged as warnings and treated as literals
+# - Check the n-gram export CSV to verify your filters are working correctly

@@ -5,7 +5,7 @@ import { TaskStatus, TaskStageConfig, TaskStatusProps } from '../components/ui/t
 import { Radio, Triangle } from 'lucide-react'
 
 const meta = {
-  title: 'Progress Bars/TaskStatus',
+  title: 'Tasks/Status',
   component: TaskStatus,
   parameters: {
     layout: 'padded',

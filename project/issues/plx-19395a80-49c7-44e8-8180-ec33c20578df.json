@@ -1,0 +1,30 @@
+{
+  "id": "plx-19395a80-49c7-44e8-8180-ec33c20578df",
+  "title": "[Snyk Code] Path Traversal",
+  "description": "## Path Traversal\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/cli/shared/CommandTasks.py`\n**Location:** line 445, column 46 to line 445, column 50\n**Classes:** CWE-CWE-23\n### Snippet (plexus/cli/shared/CommandTasks.py:443-447)\n```\n 443 |                                     # Use clean JSON output for Universal Code\n 444 |                                     try:\n 445 |                                         with open(output_file, 'r', encoding='utf-8') as f:\n 446 |                                             clean_json_data = json.load(f)\n 447 |                                         universal_code_yaml = generate_universal_code_yaml(\n```\n\n**Issue Key:** c015587c-0144-4611-a80a-acab9630a1d3\n\n### Details\nPath Traversal\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.690256Z",
+  "updated_at": "2026-03-11T21:27:00.587953Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 46,
+    "snyk_end_column": 50,
+    "snyk_end_line": 445,
+    "snyk_file": "plexus/cli/shared/CommandTasks.py",
+    "snyk_key": "c015587c-0144-4611-a80a-acab9630a1d3",
+    "snyk_line": 445,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}

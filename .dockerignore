@@ -1,0 +1,72 @@
+# Project files
+dashboard/
+infrastructure/
+docker/
+examples/
+.plexus/
+.plexus_training_data_cache/
+.sqlbot/
+amplify/
+k8s/
+MCP/
+mlruns/
+node_modules/
+reports/
+scorecards/
+scripts/
+tests/
+tmp/
+*.md
+*.txt
+*.csv
+*.json
+*.yaml
+*.yml
+*.jsonl
+*.jsonl.gz
+*.jsonl.gz.gz
+
+# IDE
+.vscode/
+.cursor/
+.cursorrules
+.claude/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+py311/
+
+# Git
+.git/
+.gitignore
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*_test.py
+test_*.py
+
+# Build artifacts
+*.egg-info/
+.next/
+
+# Docker
+docker/
+Dockerfile
+.dockerignore
+
+# Other
+*.log
+.DS_Store

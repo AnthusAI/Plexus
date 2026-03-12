@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "97c07694-ca0b-4fac-9a24-b375568979c2",
+  "issue_id": "plx-d2195f58-7e95-4148-bbfa-4f3c66f4e4c2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T21:41:06.420Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+    "priority": 1,
+    "status": "open",
+    "title": "Parallelize GitHub Actions tests while keeping AWS steps sequential"
+  }
+}

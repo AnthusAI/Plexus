@@ -1,0 +1,25 @@
+{
+  "id": "plx-2bce0fa7-f083-40f4-abeb-13725ebf02fe",
+  "title": "Index template and alias configuration",
+  "description": "**As a** Plexus runtime, **I want** the OpenSearch domain to have pre-configured index templates and aliases, **so that** the blue/green index rebuild strategy works from the first run.\n\nThe stack should include a custom resource or bootstrap script that creates an index template defining the mapping for topic memory documents: `doc_id` (keyword), `text` (text), `embedding` (knn_vector, 384 dims), `metadata` (object), `cluster_id` (keyword), `cluster_version` (keyword), `record_type` (keyword for item vs cluster discrimination).\n\nIt also creates index aliases `topic-memory-live` and `topic-memory-build` for zero-downtime blue/green deployment.\n\n## Key Files (infra repo)\n\n- Modify: `opensearch_infra/stacks/opensearch_stack.py`\n- Modify: `tests/test_opensearch_stack.py`\n\n## Dependencies\n\nStory plx-a2a3cb (CDK stack synthesizes a valid OpenSearch domain)",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-46723f50-117a-404a-963e-8753dd84bf70",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4e1c5369-79e0-49bf-ae7e-6d128d88e180",
+      "author": "ryan.porter",
+      "text": "Feature: Index template and alias configuration\n\n  Scenario: Index template defines knn_vector field for embeddings\n    Given the index template configuration\n    When the mappings are inspected\n    Then there is a field \"embedding\" of type \"knn_vector\" with dimension 384\n    And there is a field \"text\" of type \"text\"\n    And there is a field \"doc_id\" of type \"keyword\"\n    And there is a field \"cluster_id\" of type \"keyword\"\n    And there is a field \"record_type\" of type \"keyword\"\n    And there is a field \"metadata\" of type \"object\"\n\n  Scenario: Blue/green aliases are defined\n    Given the index template configuration\n    When the aliases section is inspected\n    Then aliases \"topic-memory-live\" and \"topic-memory-build\" are defined\n    And the template pattern matches \"topic-memory-*\"\n\n  Scenario: Alias names are in stack outputs\n    Given the synthesized CDK template\n    When outputs are inspected\n    Then there is an Output named \"LiveIndexAlias\" with value \"topic-memory-live\"\n    And there is an Output named \"BuildIndexAlias\" with value \"topic-memory-build\"\n",
+      "created_at": "2026-03-04T02:25:27.426786Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:25:16.178624Z",
+  "updated_at": "2026-03-04T03:18:50.258608Z",
+  "closed_at": "2026-03-04T03:18:50.258608Z",
+  "custom": {}
+}

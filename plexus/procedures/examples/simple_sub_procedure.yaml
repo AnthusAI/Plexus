@@ -1,0 +1,52 @@
+name: simple_sub_procedure
+version: 1.0.0
+description: Simple sub-procedure for testing Procedure.run() and Procedure.spawn()
+
+class: LuaDSL
+
+params:
+  message:
+    type: string
+    required: false
+    default: "Hello from sub-procedure"
+  delay:
+    type: number
+    required: false
+    default: 0
+
+outputs:
+  result:
+    type: string
+    required: true
+  message:
+    type: string
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+workflow: |
+  -- Get input parameters
+  local message = params.message or "Hello from sub-procedure"
+  local delay = params.delay or 0
+
+  Log.info("Sub-procedure starting", {
+    message = message,
+    delay = delay
+  })
+
+  -- Simulate some work if delay specified
+  if delay > 0 then
+    Log.info("Sleeping", {seconds = delay})
+    Sleep(delay)
+  end
+
+  Log.info("Sub-procedure completing")
+
+  return {
+    result = "success",
+    message = message
+  }

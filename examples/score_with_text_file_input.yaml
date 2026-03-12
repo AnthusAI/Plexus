@@ -1,0 +1,21 @@
+# Example: Score using text file input source
+# This demonstrates using a simple text file attachment as input
+
+name: Document Analysis
+key: document_analysis
+external_id: document_analysis_001
+description: Analyze documents from text file attachments
+
+class: LangGraphScore
+
+# Item configuration with text file input source
+item:
+  class: TextFileInputSource
+  options:
+    pattern: ".*transcript\\.txt$"  # Match files ending with "transcript.txt"
+
+  # Optional: processors can be specified even without input source class
+  processors:
+    - class: SomeTextProcessor
+      parameters:
+        option: value

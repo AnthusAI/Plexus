@@ -1,22 +1,27 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react'
+import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { CardButton } from '@/components/CardButton'
+import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/use-toast'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
-import { ConfusionMatrix } from '@/components/confusion-matrix'
-import { CardButton } from '@/components/CardButton'
+import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } from '@/components/confusion-matrix'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
-import { EvaluationTaskScoreResult } from '@/components/EvaluationTaskScoreResult'
+import { EvaluationTaskScoreResults } from './EvaluationTaskScoreResults'
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
-import { EvaluationTaskScoreResults } from '@/components/EvaluationTaskScoreResults'
-import { EvaluationTaskScoreResultDetail } from '@/components/EvaluationTaskScoreResultDetail'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { BaseTaskData } from '@/types/base'
 import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
 import isEqual from 'lodash/isEqual'
-import { standardizeScoreResults } from '@/utils/data-operations'
+import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
+import { cn } from '@/lib/utils'
+import { Timestamp } from '@/components/ui/timestamp'
+import Link from 'next/link'
+import { getClient } from '@/utils/amplify-client'
 
 export interface EvaluationMetric {
   name: string
@@ -39,8 +44,19 @@ interface ScoreResult {
   metadata: {
     human_label: string | null
     correct: boolean
+    human_explanation: string | null
+    text: string | null
   }
+  trace: any | null
   itemId: string | null
+  itemIdentifiers?: Array<{
+    name: string
+    value: string
+    url?: string
+  }> | null
+  feedbackItem: {
+    editCommentValue: string | null
+  } | null
 }
 
 interface TaskStage {
@@ -111,10 +127,12 @@ export interface EvaluationTaskData extends BaseTaskData {
   scoreResults?: ScoreResult[]
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
   task?: TaskData | null
+  universalCode?: string | null
 }
 
 export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
   variant?: 'grid' | 'detail'
+  // Added task output display support
   task: {
     id: string
     type: string
@@ -123,6 +141,11 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     time: string
     summary?: string
     description?: string
+    command?: string
+    output?: string // Universal Code YAML output
+    attachedFiles?: string[] // Array of S3 file keys for attachments
+    stdout?: string // Task stdout output
+    stderr?: string // Task stderr output
     data: EvaluationTaskData
     stages?: TaskStageConfig[]
     currentStageName?: string
@@ -137,12 +160,17 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     completedAt?: string
     errorMessage?: string
     statusMessage?: string
+    scorecardId?: string
+    scoreId?: string
+    scoreVersionId?: string
   }
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
   extra?: boolean
   isSelected?: boolean
   commandDisplay?: 'hide' | 'show' | 'full'
+  onShare?: () => void
+  onDelete?: (evaluationId: string) => void
 }
 
 function formatDuration(seconds: number): string {
@@ -244,18 +272,7 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   extra?: boolean;
   isSelected?: boolean;
 }) => {
-  console.log('GridContent received data:', {
-    dataId: data.id,
-    hasScoreResults: !!data.scoreResults,
-    scoreResultsType: data.scoreResults ? typeof data.scoreResults : 'undefined',
-    scoreResultsIsArray: Array.isArray(data.scoreResults),
-    scoreResultsCount: Array.isArray(data.scoreResults) ? data.scoreResults.length : 
-                      (typeof data.scoreResults === 'object' && data.scoreResults !== null && 'length' in data.scoreResults ? 
-                       (data.scoreResults as any).length : 0),
-    firstScoreResult: Array.isArray(data.scoreResults) ? data.scoreResults[0] : 
-                     (typeof data.scoreResults === 'object' && data.scoreResults !== null && 
-                      Array.isArray((data.scoreResults as any).items) ? (data.scoreResults as any).items[0] : undefined)
-  });
+
 
   const progress = useMemo(() => 
     data.processedItems && data.totalItems ? 
@@ -264,42 +281,54 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   
   const accuracy = data.accuracy ?? 0;
 
-  // Parse score results
+  // Use already-transformed score results directly
   const parsedScoreResults = useMemo(() => {
-    // Standardize score results to ensure consistent format
-    const standardizedResults = standardizeScoreResults(data.scoreResults);
-    
-    console.log('GridContent standardized score results:', {
-      count: standardizedResults.length,
-      firstResult: standardizedResults[0],
-      isArray: Array.isArray(standardizedResults)
+    // data.scoreResults is already transformed by transformEvaluation
+    const rawResults = Array.isArray(data.scoreResults) ? data.scoreResults : [];
+    // Dedupe by id to avoid duplicates and ensure stable list when re-rendering
+    const uniqueMap = new Map<string, any>();
+    for (const r of rawResults) {
+      if (r && r.id && !uniqueMap.has(r.id)) uniqueMap.set(r.id, r);
+    }
+    // Maintain stable descending time ordering (if present)
+    const scoreResults = Array.from(uniqueMap.values()).sort((a: any, b: any) => {
+      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bt - at;
     });
     
-    if (!standardizedResults.length) {
-      console.log('No score results to parse in GridContent');
+    if (!scoreResults.length) {
       return [];
     }
     
-    console.log('Parsing score results in GridContent:', {
-      count: standardizedResults.length,
-      firstResult: standardizedResults[0]
-    });
-    
-    return standardizedResults.map((result: any) => {
-      return parseScoreResult(result);
-    });
+    // The results are already transformed, just map them to ScoreResultData format
+    return scoreResults.map((result: any) => ({
+      id: result.id,
+      value: String(result.value ?? ''),
+      confidence: result.confidence,
+      explanation: result.explanation,
+      metadata: result.metadata || {
+        human_label: null,
+        correct: false,
+        human_explanation: null,
+        text: null
+      },
+      trace: result.trace,
+      itemId: result.itemId,
+      itemIdentifiers: result.itemIdentifiers,
+      feedbackItem: result.feedbackItem
+    }));
   }, [data.scoreResults]);
 
-  console.log('GridContent render:', {
-    scoreResults: {
-      raw: data.scoreResults,
-      parsed: parsedScoreResults,
-      count: parsedScoreResults.length
-    }
-  });
+  // Determine loading state for score results
+  const isResultsLoading = useMemo(() => !Array.isArray(data.scoreResults), [data.scoreResults])
 
-  const stages = useMemo(() => 
-    data.task?.stages?.items?.map(stage => ({
+
+  const stages = useMemo(() => {
+    const stageItems = data.task?.stages?.items || [];
+    
+    
+    return stageItems.map(stage => ({
       key: stage.name,
       label: stage.name,
       color: stage.name === 'Processing' ? 'bg-secondary' : (
@@ -316,27 +345,47 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
       startedAt: stage.startedAt || undefined,
       completedAt: stage.completedAt || undefined,
       estimatedCompletionAt: stage.estimatedCompletionAt || undefined
-    })) || []
-  , [data.task?.stages?.items]);
+    }));
+  }, [
+    data.task?.stages?.items, 
+    data.id,
+    // Force recomputation when any stage object changes by including a hash of stage data
+    JSON.stringify(data.task?.stages?.items?.map(s => ({ 
+      name: s.name, 
+      status: s.status, 
+      processedItems: s.processedItems, 
+      totalItems: s.totalItems,
+      statusMessage: s.statusMessage,
+      startedAt: s.startedAt,
+      completedAt: s.completedAt
+    })))
+  ]);
 
-  const taskStatus = useMemo(() => ({
-    showStages: true,
-    status: mapTaskStatus(data.task?.status || data.status),
-    stageConfigs: stages,
-    stages,
-    processedItems: data.processedItems,
-    totalItems: data.totalItems,
-    startedAt: data.task?.startedAt || data.startedAt || undefined,
-    completedAt: data.task?.completedAt || undefined,
-    estimatedCompletionAt: data.task?.estimatedCompletionAt || undefined,
-    errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
-    command: data.task?.command || data.command,
-    statusMessage: getStatusMessage(data),
-    variant: 'grid' as const,
-    extra,
-    isSelected,
-    commandDisplay: 'hide' as const
-  }), [
+  const taskStatus = useMemo(() => {
+    const statusObj = {
+      showStages: true,
+      status: mapTaskStatus(data.task?.status || data.status),
+      stageConfigs: stages,
+      stages,
+      processedItems: data.processedItems,
+      totalItems: data.totalItems,
+      startedAt: data.task?.startedAt || data.startedAt || undefined,
+      completedAt: data.task?.completedAt || undefined,
+      estimatedCompletionAt: data.task?.estimatedCompletionAt || undefined,
+      errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
+      command: data.task?.command || data.command,
+      statusMessage: getStatusMessage(data),
+      variant: 'grid' as const,
+      extra,
+      isSelected,
+      commandDisplay: 'hide' as const,
+      elapsedSeconds: data.elapsedSeconds,
+      estimatedRemainingSeconds: data.estimatedRemainingSeconds
+    };
+    
+    
+    return statusObj;
+  }, [
     data.task?.status,
     data.status,
     stages,
@@ -351,12 +400,18 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     data.task?.command,
     data.command,
     extra,
-    isSelected
+    isSelected,
+    data.elapsedSeconds,
+    data.estimatedRemainingSeconds,
+    data.id
   ]);
 
   return (
     <div className="space-y-2">
-      <TaskStatus {...taskStatus} />
+      <TaskStatus 
+        {...taskStatus} 
+        key={`${data.id}-${JSON.stringify(stages.map(s => ({ name: s.name, status: s.status, processedItems: s.processedItems })))}`}
+      />
       {extra && (
         <EvaluationListAccuracyBar 
           progress={progress}
@@ -367,76 +422,41 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     </div>
   )
 }, (prevProps, nextProps) => {
-  // Custom comparison function to prevent unnecessary re-renders
-  if (prevProps.extra !== nextProps.extra || prevProps.isSelected !== nextProps.isSelected) {
+  const prevStagesList = prevProps.data.task?.stages?.items || [];
+  const nextStagesList = nextProps.data.task?.stages?.items || [];
+  const stagesChanged = (
+    prevStagesList.length !== nextStagesList.length ||
+    prevStagesList.some((s, i) => {
+      const ns = nextStagesList[i];
+      return !ns || s.name !== ns.name || s.status !== ns.status || s.processedItems !== ns.processedItems || s.totalItems !== ns.totalItems;
+    })
+  );
+
+  const progressChanged = (
+    prevProps.data.processedItems !== nextProps.data.processedItems ||
+    prevProps.data.totalItems !== nextProps.data.totalItems ||
+    prevProps.data.accuracy !== nextProps.data.accuracy ||
+    prevProps.data.status !== nextProps.data.status ||
+    prevProps.data.elapsedSeconds !== nextProps.data.elapsedSeconds ||
+    prevProps.data.estimatedRemainingSeconds !== nextProps.data.estimatedRemainingSeconds
+  );
+
+  const otherChanged = (
+    prevProps.extra !== nextProps.extra ||
+    prevProps.isSelected !== nextProps.isSelected ||
+    !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults)
+  );
+
+  const allow = stagesChanged || progressChanged || otherChanged;
+  if (allow) {
     return false;
   }
-
-  const prevData = prevProps.data;
-  const nextData = nextProps.data;
-
-  // Compare task stages
-  const prevStages = prevData.task?.stages?.items;
-  const nextStages = nextData.task?.stages?.items;
-  if (!isEqual(prevStages, nextStages)) {
-    return false;
-  }
-
-  // Compare score results directly without parsing
-  if (!isEqual(prevData.scoreResults, nextData.scoreResults)) {
-    console.log('Score results changed:', {
-      prevCount: prevData.scoreResults?.length ?? 0,
-      nextCount: nextData.scoreResults?.length ?? 0
-    });
-    return false;
-  }
-
-  // Compare essential task data
-  if (
-    prevData.processedItems !== nextData.processedItems ||
-    prevData.totalItems !== nextData.totalItems ||
-    prevData.accuracy !== nextData.accuracy ||
-    prevData.status !== nextData.status ||
-    prevData.task?.status !== nextData.task?.status ||
-    prevData.task?.command !== nextData.task?.command ||
-    prevData.command !== nextData.command ||
-    prevData.errorMessage !== nextData.errorMessage ||
-    prevData.task?.errorMessage !== nextData.task?.errorMessage ||
-    prevData.startedAt !== nextData.startedAt ||
-    prevData.task?.startedAt !== nextData.task?.startedAt ||
-    prevData.task?.completedAt !== nextData.task?.completedAt ||
-    prevData.task?.estimatedCompletionAt !== nextData.task?.estimatedCompletionAt
-  ) {
-    return false;
-  }
-
   return true;
 });
 
-interface ParsedScoreResult {
-  id: string
-  value: string
-  confidence: number | null
-  explanation: string | null
-  metadata: {
-    human_label: string | null
-    correct: boolean
-    human_explanation: string | null
-    text: string | null
-  }
-  itemId: string | null
-}
+interface ParsedScoreResult extends ScoreResultData {}
 
 function parseScoreResult(result: any): ParsedScoreResult {
-  console.log('parseScoreResult called with:', {
-    resultType: typeof result,
-    resultIsNull: result === null,
-    resultIsUndefined: result === undefined,
-    resultId: result?.id,
-    resultValue: result?.value,
-    resultMetadataType: result?.metadata ? typeof result.metadata : 'undefined',
-    resultExplanation: result?.explanation
-  });
 
   if (!result) {
     console.warn('Received null or undefined score result');
@@ -451,7 +471,10 @@ function parseScoreResult(result: any): ParsedScoreResult {
         human_explanation: null,
         text: null
       },
-      itemId: null
+      trace: null,
+      itemId: null,
+      itemIdentifiers: null,
+      feedbackItem: null
     };
   }
 
@@ -480,6 +503,7 @@ function parseScoreResult(result: any): ParsedScoreResult {
     }
   }
 
+
   // Extract results from nested structure if present
   const firstResultKey = parsedMetadata?.results ? 
     Object.keys(parsedMetadata.results)[0] : null
@@ -491,20 +515,19 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const value = String(result.value || scoreResult?.value || '');
   const confidence = result.confidence ?? scoreResult?.confidence ?? null;
   const explanation = result.explanation ?? scoreResult?.explanation ?? null;
+  const trace = result.trace ?? scoreResult?.trace ?? null;
   const humanLabel = scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? null;
   const correct = Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct);
   const humanExplanation = scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null;
   const text = scoreResult?.metadata?.text ?? parsedMetadata.text ?? null;
   const itemId = result.itemId || parsedMetadata.item_id?.toString() || null;
 
-  console.log('parseScoreResult processed result:', {
-    id,
-    value,
-    confidence,
-    explanation,
-    humanLabel,
-    correct
-  });
+  // Parse feedbackItem data
+  const feedbackItem = result.feedbackItem ? {
+    editCommentValue: result.feedbackItem.editCommentValue || null
+  } : null;
+
+
 
   return {
     id,
@@ -517,7 +540,10 @@ function parseScoreResult(result: any): ParsedScoreResult {
       human_explanation: humanExplanation,
       text
     },
-    itemId
+    trace,
+    itemId,
+    itemIdentifiers: result.itemIdentifiers || null,
+    feedbackItem
   };
 }
 
@@ -547,17 +573,6 @@ const DetailContent = React.memo(({
   // Force isSelected to true in detail mode
   const effectiveIsSelected = true;
 
-  console.log('DetailContent render:', {
-    scoreResults: {
-      raw: data.scoreResults,
-      count: data.scoreResults?.length ?? 0,
-      firstResult: data.scoreResults?.[0],
-      lastResult: data.scoreResults?.[data.scoreResults?.length - 1],
-      allResults: data.scoreResults // Log all results to see the full data
-    },
-    selectedScoreResultId,
-    hasSelectedResult: !!selectedScoreResultId
-  });
 
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -566,46 +581,43 @@ const DetailContent = React.memo(({
     actual: string | null
   }>({ predicted: null, actual: null })
 
-  // Find the selected score result from the standardized results
-  const standardizedResults = useMemo(() => standardizeScoreResults(data.scoreResults), [data.scoreResults]);
-  const selectedScoreResult = selectedScoreResultId ? standardizedResults.find(r => r.id === selectedScoreResultId) : null;
+  // Find the selected score result from the already-transformed results
+  const selectedScoreResult = useMemo(() => {
+    const scoreResults = data.scoreResults || [];
+    return selectedScoreResultId ? scoreResults.find((r: any) => r.id === selectedScoreResultId) : null;
+  }, [data.scoreResults, selectedScoreResultId]);
 
-  console.log('DetailContent selected score result:', {
-    selectedScoreResultId,
-    hasSelectedResult: !!selectedScoreResult,
-    selectedResult: selectedScoreResult
-  });
 
-  // Parse score results with more detailed logging
+  // Use already-transformed score results directly
   const parsedScoreResults = useMemo(() => {
-    // Standardize score results to ensure consistent format
-    const standardizedResults = standardizeScoreResults(data.scoreResults);
+    // data.scoreResults is already transformed by transformEvaluation
+    const scoreResults = data.scoreResults || [];
     
-    console.log('DetailContent standardized score results:', {
-      count: standardizedResults.length,
-      firstResult: standardizedResults[0],
-      isArray: Array.isArray(standardizedResults)
-    });
-    
-    if (!standardizedResults.length) {
-      console.log('No score results to parse in DetailContent');
+    if (!scoreResults.length) {
       return [];
     }
     
-    console.log('Parsing score results in DetailContent:', {
-      count: standardizedResults.length,
-      firstResult: standardizedResults[0]
-    });
-    
-    const results = standardizedResults.map((result: any) => parseScoreResult(result));
-    
-    console.log('Parsed score results in DetailContent:', {
-      count: results.length,
-      firstResult: results[0]
-    });
-    
-    return results;
+    // The results are already transformed, just map them to ScoreResultData format
+    return scoreResults.map((result: any) => ({
+      id: result.id,
+      value: result.value,
+      confidence: result.confidence,
+      explanation: result.explanation,
+      metadata: result.metadata || {
+        human_label: null,
+        correct: false,
+        human_explanation: null,
+        text: null
+      },
+      trace: result.trace,
+      itemId: result.itemId,
+      itemIdentifiers: result.itemIdentifiers,
+      feedbackItem: result.feedbackItem
+    }));
   }, [data.scoreResults]);
+
+  // Local loading flag for this detail panel scope
+  const isResultsLoading = useMemo(() => !Array.isArray(data.scoreResults), [data.scoreResults])
 
   useResizeObserver(containerRef, (entry) => {
     setContainerWidth(entry.contentRect.width)
@@ -631,52 +643,126 @@ const DetailContent = React.memo(({
   const isWideEnoughForTwo = containerWidth >= 800
   const isWideEnoughForThree = containerWidth >= 1180 && isFullWidth
   const showAsColumns = isWideEnoughForTwo
-  const showMainPanel = true
-  const showResultsList = parsedScoreResults.length > 0
+  
+  // Modify the panel visibility logic to prioritize the selected score result
   const showResultDetail = selectedScoreResult !== null
-
-  console.log('DetailContent render conditions:', {
-    hasScoreResults: !!data.scoreResults?.length,
-    parsedResultCount: parsedScoreResults.length,
-    showMainPanel,
-    showResultsList,
-    showResultDetail,
-    showAsColumns,
-    selectedScoreResult: selectedScoreResult?.id
-  });
+  const showResultsList = parsedScoreResults.length > 0
+  
+  // In narrow view with a selected result, ONLY show the score result detail
+  const showScoreResultInNarrowView = !isWideEnoughForTwo && showResultDetail
+  
+  // Only show main panel if we're not in narrow view with a selected result
+  const showMainPanel = isWideEnoughForThree || 
+                        (isWideEnoughForTwo && (!showResultDetail || !showResultsList)) || 
+                        (!isWideEnoughForTwo && !showResultDetail); // Only show main panel in narrow view if no result selected
 
   const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
-    console.log('Score result selected:', result.id);
     onSelectScoreResult?.(result.id)
   }
 
   const handleScoreResultClose = () => {
-    console.log('Score result detail closed');
     onSelectScoreResult?.(null)
   }
+
+  const transformedConfusionMatrixData = useMemo((): ConfusionMatrixData | null => {
+    const cmInput = data.confusionMatrix;
+    if (!cmInput || !cmInput.matrix || !cmInput.labels || cmInput.matrix.length === 0 || cmInput.labels.length === 0) {
+      return null;
+    }
+    // Basic check: matrix rows should match labels length for a square matrix using labels for both axes
+    if (cmInput.matrix.length !== cmInput.labels.length) {
+        console.warn('Confusion matrix: matrix rows length does not match labels length.');
+        // This might indicate an issue, but ConfusionMatrix component itself has more robust validation.
+        // For now, we let it pass to the component for its validation.
+    }
+    if (cmInput.labels.some(l => l === '')) {
+        console.warn('EvaluationTask: Input confusion matrix labels contain empty strings. This can lead to errors.');
+    }
+
+    try {
+      const newMatrix: ConfusionMatrixRow[] = cmInput.matrix.map((row, actualIndex) => {
+        const actualClassLabel = cmInput.labels![actualIndex];
+        if (actualClassLabel === undefined) {
+          // Should not happen if matrix.length === labels.length and labels is not sparse
+          throw new Error(`Label not found for actual index ${actualIndex}`);
+        }
+        const predictedClassCounts: { [predictedClassLabel: string]: number } = {};
+        row.forEach((count, predictedIndex) => {
+          const predictedClassLabel = cmInput.labels![predictedIndex];
+          if (predictedClassLabel === undefined) {
+            throw new Error(`Label not found for predicted index ${predictedIndex}`);
+          }
+          // It's important that predictedClassLabel is a valid key (non-empty string)
+          // The ConfusionMatrix component will validate if these labels exist in its main `labels` prop.
+          predictedClassCounts[predictedClassLabel] = count;
+        });
+        return {
+          actualClassLabel: actualClassLabel, // Use the label as is, even if it's ""
+          predictedClassCounts,
+        };
+      });
+      return {
+        matrix: newMatrix,
+        labels: cmInput.labels, // Pass original labels, ConfusionMatrix will validate them
+      };
+    } catch (error) {
+      console.error("Error transforming confusion matrix data:", error);
+      return null; // Or a specific error structure if ConfusionMatrix can handle it
+    }
+  }, [data.confusionMatrix]);
 
   return (
     <div 
       ref={containerRef}
-      className="w-full min-w-[300px] h-full"
+      className="w-full p-3 min-w-[300px] h-full overflow-y-auto"
     >
-      <div className={`${showAsColumns ? 'grid gap-4' : 'space-y-4'} h-full`} 
+      <div className={`overflow-visible ${showAsColumns ? 'grid gap-4' : 'space-y-4'} ${showAsColumns ? 'h-full' : 'h-auto'}`} 
         style={{
-          gridTemplateColumns: isWideEnoughForThree && selectedScoreResult 
-            ? '1fr 1fr 1fr' 
-            : isWideEnoughForTwo && parsedScoreResults.length > 0
-              ? selectedScoreResult 
-                ? '1fr 1fr'  // Show results list and detail only
-                : '1fr 1fr'  // Show main and results list
-              : '1fr'
+          gridTemplateColumns: isWideEnoughForThree 
+            ? selectedScoreResult ? '1fr 1fr 1fr' : '1fr 1fr'
+            : isWideEnoughForTwo
+              ? '1fr 1fr'    // Always equal width for two panels
+              : '1fr'          // Show only one panel
         }}
       >
+        {/* When in narrow view and a score result is selected, ONLY show the score result detail */}
+        {showScoreResultInNarrowView && selectedScoreResult && (
+          <div className="w-full h-full flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-hidden">
+              <ScoreResultComponent
+                result={{
+                  id: selectedScoreResult.id,
+                  value: String(selectedScoreResult.value),
+                  confidence: selectedScoreResult.confidence,
+                  explanation: selectedScoreResult.explanation,
+                  metadata: selectedScoreResult.metadata || {
+                    human_label: null,
+                    correct: false,
+                    human_explanation: null,
+                    text: null
+                  },
+                  trace: selectedScoreResult.trace,
+                  itemId: selectedScoreResult.itemId,
+                  itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
+                  feedbackItem: (selectedScoreResult as any).feedbackItem || null
+                }}
+                variant="detail"
+                onClose={handleScoreResultClose}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Only show main panel if not showing score result in narrow view */}
         {showMainPanel && (
-          <div className="w-full h-full flex flex-col">
-            <div className="flex-1 overflow-y-auto">
-              <div className="px-1">
+          <div 
+            className={`w-full ${showAsColumns ? 'h-full' : 'h-auto'} flex flex-col overflow-visible`}
+          >
+            <div className={`${showAsColumns ? 'flex-1' : ''} overflow-visible max-h-full`}>
+              <div className="space-y-3 p-1 overflow-visible">
                 <div className="mb-3">
                   <TaskStatus
+                    key={`detail-${data.id}-${JSON.stringify(data.task?.stages?.items?.map(s => ({ name: s.name, status: s.status, processedItems: s.processedItems })))}`}
                     variant="detail"
                     showStages={true}
                     status={mapTaskStatus(data.task?.status || data.status)}
@@ -730,6 +816,8 @@ const DetailContent = React.memo(({
                     isSelected={effectiveIsSelected}
                     commandDisplay={commandDisplay}
                     onCommandDisplayChange={onCommandDisplayChange}
+                    elapsedSeconds={data.elapsedSeconds}
+                    estimatedRemainingSeconds={data.estimatedRemainingSeconds}
                   />
                 </div>
 
@@ -760,29 +848,12 @@ const DetailContent = React.memo(({
                   variant="detail"
                 />
 
-                {data.confusionMatrix?.matrix && 
-                 data.confusionMatrix.matrix.length > 0 && 
-                 data.confusionMatrix.labels && (
-                  <div className="mt-3">
-                    <ConfusionMatrix 
-                      data={{
-                        matrix: data.confusionMatrix.matrix,
-                        labels: data.confusionMatrix.labels
-                      }}
-                      onSelectionChange={setSelectedPredictedActual}
-                    />
-                  </div>
-                )}
-
-                {!showAsColumns && parsedScoreResults.length > 0 && (
-                  <div className="mt-6">
-                    <EvaluationTaskScoreResults 
-                      results={parsedScoreResults} 
-                      accuracy={data.accuracy ?? 0}
-                      selectedPredictedValue={selectedPredictedActual.predicted}
-                      selectedActualValue={selectedPredictedActual.actual}
-                      onResultSelect={handleScoreResultSelect}
-                      selectedScoreResult={selectedScoreResult}
+                {/* Confusion Matrix Section */}
+                {transformedConfusionMatrixData && (
+                  <div className="mt-4 rounded-md bg-background/30 w-full" style={{ overflow: 'visible' }}>
+                    <ConfusionMatrix
+                      data={transformedConfusionMatrixData} // Pass the transformed data object
+                      onSelectionChange={setSelectedPredictedActual} // Reverted to original handler
                     />
                   </div>
                 )}
@@ -791,9 +862,10 @@ const DetailContent = React.memo(({
           </div>
         )}
 
-        {showAsColumns && parsedScoreResults.length > 0 && (
-          <div className="w-full h-full relative">
-            <div className="absolute inset-0 pr-0">
+        {/* Show score results panel during loading or when results exist, hidden only in narrow detail mode */}
+        {(!showScoreResultInNarrowView) && (isResultsLoading || showResultsList) && (
+          <div className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
+            <div className="h-full overflow-y-auto">
               <EvaluationTaskScoreResults 
                 results={parsedScoreResults} 
                 accuracy={data.accuracy ?? 0}
@@ -801,16 +873,34 @@ const DetailContent = React.memo(({
                 selectedActualValue={selectedPredictedActual.actual}
                 onResultSelect={handleScoreResultSelect}
                 selectedScoreResult={selectedScoreResult}
+                isLoading={isResultsLoading}
               />
             </div>
           </div>
         )}
 
-        {showResultDetail && selectedScoreResult && (
-          <div className="w-full h-full relative">
-            <div className="absolute inset-0 pr-0">
-              <EvaluationTaskScoreResultDetail
-                result={parseScoreResult(selectedScoreResult)}
+        {/* Only show the score result detail in column layout if not already showing it in narrow view */}
+        {showResultDetail && !showScoreResultInNarrowView && selectedScoreResult && (
+          <div className={`w-full ${showAsColumns ? 'h-full' : 'h-full'} flex flex-col overflow-hidden`}>
+            <div className="flex-1 overflow-hidden">
+              <ScoreResultComponent
+                result={{
+                  id: selectedScoreResult.id,
+                  value: String(selectedScoreResult.value),
+                  confidence: selectedScoreResult.confidence,
+                  explanation: selectedScoreResult.explanation,
+                  metadata: selectedScoreResult.metadata || {
+                    human_label: null,
+                    correct: false,
+                    human_explanation: null,
+                    text: null
+                  },
+                  trace: selectedScoreResult.trace,
+                  itemId: selectedScoreResult.itemId,
+                  itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
+                  feedbackItem: (selectedScoreResult as any).feedbackItem || null
+                }}
+                variant="detail"
                 onClose={handleScoreResultClose}
               />
             </div>
@@ -821,28 +911,43 @@ const DetailContent = React.memo(({
   )
 }, (prevProps, nextProps) => {
   // Add logging for memo comparison
+  const stagesChanged = (() => {
+    const prevStages = prevProps.data.task?.stages?.items || [];
+    const nextStages = nextProps.data.task?.stages?.items || [];
+    if (prevStages.length !== nextStages.length) return true;
+    return prevStages.some((s, i) => {
+      const ns = nextStages[i];
+      return !ns || s.name !== ns.name || s.status !== ns.status || s.processedItems !== ns.processedItems || s.totalItems !== ns.totalItems;
+    });
+  })();
+
   const shouldUpdate = 
     prevProps.extra !== nextProps.extra || 
     prevProps.isSelected !== nextProps.isSelected ||
     prevProps.selectedScoreResultId !== nextProps.selectedScoreResultId ||
     prevProps.isFullWidth !== nextProps.isFullWidth ||
     prevProps.commandDisplay !== nextProps.commandDisplay ||
+    // evaluation identity changed
+    prevProps.data.id !== nextProps.data.id ||
+    // progress / metrics / status changes
+    prevProps.data.processedItems !== nextProps.data.processedItems ||
+    prevProps.data.totalItems !== nextProps.data.totalItems ||
+    prevProps.data.accuracy !== nextProps.data.accuracy ||
+    prevProps.data.status !== nextProps.data.status ||
+    prevProps.data.elapsedSeconds !== nextProps.data.elapsedSeconds ||
+    prevProps.data.estimatedRemainingSeconds !== nextProps.data.estimatedRemainingSeconds ||
+    stagesChanged ||
+    // score results list changes
     prevProps.data.scoreResults?.length !== nextProps.data.scoreResults?.length ||
     !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults);
 
-  console.log('DetailContent memo comparison:', {
-    shouldUpdate,
-    prevScoreResultCount: prevProps.data.scoreResults?.length ?? 0,
-    nextScoreResultCount: nextProps.data.scoreResults?.length ?? 0,
-    scoreResultsChanged: !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults),
-    prevFirstResult: prevProps.data.scoreResults?.[0],
-    nextFirstResult: nextProps.data.scoreResults?.[0]
-  });
+  // Reduced logging
 
   return !shouldUpdate;
 });
 
-export default function EvaluationTask({ 
+// Wrap the component with React.memo to prevent unnecessary re-renders
+const EvaluationTask = React.memo(function EvaluationTaskComponent({ 
   variant = 'grid',
   task,
   onClick,
@@ -854,43 +959,193 @@ export default function EvaluationTask({
   onSelectScoreResult,
   extra,
   isSelected,
-  commandDisplay: initialCommandDisplay = 'show',
+  commandDisplay: initialCommandDisplay = 'hide',
+  onShare,
+  onDelete,
   ...restProps
 }: EvaluationTaskProps) {
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
+  const [scoreVersionInfo, setScoreVersionInfo] = useState<{
+    createdAt: string;
+    isChampion: boolean;
+  } | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
+  
+  
 
   // Add more detailed logging for incoming data
-  console.log('EvaluationTask received data:', {
-    taskId: task.id,
-    variant,
-    scoreResults: {
-      isDefined: !!data.scoreResults,
-      type: data.scoreResults ? typeof data.scoreResults : 'undefined',
-      isArray: Array.isArray(data.scoreResults),
-      count: Array.isArray(data.scoreResults) ? data.scoreResults.length : 
-             (typeof data.scoreResults === 'object' && data.scoreResults !== null && 'length' in data.scoreResults ? 
-              (data.scoreResults as any).length : 0),
-      firstResult: Array.isArray(data.scoreResults) ? data.scoreResults[0] : 
-                  (typeof data.scoreResults === 'object' && data.scoreResults !== null && 
-                   Array.isArray((data.scoreResults as any).items) ? (data.scoreResults as any).items[0] : undefined),
-      allResults: data.scoreResults // Log all results to see the full data
-    },
-    status: data.status,
-    taskStatus: data.task?.status
-  });
 
-  const metrics = useMemo(() => 
-    variant === 'detail' ? 
-      (data.metrics ?? []).map(metric => ({
-        value: metric.value,
-        label: metric.name,
-        information: getMetricInformation(metric.name),
-        maximum: metric.maximum ?? 100,
-        unit: metric.unit ?? '%',
-        priority: metric.priority
-      }))
+  // Fetch score version information when scoreVersionId is available
+  useEffect(() => {
+    if (!task.scoreVersionId || variant !== 'detail') {
+      setScoreVersionInfo(null);
+      return;
+    }
+
+    const fetchScoreVersion = async () => {
+      try {
+        const client = getClient();
+        const result = await client.graphql({
+          query: `
+            query GetScoreVersion($id: ID!) {
+              getScoreVersion(id: $id) {
+                id
+                createdAt
+                score {
+                  championVersionId
+                }
+              }
+            }
+          `,
+          variables: { id: task.scoreVersionId }
+        });
+
+        const scoreVersion = (result as any).data?.getScoreVersion;
+        if (scoreVersion) {
+          setScoreVersionInfo({
+            createdAt: scoreVersion.createdAt,
+            isChampion: scoreVersion.score?.championVersionId === task.scoreVersionId
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching score version:', error);
+        setScoreVersionInfo(null);
+      }
+    };
+
+    fetchScoreVersion();
+  }, [task.scoreVersionId, variant]);
+
+  // Function to generate universal YAML code for evaluation
+  const generateUniversalCode = useCallback((evaluationData: EvaluationTaskData) => {
+    const yamlContent = `# Universal Code Snippet - Evaluation Results
+# Generated for: ${evaluationData.title || 'Evaluation'}
+# Type: Accuracy Evaluation
+# Date: ${new Date().toISOString()}
+
+evaluation:
+  id: "${evaluationData.id}"
+  type: "${task.type || 'Accuracy Evaluation'}"
+  scorecard: "${task.scorecard || ''}"
+  score: "${task.score || ''}"
+  status: "${evaluationData.status}"
+  
+  # Performance Metrics
+  accuracy: ${evaluationData.accuracy || 0}
+  processed_items: ${evaluationData.processedItems || 0}
+  total_items: ${evaluationData.totalItems || 0}
+  inferences: ${evaluationData.inferences || 0}
+  cost: ${evaluationData.cost || 0}
+  
+  # Timing Information
+  started_at: "${evaluationData.startedAt || ''}"
+  elapsed_seconds: ${evaluationData.elapsedSeconds || 0}
+  estimated_remaining_seconds: ${evaluationData.estimatedRemainingSeconds || 0}
+  
+  # Additional Metrics
+  metrics:${(() => {
+    try {
+      let metricsData = evaluationData.metrics;
+      
+      // Parse if string
+      if (typeof metricsData === 'string') {
+        metricsData = JSON.parse(metricsData);
+      }
+      
+      // Ensure it's an array
+      if (!Array.isArray(metricsData)) {
+        if (metricsData && typeof metricsData === 'object') {
+          metricsData = Object.entries(metricsData).map(([key, value]) => ({
+            name: key,
+            value: value as number,
+            priority: false
+          }));
+        } else {
+          return '';
+        }
+      }
+      
+      return metricsData.map(metric => `
+    - name: "${metric.name}"
+      value: ${metric.value}
+      unit: "${metric.unit || ''}"
+      priority: ${metric.priority || false}`).join('');
+    } catch (e) {
+      console.error('Error parsing metrics:', e);
+      return '';
+    }
+  })()}
+  
+  # Error Information
+  error_message: "${evaluationData.errorMessage || ''}"
+  
+  # Score Results Summary
+  score_results_count: ${evaluationData.scoreResults?.length || 0}
+  
+  # Class Distribution
+  dataset_balanced: ${evaluationData.isDatasetClassDistributionBalanced || false}
+  predicted_balanced: ${evaluationData.isPredictedClassDistributionBalanced || false}
+
+# Context: This YAML contains evaluation results and metrics for analysis by humans, AI models, and other systems.
+# Usage: Can be used for reporting, monitoring, or further automated analysis.
+`;
+    return yamlContent;
+  }, [task.type, task.scorecard, task.score]);
+
+  // Function to handle copying universal code to clipboard
+  const handleGetCode = useCallback(async () => {
+    try {
+      const universalCode = data.universalCode || generateUniversalCode(data);
+      await navigator.clipboard.writeText(universalCode);
+      toast({
+        description: "Copied Universal Code to clipboard",
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Failed to copy universal code:', error);
+      toast({
+        variant: "destructive",
+        description: "Failed to copy code to clipboard",
+        duration: 2000,
+      });
+    }
+  }, [data, generateUniversalCode]);
+
+  const metrics = useMemo(() =>
+    variant === 'detail' ?
+      (data.metrics ?? []).map(metric => {
+        // Special handling for Alignment (Gwet's AC1)
+        if (metric.name === 'Alignment') {
+          return {
+            value: metric.value,
+            label: metric.name,
+            information: getMetricInformation(metric.name),
+            min: -1,           // AC1 ranges from -1 to 1
+            max: 1,
+            valueUnit: '',     // No percentage sign
+            decimalPlaces: 2,  // Show 2 decimal places
+            priority: metric.priority,
+            segments: [
+              { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // -1 to 0
+              { start: 50, end: 60, color: 'var(--gauge-converging)' },   // 0 to 0.2
+              { start: 60, end: 75, color: 'var(--gauge-almost)' },       // 0.2 to 0.5
+              { start: 75, end: 90, color: 'var(--gauge-viable)' },       // 0.5 to 0.8
+              { start: 90, end: 100, color: 'var(--gauge-great)' }        // 0.8 to 1.0
+            ]
+          }
+        }
+
+        // Default handling for other metrics
+        return {
+          value: metric.value,
+          label: metric.name,
+          information: getMetricInformation(metric.name),
+          max: metric.maximum ?? 100,        // Fixed: was 'maximum', should be 'max'
+          valueUnit: metric.unit ?? '%',     // Fixed: was 'unit', should be 'valueUnit'
+          priority: metric.priority
+        }
+      })
       : [
         {
           value: data.accuracy ?? undefined,
@@ -904,6 +1159,42 @@ export default function EvaluationTask({
   const headerContent = useMemo(() => (
     variant === 'detail' ? (
       <div className="flex items-center space-x-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+             <Button 
+               variant="ghost" 
+               size="icon" 
+               className="h-8 w-8 rounded-md bg-border"
+               aria-label="More options"
+             >
+               <MoreHorizontal className="h-4 w-4" />
+             </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => {
+              handleGetCode();
+            }}>
+              <MessageSquareCode className="mr-2 h-4 w-4" />
+              Get Code
+            </DropdownMenuItem>
+            {onShare && (
+              <DropdownMenuItem onSelect={() => {
+                onShare();
+              }}>
+                <Share className="mr-2 h-4 w-4" />
+                Share
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem onSelect={() => {
+                onDelete(data.id);
+              }}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
         {typeof onToggleFullWidth === 'function' && (
           <CardButton
             icon={Square}
@@ -913,62 +1204,62 @@ export default function EvaluationTask({
         {typeof onClose === 'function' && (
           <CardButton
             icon={X}
-            onClick={onClose}
+            onClick={() => {
+              onClose();
+            }}
           />
         )}
       </div>
     ) : null
-  ), [variant, onToggleFullWidth, onClose])
+  ), [variant, onToggleFullWidth, onClose, handleGetCode])
 
   const taskData = task.data?.task as TaskData | undefined;
 
-  const taskWithDefaults = useMemo(() => ({
-    id: task.id,
-    type: (() => {
-      // If we have a task record, use its type directly (just capitalize it)
-      if (taskData?.type) {
-        return taskData.type.split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ')
-      }
-      // Otherwise, this is from an Evaluation record, so append "Evaluation"
-      return `${(task.type || '').split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ')} Evaluation`.trim()
-    })(),
-    scorecard: task.scorecard,
-    score: task.score,
-    time: task.time,
-    description: variant === 'detail' ? undefined : task.summary,
-    data: task.data,
-    command: taskData?.command,
-    stages: taskData?.stages?.items?.map(stage => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.name === 'Processing' ? 'bg-secondary' : (
-        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
-        stage.status === 'FAILED' ? 'bg-false' :
-        'bg-neutral'
-      ),
-      name: stage.name,
-      order: stage.order,
-      status: mapTaskStatus(stage.status),
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      statusMessage: stage.statusMessage
-    })) || [],
-    currentStageName: taskData?.currentStageId || undefined,
-    processedItems: task.data?.processedItems,
-    totalItems: task.data?.totalItems,
-    startedAt: taskData?.startedAt || task.data?.startedAt || undefined,
-    estimatedCompletionAt: taskData?.estimatedCompletionAt || undefined,
-    status: mapTaskStatus(taskData?.status || task.data?.status),
-    dispatchStatus: taskData?.dispatchStatus,
-    celeryTaskId: taskData?.celeryTaskId,
-    workerNodeId: taskData?.workerNodeId,
-    completedAt: taskData?.completedAt || undefined,
-    errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined
-  }), [task, taskData, variant]);
+  const taskWithDefaults = useMemo(() => {
+    // Debug: Log what we're receiving in EvaluationTask
+    
+    return {
+      id: task.id,
+      type: task.type ? task.type.split(' ').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      ).join(' ') : 'Unknown',
+      scorecard: task.scorecard,
+      score: task.score,
+      time: task.time,
+      description: variant === 'detail' ? undefined : task.summary,
+      data: task.data,
+      command: taskData?.command,
+      stages: taskData?.stages?.items?.map(stage => ({
+        key: stage.name,
+        label: stage.name,
+        color: stage.name === 'Processing' ? 'bg-secondary' : (
+          stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+          stage.status === 'FAILED' ? 'bg-false' :
+          'bg-neutral'
+        ),
+        name: stage.name,
+        order: stage.order,
+        status: mapTaskStatus(stage.status),
+        processedItems: stage.processedItems,
+        totalItems: stage.totalItems,
+        statusMessage: stage.statusMessage
+      })) || [],
+      currentStageName: taskData?.currentStageId || undefined,
+      processedItems: task.data?.processedItems,
+      totalItems: task.data?.totalItems,
+      startedAt: taskData?.startedAt || task.data?.startedAt || undefined,
+      estimatedCompletionAt: taskData?.estimatedCompletionAt || undefined,
+      status: mapTaskStatus(taskData?.status || task.data?.status),
+      dispatchStatus: taskData?.dispatchStatus,
+      celeryTaskId: taskData?.celeryTaskId,
+      workerNodeId: taskData?.workerNodeId,
+      completedAt: taskData?.completedAt || undefined,
+      errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined,
+      scorecardId: task.scorecardId,
+      scoreId: task.scoreId,
+      scoreVersionId: task.scoreVersionId
+    };
+  }, [task, taskData, variant]);
 
   // Type assertion to ensure all properties match BaseTaskProps
   const typedTask = {
@@ -1019,7 +1310,9 @@ export default function EvaluationTask({
       errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
       command: data.task?.command || data.command,
       statusMessage: data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage || undefined,
-      isSelected
+      isSelected,
+      elapsedSeconds: data.elapsedSeconds,
+      estimatedRemainingSeconds: data.estimatedRemainingSeconds
     } as const
 
     return <TaskStatus {...taskStatus} />
@@ -1039,22 +1332,140 @@ export default function EvaluationTask({
       commandDisplay={commandDisplay}
       {...restProps}
       renderHeader={(props) => (
-        <TaskHeader {...props}>
-          {headerContent}
-        </TaskHeader>
+        <div className={cn(
+          "space-y-1.5 p-0 flex flex-col items-start w-full max-w-full",
+          variant === 'detail' && "px-1"
+        )}>
+          <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+            <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              {variant === 'detail' && (
+                <div className="flex items-center gap-2 mb-3">
+                  <FlaskConical className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-semibold text-muted-foreground">{props.task.type}</span>
+                </div>
+              )}
+              {props.task.name && (
+                <div className="font-semibold text-sm truncate">{props.task.name}</div>
+              )}
+              {props.task.description && (
+                <div className={`text-sm text-muted-foreground ${variant === 'detail' ? '' : 'truncate'}`}>
+                  {props.task.description}
+                </div>
+              )}
+              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.scorecard}</span>
+                  {variant === 'detail' && taskWithDefaults.scorecardId && (
+                    <Link 
+                      href={`/lab/scorecards/${taskWithDefaults.scorecardId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+                </div>
+              )}
+              {props.task.score && props.task.score.trim() !== '' && (
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.score}</span>
+            {variant === 'detail' && taskWithDefaults.scorecardId && taskWithDefaults.scoreId && (() => {
+              
+              const scoreLink = taskWithDefaults.scoreVersionId 
+                ? `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`
+                : `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}`;
+              
+                    
+                    return (
+                      <Link 
+                        href={scoreLink}
+                        className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    );
+                  })()}
+                </div>
+              )}
+              {variant === 'detail' && scoreVersionInfo && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Score Version:</span>
+                  <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
+                  {scoreVersionInfo.isChampion && (
+                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                      Champion
+                    </span>
+                  )}
+                </div>
+              )}
+              <Timestamp time={props.task.time} variant="relative" />
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0">
+              {variant === 'grid' ? (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-2">
+                    <div className="text-muted-foreground">
+                      <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                    </div>
+                    {(onShare || onDelete) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <CardButton
+                            icon={MoreHorizontal}
+                            onClick={() => {}}
+                          />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => {
+                            handleGetCode();
+                          }}>
+                            <MessageSquareCode className="mr-2 h-4 w-4" />
+                            Get Code
+                          </DropdownMenuItem>
+                          {onShare && (
+                            <DropdownMenuItem onSelect={() => {
+                              onShare();
+                            }}>
+                              <Share className="mr-2 h-4 w-4" />
+                              Share
+                            </DropdownMenuItem>
+                          )}
+                          {onDelete && (
+                            <DropdownMenuItem onSelect={() => {
+                              onDelete(data.id);
+                            }}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground text-center">
+                    {(() => {
+                      const [firstWord, ...restWords] = props.task.type.split(/\s+/);
+                      return (
+                        <>
+                          {firstWord}<br />
+                          {restWords.join(' ')}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {headerContent}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
       renderContent={(props) => {
         // Add logging for content rendering decision
-        console.log('EvaluationTask renderContent:', {
-          variant,
-          hasScoreResults: !!data.scoreResults,
-          scoreResultsType: typeof data.scoreResults,
-          scoreResultsIsArray: Array.isArray(data.scoreResults),
-          scoreResultsCount: Array.isArray(data.scoreResults) ? data.scoreResults.length : 
-                            (typeof data.scoreResults === 'object' && data.scoreResults !== null && 'length' in data.scoreResults ? 
-                             (data.scoreResults as any).length : 0),
-          isDetailView: variant === 'detail'
-        });
 
         return (
           <TaskContent {...props} hideTaskStatus={true}>
@@ -1079,7 +1490,44 @@ export default function EvaluationTask({
       }}
     />
   )
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison function to prevent unnecessary re-renders
+  // Only re-render if these specific props change
+  const stageComparison = isEqual(
+    prevProps.task.data?.task?.stages?.items,
+    nextProps.task.data?.task?.stages?.items
+  );
+  
+  // Check for task data changes more comprehensively
+  const taskDataChanged = !isEqual(prevProps.task.data, nextProps.task.data);
+  
+  const shouldNotRerender = (
+    prevProps.variant === nextProps.variant &&
+    prevProps.task.id === nextProps.task.id &&
+    prevProps.task.status === nextProps.task.status &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.selectedScoreResultId === nextProps.selectedScoreResultId &&
+    prevProps.isFullWidth === nextProps.isFullWidth &&
+    // CHECK FOR SCORECARD/SCORE CHANGES - CRITICAL FOR REALTIME UPDATES
+    prevProps.task.scorecard === nextProps.task.scorecard &&
+    prevProps.task.score === nextProps.task.score &&
+    // CHECK FOR TASK STAGE CHANGES - CRITICAL FOR REALTIME STAGE UPDATES
+    stageComparison &&
+    // CHECK FOR ANY TASK DATA CHANGES
+    !taskDataChanged
+  );
+  
+  const prevStages = prevProps.task.data?.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
+  const nextStages = nextProps.task.data?.task?.stages?.items?.map(s => `${s.name}:${s.status}`).join(',') || 'none';
+  
+  if (shouldNotRerender) {
+  } else {
+  }
+  
+  return shouldNotRerender;
+});
+
+export default EvaluationTask;
 
 function getMetricInformation(metricName: string): string {
   const descriptions: Record<string, string> = {
@@ -1113,3 +1561,4 @@ function getMetricInformation(metricName: string): string {
   }
   return descriptions[metricName] || ""
 }
+

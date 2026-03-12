@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "15dd325f-8445-49eb-978f-244721e51ef7",
+  "issue_id": "plx-a4402022-169d-4dbf-86f4-845e3995784c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T01:48:32.745Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Execute Semantic Reinforcement Memory ScoreResult-No report for Agent Misrepresentation on scorecard 1438 and record report/task IDs plus outcome.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Run ScoreResult No-explanation report for Agent Misrepresentation"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-46723f50-117a-404a-963e-8753dd84bf70",
+  "title": "OpenSearch Infrastructure (CDK)",
+  "description": "Provision the lowest-cost AWS OpenSearch domain via a Python CDK stack in a **separate repository** from Plexus. The stack produces CloudFormation outputs (domain endpoint, ARN, IAM role, index alias names) consumed by the Plexus runtime at configuration time.\n\nThis epic is independent of all Plexus code and can be developed in parallel with Epics 1 and 2.\n\n## Definition of Done\n\n- A separate CDK repo exists with a stack that synthesizes a valid CloudFormation template\n- OpenSearch domain: single `t3.small.search` node, 10GB EBS, no multi-AZ, no dedicated master\n- IAM role for Plexus runtime with `es:ESHttp*` permissions\n- Index template with `knn_vector` field for embeddings (384 dimensions)\n- Blue/green aliases (`topic-memory-live`, `topic-memory-build`) pre-configured\n- All stack outputs exported for Plexus consumption\n- CDK synth tests pass\n\n## Depends On\n\nNothing. This is one of three parallel starting points.\n\n## Key Files (new infra repo)\n\n- Create: `opensearch_infra/stacks/opensearch_stack.py`\n- Create: `opensearch_infra/app.py`\n- Create: `opensearch_infra/cdk.json`\n- Create: `tests/test_opensearch_stack.py`\n- Create: `requirements.txt` (`aws-cdk-lib>=2.100.0`, `constructs>=10.0.0`)",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c5ad0c0f-31fb-41c4-ab49-3f88023d199b",
+      "author": "ryan.porter",
+      "text": "## Retrospective Notes (2026-03-04)\n\n### Scope change\n- Spec said CDK in a **separate repo**. We implemented in Plexus `infrastructure/` instead. Epic left open; infra is done in-repo.\n- Stack: `infrastructure/stacks/opensearch_stack.py`\n- Deploy: `infrastructure/deploy_opensearch.py` (standalone dev deploy)\n- Docs: `infrastructure/OPENSEARCH_DEPLOY.md`\n\n### Fixes applied\n- Domain name: `plexus-topic-memory-development` (28 chars) \u2192 `plexus-vtm-development` (AWS limit)\n- T3: `multi_az_with_standby_enabled=False` required for t3.small.search\n\n### Current state\n- Deployment in progress. Domain creation ~10\u201315 min.\n- Outputs: OpenSearch endpoint, S3 bucket `plexus-embeddings-development`",
+      "created_at": "2026-03-04T03:18:00.639330Z"
+    }
+  ],
+  "created_at": "2026-03-04T02:24:34.755035Z",
+  "updated_at": "2026-03-04T03:31:37.910722Z",
+  "closed_at": "2026-03-04T03:31:37.910722Z",
+  "custom": {}
+}

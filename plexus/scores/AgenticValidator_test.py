@@ -80,14 +80,14 @@ async def validator():
     await validator.async_setup()
     return validator
 
-@pytest.mark.skip(reason="Failing due to build_compiled_workflow argument mismatch")
+@pytest.mark.skip(reason="Failing due to pytest_asyncio fixture compatibility issues")
 @pytest.mark.asyncio
 async def test_initialization(validator):
     assert validator.model is not None
     assert validator.workflow is not None
     assert validator.parameters is not None
 
-@pytest.mark.skip(reason="Failing due to build_compiled_workflow argument mismatch")
+@pytest.mark.skip(reason="Failing due to pytest_asyncio fixture compatibility issues")
 @pytest.mark.asyncio
 @pytest.mark.parametrize("provider,mock_class", [
     ("AzureChatOpenAI", "langchain_community.chat_models.azure_openai.AzureChatOpenAI"),
@@ -108,7 +108,7 @@ async def test_initialize_model(validator, provider, mock_class):
         mock_model.assert_called_once()
         assert model == mock_instance
 
-@pytest.mark.skip(reason="Failing due to build_compiled_workflow argument mismatch")
+@pytest.mark.skip(reason="Failing due to pytest_asyncio fixture compatibility issues")
 @pytest.mark.asyncio
 async def test_create_workflow(validator):
     workflow = await validator.build_compiled_workflow()

@@ -21,13 +21,23 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
       errorDetails
       accountId
       scorecardId
+      scorecard {
+        id
+        name
+      }
       scoreId
+      score {
+        id
+        name
+      }
+      scoreVersionId
       confusionMatrix
       scoreGoal
       datasetClassDistribution
       isDatasetClassDistributionBalanced
       predictedClassDistribution
       isPredictedClassDistributionBalanced
+      universalCode
       taskId
       task {
         id
@@ -67,8 +77,22 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
           confidence
           metadata
           explanation
+          trace
           itemId
           createdAt
+          item {
+            id
+            externalId
+            identifiers
+            itemIdentifiers {
+              items {
+                name
+                value
+                url
+                position
+              }
+            }
+          }
         }
         nextToken
       }

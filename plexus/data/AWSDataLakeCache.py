@@ -6,7 +6,7 @@ import pandas as pd
 import concurrent.futures
 from pydantic import Field
 from plexus.CustomLogging import logging
-from plexus.cli.console import console
+from plexus.cli.shared.console import console
 from rich.progress import Progress
 from .DataCache import DataCache
 from concurrent.futures import ThreadPoolExecutor, as_completed

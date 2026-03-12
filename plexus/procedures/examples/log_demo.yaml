@@ -1,0 +1,102 @@
+name: log_demo
+version: 1.0.0
+description: Demonstration of logging primitives at different levels
+
+class: LuaDSL
+
+params:
+  task:
+    type: string
+    required: false
+    default: "data_processing"
+
+outputs:
+  status:
+    type: string
+    required: true
+  items_processed:
+    type: number
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+stages:
+  - setup
+  - processing
+  - complete
+
+workflow: |
+  Log.debug("Workflow started", {
+    task = params.task,
+    timestamp = os.date("%Y-%m-%dT%H:%M:%SZ")
+  })
+
+  Log.info("Initializing processing pipeline", {
+    stage = "setup",
+    task = params.task
+  })
+
+  -- Simulate processing
+  local items = {"item1", "item2", "item3", "item4", "item5"}
+  local processed = 0
+  local failed = 0
+
+  for i, item in ipairs(items) do
+    Log.debug("Processing item", {
+      index = i,
+      item = item,
+      total = #items
+    })
+
+    -- Simulate occasional failure
+    if i == 3 then
+      Log.warn("Item processing encountered issue", {
+        item = item,
+        index = i,
+        reason = "validation_failed"
+      })
+      failed = failed + 1
+    else
+      processed = processed + 1
+    end
+  end
+
+  if failed > 0 then
+    Log.warn("Processing completed with failures", {
+      processed = processed,
+      failed = failed,
+      total = #items
+    })
+  else
+    Log.info("Processing completed successfully", {
+      processed = processed,
+      total = #items
+    })
+  end
+
+  -- Test error logging
+  if failed > 2 then
+    Log.error("Failure threshold exceeded", {
+      failed = failed,
+      threshold = 2,
+      action = "stopping_pipeline"
+    })
+    return {
+      status = "failed",
+      items_processed = processed
+    }
+  end
+
+  Log.info("Workflow complete", {
+    status = "success",
+    items_processed = processed
+  })
+
+  return {
+    status = "success",
+    items_processed = processed
+  }

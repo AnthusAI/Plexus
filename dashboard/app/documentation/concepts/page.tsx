@@ -83,6 +83,26 @@ export default function BasicsPage() {
                 <DocButton>Discover Tasks</DocButton>
               </Link>
             </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Reports</h3>
+              <p className="text-muted-foreground mb-4">
+                Flexible, template-driven analyses and summaries generated from your Plexus data using reusable components.
+              </p>
+              <Link href="/documentation/concepts/reports">
+                <DocButton>Learn about Reports</DocButton>
+              </Link>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Evaluation Metrics</h3>
+              <p className="text-muted-foreground mb-4">
+                Specialized visualization tools that help interpret agreement and accuracy metrics, especially when dealing with imbalanced data.
+              </p>
+              <Link href="/documentation/concepts/evaluation-metrics">
+                <DocButton>Understand Evaluation Metrics</DocButton>
+              </Link>
+            </div>
           </div>
         </section>
 
@@ -105,8 +125,8 @@ export default function BasicsPage() {
               <p>Process sources using your scorecards.</p>
             </li>
             <li>
-              <strong className="text-foreground">Monitor Tasks</strong>
-              <p>Track progress and review results.</p>
+              <strong className="text-foreground">Monitor Tasks & View Reports</strong>
+              <p>Track progress of evaluations and report generation, then review the results and generated reports.</p>
             </li>
           </ol>
         </section>

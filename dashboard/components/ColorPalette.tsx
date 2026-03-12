@@ -19,6 +19,9 @@ const ColorPaletteContent = () => {
     [
       'gauge-background', 'gauge-inviable', 'gauge-converging',
       'gauge-almost', 'gauge-viable', 'gauge-great'
+    ],
+    [
+      'editor-comment', 'editor-key', 'editor-string', 'editor-number', 'editor-keyword'
     ]
   ]
 
@@ -29,6 +32,8 @@ const ColorPaletteContent = () => {
     ['primary-foreground', 'primary-selected-foreground'],
     ['secondary', 'secondary-selected'],
     ['secondary-foreground', 'secondary-selected-foreground'],
+    ['selected', 'selected-selected'],
+    ['selected-foreground', 'selected-selected-foreground'],
     ['accent', 'accent-selected'],
     ['accent-foreground', 'accent-selected-foreground'],
     ['destructive', 'destructive-selected'],
@@ -102,13 +107,23 @@ const ColorPaletteContent = () => {
     return `${baseClasses} ${bgClass} ${textColor}`
   }
 
+  const columnHeaders = [
+    'Base Colors',
+    'Navigation & Chat',
+    'Gauge Colors',
+    'Editor Colors'
+  ]
+
   return (
     <div className="container space-y-8">
       <div>
         <h2 className="text-lg font-semibold mb-4">Color Palette</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {colorColumns.map((column, columnIndex) => (
             <div key={columnIndex}>
+              <h3 className="text-sm font-medium mb-3 text-muted-foreground">
+                {columnHeaders[columnIndex]}
+              </h3>
               {column.map((color) => (
                 <Button
                   key={color}

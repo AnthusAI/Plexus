@@ -1,4 +1,9 @@
 import type { StorybookConfig } from "@storybook/nextjs";
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ESM module equivalent for __dirname
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 const config: StorybookConfig = {
   stories: [
@@ -21,12 +26,29 @@ const config: StorybookConfig = {
   },
   staticDirs: ['../public'],
   webpackFinal: async (config) => {
+    const webpack = require('webpack');
+    
     if (config.resolve) {
       config.resolve.alias = {
         ...config.resolve.alias,
-        '@': require('path').resolve(__dirname, '../'),
+        '@': path.resolve(currentDir, '../'),
+        '@number-flow/react': path.resolve(currentDir, '../components/ui/number-flow-dev.tsx'),
       };
     }
+    
+    // Use NormalModuleReplacementPlugin to replace imports with mocks
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /.*\/app\/contexts\/AccountContext/,
+        path.resolve(currentDir, '../__mocks__/AccountContext.ts')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /aws-amplify\/data$/,
+        path.resolve(currentDir, '../__mocks__/aws-amplify-data.ts')
+      )
+    );
+    
     return config;
   },
 };

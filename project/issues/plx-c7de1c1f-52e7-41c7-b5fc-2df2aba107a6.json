@@ -1,0 +1,30 @@
+{
+  "id": "plx-c7de1c1f-52e7-41c7-b5fc-2df2aba107a6",
+  "title": "[Snyk Code] Hardcoded Non-Cryptographic Secret",
+  "description": "## Hardcoded Non-Cryptographic Secret\n\n**Severity:** low\n**Project:** `AnthusAI/Plexus`\n**File:** `tests/experiment/test_standard_operating_procedure_agent_story.py`\n**Location:** line 243, column 13 to line 243, column 27\n**Classes:** CWE-CWE-547\n### Snippet (tests/experiment/test_standard_operating_procedure_agent_story.py:241-245)\n```\n 241 |             mcp_server=FakeMCPServer(),\n 242 |             client=FakeClient(),\n 243 |             openai_api_key='test-key',\n 244 |             experiment_context=experiment_context\n 245 |         )\n```\n\n**Issue Key:** a8f9af19-1e87-4313-8a55-5947538c706a\n\n### Details\nHardcoded Non-Cryptographic Secret\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.696419Z",
+  "updated_at": "2026-03-11T21:27:00.603981Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 13,
+    "snyk_end_column": 27,
+    "snyk_end_line": 243,
+    "snyk_file": "tests/experiment/test_standard_operating_procedure_agent_story.py",
+    "snyk_key": "a8f9af19-1e87-4313-8a55-5947538c706a",
+    "snyk_line": 243,
+    "snyk_severity": "low",
+    "snyk_type": "code"
+  }
+}

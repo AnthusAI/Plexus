@@ -1,7 +1,7 @@
 {
     "version": "0.2.0",
     "python": {
-        "pythonPath": "/Users/ryan/miniconda3/envs/py39/bin/python"
+        "python": "/Users/ryan/miniconda3/envs/py311/bin/python"
     },
     "configurations": [
 
@@ -13,14 +13,15 @@
             "args": [
                 "evaluate",
                 "accuracy",
-                "--scorecard-name",
-                "primeedu",
-                "--score-name",
-                "PS Mismatch - Program",
+                "--scorecard",
+                "1461",
+                "--score",
+                "45923",
                 "--number-of-samples",
                 "100",
                 "--sampling-method",
                 "random",
+                // "--yaml",
                 // "--fresh",
                 // "--visualize",
                 // "--use-langsmith-trace",

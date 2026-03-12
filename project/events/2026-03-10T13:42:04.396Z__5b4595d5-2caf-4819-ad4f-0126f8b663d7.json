@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5b4595d5-2caf-4819-ad4f-0126f8b663d7",
+  "issue_id": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T13:42:04.396Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "Integrate Semantic Reinforcement Memory analysis into the FeedbackAnalysis report block so that memory topics (clustered feedback patterns) appear below the existing confusion matrix detail section, with each exemplar linking to its source Item via the `IdentifierDisplay` component.\n\n## Context\n\nFeedbackAnalysis currently shows agreement metrics (AC1, accuracy), gauges, and a confusion matrix with a collapsible detail drill-down. VectorTopicMemory (Semantic Reinforcement Memory) clusters feedback text into topic buckets with keywords, exemplars, memory tiers, and lifecycle indicators. Both blocks consume the same data source (scorecard + days + feedback items). This epic merges the memory analysis into FeedbackAnalysis so users see feedback patterns in context with their agreement metrics.\n\n## Architecture\n\n```mermaid\ngraph TD\n    FA[\"FeedbackAnalysis.generate()\"] --> METRICS[\"Existing: AC1, confusion matrix, accuracy\"]\n    FA --> MEMORY[\"New: clustering pipeline\"]\n    MEMORY --> EMB[\"EmbeddingService (cached)\"]\n    MEMORY --> TC[\"TopicClusterer\"]\n    TC --> TOPICS[\"Topics with enriched exemplars\"]\n    TOPICS --> EX[\"Exemplar = {text, itemId, identifiers}\"]\n```\n\n**Backend:** FeedbackAnalysis calls the clustering pipeline (EmbeddingService + TopicClusterer) on the feedback items it already fetched, producing a `memories` section in its output. Exemplars are enriched from plain text strings to objects carrying Item ID and identifiers.\n\n**Frontend:** A shared `TopicList` component extracted from `VectorTopicMemory.tsx` renders memory topics inside `FeedbackAnalysis.tsx`. Each exemplar renders with `IdentifierDisplay` from `identifier-display.tsx` to link to its source Item.\n\n## Definition of Done\n\n- FeedbackAnalysis report output includes a `memories` key with per-score topic lists\n- Each exemplar carries `text`, `itemId`, and `identifiers` (not just a string)\n- Frontend renders a collapsible \"Topic Memories\" section below the confusion matrix detail\n- Each exemplar shows an `IdentifierDisplay` Item link\n- VectorTopicMemory also benefits from enriched exemplars\n- Shared `TopicList` component used by both block renderers\n- All Gherkin scenarios in child stories pass\n\n## Depends On\n\nInitiative plx-f71bd9 (Persistent Vector Topic Memory) — all prior epics completed\n\n## Story Ordering\n\n```\nPARALLEL:\n  Stories 1-3 (Backend, sequential): clusterer indices → enriched exemplars → FeedbackAnalysis integration\n  Stories 4-5 (Frontend, sequential): shared TopicList → IdentifierDisplay in exemplars\n\nTHEN:\n  Story 6 (Frontend integration): needs all above\n```\n\n## Key Files\n\n**Backend:**\n- `plexus/analysis/topic_clusterer.py` — add `_get_representative_doc_indices()`\n- `plexus/reports/blocks/vector_topic_memory.py` — enrich exemplar output\n- `plexus/reports/blocks/feedback_analysis.py` — add memory analysis pipeline\n\n**Frontend:**\n- `dashboard/components/blocks/VectorTopicMemory.tsx` — extract shared component\n- `dashboard/components/blocks/FeedbackAnalysis.tsx` — add memories section\n- `dashboard/components/ui/identifier-display.tsx` — reused for Item links",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 2,
+    "status": "open",
+    "title": "Semantic Reinforcement Memory in FeedbackAnalysis"
+  }
+}

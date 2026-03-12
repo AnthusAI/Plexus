@@ -10,10 +10,12 @@ Each scorecard belongs to an account and contains sections with scores.
 """
 
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass
 from .base import BaseModel
-from ..client import _BaseAPIClient
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,7 @@ class Scorecard(BaseModel):
         externalId: str,
         accountId: str,
         description: Optional[str] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.name = name
@@ -54,7 +56,7 @@ class Scorecard(BaseModel):
         """
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Scorecard':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Scorecard':
         return cls(
             id=data['id'],
             name=data['name'],
@@ -66,7 +68,7 @@ class Scorecard(BaseModel):
         )
 
     @classmethod
-    def get_by_key(cls, key: str, client: _BaseAPIClient) -> 'Scorecard':
+    def get_by_key(cls, key: str, client: '_BaseAPIClient') -> 'Scorecard':
         logger.debug(f"Looking up scorecard by key: {key}")
         query = """
         query GetScorecardByKey($key: String!) {
@@ -86,9 +88,25 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
+    def list_by_key(cls, key: str, client: '_BaseAPIClient') -> Optional['Scorecard']:
+        """Get a scorecard by its key.
+        
+        Args:
+            key: The scorecard key to look up
+            client: The API client instance
+            
+        Returns:
+            Scorecard: The found scorecard or None
+        """
+        try:
+            return cls.get_by_key(key, client)
+        except ValueError:
+            return None
+
+    @classmethod
     def create(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         name: str,
         key: str,
         externalId: str,
@@ -131,7 +149,7 @@ class Scorecard(BaseModel):
         return cls.from_dict(result['createScorecard'], client)
 
     @classmethod
-    def get_by_name(cls, name: str, client: _BaseAPIClient) -> 'Scorecard':
+    def get_by_name(cls, name: str, client: '_BaseAPIClient') -> 'Scorecard':
         logger.debug(f"Looking up scorecard by name: {name}")
         query = """
         query GetScorecardByName($name: String!) {
@@ -151,7 +169,23 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Scorecard':
+    def list_by_name(cls, name: str, client: '_BaseAPIClient') -> Optional['Scorecard']:
+        """Get a scorecard by its name.
+        
+        Args:
+            name: The scorecard name to look up
+            client: The API client instance
+            
+        Returns:
+            Scorecard: The found scorecard or None
+        """
+        try:
+            return cls.get_by_name(name, client)
+        except ValueError:
+            return None
+
+    @classmethod
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'Scorecard':
         logger.debug(f"Looking up scorecard by ID: {id}")
         query = """
         query GetScorecardById($id: ID!) {
@@ -168,7 +202,7 @@ class Scorecard(BaseModel):
         return cls.from_dict(result['getScorecard'], client)
 
     @classmethod
-    def get_by_external_id(cls, external_id: str, client: _BaseAPIClient) -> 'Scorecard':
+    def get_by_external_id(cls, external_id: str, client: '_BaseAPIClient') -> 'Scorecard':
         logger.debug(f"Looking up scorecard by external ID: {external_id}")
         query = """
         query GetScorecardByExternalId($externalId: String!) {
@@ -186,4 +220,59 @@ class Scorecard(BaseModel):
             raise ValueError(f"No scorecard found with external ID: {external_id}")
         logger.debug(f"Found scorecard: {items[0]['name']} ({items[0]['id']})")
         return cls.from_dict(items[0], client)
+
+    @classmethod
+    def get_by_account_and_external_id(cls, account_id: str, external_id: str, client: '_BaseAPIClient') -> Optional['Scorecard']:
+        """Get a scorecard by account ID and external ID using the GSI.
+        
+        This uses the byAccountIdAndExternalId GSI for efficient lookup.
+        
+        Args:
+            account_id: The account ID to filter by
+            external_id: The scorecard external ID to look up
+            client: The API client instance
+            
+        Returns:
+            Scorecard: The found scorecard or None
+        """
+        query = """
+        query GetScorecardByAccountIdAndExternalId($accountId: String!, $externalId: String!) {
+            listScorecardByAccountIdAndExternalId(accountId: $accountId, externalId: {eq: $externalId}, limit: 1) {
+                items {
+                    %s
+                }
+            }
+        }
+        """ % cls.fields()
+        
+        variables = {
+            "accountId": account_id,
+            "externalId": external_id
+        }
+        
+        result = client.execute(query, variables)
+        items = result.get('listScorecardByAccountIdAndExternalId', {}).get('items', [])
+        
+        if items:
+            logger.debug(f"Found scorecard: {items[0]['name']} ({items[0]['id']}) for account {account_id}")
+            return cls.from_dict(items[0], client)
+        
+        logger.debug(f"No scorecard found with external ID {external_id} for account {account_id}")
+        return None
+
+    @classmethod
+    def list_by_external_id(cls, external_id: str, client: '_BaseAPIClient') -> Optional['Scorecard']:
+        """Get a scorecard by its external ID.
+        
+        Args:
+            external_id: The scorecard external ID to look up
+            client: The API client instance
+            
+        Returns:
+            Scorecard: The found scorecard or None
+        """
+        try:
+            return cls.get_by_external_id(external_id, client)
+        except ValueError:
+            return None
   

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useInView } from 'react-intersection-observer'
+import { motion, AnimatePresence } from "framer-motion"
 import { formatTimeAgo } from '@/utils/format-time'
 import { formatDuration } from '@/utils/format-duration'
 import { TaskStageConfig } from '@/components/ui/task-status'
@@ -11,7 +12,7 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { Task, TaskHeader, TaskContent, type BaseTaskProps } from '@/components/Task'
 import { Activity, Square, X, MoreHorizontal, RefreshCw, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname, useParams } from 'next/navigation'
 import ScorecardContext from "@/components/ScorecardContext"
 import { TaskDispatchButton, activityConfig } from "@/components/task-dispatch"
 import { CardButton } from "@/components/CardButton"
@@ -20,6 +21,8 @@ import { toast } from 'sonner'
 import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData } from '@/components/EvaluationTask'
 import { observeRecentTasks } from '@/utils/subscriptions'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
+import { ActivityDashboardSkeleton } from '@/components/loading-skeleton'
+import { TasksGauges } from './TasksGauges'
 
 type TaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
 
@@ -50,6 +53,10 @@ const LIST_TASKS = `
         estimatedCompletionAt
         errorMessage
         errorDetails
+        stdout
+        stderr
+        output
+        attachedFiles
         currentStageId
         scorecardId
         scoreId
@@ -99,6 +106,7 @@ const LIST_TASKS = `
           isDatasetClassDistributionBalanced
           predictedClassDistribution
           isPredictedClassDistributionBalanced
+          universalCode
           scoreResults {
             items {
               id
@@ -285,13 +293,18 @@ function transformTaskToActivity(task: ProcessedTask) {
           metadata: any;
           explanation: string | null;
           itemId: string | null;
+          feedbackItem?: {
+            editCommentValue: string | null;
+          } | null;
         }) => ({
           id: result.id,
           value: result.value,
           confidence: result.confidence,
           metadata: result.metadata,
+          explanation: result.explanation,
           itemId: result.itemId,
-          explanation: result.explanation
+          trace: null,
+          feedbackItem: result.feedbackItem || null
         })) || [],
         task: {
           id: task.id,
@@ -333,13 +346,18 @@ function transformTaskToActivity(task: ProcessedTask) {
     }
   }
 
-  const result: EvaluationTaskProps['task'] = {
+  const result = {
     id: task.id,
-    type: String((metadata as any)?.type || task.type),
+    type: 'Task',
     scorecard,
     score,
     time: timeStr,
     description: task.command,
+    command: task.command,
+    output: task.output,
+    attachedFiles: task.attachedFiles,
+    stdout: task.stdout,
+    stderr: task.stderr,
     data: evaluationData || {
       id: task.id,
       title: `${scorecard} - ${score}`,
@@ -408,19 +426,25 @@ function transformTaskToActivity(task: ProcessedTask) {
     workerNodeId: task.workerNodeId
   }
 
-  return result
+  return result as EvaluationTaskProps['task']
 }
 
-export default function ActivityDashboard() {
+export default function ActivityDashboard({ 
+  initialSelectedTaskId = null 
+}: { 
+  initialSelectedTaskId?: string | null 
+} = {}) {
   const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
   const router = useRouter();
+  const pathname = usePathname();
+  const params = useParams();
   
   // State hooks
   const [displayedTasks, setDisplayedTasks] = useState<ReturnType<typeof transformTaskToActivity>[]>([])
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [recentTasks, setRecentTasks] = useState<ProcessedTask[]>([])
-  const [selectedTask, setSelectedTask] = useState<string | null>(null)
-  const [isFullWidth, setIsFullWidth] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<string | null>(initialSelectedTaskId)
+  const [isFullWidth, setIsFullWidth] = useState(!!initialSelectedTaskId)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
@@ -428,6 +452,67 @@ export default function ActivityDashboard() {
   const { ref, inView } = useInView({
     threshold: 0,
   })
+
+  // Handle deep linking - check if we're on a specific task page
+  useEffect(() => {
+    // If we have an ID in the URL and we're on the task detail page
+    if (params && 'id' in params && pathname === `/lab/tasks/${params.id}`) {
+      setSelectedTask(params.id as string);
+      if (isNarrowViewport) {
+        setIsFullWidth(true);
+      }
+    }
+  }, [params, pathname, isNarrowViewport]);
+
+  // Handle browser back/forward navigation with popstate event
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Extract task ID from URL if present
+      const match = window.location.pathname.match(/\/lab\/tasks\/([^\/]+)$/);
+      const idFromUrl = match ? match[1] : null;
+      
+      // Update the selected task ID based on the URL
+      setSelectedTask(idFromUrl);
+      if (idFromUrl && isNarrowViewport) {
+        setIsFullWidth(true);
+      } else if (!idFromUrl && isNarrowViewport) {
+        setIsFullWidth(false);
+      }
+    };
+
+    // Add event listener for popstate (browser back/forward)
+    window.addEventListener('popstate', handlePopState);
+    
+    // Clean up event listener on unmount
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isNarrowViewport]);
+
+  // Custom setter for selectedTask that handles both state and URL
+  const handleSelectTask = (id: string | null) => {
+    // Only update state if the selected task has changed
+    if (id !== selectedTask) {
+      setSelectedTask(id);
+      
+      // Update URL without triggering a navigation/re-render
+      const newPathname = id ? `/lab/tasks/${id}` : '/lab/activity';
+      window.history.pushState(null, '', newPathname);
+      
+      if (id && isNarrowViewport) {
+        setIsFullWidth(true);
+      }
+    }
+  };
+
+  // Handle closing the selected task
+  const handleCloseTask = () => {
+    setSelectedTask(null);
+    setIsFullWidth(false);
+    
+    // Update URL without triggering a navigation/re-render
+    window.history.pushState(null, '', '/lab/activity');
+  };
 
   // Add authentication check
   useEffect(() => {
@@ -441,15 +526,6 @@ export default function ActivityDashboard() {
   const fetchRecentTasks = async () => {
     try {
       const { tasks } = await listRecentTasks();
-      console.warn('Initial data load complete:', {
-        count: tasks.length,
-        taskIds: tasks.map((item: ProcessedTask) => item.id),
-        taskDetails: tasks.map((item: ProcessedTask) => ({
-          id: item.id,
-          status: item.status,
-          type: item.type
-        }))
-      });
       setRecentTasks(tasks);
       setIsInitialLoading(false);
     } catch (error) {
@@ -462,7 +538,6 @@ export default function ActivityDashboard() {
     fetchRecentTasks();
 
     // Set up real-time subscription
-    console.log('Setting up real-time task subscription');
     const subscription = observeRecentTasks().subscribe({
       next: ({ data: processedTask }) => {
         if (processedTask) {
@@ -486,7 +561,6 @@ export default function ActivityDashboard() {
     });
 
     return () => {
-      console.log('Cleaning up task subscription');
       subscription.unsubscribe();
     };
   }, []);
@@ -573,19 +647,9 @@ export default function ActivityDashboard() {
     const task = displayedTasks.find(t => t.id === selectedTask)
     if (!task) return null
 
-    console.debug('Rendering selected task in Activity Dashboard:', {
-      taskId: task.id,
-      type: task.type,
-      command: task.description || task.data?.command,
-      isEvaluation: task.type.toLowerCase().includes('evaluation'),
-      commandDisplay: 'full' // Verify we're setting this correctly
-    });
-
     const handleAnnounceAgain = async () => {
-      console.log('Announcing task again:', task.id)
       try {
         // First update the main task record - reset all timing and error fields
-        console.log('Resetting task:', task.id, 'Current status:', task.status)
         const updatedTask = await updateTask(task.id, {
           dispatchStatus: undefined,
           workerNodeId: null,
@@ -613,14 +677,7 @@ export default function ActivityDashboard() {
               completedAt: null,
               processedItems: 0,
               totalItems: stage.totalItems || null, // Preserve total items if it exists
-              statusMessage: "Not started",
-              errorMessage: null, // Reset error fields if they exist
-              errorDetails: null,
-              metadata: null, // Reset any stage-specific metadata
-              progress: null, // Reset any progress tracking
-              elapsedTime: null, // Reset timing information
-              estimatedTimeRemaining: null,
-              lastUpdateTime: null
+              statusMessage: "Not started"
             }, 'TaskStage')
             console.log('Stage update result:', updatedStage)
           }
@@ -663,10 +720,7 @@ export default function ActivityDashboard() {
           controlButtons={controlButtons}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-          onClose={() => {
-            setSelectedTask(null)
-            setIsFullWidth(false)
-          }}
+          onClose={handleCloseTask}
           commandDisplay="full"
         />
       )
@@ -679,10 +733,7 @@ export default function ActivityDashboard() {
         controlButtons={controlButtons}
         isFullWidth={isFullWidth}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-        onClose={() => {
-          setSelectedTask(null)
-          setIsFullWidth(false)
-        }}
+        onClose={handleCloseTask}
         renderHeader={TaskHeader}
         renderContent={(props) => <TaskContent {...props} />}
         commandDisplay="full"
@@ -695,96 +746,148 @@ export default function ActivityDashboard() {
     return null;
   }
 
+  // Show loading skeleton during initial load
+  if (isInitialLoading) {
+    return <ActivityDashboardSkeleton />
+  }
+
   return (
-    <div className="flex flex-col h-full p-1.5">
-      <div className="mb-3 flex justify-between items-start">
-        <ScorecardContext 
-          selectedScorecard={selectedScorecard}
-          setSelectedScorecard={setSelectedScorecard}
-          selectedScore={selectedScore}
-          setSelectedScore={setSelectedScore}
-        />
-        <TaskDispatchButton config={activityConfig} />
-      </div>
-      <div className="flex h-full">
-        <div 
-          className={`
-            ${selectedTask && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
-            ${selectedTask && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
-            h-full overflow-y-auto overflow-x-hidden @container
-          `}
-          style={selectedTask && !isNarrowViewport && !isFullWidth ? {
-            width: `${leftPanelWidth}%`
-          } : undefined}
-        >
-          <div className={`
-            grid gap-3
-            ${selectedTask && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
-          `}>
-            {displayedTasks.map((task) => (
-              <div 
-                key={task.id} 
-                onClick={() => {
-                  setSelectedTask(task.id)
-                  if (isNarrowViewport) {
-                    setIsFullWidth(true)
-                  }
-                }}
-              >
-                {task.type.toLowerCase().includes('evaluation') ? (
-                  <EvaluationTask
-                    variant="grid"
-                    task={task}
-                    isSelected={task.id === selectedTask}
-                    onClick={() => {
-                      setSelectedTask(task.id)
-                      if (isNarrowViewport) {
-                        setIsFullWidth(true)
-                      }
-                    }}
-                  />
-                ) : (
-                  <Task
-                    variant="grid"
-                    task={task}
-                    isSelected={task.id === selectedTask}
-                    onClick={() => {
-                      setSelectedTask(task.id)
-                      if (isNarrowViewport) {
-                        setIsFullWidth(true)
-                      }
-                    }}
-                    renderHeader={TaskHeader}
-                    renderContent={(props) => <TaskContent {...props} />}
-                  />
-                )}
-              </div>
-            ))}
-            <div ref={ref} />
-          </div>
+    <div className="@container flex flex-col h-full p-3 overflow-hidden">
+      {/* Fixed header */}
+      <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+        <div className="@[600px]:flex-grow w-full">
+          <ScorecardContext 
+            selectedScorecard={selectedScorecard}
+            setSelectedScorecard={setSelectedScorecard}
+            selectedScore={selectedScore}
+            setSelectedScore={setSelectedScore}
+          />
         </div>
-
-        {selectedTask && !isNarrowViewport && !isFullWidth && (
-          <div
-            className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-            onMouseDown={handleDragStart}
+        
+        {/* TaskDispatchButton on top right */}
+        <div className="flex-shrink-0">
+          <TaskDispatchButton config={activityConfig} />
+        </div>
+      </div>
+      
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <AnimatePresence mode="popLayout">
+          <motion.div 
+            key="activity-layout"
+            className="flex flex-1 min-h-0"
+            layout
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ 
+              type: "spring", 
+              stiffness: 300, 
+              damping: 30,
+              opacity: { duration: 0.2 }
+            }}
           >
-            <div className="absolute inset-0 rounded-full transition-colors duration-150 
-              group-hover:bg-accent" />
-          </div>
-        )}
+            {/* Left panel - grid content */}
+            <motion.div 
+              className={`${selectedTask && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+              style={selectedTask && !isNarrowViewport && !isFullWidth ? {
+                width: `${leftPanelWidth}%`
+              } : undefined}
+              layout
+              transition={{ 
+                type: "spring", 
+                stiffness: 300, 
+                damping: 30 
+              }}
+            >
+            <div className="@container overflow-visible">
+              {/* TasksGauges at the top - only show when not in mobile selected task view */}
+              {!(selectedTask && isNarrowViewport) && (
+                <TasksGauges className="mb-3" />
+              )}
+              
+              <div className={`
+                grid gap-3
+                ${selectedTask && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+              `}>
+                {displayedTasks.map((task) => (
+                  <div 
+                    key={task.id} 
+                    onClick={() => {
+                      handleSelectTask(task.id)
+                    }}
+                  >
+                    {task.type.toLowerCase().includes('evaluation') ? (
+                      <EvaluationTask
+                        variant="grid"
+                        task={task}
+                        isSelected={task.id === selectedTask}
+                        onClick={() => {
+                          handleSelectTask(task.id)
+                        }}
+                      />
+                    ) : (
+                      <Task
+                        variant="grid"
+                        task={task}
+                        isSelected={task.id === selectedTask}
+                        onClick={() => {
+                          handleSelectTask(task.id)
+                        }}
+                        renderHeader={TaskHeader}
+                        renderContent={(props) => <TaskContent {...props} />}
+                      />
+                    )}
+                  </div>
+                ))}
+                <div ref={ref} />
+              </div>
+            </div>
+            </motion.div>
 
-        {selectedTask && !isNarrowViewport && !isFullWidth && (
-          <div 
-            className="h-full overflow-hidden"
-            style={{ width: `${100 - leftPanelWidth}%` }}
-          >
-            {renderSelectedTask()}
-          </div>
-        )}
+            {/* Divider for split view */}
+            {selectedTask && !isNarrowViewport && !isFullWidth && (
+              <div
+                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                onMouseDown={handleDragStart}
+              >
+                <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                  group-hover:bg-accent" />
+              </div>
+            )}
 
+            {/* Right panel - task detail view */}
+            <AnimatePresence>
+              {selectedTask && !isNarrowViewport && !isFullWidth && (
+                <motion.div 
+                  key={`task-detail-${selectedTask}`}
+                  className="h-full overflow-hidden flex-shrink-0"
+                  style={{ width: `${100 - leftPanelWidth}%` }}
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ 
+                    width: `${100 - leftPanelWidth}%`, 
+                    opacity: 1 
+                  }}
+                  exit={{ 
+                    width: 0, 
+                    opacity: 0 
+                  }}
+                  transition={{ 
+                    type: "spring", 
+                    stiffness: 300, 
+                    damping: 30 
+                  }}
+                >
+                  {renderSelectedTask()}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+          </motion.div>
+        </AnimatePresence>
+        
+        {/* Full-screen view for mobile or full-width mode */}
         {selectedTask && (isNarrowViewport || isFullWidth) && (
-          <div className="fixed inset-0 bg-background z-50">
+          <div className="fixed inset-0 z-50 overflow-y-auto">
             {renderSelectedTask()}
           </div>
         )}

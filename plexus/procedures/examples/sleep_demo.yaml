@@ -1,0 +1,82 @@
+name: sleep_demo
+version: 1.0.0
+description: Demonstration of Sleep() primitive for delays and rate limiting
+
+class: LuaDSL
+
+params:
+  delay_seconds:
+    type: number
+    required: false
+    default: 2
+
+outputs:
+  status:
+    type: string
+    required: true
+  total_time:
+    type: number
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+stages:
+  - initialization
+  - processing
+  - complete
+
+workflow: |
+  Log.info("Starting workflow with delays", {
+    delay_seconds = params.delay_seconds
+  })
+
+  -- Phase 1: Initialization
+  Log.info("Phase 1: Initialization")
+  Sleep(params.delay_seconds)
+  Log.info("Initialization complete")
+
+  -- Phase 2: Processing with rate limiting
+  Log.info("Phase 2: Processing items with rate limiting")
+  local items = {"item1", "item2", "item3"}
+  local processed_count = 0
+
+  for i, item in ipairs(items) do
+    Log.info("Processing item", {
+      index = i,
+      item = item,
+      total = #items
+    })
+
+    processed_count = processed_count + 1
+
+    -- Rate limit: delay between items
+    if i < #items then
+      Log.info("Rate limiting - waiting before next item", {
+        delay = params.delay_seconds
+      })
+      Sleep(params.delay_seconds)
+    end
+  end
+
+  Log.info("Processing complete", {
+    processed_count = processed_count
+  })
+
+  -- Phase 3: Final delay before completion
+  Log.info("Phase 3: Final delay before completion")
+  Sleep(params.delay_seconds)
+
+  Log.info("Workflow complete", {
+    total_sleeps = 4,
+    delay_seconds = params.delay_seconds,
+    expected_total_time = params.delay_seconds * 4
+  })
+
+  return {
+    status = "success",
+    total_time = params.delay_seconds * 4
+  }

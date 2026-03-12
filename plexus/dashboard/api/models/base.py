@@ -34,17 +34,20 @@ Example Usage:
 
 from typing import Optional, Dict, Any, ClassVar, Type, TypeVar
 from dataclasses import dataclass
-from ..client import PlexusDashboardClient
+# Lazy import to avoid circular dependency
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..client import PlexusDashboardClient
 
 T = TypeVar('T', bound='BaseModel')
 
 class BaseModel:
-    def __init__(self, id: str, client: Optional[PlexusDashboardClient] = None):
+    def __init__(self, id: str, client: Optional['PlexusDashboardClient'] = None):
         self.id = id
         self._client = client
     
     @classmethod
-    def get_by_id(cls: Type[T], id: str, client: PlexusDashboardClient) -> T:
+    def get_by_id(cls: Type[T], id: str, client: 'PlexusDashboardClient') -> T:
         query = f"""
         query Get{cls.__name__}($id: ID!) {{
             get{cls.__name__}(id: $id) {{
@@ -71,6 +74,6 @@ class BaseModel:
         raise NotImplementedError
     
     @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any], client: PlexusDashboardClient) -> T:
+    def from_dict(cls: Type[T], data: Dict[str, Any], client: 'PlexusDashboardClient') -> T:
         """Create an instance from a dictionary of data"""
         raise NotImplementedError

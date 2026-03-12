@@ -1,0 +1,130 @@
+name: review_demo
+version: 1.0.0
+description: Demonstration of Human-in-the-Loop artifact review with editing
+
+class: LuaDSL
+
+params:
+  artifact_name:
+    type: string
+    required: false
+    default: "Production Deployment Configuration"
+  environment:
+    type: string
+    required: false
+    default: "production"
+
+outputs:
+  decision:
+    type: string
+    required: true
+  feedback:
+    type: string
+    required: true
+  artifact_edited:
+    type: boolean
+    required: true
+  reviewed_at:
+    type: string
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "This is a placeholder agent (not used in this workflow)"
+    initial_message: "Placeholder"
+    tools: []
+
+stages:
+  - notifying
+  - awaiting_review
+  - processing
+  - complete
+
+workflow: |
+  Human.notify({
+    message = "📋 Artifact ready for review: " .. params.artifact_name,
+    level = "info"
+  })
+
+  -- Create sample artifact to review
+  local artifact = {
+    name = params.artifact_name,
+    environment = params.environment,
+    config = {
+      replicas = 3,
+      memory_limit = "2Gi",
+      cpu_limit = "1000m",
+      auto_scaling = {
+        enabled = true,
+        min_replicas = 2,
+        max_replicas = 10,
+        target_cpu_percent = 70
+      }
+    },
+    deployment_strategy = "rolling",
+    health_check = {
+      path = "/health",
+      interval = 30,
+      timeout = 5
+    }
+  }
+
+  -- Request review with artifact
+  local review_result = Human.review({
+    message = "**Review Deployment Configuration**\n\n" ..
+              "Please review the " .. params.environment .. " deployment configuration.\n\n" ..
+              "You can edit the artifact directly or provide feedback below.",
+    artifact = artifact,
+    artifact_type = "deployment_config",
+    timeout = 3600,
+    default = {
+      decision = "timeout",
+      feedback = "Review timed out",
+      edited_artifact = nil
+    },
+    options = {
+      {label = "Approve", type = "button"},
+      {label = "Request Changes", type = "button"},
+      {label = "Reject", type = "button"}
+    },
+    context = {
+      artifact_name = params.artifact_name,
+      environment = params.environment,
+      requested_at = os.date("%Y-%m-%dT%H:%M:%SZ")
+    }
+  })
+
+  local reviewed_at = os.date("%Y-%m-%dT%H:%M:%SZ")
+
+  -- Check if artifact was edited
+  local artifact_edited = review_result.edited_artifact ~= nil
+
+  -- Provide feedback based on decision
+  if review_result.decision == "Approve" then
+    Human.notify({
+      message = "✅ **Configuration Approved**\n\n" ..
+                "Feedback: " .. (review_result.feedback or "None provided") .. "\n" ..
+                "Artifact edited: " .. (artifact_edited and "Yes" or "No"),
+      level = "info"
+    })
+  elseif review_result.decision == "Request Changes" then
+    Human.notify({
+      message = "🔄 **Changes Requested**\n\n" ..
+                "Feedback: " .. (review_result.feedback or "None provided") .. "\n" ..
+                "Artifact edited: " .. (artifact_edited and "Yes" or "No"),
+      level = "warning"
+    })
+  else
+    Human.notify({
+      message = "❌ **Configuration Rejected**\n\n" ..
+                "Feedback: " .. (review_result.feedback or "None provided"),
+      level = "warning"
+    })
+  end
+
+  return {
+    decision = review_result.decision,
+    feedback = review_result.feedback or "",
+    artifact_edited = artifact_edited,
+    reviewed_at = reviewed_at
+  }

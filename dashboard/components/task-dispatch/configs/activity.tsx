@@ -1,3 +1,4 @@
+import React from "react"
 import { PlayCircle, FlaskConical, SquareTerminal, FlaskRound, TestTubes } from "lucide-react"
 import { TaskDispatchConfig } from "../types"
 import { SimpleDialog } from "../dialogs/SimpleDialog"

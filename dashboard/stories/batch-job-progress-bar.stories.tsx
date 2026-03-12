@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { BatchJobProgressBar } from '../components/ui/batch-job-progress-bar'
 
 const meta = {
-  title: 'Progress Bars/BatchJobProgressBar',
+  title: 'General/Components/BatchJobProgressBar',
   component: BatchJobProgressBar,
   parameters: {
     layout: 'padded',

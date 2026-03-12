@@ -58,7 +58,16 @@ export interface ScoreResult {
     human_explanation?: string | null;
     text?: string | null;
   };
+  trace?: any | null;
   itemId: string | null;
+  feedbackItem?: {
+    id: string;
+    editCommentValue: string | null;
+    initialAnswerValue?: string | null;
+    finalAnswerValue?: string | null;
+    editorName?: string | null;
+    editedAt?: string | null;
+  } | null;
 }
 
 export interface EvaluationTaskData {
@@ -78,6 +87,7 @@ export interface EvaluationTaskData {
   errorMessage?: string;
   errorDetails: any;
   task: TaskData | null;
+  universalCode?: string | null;
 }
 
 export interface EvaluationTaskPropsInternal {

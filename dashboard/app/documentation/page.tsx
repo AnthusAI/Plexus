@@ -19,7 +19,7 @@ export default function DocumentationPage() {
               <p className="text-muted-foreground mb-4">
                 Learn about the fundamental concepts and components that power Plexus.
               </p>
-              <Link href="/documentation/basics">
+              <Link href="/documentation/concepts">
                 <DocButton>Explore Basics</DocButton>
               </Link>
             </div>
@@ -104,7 +104,7 @@ export default function DocumentationPage() {
             Ready to get started? Begin with the basics to understand Plexus's core concepts.
           </p>
           <div className="flex gap-4">
-            <Link href="/documentation/basics">
+            <Link href="/documentation/concepts">
               <DocButton>Start with Basics</DocButton>
             </Link>
             <Link href="/documentation/methods/add-edit-source">

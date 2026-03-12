@@ -1,0 +1,400 @@
+# YAML DSL Linter Test Cases
+# This file contains test cases for validating the YAML linter implementation
+# Each test case includes input YAML, expected results, and metadata
+
+# Score Configuration Test Cases
+score_tests:
+  - name: "Valid score configuration"
+    description: "A properly formatted score configuration should pass validation"
+    context: "score"
+    input: |
+      name: "Sentiment Analysis"
+      key: "sentiment_analysis"
+      externalId: "sent-001"
+      description: "Analyzes sentiment in customer feedback"
+      type: "categorical"
+      version: "1.0.0"
+      tags:
+        - "nlp"
+        - "sentiment"
+      config:
+        threshold: 0.7
+        categories: ["positive", "negative", "neutral"]
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 0
+    tags: ["valid", "complete"]
+
+  - name: "Missing required fields"
+    description: "Score missing required name and key fields"
+    context: "score"
+    input: |
+      description: "A score without required fields"
+      type: "binary"
+    expected:
+      is_valid: false
+      error_count: 2
+      warning_count: 0
+      messages:
+        - code: "REQUIRED_FIELD_NAME"
+          level: "error"
+        - code: "REQUIRED_FIELD_KEY"
+          level: "error"
+    tags: ["invalid", "required-fields"]
+
+  - name: "Invalid key format"
+    description: "Score key with invalid characters (uppercase, spaces)"
+    context: "score"
+    input: |
+      name: "Bad Key Score"
+      key: "BAD KEY WITH SPACES!"
+      description: "Score with invalid key format"
+    expected:
+      is_valid: false
+      error_count: 1
+      warning_count: 0
+      messages:
+        - code: "SCORE_KEY_FORMAT"
+          level: "error"
+    tags: ["invalid", "key-format"]
+
+  - name: "External ID consistency warning"
+    description: "Score with both camelCase and snake_case external IDs"
+    context: "score"
+    input: |
+      name: "Inconsistent External ID"
+      key: "inconsistent_external_id"
+      externalId: "camel-case-id"
+      external_id: "snake_case_id"
+      description: "Score with inconsistent external ID format"
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 1
+      messages:
+        - code: "SCORE_EXTERNAL_ID_CONSISTENCY"
+          level: "warning"
+    tags: ["valid", "warnings", "external-id"]
+
+  - name: "Invalid score type"
+    description: "Score with unsupported type value"
+    context: "score"
+    input: |
+      name: "Invalid Type Score"
+      key: "invalid_type"
+      type: "unsupported_type"
+      description: "Score with invalid type"
+    expected:
+      is_valid: false
+      error_count: 1
+      warning_count: 0
+      messages:
+        - code: "ALLOWED_VALUES_TYPE"
+          level: "error"
+    tags: ["invalid", "type-validation"]
+
+  - name: "Empty document"
+    description: "Empty YAML document"
+    context: "score"
+    input: ""
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 1
+      messages:
+        - code: "YAML_EMPTY_DOCUMENT"
+          level: "warning"
+    tags: ["valid", "warnings", "empty"]
+
+  - name: "YAML syntax error"
+    description: "Invalid YAML syntax with unclosed quotes"
+    context: "score"
+    input: |
+      name: "Unclosed quote
+      key: "syntax_error"
+    expected:
+      is_valid: false
+      error_count: 1
+      warning_count: 0
+      messages:
+        - code: "YAML_SYNTAX_ERROR"
+          level: "error"
+    tags: ["invalid", "syntax"]
+
+# Data Source Configuration Test Cases
+data_source_tests:
+  - name: "Valid data source with queries"
+    description: "A properly formatted data source with database queries"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: 1329
+          number: 1000
+      balance: false
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 0
+    tags: ["valid", "queries"]
+
+  - name: "Valid data source with custom query"
+    description: "Data source with custom SQL query"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: 1329
+          number: 6000
+          query: |
+            SELECT DISTINCT TOP {number} 
+                a.scorecard as scorecard_id,
+                a.f_id,
+                a.call_date
+            FROM 
+                vwForm a 
+            JOIN 
+                otherformdata ofd ON a.review_id = ofd.xcc_id
+            WHERE 
+                a.scorecard = {scorecard_id} 
+                AND a.transcript_analyzed IS NOT NULL 
+                AND a.max_reviews != -1
+                AND ofd.data_key = 'SOLD_FLAG'
+                AND ofd.data_value = '0'
+            ORDER BY 
+                a.call_date DESC, a.f_id DESC
+      balance: false
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 0
+    tags: ["valid", "queries", "custom-sql"]
+
+  - name: "Valid data source with searches"
+    description: "Data source with file-based searches"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      searches:
+        - item_list_filename: scorecards/TermLifeAI/high-value-customers.csv
+      balance: false
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 0
+    tags: ["valid", "searches"]
+
+  - name: "Valid data source with minimum calibration"
+    description: "Data source with minimum calibration count"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: 555
+          number: 100
+          minimum_calibration_count: 1
+      balance: true
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 0
+    tags: ["valid", "queries", "calibration"]
+
+  - name: "Missing required class"
+    description: "Data source missing required class field"
+    context: "data-source"
+    input: |
+      queries:
+        - scorecard_id: 1329
+          number: 1000
+      balance: false
+    expected:
+      is_valid: false
+      error_count: 1
+      warning_count: 0
+      messages:
+        - code: "REQUIRED_FIELD_CLASS"
+          level: "error"
+    tags: ["invalid", "required-fields"]
+
+  - name: "Invalid class value"
+    description: "Data source with unsupported class"
+    context: "data-source"
+    input: |
+      class: "UnsupportedClass"
+      queries:
+        - scorecard_id: 1329
+          number: 1000
+    expected:
+      is_valid: false
+      error_count: 1
+      warning_count: 0
+      messages:
+        - code: "ALLOWED_VALUES_CLASS"
+          level: "error"
+    tags: ["invalid", "class-validation"]
+
+  - name: "Missing queries and searches"
+    description: "Data source without queries or searches"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      balance: true
+    expected:
+      is_valid: false
+      error_count: 1
+      warning_count: 0
+      messages:
+        - code: "DATA_SOURCE_QUERIES_OR_SEARCHES_REQUIRED"
+          level: "error"
+    tags: ["invalid", "required-sections"]
+
+  - name: "Query missing required fields"
+    description: "Query item missing scorecard_id and number"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      queries:
+        - query: "SELECT * FROM calls"
+    expected:
+      is_valid: false
+      error_count: 2
+      warning_count: 0
+      messages:
+        - code: "DATA_SOURCE_QUERY_MISSING_SCORECARD_ID"
+          level: "error"
+        - code: "DATA_SOURCE_QUERY_MISSING_NUMBER"
+          level: "error"
+    tags: ["invalid", "query-validation"]
+
+  - name: "Invalid query field types"
+    description: "Query with invalid field types"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: "not-a-number"
+          number: -5
+    expected:
+      is_valid: false
+      error_count: 2
+      warning_count: 0
+      messages:
+        - code: "DATA_SOURCE_QUERY_INVALID_SCORECARD_ID"
+          level: "error"
+        - code: "DATA_SOURCE_QUERY_INVALID_NUMBER"
+          level: "error"
+    tags: ["invalid", "query-validation", "field-types"]
+
+  - name: "Search missing filename"
+    description: "Search item missing required filename"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      searches:
+        - description: "Missing filename"
+    expected:
+      is_valid: false
+      error_count: 1
+      warning_count: 0
+      messages:
+        - code: "DATA_SOURCE_SEARCH_MISSING_FILENAME"
+          level: "error"
+    tags: ["invalid", "search-validation"]
+
+  - name: "Search with unusual file type"
+    description: "Search with file that's not CSV or TXT"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      searches:
+        - item_list_filename: "data/items.json"
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 1
+      messages:
+        - code: "DATA_SOURCE_SEARCH_INVALID_FILE_TYPE"
+          level: "warning"
+    tags: ["valid", "warnings", "search-validation"]
+
+# Complex Integration Test Cases
+integration_tests:
+  - name: "Complex score with all fields"
+    description: "Comprehensive score configuration with all optional fields"
+    context: "score"
+    input: |
+      name: "Advanced Sentiment Classifier"
+      key: "advanced_sentiment"
+      externalId: "adv-sent-v2"
+      description: "Multi-model sentiment analysis with confidence scoring"
+      type: "numeric"
+      version: "2.1.0"
+      tags:
+        - "nlp"
+        - "sentiment"
+        - "advanced"
+        - "confidence"
+      config:
+        models:
+          - name: "transformer"
+            weight: 0.6
+            params:
+              max_length: 512
+              temperature: 0.7
+          - name: "traditional_ml"
+            weight: 0.4
+            params:
+              features: ["ngrams", "pos", "sentiment_lexicon"]
+        ensemble:
+          method: "weighted_average"
+          confidence_threshold: 0.8
+        output:
+          range: [0, 1]
+          precision: 3
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 0
+    tags: ["valid", "complex", "comprehensive"]
+
+  - name: "Complex data source with all features"
+    description: "Comprehensive data source configuration with both queries and searches"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: 1329
+          number: 5000
+          query: |
+            SELECT DISTINCT TOP {number} 
+                a.scorecard as scorecard_id,
+                a.f_id,
+                a.call_date,
+                a.rating,
+                a.transcript_analyzed
+            FROM 
+                vwForm a 
+            JOIN 
+                otherformdata ofd ON a.review_id = ofd.xcc_id
+            WHERE 
+                a.scorecard = {scorecard_id} 
+                AND a.transcript_analyzed IS NOT NULL 
+                AND a.max_reviews != -1
+                AND ofd.data_key = 'CUSTOMER_TYPE'
+                AND ofd.data_value = 'PREMIUM'
+            ORDER BY 
+                a.call_date DESC, a.f_id DESC
+        - scorecard_id: 555
+          number: 2000
+          minimum_calibration_count: 3
+      searches:
+        - item_list_filename: scorecards/TermLifeAI/high-value-customers.csv
+        - item_list_filename: data/special-cases.txt
+      balance: true
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 0
+    tags: ["valid", "complex", "comprehensive", "queries", "searches"]

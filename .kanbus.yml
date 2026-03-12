@@ -1,0 +1,124 @@
+project_directory: project
+ignore_paths:
+  - features/project
+console_port: 4242
+project_key: plx
+
+hierarchy:
+  - initiative
+  - epic
+  - task
+  - sub-task
+types:
+  - bug
+  - story
+  - chore
+
+workflows:
+  default:
+    backlog: [open, closed]
+    open: [in_progress, closed, backlog]
+    in_progress: [open, blocked, closed]
+    blocked: [in_progress, closed]
+    closed: [open]
+  epic:
+    open: [in_progress, closed]
+    in_progress: [open, closed]
+    closed: [open]
+
+statuses:
+  - key: backlog
+    name: Backlog
+    category: To do
+    collapsed: true
+  - key: Discovery
+    name: Discovery
+    category: To do
+    collapsed: false
+  - key: open
+    name: Ready
+    category: To do
+  - key: in_progress
+    name: In Progress
+    category: In progress
+  - key: blocked
+    name: Blocked
+    category: In progress
+    collapsed: true
+  - key: closed
+    name: Done
+    category: Done
+    collapsed: true
+
+categories:
+  - name: To do
+    color: grey
+  - name: In progress
+    color: blue
+  - name: Done
+    color: green
+
+transition_labels:
+  default:
+    backlog:
+      open: Start discovery
+      closed: Drop
+    open:
+      in_progress: Start work
+      closed: Drop
+      backlog: Back to backlog
+    in_progress:
+      open: Pause
+      blocked: Block
+      closed: Complete
+    blocked:
+      in_progress: Unblock
+      closed: Drop
+    closed:
+      open: Reopen
+  epic:
+    open:
+      in_progress: Start
+      closed: Complete
+    in_progress:
+      open: Pause
+      closed: Complete
+    closed:
+      open: Reopen
+
+initial_status: open
+priorities:
+  0:
+    name: critical
+    color: red
+  1:
+    name: high
+    color: bright_red
+  2:
+    name: medium
+    color: yellow
+  3:
+    name: low
+    color: blue
+  4:
+    name: trivial
+    color: white
+default_priority: 2
+
+type_colors:
+  initiative: bright_blue
+  epic: magenta
+  task: blue
+  sub-task: bright_cyan
+  bug: red
+  story: yellow
+  chore: green
+  event: bright_blue
+
+beads_compatibility: false
+
+# Snyk vulnerability synchronization (optional). Secrets go in .env, not here.
+snyk:
+  org_id: dbec85a8-d7a0-482a-b5c4-eb609a451b53
+  min_severity: low
+  parent_epic: null

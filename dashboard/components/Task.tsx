@@ -1,23 +1,29 @@
 import React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Square, RectangleVertical, X, Activity, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
+import { Square, Columns2, X, Activity, FlaskConical, FlaskRound, TestTubes, FileText, FileBarChart, Waypoints } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { cn } from '@/lib/utils'
 import { Timestamp } from './ui/timestamp'
+import { TaskOutputDisplay } from './TaskOutputDisplay'
 
 export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
-  variant: 'grid' | 'detail' | 'nested'
+  variant: 'grid' | 'detail' | 'nested' | 'bare'
   task: {
     id: string
     type: string
+    name?: string
+    description?: string
     scorecard: string
     score: string
     time: string
-    description?: string
     command?: string
+    output?: string // Universal Code YAML output
+    attachedFiles?: string[] // Array of S3 file keys for attachments
+    stdout?: string // Task stdout output
+    stderr?: string // Task stderr output
     data?: TData
     stages?: TaskStageConfig[]
     currentStageName?: string
@@ -62,9 +68,14 @@ export interface TaskComponentProps<TData extends BaseTaskData = BaseTaskData> e
 }
 
 // Add helper function to get task icon
-const getTaskIcon = (type: string) => {
+const getTaskIcon = (type: string | undefined) => {
   // Convert to lowercase for case-insensitive comparison
-  const taskType = type.toLowerCase()
+  const taskType = type?.toLowerCase() || ''
+  
+  // Add check for Report type
+  if (taskType.includes('report')) {
+    return <FileBarChart className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+  }
   
   if (taskType.includes('evaluation')) {
     if (taskType.includes('accuracy')) {
@@ -77,6 +88,10 @@ const getTaskIcon = (type: string) => {
       return <TestTubes className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
     }
     return <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+  }
+  
+  if (taskType.toLowerCase().includes('experiment')) {
+    return <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
   }
   
   return <Activity className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
@@ -132,14 +147,19 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     )
   }
 
+  // Add a check for the 'bare' variant to render only content
+  if (variant === 'bare') {
+    return <>{renderContent(childProps)}</>;
+  }
+
   return (
     <div 
-      className={`
-        transition-colors duration-200 
-        flex flex-col h-full p-3 rounded-lg
-        ${variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : ''}
-        ${effectiveIsSelected ? 'bg-card-selected' : 'bg-card'}
-      `}
+      className={cn(
+        "transition-colors duration-200 flex flex-col h-full rounded-lg w-full max-w-full relative",
+        variant === 'grid' ? 'cursor-pointer' : '',
+        effectiveIsSelected ? 'bg-card-selected' : variant === 'grid' ? 'bg-card hover:bg-accent' : 'bg-card',
+        (effectiveIsSelected && variant === 'grid') && "selected-border-rounded"
+      )}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}
       role={variant === 'grid' ? 'button' : 'article'}
       tabIndex={variant === 'grid' ? 0 : undefined}
@@ -152,10 +172,13 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       aria-busy={isLoading}
       aria-disabled={isLoading}
     >
-      <div className="flex-none">
+      <div className="flex-none p-3 w-full max-w-full overflow-hidden relative z-10">
         {renderHeader(childProps)}
       </div>
-      <div className="flex-1 min-h-0">
+      <div className={cn(
+        "flex-1 min-h-0 relative z-10",
+        variant === 'detail' && "overflow-y-auto"
+      )}>
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <div className="text-destructive mb-2">{error}</div>
@@ -190,26 +213,51 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
 }: TaskChildProps<TData>) => {
   const taskIcon = getTaskIcon(task.type);
 
+  // Add a console log to debug the onClose function
+  const handleClose = () => {
+    console.log('TaskHeader: Close button clicked, onClose function:', !!onClose);
+    if (onClose) {
+      onClose();
+    }
+  };
+
   return (
     <CardHeader className={cn(
-      "space-y-1.5 p-0 flex flex-col items-start",
+      "space-y-1.5 p-0 flex flex-col items-start w-full max-w-full",
       variant === 'detail' && "px-1"
     )}>
-      <div className="flex justify-between items-start w-full">
-        <div className="flex flex-col pb-1 leading-none">
-          <div className="text-sm truncate max-w-[200px]">{task.scorecard || '\u00A0'}</div>
-          <div className="text-sm truncate max-w-[200px]">{task.score || '\u00A0'}</div>
-          {variant !== 'grid' && (
-            <div className="text-sm text-muted-foreground">{task.type}</div>
+      <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+        <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+          {variant === 'detail' && (
+            <div className="flex items-center gap-2 mb-3">
+              {(task.type || '').toLowerCase().includes('experiment') ? (
+                <>
+                  <Waypoints className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-semibold text-muted-foreground">Experiment</span>
+                </>
+              ) : (
+                <>
+                  <Activity className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-semibold text-muted-foreground">Task</span>
+                </>
+              )}
+            </div>
+          )}
+          {task.scorecard && task.scorecard.trim() !== '' && (
+            <div className="text-sm text-muted-foreground truncate">{task.scorecard}</div>
+          )}
+          {task.score && task.score.trim() !== '' && (
+            <div className="text-sm text-muted-foreground truncate">{task.score}</div>
           )}
           <Timestamp time={task.time} variant="relative" />
         </div>
-        <div className="flex flex-col items-end">
+        <div className="flex flex-col items-end flex-shrink-0">
           {variant === 'grid' ? (
-            <div className="flex items-start gap-2">
-              <div className="text-sm text-muted-foreground text-right">
+            <div className="flex flex-col items-center gap-1">
+              <div className="text-muted-foreground">{taskIcon}</div>
+              <div className="text-xs text-muted-foreground text-center">
                 {(() => {
-                  const [firstWord, ...restWords] = task.type.split(/\s+/);
+                  const [firstWord, ...restWords] = (task.type || '').split(/\s+/);
                   return (
                     <>
                       {firstWord}<br />
@@ -218,7 +266,6 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
                   );
                 })()}
               </div>
-              <div className="text-muted-foreground mt-[0.15rem]">{taskIcon}</div>
             </div>
           ) : (
             <>
@@ -226,7 +273,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
                 {controlButtons}
                 {onToggleFullWidth && (
                   <CardButton
-                    icon={isFullWidth ? RectangleVertical : Square}
+                    icon={isFullWidth ? Columns2 : Square}
                     onClick={onToggleFullWidth}
                     disabled={isLoading}
                     aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
@@ -235,7 +282,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
                 {onClose && (
                   <CardButton
                     icon={X}
-                    onClick={onClose}
+                    onClick={handleClose}
                     disabled={isLoading}
                     aria-label="Close"
                   />
@@ -296,19 +343,23 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   })()
 
   return (
-    <CardContent className="h-full p-0 flex flex-col flex-1">
+    <CardContent className={cn(
+      "h-full p-0 flex flex-col flex-1",
+      variant === 'grid' ? 'px-3 pb-3' : ''
+    )}>
       {!hideTaskStatus && (
-        <div>
+        <div className={variant === 'detail' ? 'px-3' : ''}>
           <TaskStatus
             showStages={showProgress}
             stages={task.stages || []}
+            stageConfigs={task.stages || []}
             currentStageName={task.currentStageName}
             processedItems={task.processedItems}
             totalItems={task.totalItems}
             startedAt={task.startedAt}
             estimatedCompletionAt={task.estimatedCompletionAt}
             status={task.status || 'PENDING'}
-            command={task.command}
+            command={task.command || task.description}
             statusMessage={statusMessage}
             errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}
@@ -326,6 +377,18 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
         </div>
       )}
       {children}
+      {/* Task Output Display */}
+      <div className="px-3 pb-3">
+        <TaskOutputDisplay
+          output={task.output}
+          attachedFiles={task.attachedFiles}
+          stdout={task.stdout}
+          stderr={task.stderr}
+          command={task.command}
+          taskType={task.type}
+          variant={variant === 'nested' || variant === 'bare' ? 'detail' : variant}
+        />
+      </div>
     </CardContent>
   )
 }

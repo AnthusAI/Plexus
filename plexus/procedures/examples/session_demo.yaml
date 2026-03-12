@@ -1,0 +1,89 @@
+name: session_demo
+version: 1.0.0
+description: Demonstration of Session primitives for conversation management
+
+class: LuaDSL
+
+params:
+  topic:
+    type: string
+    required: false
+    default: "artificial intelligence"
+
+outputs:
+  status:
+    type: string
+    required: true
+  message_count:
+    type: number
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+stages:
+  - setup
+  - conversation
+  - complete
+
+workflow: |
+  Log.info("Session management demonstration", {
+    topic = params.topic
+  })
+
+  -- Test Session.clear()
+  Session.clear()
+  Log.info("Cleared session history")
+
+  -- Test Session.inject_system()
+  Session.inject_system("You are discussing " .. params.topic)
+  Log.info("Injected system message")
+
+  -- Test Session.append() with USER messages
+  Session.append("USER", "What are the key concepts?")
+  Session.append("USER", "Can you provide examples?")
+  Session.append("USER", "What are the challenges?")
+
+  -- Test Session.append() with ASSISTANT messages
+  Session.append("ASSISTANT", "Key concepts include machine learning, neural networks, and natural language processing.")
+  Session.append("ASSISTANT", "Examples: image recognition, language translation, recommendation systems.")
+  Session.append("ASSISTANT", "Challenges: data quality, computational cost, ethical considerations.")
+
+  -- Test Session.count()
+  local msg_count = Session.count()
+  Log.info("Message count", {count = msg_count})
+
+  -- Test Session.history()
+  local messages = Session.history()
+  Log.info("Session history retrieved", {message_count = #messages})
+
+  -- Log details of each message
+  for i, msg in ipairs(messages) do
+    Log.debug("Message details", {
+      index = i,
+      role = msg.role,
+      content = msg.content:sub(1, 50) .. "..."
+    })
+  end
+
+  -- Test Session.clear() again
+  Log.info("Clearing session for fresh context")
+  Session.clear()
+  local count_after_clear = Session.count()
+  Log.info("Count after clear", {count = count_after_clear})
+
+  -- Add final summary messages
+  Session.append("SYSTEM", "Session demonstration complete")
+  Session.append("USER", "Summary of session activities")
+  Session.append("ASSISTANT", "Demonstrated session management: clear, inject_system, append, count, history")
+
+  local final_count = Session.count()
+  Log.info("Final message count", {count = final_count})
+
+  return {
+    status = "success",
+    message_count = final_count
+  }

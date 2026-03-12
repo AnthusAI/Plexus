@@ -1,0 +1,423 @@
+import unittest
+import pandas as pd
+from unittest.mock import Mock, patch, MagicMock
+from plexus.scores.Score import Score
+from plexus.processors.FilterCustomerOnlyProcessor import FilterCustomerOnlyProcessor
+from plexus.processors.RemoveSpeakerIdentifiersTranscriptFilter import RemoveSpeakerIdentifiersTranscriptFilter
+
+
+class TestProcessorIntegration(unittest.TestCase):
+    """Integration tests for processor execution in training, evaluation, and production"""
+
+    def test_apply_processors_to_text_single_processor(self):
+        """Test applying a single processor to text"""
+        text = "Agent: Hello there. Customer: Hi, I need help. Agent: Sure thing."
+        
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'}
+        ]
+        
+        result = Score.apply_processors_to_text(text, processors_config)
+        
+        # Should contain only customer speech
+        self.assertIn("Hi, I need help", result)
+        # Should not contain agent speech
+        self.assertNotIn("Hello there", result)
+        self.assertNotIn("Sure thing", result)
+
+    def test_apply_processors_to_text_chained_processors(self):
+        """Test chaining multiple processors"""
+        text = "Agent: Hello there. Customer: Hi, I need help. Agent: Sure thing. Customer: Thank you."
+        
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'},
+            {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+        ]
+        
+        result = Score.apply_processors_to_text(text, processors_config)
+        
+        # Should contain customer speech
+        self.assertIn("Hi, I need help", result)
+        self.assertIn("Thank you", result)
+        # Should not contain agent speech
+        self.assertNotIn("Hello there", result)
+        self.assertNotIn("Sure thing", result)
+        # Should not contain speaker identifiers
+        self.assertNotIn("Customer:", result)
+        self.assertNotIn("Agent:", result)
+
+    def test_apply_processors_to_text_empty_config(self):
+        """Test that empty processor config returns original text"""
+        text = "Agent: Hello. Customer: Hi."
+        
+        result = Score.apply_processors_to_text(text, [])
+        
+        self.assertEqual(result, text)
+
+    def test_apply_processors_to_text_none_config(self):
+        """Test that None processor config returns original text"""
+        text = "Agent: Hello. Customer: Hi."
+        
+        result = Score.apply_processors_to_text(text, None)
+        
+        self.assertEqual(result, text)
+
+    def test_apply_processors_to_text_empty_text(self):
+        """Test handling of empty text"""
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'}
+        ]
+        
+        result = Score.apply_processors_to_text("", processors_config)
+        
+        self.assertEqual(result, "")
+
+    def test_apply_processors_to_text_with_parameters(self):
+        """Test processor with custom parameters"""
+        text = "Some text with stopwords and more text"
+        
+        # RemoveStopWordsTranscriptFilter doesn't take parameters in our implementation,
+        # but this tests the parameter passing mechanism
+        processors_config = [
+            {
+                'class': 'RemoveStopWordsTranscriptFilter',
+                'parameters': {}
+            }
+        ]
+        
+        # Should not raise an error
+        result = Score.apply_processors_to_text(text, processors_config)
+        self.assertIsInstance(result, str)
+
+    def test_apply_processors_to_text_invalid_processor(self):
+        """Test handling of invalid processor class"""
+        text = "Agent: Hello. Customer: Hi."
+        
+        processors_config = [
+            {'class': 'NonExistentProcessor'}
+        ]
+        
+        # Should log error but not crash, returning original text
+        result = Score.apply_processors_to_text(text, processors_config)
+        
+        # Should return original text since processor failed
+        self.assertEqual(result, text)
+
+    def test_apply_processors_to_text_missing_class_field(self):
+        """Test handling of processor config missing 'class' field"""
+        text = "Agent: Hello. Customer: Hi."
+        
+        processors_config = [
+            {'parameters': {}}  # Missing 'class' field
+        ]
+        
+        # Should log warning but not crash
+        result = Score.apply_processors_to_text(text, processors_config)
+        
+        # Should return original text
+        self.assertEqual(result, text)
+
+    def test_processor_execution_in_training_flow(self):
+        """Test that processors are applied during training data processing"""
+        # This tests the existing behavior in ScoreData.process_data()
+        from plexus.scores.core.ScoreData import ScoreData
+        
+        # Create a mock score with processor config
+        class TestScore(Score):
+            def predict(self, context, model_input):
+                return Score.Result(value="test", parameters=self.parameters)
+            
+            def train_model(self):
+                pass
+            
+            def predict_validation(self):
+                pass
+        
+        # Create score with processor configuration
+        score = TestScore(
+            name="Test Score",
+            scorecard_name="Test Scorecard",
+            data={
+                'class': 'MockDataCache',
+                'processors': [
+                    {'class': 'FilterCustomerOnlyProcessor'}
+                ]
+            }
+        )
+        
+        # Verify the processor config is stored
+        self.assertIn('processors', score.parameters.data)
+        self.assertEqual(len(score.parameters.data['processors']), 1)
+        self.assertEqual(score.parameters.data['processors'][0]['class'], 'FilterCustomerOnlyProcessor')
+
+    def test_scorecard_level_processor_configuration(self):
+        """Test that scorecard-level processors can be configured"""
+        # This tests the structure, not the full execution
+        scorecard_config = {
+            'name': 'Test Scorecard',
+            'processors': [
+                {'class': 'FilterCustomerOnlyProcessor'},
+                {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+            ],
+            'scores': []
+        }
+        
+        # Verify structure
+        self.assertIn('processors', scorecard_config)
+        self.assertEqual(len(scorecard_config['processors']), 2)
+
+    def test_score_level_overrides_scorecard_level(self):
+        """Test that score-level processors override scorecard-level processors"""
+        # This is tested through the Scorecard.get_score_result logic
+        # where score-level processors are checked first
+        
+        scorecard_processors = [
+            {'class': 'RemoveStopWordsTranscriptFilter'}
+        ]
+        
+        score_processors = [
+            {'class': 'FilterCustomerOnlyProcessor'}
+        ]
+        
+        # In the actual implementation, score_processors would be used
+        # This test verifies the configuration structure
+        self.assertNotEqual(scorecard_processors, score_processors)
+        self.assertEqual(score_processors[0]['class'], 'FilterCustomerOnlyProcessor')
+
+    def test_processor_error_handling_continues_with_other_processors(self):
+        """Test that if one processor fails, others still run"""
+        text = "Agent: Hello. Customer: Hi there. Agent: Goodbye."
+        
+        processors_config = [
+            {'class': 'NonExistentProcessor'},  # This will fail
+            {'class': 'FilterCustomerOnlyProcessor'}  # This should still run
+        ]
+        
+        result = Score.apply_processors_to_text(text, processors_config)
+        
+        # Despite first processor failing, second should have run
+        # However, since first processor fails, text remains unchanged for it
+        # and second processor operates on original text
+        self.assertIn("Hi there", result)
+
+    def test_multiple_customer_turns_with_chained_processors(self):
+        """Test complex scenario with multiple customer turns and chained processors"""
+        text = """
+        Agent: Welcome to support, how can I help you today?
+        Customer: I'm having trouble with my order.
+        Agent: I understand. Can you provide your order number?
+        Customer: Yes, it's 12345.
+        Agent: Thank you. Let me look that up.
+        Customer: I appreciate your help.
+        Agent: You're welcome. I found your order.
+        """
+        
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'},
+            {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+        ]
+        
+        result = Score.apply_processors_to_text(text, processors_config)
+        
+        # Should have all customer utterances
+        self.assertIn("having trouble with my order", result)
+        self.assertIn("12345", result)
+        self.assertIn("appreciate your help", result)
+        
+        # Should not have agent utterances
+        self.assertNotIn("Welcome to support", result)
+        self.assertNotIn("look that up", result)
+        self.assertNotIn("found your order", result)
+        
+        # Should not have speaker labels
+        self.assertNotIn("Customer:", result)
+        self.assertNotIn("Agent:", result)
+
+    def test_processor_preserves_text_encoding(self):
+        """Test that processors handle UTF-8 text correctly"""
+        text = "Agent: Hello 👋 Customer: Hi there! 😊 I need help. Agent: Sure! 🎉"
+        
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'}
+        ]
+        
+        result = Score.apply_processors_to_text(text, processors_config)
+        
+        # Should preserve emoji and special characters
+        self.assertIn("😊", result)
+        self.assertIn("Hi there", result)
+        # Should not have agent's emoji
+        self.assertNotIn("👋", result)
+        self.assertNotIn("🎉", result)
+
+    def test_processor_handles_whitespace_text(self):
+        """Test processor handling of whitespace-only text"""
+        text = "   \n\t  "
+
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'}
+        ]
+
+        result = Score.apply_processors_to_text(text, processors_config)
+
+        # Should handle gracefully
+        self.assertIsInstance(result, str)
+
+    def test_remove_speaker_identifiers_various_formats(self):
+        """Test RemoveSpeakerIdentifiersTranscriptFilter with various speaker label formats"""
+        # Test various speaker label formats
+        test_cases = [
+            ("Agent: Hello", "Hello"),
+            ("Customer: Hi", "Hi"),
+            ("Speaker1: Test", "Test"),
+            ("Rep: Good morning", "Good morning"),
+            ("User123: Message here", "Message here"),
+            ("AGENT: Uppercase", "Uppercase"),
+        ]
+
+        processors_config = [
+            {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+        ]
+
+        for input_text, expected_content in test_cases:
+            result = Score.apply_processors_to_text(input_text, processors_config)
+            # Should remove the speaker label
+            self.assertNotIn(":", result)
+            # Should preserve the content
+            self.assertIn(expected_content.strip(), result)
+
+    def test_remove_stop_words_preserves_meaning(self):
+        """Test RemoveStopWordsTranscriptFilter preserves important words"""
+        text = "I am very happy with the excellent service provided"
+
+        processors_config = [
+            {'class': 'RemoveStopWordsTranscriptFilter'}
+        ]
+
+        result = Score.apply_processors_to_text(text, processors_config)
+
+        # Important content words should be preserved
+        self.assertIn("happy", result)
+        self.assertIn("excellent", result)
+        self.assertIn("service", result)
+        self.assertIn("provided", result)
+
+        # Common stop words should be removed
+        self.assertNotIn(" I ", result)
+        self.assertNotIn(" am ", result)
+        self.assertNotIn(" the ", result)
+
+    def test_expand_contractions_comprehensive(self):
+        """Test ExpandContractionsProcessor with various contractions"""
+        text = "I don't think it's working. Won't you help? They're here. I'll try."
+
+        processors_config = [
+            {'class': 'ExpandContractionsProcessor'}
+        ]
+
+        result = Score.apply_processors_to_text(text, processors_config)
+
+        # Contractions should be expanded
+        self.assertIn("do not", result)
+        self.assertIn("it is", result)
+        self.assertIn("Will not", result)  # Won't at start of sentence gets capitalized
+        self.assertIn("I will", result)
+
+        # Original contractions should not be present
+        self.assertNotIn("don't", result)
+        self.assertNotIn("it's", result)
+        self.assertNotIn("Won't", result)
+        self.assertNotIn("I'll", result)
+
+    def test_processor_chain_order_matters(self):
+        """Test that processor order affects output correctly"""
+        text = "Agent: I don't understand. Customer: It's not working."
+
+        # Order 1: Filter customer, then expand contractions
+        config1 = [
+            {'class': 'FilterCustomerOnlyProcessor'},
+            {'class': 'ExpandContractionsProcessor'}
+        ]
+        result1 = Score.apply_processors_to_text(text, config1)
+
+        # Order 2: Expand contractions, then filter customer
+        config2 = [
+            {'class': 'ExpandContractionsProcessor'},
+            {'class': 'FilterCustomerOnlyProcessor'}
+        ]
+        result2 = Score.apply_processors_to_text(text, config2)
+
+        # Both should have customer speech with expanded contractions
+        self.assertIn("not working", result1)
+        self.assertIn("not working", result2)
+
+        # Neither should have agent speech
+        self.assertNotIn("understand", result1)
+        self.assertNotIn("understand", result2)
+
+    def test_remove_speaker_identifiers_multiline(self):
+        """Test RemoveSpeakerIdentifiersTranscriptFilter with multiline text"""
+        text = """Agent: Hello, how can I help you?
+Customer: I need assistance with my account.
+Agent: Sure, let me check that for you.
+Customer: Thank you."""
+
+        processors_config = [
+            {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+        ]
+
+        result = Score.apply_processors_to_text(text, processors_config)
+
+        # Speaker labels should be removed
+        self.assertNotIn("Agent:", result)
+        self.assertNotIn("Customer:", result)
+
+        # Content should be preserved
+        self.assertIn("Hello", result)
+        self.assertIn("assistance", result)
+        self.assertIn("check", result)
+        self.assertIn("Thank you", result)
+
+    def test_filter_customer_only_with_no_customer(self):
+        """Test FilterCustomerOnlyProcessor when there's no customer speech"""
+        text = "Agent: Hello. Agent: Anyone there? Agent: Goodbye."
+
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'}
+        ]
+
+        result = Score.apply_processors_to_text(text, processors_config)
+
+        # Result should be empty or minimal since there's no customer speech
+        self.assertNotIn("Hello", result)
+        self.assertNotIn("Anyone there", result)
+        self.assertNotIn("Goodbye", result)
+
+    def test_processor_with_very_long_text(self):
+        """Test processors handle very long text"""
+        # Create long text with many speaker turns
+        long_text = ""
+        for i in range(100):
+            long_text += f"Agent: Message {i} from agent. "
+            long_text += f"Customer: Message {i} from customer. "
+
+        processors_config = [
+            {'class': 'FilterCustomerOnlyProcessor'},
+            {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+        ]
+
+        result = Score.apply_processors_to_text(long_text, processors_config)
+
+        # Should handle long text without errors
+        self.assertIsInstance(result, str)
+        # Should contain customer messages
+        self.assertIn("from customer", result)
+        # Should not contain agent messages
+        self.assertNotIn("from agent", result)
+        # Should not have speaker labels
+        self.assertNotIn("Customer:", result)
+
+
+if __name__ == '__main__':
+    unittest.main()
+

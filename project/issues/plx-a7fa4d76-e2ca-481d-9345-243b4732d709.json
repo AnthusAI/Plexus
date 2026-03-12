@@ -1,0 +1,30 @@
+{
+  "id": "plx-a7fa4d76-e2ca-481d-9345-243b4732d709",
+  "title": "[Snyk Code] Path Traversal",
+  "description": "## Path Traversal\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/cli/shared/shared.py`\n**Location:** line 31, column 22 to line 31, column 26\n**Classes:** CWE-CWE-23\n### Snippet (plexus/cli/shared/shared.py:29-33)\n```\n  29 |     # Allow override via environment variable for Lambda compatibility\n  30 |     scorecards_base = os.environ.get('SCORECARD_CACHE_DIR', 'scorecards')\n  31 |     scorecards_dir = Path(scorecards_base)\n  32 |     \n  33 |     # Handle case where 'scorecards' exists as a file instead of directory\n```\n\n**Issue Key:** bfa20c0e-5fcd-461b-a411-047be786464e\n\n### Details\nPath Traversal\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.692161Z",
+  "updated_at": "2026-03-11T21:27:00.590377Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 22,
+    "snyk_end_column": 26,
+    "snyk_end_line": 31,
+    "snyk_file": "plexus/cli/shared/shared.py",
+    "snyk_key": "bfa20c0e-5fcd-461b-a411-047be786464e",
+    "snyk_line": 31,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "id": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "title": "score-processor-lambda/requirements.txt",
+  "description": "Snyk vulnerabilities found in `score-processor-lambda/requirements.txt`.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f6b32f8-0d5c-4792-be56-a5caa89242a7",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7fd7de08-3ef9-485b-8060-f7c2ff19d8f5",
+      "author": "derek.norrbom",
+      "text": "Starting remediation for critical dependency findings under this task. Initial scope: SNYK-PYTHON-PILLOW-5918878 and SNYK-PYTHON-H11-10293728. Per repo guidance, dependency source-of-truth is pyproject.toml where applicable; requirements outputs will be regenerated/updated and validated with targeted tests after each change.",
+      "created_at": "2026-03-11T20:49:00.059133Z"
+    },
+    {
+      "id": "42024e69-d80a-434d-87e2-d356c1f15023",
+      "author": "derek.norrbom",
+      "text": "Progress update:\n- Added explicit remediation pins in :\n  -  (for SNYK-PYTHON-H11-10293728 / CVE-2025-43859)\n  -  (for SNYK-PYTHON-PILLOW-5918878 / CVE-2023-4863)\n- Validation:\n  - ============================= test session starts ==============================\nplatform darwin -- Python 3.12.2, pytest-8.2.2, pluggy-1.5.0 -- /Users/derek.norrbom/miniconda3/bin/python\ncachedir: .pytest_cache\nrootdir: /Users/derek.norrbom/Projects/Plexus\nconfigfile: pytest.ini\nplugins: asyncio-0.23.5, cov-5.0.0, anyio-4.9.0, langsmith-0.4.16, xdist-3.8.0, typeguard-2.13.3, logfire-4.19.0, pyfakefs-5.9.2\nasyncio: mode=Mode.STRICT\ncollecting ... collected 6 items\n\nscore-processor-lambda/tests/test_handler.py::TestLambdaJobProcessor::test_init_success PASSED [ 16%]\nscore-processor-lambda/tests/test_handler.py::TestLambdaJobProcessor::test_init_missing_env_vars PASSED [ 33%]\nscore-processor-lambda/tests/test_handler.py::TestLambdaHandler::test_handler_exists PASSED [ 50%]\nscore-processor-lambda/tests/test_handler.py::TestLambdaHandler::test_handler_with_empty_event PASSED [ 66%]\nscore-processor-lambda/tests/test_handler.py::TestEventParsing::test_sqs_event_detection PASSED [ 83%]\nscore-processor-lambda/tests/test_handler.py::TestEventParsing::test_manual_event_detection PASSED [100%]\n\n============================== 6 passed in 0.86s ===============================\n  - Result: 6 passed\n- Note: initial test run with  failed due to import path (); resolved by including repo root in .\n",
+      "created_at": "2026-03-11T20:49:49.138540Z"
+    },
+    {
+      "id": "999512a3-43cf-4664-8593-8f4a62e62639",
+      "author": "derek.norrbom",
+      "text": "Progress update:\n- Added explicit remediation pins in score-processor-lambda/requirements.txt:\n  - h11>=0.16.0 (for SNYK-PYTHON-H11-10293728 / CVE-2025-43859)\n  - pillow>=10.0.1 (for SNYK-PYTHON-PILLOW-5918878 / CVE-2023-4863)\n- Validation:\n  - Command: PYTHONPATH=.:score-processor-lambda pytest score-processor-lambda/tests/test_*.py -v\n  - Result: 6 passed\n- Note: initial test run with PYTHONPATH=score-processor-lambda failed due to import path (ModuleNotFoundError: plexus); resolved by including repo root in PYTHONPATH.",
+      "created_at": "2026-03-11T20:49:59.844857Z"
+    },
+    {
+      "id": "25f642fb-9cf5-402e-9a3e-af8a20653d51",
+      "author": "derek.norrbom",
+      "text": "Correction and concrete parent-package remediation applied:\n- Removed prior transitive bandaid additions (h11/pillow/httpx direct lines).\n- Updated existing parent packages in score-processor-lambda/requirements.txt:\n  - openai -> openai>=2.26.0\n  - matplotlib -> matplotlib>=3.10.8\n\nValidation:\n- PYTHONPATH=.:score-processor-lambda pytest score-processor-lambda/tests/test_*.py -q\n- Result: 6 passed\n\nResolver verification (dry-run report):\n- openai 2.26.0\n- matplotlib 3.10.8\n- transitive httpx 0.28.1, httpcore 1.0.9, h11 0.16.0, pillow 12.1.1",
+      "created_at": "2026-03-11T21:20:16.783519Z"
+    },
+    {
+      "id": "7acba3fd-36a6-4c16-b1cf-088fbcf30162",
+      "author": "derek.norrbom",
+      "text": "Installed dependency-triage tooling into the active Python environment for future remediation work:\n- pipdeptree 2.31.0\n- pip-audit 2.10.0\n- pip-tools 7.5.3\n\nQuick verification:\n- pipdeptree --version\n- pip-audit --version\n- pip-compile --version\n\nNote: environment has pre-existing package metadata/constraint conflicts (reported by pipdeptree), which may affect global audit output quality but tools are installed and usable for requirements-level analysis.",
+      "created_at": "2026-03-11T21:22:45.550894Z"
+    }
+  ],
+  "created_at": "2026-02-26T00:13:56.245115Z",
+  "updated_at": "2026-03-11T21:22:45.550894Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_category": "dependency",
+    "snyk_target_file": "score-processor-lambda/requirements.txt"
+  }
+}

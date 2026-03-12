@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { generateClient } from "aws-amplify/api"
+import { useAuthenticator } from '@aws-amplify/ui-react'
 import type { Schema } from "@/amplify/data/resource"
 import type { AccountSettings } from "@/types/account-config"
 import { isValidAccountSettings } from "@/types/account-config"
@@ -19,11 +20,13 @@ interface AccountContextType {
   visibleMenuItems: { name: string; icon: any; path: string }[]
   setSelectedAccount: (account: Account) => void
   refreshAccount: () => Promise<void>
+  refetchAccounts: () => Promise<void>
 }
 
 const AccountContext = createContext<AccountContextType | undefined>(undefined)
 
 export function AccountProvider({ children }: { children: React.ReactNode }) {
+  const { authStatus } = useAuthenticator(context => [context.authStatus])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true)
@@ -61,22 +64,85 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const refetchAccounts = async () => {
+    if (authStatus !== 'authenticated') {
+      return
+    }
+
+    setIsLoadingAccounts(true)
+    try {
+      const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
+        client.models.Account
+      )
+      
+      const accountsWithParsedSettings = accountsData.map(account => ({
+        ...account,
+        settings: typeof account.settings === 'string' ? 
+          JSON.parse(account.settings) : account.settings
+      }))
+      
+      setAccounts(accountsWithParsedSettings)
+      
+      // Reset selected account if it's no longer in the list
+      if (selectedAccount && !accountsWithParsedSettings.find(a => a.id === selectedAccount.id)) {
+        const defaultAccountKey = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY
+        const defaultAccount = (defaultAccountKey 
+          ? accountsWithParsedSettings.find(account => account.key === defaultAccountKey)
+          : null) || accountsWithParsedSettings[0]
+        
+        if (defaultAccount) {
+          setSelectedAccount(defaultAccount)
+          updateVisibleMenuItems(defaultAccount)
+        } else {
+          setSelectedAccount(null)
+          setVisibleMenuItems(menuItems)
+        }
+      }
+    } catch (error) {
+      console.error('Error refetching accounts:', error)
+    } finally {
+      setIsLoadingAccounts(false)
+    }
+  }
+
+  // Clear account state when user logs out
+  useEffect(() => {
+    if (authStatus === 'unauthenticated') {
+      setAccounts([])
+      setSelectedAccount(null)
+      setVisibleMenuItems(menuItems)
+      setIsLoadingAccounts(false)
+    }
+  }, [authStatus])
+
   useEffect(() => {
     async function fetchAccounts() {
+      // Only fetch accounts if user is authenticated
+      if (authStatus !== 'authenticated') {
+        setIsLoadingAccounts(false)
+        return
+      }
+
       try {
         const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
           client.models.Account
         )
+        
         const accountsWithParsedSettings = accountsData.map(account => ({
           ...account,
           settings: typeof account.settings === 'string' ? 
             JSON.parse(account.settings) : account.settings
         }))
+        
         setAccounts(accountsWithParsedSettings)
-        if (!selectedAccount) {
-          const defaultAccount = accountsWithParsedSettings.find(
-            account => account.key === 'call-criteria'
-          ) || accountsWithParsedSettings[0]
+        
+        // Set default account if none is selected
+        if (!selectedAccount && accountsWithParsedSettings.length > 0) {
+          const defaultAccountKey = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY
+          const defaultAccount = (defaultAccountKey 
+            ? accountsWithParsedSettings.find(account => account.key === defaultAccountKey)
+            : null) || accountsWithParsedSettings[0]
+          
           if (defaultAccount) {
             setSelectedAccount(defaultAccount)
             updateVisibleMenuItems(defaultAccount)
@@ -90,7 +156,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
 
     fetchAccounts()
-  }, [])
+  }, [authStatus, selectedAccount])
 
   useEffect(() => {
     updateVisibleMenuItems(selectedAccount)
@@ -103,7 +169,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       isLoadingAccounts,
       visibleMenuItems,
       setSelectedAccount,
-      refreshAccount
+      refreshAccount,
+      refetchAccounts
     }}>
       {children}
     </AccountContext.Provider>

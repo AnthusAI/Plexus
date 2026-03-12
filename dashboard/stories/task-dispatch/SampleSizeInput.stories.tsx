@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { SampleSizeInput } from '@/components/task-dispatch'
 
 const meta: Meta<typeof SampleSizeInput> = {
-  title: 'Task Dispatch/SampleSizeInput',
+  title: 'Tasks/Dispatch/SampleSizeInput',
   component: SampleSizeInput,
   parameters: {
     layout: 'centered',

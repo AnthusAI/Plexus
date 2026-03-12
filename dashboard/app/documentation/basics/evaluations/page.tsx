@@ -86,7 +86,11 @@ export default function EvaluationsPage() {
           },
           itemId: `item-${i}`,
           EvaluationId: 'eval-1',
-          scorecardId: 'scorecard-1'
+          scorecardId: 'scorecard-1',
+          trace: null,
+          feedbackItem: i % 3 === 0 ? {
+            editCommentValue: i % 6 === 0 ? "agree" : "disagree"
+          } : null
         }
       }),
       task: {
@@ -267,7 +271,7 @@ export default function EvaluationsPage() {
                   <code>{`plexus \\
   evaluate \\
   accuracy \\
-  --scorecard-name "Lead Qualification" \\
+  --scorecard "Lead Qualification" \\
   --number-of-samples 100 \\
   --visualize`}</code>
                 </div>

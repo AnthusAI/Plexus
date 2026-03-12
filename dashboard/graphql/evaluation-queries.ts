@@ -28,6 +28,7 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
       isDatasetClassDistributionBalanced
       predictedClassDistribution
       isPredictedClassDistributionBalanced
+      universalCode
       taskId
       task {
         id
@@ -44,6 +45,10 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
         estimatedCompletionAt
         errorMessage
         errorDetails
+        stdout
+        stderr
+        output
+        attachedFiles
         currentStageId
         stages {
           items {
@@ -67,8 +72,22 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
           confidence
           metadata
           explanation
+          trace
           itemId
           createdAt
+          item {
+            id
+            externalId
+            identifiers
+            itemIdentifiers {
+              items {
+                name
+                value
+                url
+                position
+              }
+            }
+          }
         }
         nextToken
       }
@@ -93,6 +112,10 @@ export const TASK_UPDATE_SUBSCRIPTION = `
       estimatedCompletionAt
       errorMessage
       errorDetails
+      stdout
+      stderr
+      output
+      attachedFiles
       currentStageId
       stages {
         items {
@@ -147,6 +170,10 @@ export const GET_TASK_QUERY = `
       estimatedCompletionAt
       errorMessage
       errorDetails
+      stdout
+      stderr
+      output
+      attachedFiles
       currentStageId
       stages {
         items {
@@ -162,6 +189,23 @@ export const GET_TASK_QUERY = `
           totalItems
         }
       }
+    }
+  }
+`;
+
+export const ITEM_CREATE_SUBSCRIPTION = `
+  subscription OnCreateItem {
+    onCreateItem {
+      id
+      externalId
+      description
+      accountId
+      scorecardId
+      scoreId
+      evaluationId
+      updatedAt
+      createdAt
+      isEvaluation
     }
   }
 `; 

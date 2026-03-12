@@ -55,7 +55,7 @@ Error Handling:
 """
 
 import os
-from typing import Optional, Dict, Any, Tuple, TYPE_CHECKING
+from typing import Optional, Dict, Any, Tuple, List, TYPE_CHECKING
 from dataclasses import dataclass
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
@@ -66,27 +66,19 @@ import time
 from datetime import datetime, timezone
 import logging
 from plexus.utils import truncate_dict_strings_inner
-logging.basicConfig(level=logging.DEBUG)
-
-# Configure GQL loggers to show output
-gql_logger = logging.getLogger('gql')
-gql_logger.setLevel(logging.DEBUG)
-gql_logger.propagate = True
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-stream_handler.setFormatter(formatter)
-gql_logger.addHandler(stream_handler)
-
-# Disable noisy transport logging
+# Configure minimal logging for GraphQL operations
+# Only show warnings and errors from external libraries
 transport_logger = logging.getLogger('gql.transport')
 transport_logger.setLevel(logging.WARNING)
 transport_logger.propagate = False
 
-# Disable noisy requests logging
 requests_logger = logging.getLogger('urllib3')
 requests_logger.setLevel(logging.WARNING)
 requests_logger.propagate = False
+
+gql_logger = logging.getLogger('gql')
+gql_logger.setLevel(logging.WARNING)
+gql_logger.propagate = False
 
 if TYPE_CHECKING:
     from .models.scoring_job import ScoringJob
@@ -123,7 +115,12 @@ class _BaseAPIClient:
         
         if not all([self.api_url, self.api_key]):
             raise ValueError("Missing required API URL or API key")
-            
+
+        # Check environment variable for schema introspection setting
+        # Default to True for backward compatibility, but allow disabling for Lambda/packaging scenarios
+        fetch_schema_str = os.getenv('PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT', 'true').lower()
+        self._fetch_schema = fetch_schema_str in ('true', '1', 'yes')
+
         # Set up GQL client with API key authentication
         transport = RequestsHTTPTransport(
             url=self.api_url,
@@ -134,10 +131,10 @@ class _BaseAPIClient:
             verify=True,
             retries=3,
         )
-        
+
         self.client = Client(
             transport=transport,
-            fetch_schema_from_transport=True
+            fetch_schema_from_transport=self._fetch_schema
         )
         
         # Initialize model namespaces
@@ -202,7 +199,7 @@ class _BaseAPIClient:
 
     def flush(self) -> None:
         """Flush any pending log items immediately."""
-        if not self._stop_logging:
+        if not hasattr(self, '_stop_logging') or self._stop_logging is None or self._stop_logging.is_set():
             return
             
         # Signal thread to stop
@@ -240,7 +237,7 @@ class _BaseAPIClient:
             )
             client = Client(
                 transport=transport,
-                fetch_schema_from_transport=True
+                fetch_schema_from_transport=self._fetch_schema
             )
             with client as session:
                 return session.execute(gql(query), variable_values=variables)
@@ -333,6 +330,35 @@ class _BaseAPIClient:
                 continue
             
         return None
+    
+    def load_score_configuration(self, scorecard_identifier: str, score_name: str, 
+                                use_cache: bool = False, yaml_only: bool = False):
+        """
+        Load a score configuration using the standardized Score.load() method.
+        
+        This provides a convenient way for dashboard clients to load score configurations
+        using the same DRY, tested logic used throughout the system.
+        
+        Args:
+            scorecard_identifier: Scorecard identifier (ID, key, name, etc.)
+            score_name: Name of the score to load
+            use_cache: Whether to use cached YAML files (default: False for fresh API data)
+            yaml_only: Whether to restrict to YAML-only loading (default: False)
+            
+        Returns:
+            Score instance with loaded configuration
+            
+        Raises:
+            ValueError: If the score cannot be loaded
+        """
+        from plexus.scores.Score import Score
+        
+        return Score.load(
+            scorecard_identifier=scorecard_identifier,
+            score_name=score_name,
+            use_cache=use_cache,
+            yaml_only=yaml_only
+        )
 
     def log_score(
         self, 
@@ -744,6 +770,43 @@ class _BaseAPIClient:
             logging.error(f"Error updating evaluation: {e}")
             raise
 
+    def generate_deep_link(self, url_pattern: str, params: Dict[str, str]) -> str:
+        """
+        Generate a deep link URL to a Plexus dashboard resource.
+        
+        Args:
+            url_pattern: URL pattern with placeholders (e.g., "/reports/{reportId}")
+            params: Dictionary of parameters to fill into the URL pattern
+                   (e.g., {"reportId": "123"})
+        
+        Returns:
+            Complete URL including protocol and hostname
+        
+        Example:
+            client.generate_deep_link("/reports/{reportId}", {"reportId": "123"})
+            # Returns: "https://app.plexus.domain/reports/123"
+        """
+        # Use environment variable for base URL, with fallback to a default
+        base_url = os.environ.get('PLEXUS_DASHBOARD_URL', 'https://app.plexus.ai')
+        
+        # Remove trailing slash from base_url if present
+        if base_url.endswith('/'):
+            base_url = base_url[:-1]
+        
+        # Add leading slash to url_pattern if not present
+        if not url_pattern.startswith('/'):
+            url_pattern = '/' + url_pattern
+            
+        # Replace placeholders in the URL pattern
+        for key, value in params.items():
+            placeholder = f"{{{key}}}"
+            url_pattern = url_pattern.replace(placeholder, value)
+            
+        # Combine the base URL with the filled pattern
+        full_url = f"{base_url}{url_pattern}"
+        
+        return full_url
+
 class PlexusDashboardClient(_BaseAPIClient):
     """
     Client for the Plexus Dashboard API.
@@ -760,6 +823,7 @@ class PlexusDashboardClient(_BaseAPIClient):
     - Thread-safe operations
     - Context management for accounts, scorecards, and scores
     """
+    
     def __init__(
         self,
         api_url: Optional[str] = None,
@@ -767,7 +831,16 @@ class PlexusDashboardClient(_BaseAPIClient):
         context: Optional[ClientContext] = None
     ):
         super().__init__(api_url=api_url, api_key=api_key, context=context)
-
+        
+    # Context manager methods
+    def __enter__(self):
+        """Make the client usable as a context manager, returning the GQL client."""
+        return self.client
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Handle cleanup when exiting the context manager."""
+        return False  # Don't suppress exceptions
+    
     @classmethod
     def for_account(cls, account_key: str) -> 'PlexusDashboardClient':
         """Create a client initialized with account context"""
@@ -786,3 +859,211 @@ class PlexusDashboardClient(_BaseAPIClient):
             scorecard_key=scorecard_key,
             score_name=score_name
         ))
+    
+    # Chat-related methods for GraphQL chat system
+    async def create_chat_session(self, session_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new chat session."""
+        mutation = '''
+        mutation CreateChatSession($input: CreateChatSessionInput!) {
+            createChatSession(input: $input) {
+                id
+                accountId
+                scorecardId
+                scoreId
+                procedureId
+                name
+                category
+                status
+                metadata
+                createdAt
+                updatedAt
+            }
+        }
+        '''
+        
+        variables = {"input": session_data}
+        result = await self._execute_query(mutation, variables)
+        return result['createChatSession']
+    
+    async def create_chat_message(self, message_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new chat message."""
+        mutation = '''
+        mutation CreateChatMessage($input: CreateChatMessageInput!) {
+            createChatMessage(input: $input) {
+                id
+                sessionId
+                procedureId
+                role
+                content
+                metadata
+                createdAt
+            }
+        }
+        '''
+        
+        variables = {"input": message_data}
+        result = await self._execute_query(mutation, variables)
+        return result['createChatMessage']
+    
+    async def update_chat_session(self, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing chat session."""
+        mutation = '''
+        mutation UpdateChatSession($input: UpdateChatSessionInput!) {
+            updateChatSession(input: $input) {
+                id
+                accountId
+                scorecardId
+                scoreId
+                procedureId
+                status
+                metadata
+                createdAt
+                updatedAt
+            }
+        }
+        '''
+        
+        variables = {"input": update_data}
+        result = await self._execute_query(mutation, variables)
+        return result['updateChatSession']
+    
+    async def get_chat_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get a chat session by ID."""
+        query = '''
+        query GetChatSession($id: ID!) {
+            getChatSession(id: $id) {
+                id
+                accountId
+                scorecardId
+                scoreId
+                procedureId
+                status
+                metadata
+                createdAt
+                updatedAt
+            }
+        }
+        '''
+        
+        variables = {"id": session_id}
+        result = await self._execute_query(query, variables)
+        return result.get('getChatSession')
+    
+    async def list_chat_messages(
+        self, 
+        session_id: str = None, 
+        experiment_id: str = None, 
+        limit: int = 50,
+        sort_by: str = 'createdAt'
+    ) -> List[Dict[str, Any]]:
+        """List chat messages for a session or experiment."""
+        if experiment_id:
+            # Query by experiment GSI for chronological order
+            query = '''
+            query ListChatMessagesByExperiment($procedureId: String!, $limit: Int, $sortDirection: ModelSortDirection) {
+                listChatMessages(
+                    filter: { procedureId: { eq: $procedureId } }
+                    limit: $limit
+                    sortDirection: $sortDirection
+                ) {
+                    items {
+                        id
+                        sessionId
+                        procedureId
+                        role
+                        content
+                        metadata
+                        createdAt
+                    }
+                }
+            }
+            '''
+            variables = {
+                "procedureId": experiment_id,
+                "limit": limit,
+                "sortDirection": "ASC" if sort_by == 'createdAt' else "DESC"
+            }
+        else:
+            # Query by session
+            query = '''
+            query ListChatMessagesBySession($sessionId: String!, $limit: Int) {
+                listChatMessages(
+                    filter: { sessionId: { eq: $sessionId } }
+                    limit: $limit
+                    sortDirection: ASC
+                ) {
+                    items {
+                        id
+                        sessionId
+                        procedureId
+                        role
+                        content
+                        metadata
+                        createdAt
+                    }
+                }
+            }
+            '''
+            variables = {"sessionId": session_id, "limit": limit}
+        
+        result = await self._execute_query(query, variables)
+        return result['listChatMessages']['items']
+    
+    async def list_chat_sessions(
+        self, 
+        account_id: str = None, 
+        experiment_id: str = None, 
+        limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """List chat sessions for an account or experiment."""
+        if experiment_id:
+            # Query by experiment GSI
+            query = '''
+            query ListChatSessionsByExperiment($procedureId: String!, $limit: Int) {
+                listChatSessions(
+                    filter: { procedureId: { eq: $procedureId } }
+                    limit: $limit
+                    sortDirection: DESC
+                ) {
+                    items {
+                        id
+                        accountId
+                        scorecardId
+                        scoreId
+                        procedureId
+                        status
+                        metadata
+                        createdAt
+                        updatedAt
+                    }
+                }
+            }
+            '''
+            variables = {"procedureId": experiment_id, "limit": limit}
+        else:
+            # Query by account
+            query = '''
+            query ListChatSessionsByAccount($accountId: String!, $limit: Int) {
+                listChatSessions(
+                    filter: { accountId: { eq: $accountId } }
+                    limit: $limit
+                    sortDirection: DESC
+                ) {
+                    items {
+                        id
+                        accountId
+                        scorecardId
+                        scoreId
+                        procedureId
+                        status
+                        metadata
+                        createdAt
+                        updatedAt
+                    }
+                }
+            }
+            '''
+            variables = {"accountId": account_id, "limit": limit}
+        
+        result = await self._execute_query(query, variables)
+        return result['listChatSessions']['items']

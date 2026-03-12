@@ -1,0 +1,21 @@
+# Test scorecard for dry-run testing
+name: Test Scorecard
+key: test_scorecard
+id: test-scorecard-id
+sections:
+  - name: Test Section
+    scores:
+      - name: TestScore
+        key: test-score
+        id: test-score-id
+        class: Score
+        label_field: Valid
+        data:
+          type: fixed
+          items:
+            - text: "This is a test text for the TestScore."
+              TestScore Valid: "Yes"
+              content_id: 12345
+            - text: "This is another test text for the TestScore."
+              TestScore Valid: "No"
+              content_id: 67890 

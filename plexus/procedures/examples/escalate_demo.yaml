@@ -1,0 +1,109 @@
+name: escalate_demo
+version: 1.0.0
+description: Demonstration of Human.escalate() for blocking escalations
+
+class: LuaDSL
+
+params:
+  max_retries:
+    type: number
+    required: false
+    default: 3
+
+outputs:
+  status:
+    type: string
+    required: true
+  resolution:
+    type: string
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+stages:
+  - attempting
+  - escalated
+  - resolved
+
+workflow: |
+  Log.info("Starting critical operation with retry logic", {
+    max_retries = params.max_retries
+  })
+
+  -- Simulate operation that might fail
+  local attempts = 0
+  local success = false
+  local last_error = nil
+
+  while attempts < params.max_retries and not success do
+    attempts = attempts + 1
+
+    Log.info("Attempting critical operation", {
+      attempt = attempts,
+      max_retries = params.max_retries
+    })
+
+    -- Simulate failure (for demo purposes, always fail)
+    success = false
+    last_error = "Database connection timeout after 30s"
+
+    if not success then
+      Log.warn("Operation failed", {
+        attempt = attempts,
+        error = last_error
+      })
+
+      if attempts < params.max_retries then
+        Log.info("Retrying in 2 seconds...")
+        Sleep(2)
+      end
+    end
+  end
+
+  -- Check if we exhausted retries
+  if not success then
+    Log.error("All automatic retry attempts exhausted", {
+      total_attempts = attempts,
+      last_error = last_error
+    })
+
+    -- Escalate to human - blocks until resolved
+    Log.info("Escalating to human for manual resolution...")
+
+    Human.escalate({
+      message = "Critical operation failed after " .. attempts .. " attempts",
+      context = {
+        attempts = attempts,
+        max_retries = params.max_retries,
+        error = last_error,
+        operation = "database_connection"
+      },
+      severity = "error"
+    })
+
+    -- Execution continues here after human resolves the issue
+    Log.info("Human resolved the escalation - resuming workflow")
+
+    -- Simulate one more attempt after human intervention
+    Log.info("Attempting operation after human intervention...")
+    Sleep(1)
+
+    -- Assume it succeeds now
+    success = true
+    Log.info("Operation succeeded after human intervention")
+  end
+
+  Log.info("Workflow complete", {
+    success = success,
+    total_attempts = attempts,
+    required_escalation = attempts >= params.max_retries
+  })
+
+  return {
+    status = success and "success" or "failed",
+    resolution = attempts >= params.max_retries and "human_intervention" or "automatic"
+  }

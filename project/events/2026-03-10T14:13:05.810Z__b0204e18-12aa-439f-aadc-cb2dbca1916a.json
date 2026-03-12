@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b0204e18-12aa-439f-aadc-cb2dbca1916a",
+  "issue_id": "plx-7826af2f-85c4-4576-8db4-a9960ab14620",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T14:13:05.810Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** report consumer, **I want** each exemplar in a memory topic to show a clickable link to its source Item using the standard identifier display, **so that** I can navigate directly to the original call/interaction that produced the feedback.\n\n## Background\n\nThe `IdentifierDisplay` component (`dashboard/components/ui/identifier-display.tsx`) is the standard way to render Item links in Plexus. It is already used in the evaluations dashboard (`FeedbackItemsList`, `ScorecardReportEvaluation`) to show Item identifiers with copy buttons and optional URLs. It supports both single `externalId` and multiple `identifiers` key-value pairs.\n\nWith Story plx-679a29, exemplars now carry `item_id` and `identifiers`. This story wires the `IdentifierDisplay` component into the shared `TopicCard` so each exemplar shows its Item link.\n\n## Solution\n\nIn the shared `TopicCard` component (from Story plx-17451f), when rendering an exemplar that is an object with `item_id` and `identifiers`:\n\n1. Render the exemplar text as before (quoted italic)\n2. Below or beside the text, render `<IdentifierDisplay identifiers={exemplar.identifiers} iconSize=\"sm\" textSize=\"xs\" displayMode=\"compact\" />`\n3. If `identifiers` is empty or absent, show only the text (no broken link)\n\nThe `IdentifierDisplay` component handles all the complexity: truncation, tooltips, copy-to-clipboard, and URL linking.\n\n## Key Files\n\n- Modify: `dashboard/components/ui/topic-list.tsx` — add IdentifierDisplay to exemplar rendering\n- Reuse: `dashboard/components/ui/identifier-display.tsx`\n\n## Dependencies\n\n- Story plx-17451f (Extract shared TopicList component)",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+    "priority": 2,
+    "status": "open",
+    "title": "Exemplars render with IdentifierDisplay Item links"
+  }
+}

@@ -1,0 +1,316 @@
+import React from 'react';
+import { ReportBlockProps } from './ReportBlock';
+import { FeedbackAnalysisDisplay, type FeedbackAnalysisDisplayData } from '@/components/ui/feedback-analysis-display';
+import * as yaml from 'js-yaml';
+import { Gauge, type Segment } from '@/components/gauge';
+import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
+import { ac1GaugeSegments } from '@/components/ui/scorecard-evaluation';
+import { RawAgreementBar } from '@/components/RawAgreementBar';
+import { ChevronUp, ChevronDown } from 'lucide-react';
+import { TopicList } from '@/components/ui/topic-list';
+
+// Re-export the interface for backward compatibility
+export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
+  memories_file?: string;
+  memories?: {
+    scores: Array<{
+      score_name: string;
+      score_id: string;
+      topics: Array<{
+        topic_id: number;
+        label: string;
+        keywords: string[];
+        exemplars: Array<{ text: string; item_id?: string | null; identifiers?: Record<string, string> | null }>;
+        member_count: number;
+        memory_weight: number;
+        memory_tier: "hot" | "warm" | "cold";
+        lifecycle_tier: string;
+        is_new: boolean;
+        is_trending: boolean;
+      }>;
+    }>;
+  };
+}
+
+/**
+ * Renders a Feedback Analysis block showing Gwet's AC1 agreement scores.
+ * This component displays overall agreement and per-question breakdowns.
+ * 
+ * This component now uses the reusable FeedbackAnalysisDisplay component
+ * to maintain consistency between server-side report blocks and client-side
+ * ad-hoc analysis.
+ * 
+ * The confusion matrix uses FeedbackItemView to display filtered feedback items
+ * in a structured before/after format with toggleable raw JSON view.
+ */
+const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
+  const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
+
+  // Parse output unconditionally so hooks always run in the same order
+  let feedbackData: FeedbackAnalysisData | null = null;
+  let parseError = false;
+  if (props.output) {
+    try {
+      if (typeof props.output === 'string') {
+        feedbackData = yaml.load(props.output) as FeedbackAnalysisData;
+      } else {
+        feedbackData = props.output as FeedbackAnalysisData;
+      }
+    } catch (error) {
+      console.error('❌ FeedbackAnalysis: Failed to parse output data:', error);
+      parseError = true;
+    }
+  }
+
+  const memoriesFile = feedbackData?.memories_file ?? null;
+  React.useEffect(() => {
+    if (!memoriesFile || loadedMemories) return;
+    (async () => {
+      try {
+        const { downloadData } = await import('aws-amplify/storage');
+        const result = await downloadData({
+          path: memoriesFile,
+          options: { bucket: 'reportBlockDetails' as any },
+        }).result;
+        const text = await result.body.text();
+        const parsed = yaml.load(text) as FeedbackAnalysisData['memories'];
+        setLoadedMemories(parsed ?? null);
+      } catch (e) {
+        console.warn('FeedbackAnalysis: failed to load memories_file', e);
+      }
+    })();
+  }, [memoriesFile, loadedMemories]);
+
+  if (!props.output) {
+    return <p>No feedback analysis data available or data is loading.</p>;
+  }
+  if (parseError) {
+    return (
+      <div className="p-4 text-center text-destructive">
+        Error parsing feedback analysis data. Please check the report generation.
+      </div>
+    );
+  }
+  if (!feedbackData) {
+    return <p>No feedback analysis data available after parsing.</p>;
+  }
+
+  // Use a meaningful name, ignoring generic block names
+  const title = (props.name && !props.name.startsWith('block_')) ? props.name : 'Feedback Analysis';
+
+  // Check if this is "all scorecards" mode
+  if ((feedbackData as any).mode === 'all_scorecards') {
+    const allScorecardsData = feedbackData as any;
+    const scorecards = allScorecardsData.scorecards || [];
+
+    // State to track which scorecard is currently expanded
+    const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
+    // State to track which scorecard's memories section is expanded
+    const [expandedMemoryIds, setExpandedMemoryIds] = React.useState<Set<string>>(new Set());
+    const toggleMemory = (id: string) =>
+      setExpandedMemoryIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+    return (
+      <div className="space-y-8">
+        {/* Summary header */}
+        <div className="p-4 bg-muted/30 rounded-lg">
+          <h3 className="text-lg font-semibold mb-2">{title}</h3>
+          {allScorecardsData.block_description && (
+            <p className="text-sm text-muted-foreground mb-2">{allScorecardsData.block_description}</p>
+          )}
+          <div className="text-sm space-y-1">
+            <p><strong>Total scorecards analyzed:</strong> {allScorecardsData.total_scorecards_analyzed || scorecards.length}</p>
+            {allScorecardsData.total_scorecards_filtered !== undefined && allScorecardsData.total_scorecards_filtered > 0 && (
+              <p><strong>Scorecards filtered (no data):</strong> {allScorecardsData.total_scorecards_filtered}</p>
+            )}
+            {allScorecardsData.date_range && (
+              <p><strong>Date range:</strong> {new Date(allScorecardsData.date_range.start).toLocaleDateString()} - {new Date(allScorecardsData.date_range.end).toLocaleDateString()}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Render each scorecard with collapsible details */}
+        {scorecards.length === 0 ? (
+          <p className="text-muted-foreground">No scorecards found.</p>
+        ) : (
+          <div>
+            {scorecards.map((scorecardData: any, index: number) => {
+              const scorecardId = scorecardData.scorecard_id || index.toString();
+              const isExpanded = expandedScorecardId === scorecardId;
+
+              // Calculate accuracy segments if label distribution is available
+              const accuracySegments: Segment[] = scorecardData.label_distribution 
+                ? GaugeThresholdComputer.createSegments(
+                    GaugeThresholdComputer.computeThresholds(scorecardData.label_distribution)
+                  )
+                : [{ start: 0, end: 100, color: 'var(--gauge-inviable)' }];
+
+              // Calculate accuracy value  
+              const accuracy = scorecardData.accuracy !== undefined 
+                ? scorecardData.accuracy 
+                : scorecardData.mismatch_percentage !== undefined
+                  ? (100 - scorecardData.mismatch_percentage)
+                  : scorecardData.total_items > 0
+                    ? (scorecardData.total_agreements / scorecardData.total_items) * 100
+                    : 100.0;
+
+              return (
+                <div key={scorecardId} style={{ marginBottom: (index < scorecards.length - 1 && !isExpanded) ? '2em' : '0' }}>
+                  {/* Scorecard card */}
+                  <div className="bg-card rounded-lg">
+                    <div className="px-4 py-4">
+                      <div className="flex items-start justify-between gap-4 mb-4">
+                        {/* Left side: Rank, name, and items count */}
+                        <div className="flex items-start gap-4 flex-1">
+                          <span className="text-sm text-muted-foreground font-mono pt-1">#{scorecardData.rank || index + 1}</span>
+                          <div className="flex-1">
+                            <div className="font-semibold mb-1">{scorecardData.scorecard_name || scorecardData.scorecard_id}</div>
+                            <div className="text-sm text-muted-foreground">
+                              Items: <span className="font-medium text-foreground">{scorecardData.total_items || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right side: Larger gauges */}
+                        <div className="flex items-center gap-6">
+                          <div className="flex flex-col items-center" style={{ width: '200px' }}>
+                            <Gauge
+                              value={scorecardData.overall_ac1 ?? 0}
+                              title="Agreement"
+                              valueUnit=""
+                              min={-1}
+                              max={1}
+                              decimalPlaces={2}
+                              segments={ac1GaugeSegments}
+                              showTicks={true}
+                            />
+                          </div>
+                          <div className="flex flex-col items-center" style={{ width: '200px' }}>
+                            <Gauge 
+                              value={accuracy ?? 0} 
+                              title="Accuracy"
+                              segments={accuracySegments}
+                              showTicks={true}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Raw Agreement Bar */}
+                      <div className="mb-4">
+                        <h5 className="text-sm font-medium mb-2">Raw Agreement</h5>
+                        <RawAgreementBar 
+                          agreements={scorecardData.total_agreements || 0}
+                          totalItems={scorecardData.total_items || 0}
+                        />
+                      </div>
+
+                      {/* Expand/Collapse button - matching individual score pattern */}
+                      <div className="flex flex-col items-center mt-4">
+                        <div className="w-full h-px bg-border mb-1"></div>
+                        <button
+                          onClick={() => setExpandedScorecardId(isExpanded ? null : scorecardId)}
+                          className="flex items-center justify-center rounded-full hover:bg-muted/50 transition-colors"
+                          aria-label={isExpanded ? "Collapse details" : "Expand details"}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded detailed view - rendered below the card when expanded */}
+                  {isExpanded && (
+                    <div className="pt-3" style={{ marginBottom: index < scorecards.length - 1 ? '4em' : '0' }}>
+                      <FeedbackAnalysisDisplay
+                        data={scorecardData}
+                        showHeader={false}
+                        showDateRange={false}
+                        showPrecisionRecall={false}
+                        hideSummary={true}
+                        attachedFiles={props.attachedFiles}
+                        log={props.log}
+                        rawOutput={typeof props.output === 'string' ? props.output : undefined}
+                        id={`${props.id}-${index}`}
+                        position={props.position}
+                        config={props.config}
+                      />
+                      {(() => {
+                        const scMemories = (scorecardData as any).memories;
+                        const hasScMemories = scMemories && scMemories.scores && scMemories.scores.length > 0;
+                        if (!hasScMemories) return null;
+                        const scMemExpanded = expandedMemoryIds.has(scorecardId);
+                        return (
+                          <div className="mt-4">
+                            <button
+                              type="button"
+                              onClick={() => toggleMemory(scorecardId)}
+                              className="w-full flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                            >
+                              <span className="font-medium text-sm">Topic Memories</span>
+                              {scMemExpanded ? (
+                                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </button>
+                            {scMemExpanded && (
+                              <div className="mt-3 space-y-6 px-1">
+                                {scMemories.scores.map((sd: any) => (
+                                  <TopicList key={sd.score_id} topics={sd.topics} label={sd.score_name} />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Single scorecard mode — merge memory topics into each score entry
+  const singleMemories = loadedMemories ?? feedbackData.memories;
+  const memoriesByScoreId = singleMemories
+    ? Object.fromEntries(singleMemories.scores.map(s => [s.score_id, s.topics]))
+    : {};
+  const feedbackDataWithTopics = singleMemories ? {
+    ...feedbackData,
+    scores: feedbackData.scores?.map((s: any) => ({
+      ...s,
+      topics: memoriesByScoreId[s.score_id] ?? s.topics,
+    })),
+  } : feedbackData;
+
+  return (
+    <div>
+      <FeedbackAnalysisDisplay
+        data={feedbackDataWithTopics as any}
+        title={title}
+        subtitle={feedbackData.block_description}
+        showPrecisionRecall={false}
+        attachedFiles={props.attachedFiles}
+        log={props.log}
+        rawOutput={typeof props.output === 'string' ? props.output : undefined}
+        id={props.id}
+        position={props.position}
+        config={props.config}
+      />
+    </div>
+  );
+};
+
+// Set the blockClass property
+(FeedbackAnalysis as any).blockClass = 'FeedbackAnalysis';
+
+export default FeedbackAnalysis; 

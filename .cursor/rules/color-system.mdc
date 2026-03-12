@@ -1,0 +1,131 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Plexus Color System Guide
+
+## Overview
+Plexus uses a sophisticated color system based on Radix UI colors with custom CSS variables and Tailwind integration. Understanding how to properly reference colors is crucial for consistent UI development.
+
+## Color Architecture
+
+### CSS Variables Structure
+Colors are defined as CSS variables in [globals.css](mdc:Plexus/dashboard/app/globals.css) using this pattern:
+- `--color-name`: Base color definition
+- `--color-name-foreground`: Text/stroke color for that base
+- `--color-name-selected`: Selected state variant
+- `--color-name-selected-foreground`: Text/stroke for selected state
+
+### Key Color Categories
+1. **Base Colors**: `background`, `foreground`, `muted`, `muted-foreground`
+2. **UI Components**: `card`, `primary`, `secondary`, `accent`, `destructive`
+3. **Chart Colors**: `chart-1` through `chart-7`
+4. **Semantic Colors**: `true`, `false`, `neutral`
+5. **Gauge Colors**: `gauge-background`, `gauge-inviable`, `gauge-converging`, etc.
+
+## How to Reference Colors
+
+### ❌ WRONG - Common Mistakes
+```typescript
+// DON'T use HSL wrapper syntax
+stroke="hsl(var(--muted-foreground))"
+
+// DON'T use just the base name for strokes/text
+stroke="var(--muted)"
+```
+
+### ✅ CORRECT - Proper Usage
+
+#### For CSS/Inline Styles
+```typescript
+// Direct CSS variable reference
+stroke="var(--muted-foreground)"
+fill="var(--primary)"
+color="var(--card-foreground)"
+```
+
+#### For Tailwind Classes
+```typescript
+// Use Tailwind color classes
+className="text-muted-foreground"
+className="bg-primary"
+className="stroke-muted-foreground"
+```
+
+#### For Recharts Components
+```typescript
+// Recharts accepts direct CSS variable references
+<ReferenceLine 
+  y={0} 
+  stroke="var(--muted-foreground)" 
+  strokeWidth={1}
+/>
+
+<Area
+  fill="var(--chart-1)"
+  stroke="var(--chart-1)"
+/>
+```
+
+## Color Pairing Rules
+
+### Text/Stroke Colors
+- Use `-foreground` variants for text and strokes on colored backgrounds
+- Example: `bg-primary` pairs with `text-primary-foreground`
+
+### Selected States
+- Use `-selected` variants for hover/active states
+- Example: `bg-card` becomes `bg-card-selected` when selected
+
+## Debugging Colors
+
+### Color Palette Component
+Reference [ColorPalette.tsx](mdc:Plexus/dashboard/components/ColorPalette.tsx) to visualize all available colors in both light and dark themes.
+
+### Storybook
+Use the ColorPalette story at `Theme/ColorPalette` to test color combinations.
+
+## Theme Support
+All colors automatically support light/dark themes through CSS variable definitions in [globals.css](mdc:Plexus/dashboard/app/globals.css).
+
+## Common Patterns
+
+### Muted Elements
+```typescript
+// For subtle UI elements
+className="text-muted-foreground"
+stroke="var(--muted-foreground)"
+```
+
+### Chart Elements
+```typescript
+// For data visualization
+fill="var(--chart-1)"
+stroke="var(--chart-2)"
+```
+
+### Interactive Elements
+```typescript
+// For buttons, cards, etc.
+className="bg-primary text-primary-foreground hover:bg-primary-selected"
+```
+
+## Troubleshooting
+
+### Color Not Visible
+1. Check if you're using the correct `-foreground` variant for text/strokes
+2. Verify the color exists in [globals.css](mdc:Plexus/dashboard/app/globals.css)
+3. Test in both light and dark themes
+4. Use the ColorPalette component to verify color definitions
+
+### SVG/Chart Colors
+- Always use `var(--color-name)` syntax, never `hsl(var(--color-name))`
+- For Recharts, use direct CSS variable references
+- Test with thick, bright colors first (like `red`) to ensure visibility
+
+## File References
+- Color definitions: [globals.css](mdc:Plexus/dashboard/app/globals.css)
+- Tailwind config: [tailwind.config.js](mdc:Plexus/dashboard/tailwind.config.js)
+- Color palette component: [ColorPalette.tsx](mdc:Plexus/dashboard/components/ColorPalette.tsx)
+- Color palette story: [ColorPalette.stories.tsx](mdc:Plexus/dashboard/stories/ColorPalette.stories.tsx)
