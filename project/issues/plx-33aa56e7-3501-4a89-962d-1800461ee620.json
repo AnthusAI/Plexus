@@ -76,10 +76,40 @@
       "author": "derek.norrbom",
       "text": "Root-cause validation for PR #109 Snyk check: in a clean Python resolver environment (python:3.11-slim), installing generated root requirements fails immediately on VCS dependency line because git binary is absent (Cannot find command 'git'). This matches 'Packages installation failed' behavior from Snyk Git integration. Lambda manifest may appear healthy because unchanged manifests are not necessarily part of the PR check scope.",
       "created_at": "2026-03-12T17:28:56.542404Z"
+    },
+    {
+      "id": "a1a4a71e-fd62-4872-a5f9-92fbba8dbe54",
+      "author": "derek.norrbom",
+      "text": "Checked PR #109 after removing the VCS git dependency line. Snyk check still fails with \"1 test has failed\" because the scan now proceeds and reports vulnerabilities in the root requirements manifest, not install/parser failure. Local repro using snyk test on requirements.txt with --skip-unresolved returns ok=false with about 880 vulnerable dependency paths and about 84 unique issues.",
+      "created_at": "2026-03-12T18:06:57.122538Z"
+    },
+    {
+      "id": "4a61905d-e5c6-4776-bc12-1c1b13784553",
+      "author": "derek.norrbom",
+      "text": "Confirmed main branch ruleset does not require Snyk status checks (required checks are Python 3.11/3.12 + Dashboard tests only). PR #109 is blocked by review requirement, while Snyk context is informational and currently erroring. User intent clarified: keep Snyk UI scans only, no CI/PR gating. Recommended action: disable Snyk PR checks (or set fail-open) in Snyk GitHub integration settings for this repo/org.",
+      "created_at": "2026-03-12T18:18:40.234711Z"
+    },
+    {
+      "id": "b550e819-0427-43e2-a676-90159feec957",
+      "author": "derek.norrbom",
+      "text": "Updated CI workflow to avoid no-op semantic-release pushes causing GH013. Added semrel_check outputs (last_released, next_version, should_release), gated semantic-release auth/publish steps on should_release==true, and added token-identity validation to ensure ANTHUSBOT_GH_TOKEN resolves to anthusbot in runner.",
+      "created_at": "2026-03-12T18:58:01.622525Z"
+    },
+    {
+      "id": "d6b01809-e4ac-4a73-a674-34ee6e27b42d",
+      "author": "derek.norrbom",
+      "text": "Addressing CodeQL alert actions/untrusted-checkout/high in release.yml by removing tainted workflow_run head_sha checkout. Plan: gate workflow_run to push events on main from same repo and checkout trusted refs/heads/main instead of workflow_run.head_sha.",
+      "created_at": "2026-03-12T20:12:52.626446Z"
+    },
+    {
+      "id": "1966e75a-6318-47d1-a467-08130113a139",
+      "author": "derek.norrbom",
+      "text": "Implemented CodeQL fix for workflow_run untrusted checkout: release job now requires workflow_run.event==push, head_branch==main, head_repository==current repo, and checkout uses trusted ref refs/heads/main instead of workflow_run.head_sha.",
+      "created_at": "2026-03-12T20:13:08.750117Z"
     }
   ],
   "created_at": "2026-03-11T17:17:47.271266Z",
-  "updated_at": "2026-03-12T17:28:56.542404Z",
+  "updated_at": "2026-03-12T20:13:08.750117Z",
   "closed_at": null,
   "custom": {}
 }
