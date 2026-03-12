@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "19448baf-71c4-46d3-91ff-81af9a6a882b",
+  "issue_id": "plx-73df4c32-cde5-4aea-aaf8-da652f4c7273",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T02:21:37.168Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Run ScoreResult-No semantic memory reports with >=60 day ranges to validate lifecycle classification beyond all-new clusters; capture tier distribution and report IDs.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Validate lifecycle tiers with 60+ day window"
+  }
+}

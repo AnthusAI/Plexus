@@ -1,0 +1,289 @@
+{
+  "id": "plx-e4122644-6856-498e-8ba9-221506821963",
+  "title": "Coarsen Semantic Reinforcement Memory buckets and add batched LLM fine-tuned topic naming",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "760e4f76-5411-4ab2-9f60-2e570978feda",
+      "author": "unknown",
+      "text": "Starting implementation test-first. Plan: (1) add BDD spec scenarios for coarser bucket controls and batched one-call LLM topic naming, (2) implement VectorTopicMemory batching path to send all topic keyword+exemplar bundles in one LLM request with distinct-name instructions, configurable model (default gpt-4o for batch labels), (3) add coarsening controls in clustering config and update report template defaults to produce coarser buckets, (4) run focused tests and then update active run tasks with rerun guidance.",
+      "created_at": "2026-03-05T13:21:50.880249Z"
+    },
+    {
+      "id": "e0b2b1f8-5536-415f-81c5-92ba207ef2a9",
+      "author": "unknown",
+      "text": "Context gathered from vector_topic_memory.py and TopicAnalysis fine-tuning flow. Next step: add failing BDD-style specs for (1) stronger coarse bucket sizing behavior and (2) batched one-pass LLM topic naming that returns distinct names for all selected buckets in a single call.",
+      "created_at": "2026-03-05T13:23:11.109824Z"
+    },
+    {
+      "id": "38d3b9b4-4fc2-46a7-acd9-9068c6e563e7",
+      "author": "unknown",
+      "text": "Writing BDD-first failing tests now: coarse clustering defaults (less fragmented buckets) and one-pass batched LLM naming with distinct-name instructions + configurable model.",
+      "created_at": "2026-03-05T13:24:30.051965Z"
+    },
+    {
+      "id": "0f31af3c-b033-4b1a-afae-b20bc2d54d9d",
+      "author": "unknown",
+      "text": "BDD red phase complete. Added failing specs in vector_topic_memory_test.py for: (1) coarse clustering-control defaults and override behavior, (2) one-pass batched LLM topic naming with distinct/nuance prompt requirements. Current targeted run: 4 failing tests (missing new methods). Moving to implementation.",
+      "created_at": "2026-03-05T13:25:18.284832Z"
+    },
+    {
+      "id": "6e7e36f5-708b-49cc-aaee-f3455663fd0f",
+      "author": "unknown",
+      "text": "Implementation complete for this slice. Added in VectorTopicMemory: (1) resolve_clustering_controls with coarser defaults (coarse_min_topic_fraction=0.02, coarse_target_max_topics_per_score=12) while preserving explicit overrides; (2) one-pass batched LLM naming (label.batch_one_pass, label.batch_model, optional label.batch_prompt) that sends all selected buckets in one call and enforces distinct nuanced names; (3) safe fallback to per-topic naming if batch call fails. Updated report templates score_result_no_vector_topic_memory_report.md and vector_topic_memory_report.md to use coarse controls plus batch naming config. Validation: .venv/bin/python -m pytest -q plexus/reports/blocks/vector_topic_memory_test.py => 18 passed.",
+      "created_at": "2026-03-05T13:27:13.383347Z"
+    },
+    {
+      "id": "b2c8cec3-1b31-4dd0-8a8d-37d78cfbe614",
+      "author": "unknown",
+      "text": "test from recovery",
+      "created_at": "2026-03-05T14:07:17.041993Z"
+    },
+    {
+      "id": "ef1c256b-027a-450c-82c0-7d00ffa9d1f4",
+      "author": "unknown",
+      "text": "Implementing approved execution plan now: stale-run supersede policy active, canary sync/run on Prime first, then fanout with max-2 concurrency and 45-minute stage-4 timeout relaunch rule.",
+      "created_at": "2026-03-05T14:07:35.133935Z"
+    },
+    {
+      "id": "9b48ceb9-3efb-473b-8bd6-07343e35e188",
+      "author": "unknown",
+      "text": "Stale Andersen local process was terminated to enforce supersede policy before new synced canary/fanout runs.",
+      "created_at": "2026-03-05T14:07:50.447629Z"
+    },
+    {
+      "id": "7958adfd-fc03-42ff-823b-a67e380f1df1",
+      "author": "unknown",
+      "text": "Canary launch complete after syncing live report configuration from score_result_no_vector_topic_memory_report.md. task_id=9d5d4a3c-5d68-4a5d-8fb1-615b9d32f795 (Prime, 60d).",
+      "created_at": "2026-03-05T14:08:26.602993Z"
+    },
+    {
+      "id": "10b7383d-1397-4d04-b7a1-9fdfb47e025e",
+      "author": "unknown",
+      "text": "Verified live config sync succeeded via canary report e2c53073-f8ad-4aa3-8a13-b37bc502746a: report markdown now includes coarse clustering and one-pass batch naming fields.",
+      "created_at": "2026-03-05T14:08:54.822316Z"
+    },
+    {
+      "id": "f8cdc321-7d6a-4099-870c-e03d29891e83",
+      "author": "unknown",
+      "text": "Regression suite check while canary runs: .venv/bin/python -m pytest -q plexus/reports/blocks/vector_topic_memory_test.py => 18 passed.",
+      "created_at": "2026-03-05T14:09:58.432304Z"
+    },
+    {
+      "id": "e02ed90f-9add-4e23-97fe-61721a968cff",
+      "author": "unknown",
+      "text": "Runtime monitor: canary task 9d5d4a3c-5d68-4a5d-8fb1-615b9d32f795 currently in stage 4; timeout threshold for stale relaunch is 2026-03-05T14:53:39Z.",
+      "created_at": "2026-03-05T14:12:30.413196Z"
+    },
+    {
+      "id": "6a1195a5-3b4f-437c-8fa8-626e624a32d7",
+      "author": "unknown",
+      "text": "Canary runtime evidence: stage-4 processing is active (not deadlocked), with large retained datasets being resolved per score from ScoreResults.",
+      "created_at": "2026-03-05T14:14:47.471026Z"
+    },
+    {
+      "id": "3bca038c-ea24-4091-bd25-694fae4cfae1",
+      "author": "unknown",
+      "text": "Discovered runtime hang mode: batch topic naming can block on long SSL read. Implementing timeout guardrails in VectorTopicMemory LLM calls before relaunch.",
+      "created_at": "2026-03-05T14:24:46.922743Z"
+    },
+    {
+      "id": "f5ceea0f-3820-4d2d-8092-d2c3feb46f33",
+      "author": "unknown",
+      "text": "Implemented timeout guardrails for LLM labeling in VectorTopicMemory: added label.request_timeout_seconds and label.batch_request_timeout_seconds, wired through single/batch ChatOpenAI calls, and set report templates to 45s for both. Tests: vector_topic_memory_test.py now 20 passed.",
+      "created_at": "2026-03-05T14:26:22.508314Z"
+    },
+    {
+      "id": "ffaa514b-4eae-4535-872a-b60c6b64e731",
+      "author": "unknown",
+      "text": "Marked canary task 9d5d4a3c-5d68-4a5d-8fb1-615b9d32f795 as stale/superseded due to external LLM socket wait; proceeding with timeout-hardened relaunch.",
+      "created_at": "2026-03-05T14:26:38.292531Z"
+    },
+    {
+      "id": "c12e0e06-ee30-42f8-90e1-b755c98b44b9",
+      "author": "unknown",
+      "text": "Canary relaunch active with timeout-hardened config (request_timeout_seconds=45, batch_request_timeout_seconds=45). task_id=0bb82d1a-3918-4f3e-aec2-44a5c43c4901 report_id=6abaaa79-0ef3-48b6-a52b-d629c8d36ad1.",
+      "created_at": "2026-03-05T14:27:19.490824Z"
+    },
+    {
+      "id": "b32a7583-f28a-4490-a927-35c7b6fd2c44",
+      "author": "unknown",
+      "text": "Second local canary execution path superseded (SSL read wait). Switching to MCP report_run dispatch for canary/fanout with existing synced config ID 6236bc69-beca-4e37-970f-5891096b5b3e.",
+      "created_at": "2026-03-05T14:43:19.326729Z"
+    },
+    {
+      "id": "c7bbbd8b-401e-426b-b05a-3469e19d22f9",
+      "author": "unknown",
+      "text": "Switching back to local sync runner for canary with timeout-hardened code and stricter threshold discipline (no early supersede before 45-minute no-progress window).",
+      "created_at": "2026-03-05T14:50:14.214964Z"
+    },
+    {
+      "id": "be87e0a1-12fc-4f6d-be22-4821195cff3e",
+      "author": "unknown",
+      "text": "Active canary execution IDs: task 6a3ad9e4-7ffc-471d-8e26-b131f6e6be15, report 3aab0913-d245-42e1-a7d6-966364c63d2f.",
+      "created_at": "2026-03-05T14:50:55.976011Z"
+    },
+    {
+      "id": "4b241c3d-2b4f-44e0-95bf-a13ccd961a16",
+      "author": "unknown",
+      "text": "Canary still in-progress but healthy: extraction phase completed with expected retained volumes; waiting for embedding/index/cluster completion before fanout.",
+      "created_at": "2026-03-05T14:56:08.045613Z"
+    },
+    {
+      "id": "59fcddac-3871-4973-86a2-8293bedde447",
+      "author": "unknown",
+      "text": "[2026-03-05 10:15 ET] Starting fanout phase after canary success. Next actions: relaunch 60-day runs for Andersen (555), Moore (765), CMG (1039) with max concurrency=2 and timeout/relaunch policy.",
+      "created_at": "2026-03-05T15:20:00.134749Z"
+    },
+    {
+      "id": "7ac5e685-cec7-4f6e-ae76-5b18463b13f5",
+      "author": "unknown",
+      "text": "[2026-03-05 10:31 ET] Fanout launched with concurrency=2. Active runs: Andersen report/task=68e07046-c8e9-498c-bcd7-fc897a9c258a/30155c76-61d1-4795-9813-44fa64f86aeb; Moore report/task=6238332e-bc5e-4cef-9a94-c180d320f3c6/af047f7f-9efd-4332-bcdf-7f683413d23c. Monitoring every ~2-3 min; will relaunch if stage-4 no-progress exceeds 45 min.",
+      "created_at": "2026-03-05T15:31:22.731348Z"
+    },
+    {
+      "id": "9fac5a6f-7df4-4945-a42e-481e3cf20030",
+      "author": "unknown",
+      "text": "[2026-03-05 10:31 ET] Both active fanout runs are in stage 4 (Processing Report Blocks): Andersen task=30155c76-61d1-4795-9813-44fa64f86aeb, Moore task=af047f7f-9efd-4332-bcdf-7f683413d23c. Monitoring for completion or 45-min no-progress timeout.",
+      "created_at": "2026-03-05T15:31:46.514474Z"
+    },
+    {
+      "id": "e7471711-3444-45ea-8ac9-45865c96766b",
+      "author": "unknown",
+      "text": "[2026-03-05 10:43 ET] Fanout heartbeat: Andersen+Moore still stage-4 running with pending block outputs; no-progress duration currently ~12 minutes, under the 45-minute timeout threshold. Continuing 2-3 minute monitoring cadence.",
+      "created_at": "2026-03-05T15:43:24.844445Z"
+    },
+    {
+      "id": "bc79a80d-c090-4ed0-a929-2fedf17f6e22",
+      "author": "unknown",
+      "text": "[2026-03-05 10:47 ET] Fanout heartbeat: Andersen and Moore are both still in stage 4 after ~16 minutes with no update timestamp movement. Holding steady; no relaunch before 45-minute no-progress threshold.",
+      "created_at": "2026-03-05T15:47:09.024405Z"
+    },
+    {
+      "id": "3f4d9ac1-4d9d-4fb9-8a49-a7bda412b031",
+      "author": "unknown",
+      "text": "[2026-03-05 10:52 ET] Fanout heartbeat: Andersen and Moore both ~22 minutes in stage 4 (RUNNING) with no task errors yet. Relaunch threshold remains 45-minute no-progress.",
+      "created_at": "2026-03-05T15:52:55.062199Z"
+    },
+    {
+      "id": "e609721c-189e-420b-9e2e-1122f88922f3",
+      "author": "unknown",
+      "text": "[2026-03-05 10:55 ET] Fanout status: Moore run is actively ingesting/filtering ScoreResult records in stage 4; Andersen run is alive with ongoing API I/O in stage 4. Both still monitored under timeout/relaunch policy.",
+      "created_at": "2026-03-05T15:55:11.826775Z"
+    },
+    {
+      "id": "796dc4c4-6ff6-44e4-9846-4a8ad4991154",
+      "author": "unknown",
+      "text": "[2026-03-05 10:57 ET] Fanout split: Moore run showing continuous stage-4 progress; Andersen remains quiet but process alive/no explicit error. Applying timeout policy only if Andersen lacks forward signal at 45-minute mark.",
+      "created_at": "2026-03-05T15:59:24.190507Z"
+    },
+    {
+      "id": "94bbd68a-0ee4-475d-a88f-0a9b32a02a55",
+      "author": "unknown",
+      "text": "[2026-03-05 11:01 ET] Fanout update: Andersen now shows clear stage-4 forward progress (high-volume score ingestion logs). Both active runs remain valid; no timeout relaunch triggered.",
+      "created_at": "2026-03-05T16:01:48.495280Z"
+    },
+    {
+      "id": "e0b9169c-10d8-4472-b118-84e7a6a9cb81",
+      "author": "unknown",
+      "text": "[2026-03-05 11:08 ET] Fanout heartbeat: Andersen actively ingesting records; Moore in quiet but alive stage-4 phase. Concurrency remains 2/2; CMG launch queued for next free slot.",
+      "created_at": "2026-03-05T16:09:57.914709Z"
+    },
+    {
+      "id": "68a66049-37e6-47c0-b481-e2d8a895073c",
+      "author": "unknown",
+      "text": "[2026-03-05 11:15 ET] Both active fanout runs are still alive and network-bound in stage 4 after earlier ingestion bursts. No failures reported yet; CMG launch remains queued until a slot frees.",
+      "created_at": "2026-03-05T16:14:48.869849Z"
+    },
+    {
+      "id": "5b7990dd-ff35-482d-84dd-6abcd137c524",
+      "author": "unknown",
+      "text": "[2026-03-05 11:20 ET] Fanout heartbeat: both runs remain alive but currently quiet/network-bound. Moore has the longer quiet window (~25 min), Andersen ~14 min. Timeout/relaunch gate remains 45 min of no forward signal.",
+      "created_at": "2026-03-05T16:25:29.020565Z"
+    },
+    {
+      "id": "f05b45cb-ac23-41c1-a47a-ceaa0bbe7b9a",
+      "author": "unknown",
+      "text": "[2026-03-05 11:34 ET] Moore fanout leg completed successfully: report/task=6238332e-bc5e-4cef-9a94-c180d320f3c6/af047f7f-9efd-4332-bcdf-7f683413d23c. Key runtime validation: 11946 items, 53 scores, 140 clusters; one-pass batch naming applied 116/116 labels with gpt-4o; block output compacted with attached artifact storage.",
+      "created_at": "2026-03-05T16:36:00.691843Z"
+    },
+    {
+      "id": "3fb17718-2a88-463d-93e9-5a12cd9dd660",
+      "author": "unknown",
+      "text": "[2026-03-05 11:36 ET] Fanout slot refilled after Moore completion: launched CMG report/task=565565cf-a101-43f0-9a14-81c714c43a04/82ab65d8-33aa-4136-8114-031b7c859abd. Active runs are now Andersen + CMG (concurrency 2/2).",
+      "created_at": "2026-03-05T16:36:43.290401Z"
+    },
+    {
+      "id": "8bafc653-c8b7-4ace-95a1-99598ecf89e4",
+      "author": "unknown",
+      "text": "[2026-03-05 11:38 ET] Moore quality signal captured: cluster count reduced from 192 -> 140 (27.1% reduction) at similar volume (~11.9k items, 53 scores), and batch naming path confirmed (116/116 labels in one gpt-4o call).",
+      "created_at": "2026-03-05T16:39:58.030651Z"
+    },
+    {
+      "id": "26340e8e-f7c7-42a0-a9db-3d2df6afebb3",
+      "author": "unknown",
+      "text": "[2026-03-05 11:42 ET] Active runs now Andersen(task=30155c76-61d1-4795-9813-44fa64f86aeb) + CMG(task=82ab65d8-33aa-4136-8114-031b7c859abd). Moore leg remains completed/validated. Both active workers are alive and currently in network-bound stage-4 execution.",
+      "created_at": "2026-03-05T16:42:20.919277Z"
+    },
+    {
+      "id": "18005527-87f8-4c95-bdbf-4164d3c85222",
+      "author": "unknown",
+      "text": "[2026-03-05 11:49 ET] Fanout heartbeat: CMG now shows clear stage-4 forward progress with retained-item logs; Andersen remains alive but quiet/network-bound. Moore remains complete+validated.",
+      "created_at": "2026-03-05T16:52:39.628078Z"
+    },
+    {
+      "id": "eb46ca8f-5caa-4a50-96cd-adc36b3b3869",
+      "author": "unknown",
+      "text": "[2026-03-05 11:43 ET] Filed Kanbus bug for CLI context failure: tskl-eu9 (in ../Kanbus). Repro: in Plexus, kbs show/update/close return 'project not initialized' while list/comment continue to work.",
+      "created_at": "2026-03-05T17:00:34.199073Z"
+    },
+    {
+      "id": "aa1c7c5e-e577-4c93-b145-f031887c9727",
+      "author": "unknown",
+      "text": "[2026-03-05 11:45 ET] Re-tested Kanbus CLI issue: kbs show/update/close still fail with 'project not initialized' in Plexus, including with --project-root. Logged retest details to Kanbus bug tskl-eu9; continuing issue tracking via comments while bug remains open.",
+      "created_at": "2026-03-05T18:11:12.406380Z"
+    },
+    {
+      "id": "64b1c124-906c-4314-92f1-a9b55a62600e",
+      "author": "unknown",
+      "text": "[2026-03-05 13:12 ET] Andersen run timed out under policy (>45 min stage-4 no-progress). Stale task/report marked superseded: task=30155c76-61d1-4795-9813-44fa64f86aeb report=68e07046-c8e9-498c-bcd7-fc897a9c258a. Relaunching Andersen now.",
+      "created_at": "2026-03-05T18:12:28.514755Z"
+    },
+    {
+      "id": "ee8877f8-496c-43c8-8312-ffc7c1506583",
+      "author": "unknown",
+      "text": "[2026-03-05 13:13 ET] Andersen stale run superseded and relaunched. New IDs: report/task=bbc4166b-ab64-4eda-a849-8ca1217a1df1/84db57f5-a3ae-4105-a97d-74b73f52bb3f. Old stale IDs retained in log for audit: report/task=68e07046-c8e9-498c-bcd7-fc897a9c258a/30155c76-61d1-4795-9813-44fa64f86aeb.",
+      "created_at": "2026-03-05T18:13:36.204753Z"
+    },
+    {
+      "id": "88169d72-c145-4871-ae66-5b5f0bfc450b",
+      "author": "unknown",
+      "text": "[2026-03-05 13:14 ET] Andersen relaunch now healthy in stage 4 (block id 14afd982-a723-4d50-9b11-1698639d0278). CMG and Moore are completed; Andersen is the remaining active leg.",
+      "created_at": "2026-03-05T18:14:47.650427Z"
+    },
+    {
+      "id": "24c0f183-7f24-43b0-ba54-12c7ef95e73a",
+      "author": "unknown",
+      "text": "[2026-03-05 13:14 ET] Implemented bug fixes requested in-code (no commits): (1) score-results window cache key now uses stable business identifiers only (removed id(api_client)); (2) embedding batch path hardened to treat None/scalar entries as unresolved so ordering/length invariants cannot silently corrupt index alignment. Added regression tests in embedding_cache_test.py and feedback_utils_test.py; focused test run passed: 33 passed.",
+      "created_at": "2026-03-05T19:13:51.647683Z"
+    },
+    {
+      "id": "2d2bc322-3d44-47e6-b0ff-95b047aca090",
+      "author": "unknown",
+      "text": "[2026-03-05 14:24 ET] Agreed: implementation scope for this task is complete (coarse clustering defaults + one-pass batched LLM naming + config wiring + tests + successful real report validations on Prime/Moore/CMG with quality deltas). Remaining active work is tracked in run-specific tasks (e.g., Andersen). This item is ready to mark done once update/close CLI commands are working again (see Kanbus bug tskl-eu9).",
+      "created_at": "2026-03-05T19:28:56.906146Z"
+    }
+  ],
+  "created_at": "2026-03-05T13:20:31.594364Z",
+  "updated_at": "2026-03-05T19:49:23.868386Z",
+  "closed_at": "2026-03-05T19:49:23.868386Z",
+  "custom": {}
+}

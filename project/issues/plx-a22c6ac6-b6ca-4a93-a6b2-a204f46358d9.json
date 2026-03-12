@@ -15,10 +15,11 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-02-26T00:13:56.246501150Z",
-  "updated_at": "2026-02-26T00:13:56.246501150Z",
+  "updated_at": "2026-03-11T21:27:00.628740Z",
   "closed_at": null,
   "custom": {
     "snyk_key": "SNYK-PYTHON-URLLIB3-7267250",
-    "snyk_severity": "medium"
+    "snyk_severity": "medium",
+    "snyk_type": "package_vulnerability"
   }
 }

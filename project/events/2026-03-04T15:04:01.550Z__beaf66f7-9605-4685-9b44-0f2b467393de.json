@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "beaf66f7-9605-4685-9b44-0f2b467393de",
+  "issue_id": "plx-d9a37c5b-485b-4cb8-9dba-8989105e7d62",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T15:04:01.550Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 2,
+    "status": "open",
+    "title": "Sort topics by severity and hide configuration block"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-88c50883-81a4-49a4-a257-4f4de155187b",
+  "title": "Repair malformed Kanbus issue JSON artifact",
+  "description": "",
+  "type": "chore",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ec801449-f95f-48cb-ad6e-0c729cd4f87f",
+      "author": "ryan.porter",
+      "text": "Resolved parser failure by removing malformed issue file plx-0197ec and associated event artifacts that caused 'trailing characters at line 31 column 2'. Confirmed kbs validate passes.",
+      "created_at": "2026-03-06T17:49:14.681975Z"
+    }
+  ],
+  "created_at": "2026-03-06T17:49:10.019017Z",
+  "updated_at": "2026-03-06T17:49:23.280224Z",
+  "closed_at": "2026-03-06T17:49:23.280224Z",
+  "custom": {}
+}

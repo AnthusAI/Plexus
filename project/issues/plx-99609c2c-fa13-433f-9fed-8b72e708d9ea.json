@@ -1,0 +1,30 @@
+{
+  "id": "plx-99609c2c-fa13-433f-9fed-8b72e708d9ea",
+  "title": "[Snyk Code] Path Traversal",
+  "description": "## Path Traversal\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/cli/shared/shared.py`\n**Location:** line 41, column 21 to line 41, column 72\n**Classes:** CWE-CWE-23\n### Snippet (plexus/cli/shared/shared.py:39-43)\n```\n  39 |     \n  40 |     # Create sanitized directory names\n  41 |     scorecard_dir = scorecards_dir / sanitize_path_name(scorecard_name)\n  42 |     \n  43 |     # Handle case where scorecard dir exists as a file instead of directory  \n```\n\n**Issue Key:** 211e613b-7dc3-4fb3-9ce8-374f4b0c55e7\n\n### Details\nPath Traversal\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.692854Z",
+  "updated_at": "2026-03-11T21:27:00.591557Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 21,
+    "snyk_end_column": 72,
+    "snyk_end_line": 41,
+    "snyk_file": "plexus/cli/shared/shared.py",
+    "snyk_key": "211e613b-7dc3-4fb3-9ce8-374f4b0c55e7",
+    "snyk_line": 41,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "id": "plx-33aa56e7-3501-4a89-962d-1800461ee620",
+  "title": "Add requirements sync workflow and fix semantic-release package versioning",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3904fea2-a9ff-4e57-8635-92eb3abaa0ef",
+      "author": "derek.norrbom",
+      "text": "Implemented: (1) added .github/workflows/requirements-sync.yml to pip-compile requirements.txt from pyproject.toml on non-main pushes and auto-commit via ANTHUSBOT_GH_TOKEN; (2) fixed semantic-release config in pyproject.toml by switching from invalid `version_variable` to `version_variables` and using `version_source = \"file\"`; (3) aligned prerelease branch config to `dev`; (4) removed CI bootstrap step that force-tagged v0.0.0 and updated release branch condition to dev. Validation: TOML/YAML parse OK and isolated semantic-release simulation on main produced release commit updating plexus/_version.py to 1.20.4.",
+      "created_at": "2026-03-11T17:19:51.471870Z"
+    },
+    {
+      "id": "c1ca94f2-8525-4b18-b3a4-757a8ce4de42",
+      "author": "derek.norrbom",
+      "text": "Added release-safety guard in .github/workflows/ci.yaml before semantic-release: computes latest released version and computed next version from semantic-release CLI, and fails if next < latest. This prevents accidental downgrade-style releases (e.g., 1.20.3 after published v1.21.0) and protects existing GitHub releases while release history/config is reconciled.",
+      "created_at": "2026-03-11T17:36:52.180180Z"
+    },
+    {
+      "id": "d9ed4767-4ea7-4e52-8f68-1308a0cf42b9",
+      "author": "derek.norrbom",
+      "text": "Recommended best-practice path: keep semantic-release safety gate active to protect existing GitHub releases; treat requirements sync change as independent. For release lineage reconciliation, do a one-time canonical release point on main (release-style commit + tag) at > v1.21.0 (e.g., v1.21.1), then keep all future tags/release commits produced only by semantic-release automation (no manual release tags on merge commits). This avoids branch-history drift where latest tag exists but algorithm baseline remains older.",
+      "created_at": "2026-03-11T17:42:19.335885Z"
+    },
+    {
+      "id": "3330060e-c8e9-4be7-aaa3-d67c59e589bb",
+      "author": "derek.norrbom",
+      "text": "Investigating PR #105 blocked by expected CI checks not reporting. Collecting PR check/run metadata and workflow trigger diagnostics to identify why CI jobs are pending with no status.",
+      "created_at": "2026-03-11T19:07:21.148372Z"
+    },
+    {
+      "id": "bf665494-e198-4535-8c7d-59120038debe",
+      "author": "derek.norrbom",
+      "text": "Diagnosed PR #105 deadlock: semantic-release on dev push created a new bot commit (03aa60f) after CI, and because push used GITHUB_TOKEN, GitHub did not trigger a fresh CI suite for the new SHA. Updated ci.yaml so release safety check + semantic-release run only on push to main. This prevents bot-mutated dev head commits from leaving required PR checks permanently pending.",
+      "created_at": "2026-03-11T19:08:30.000141Z"
+    },
+    {
+      "id": "e5244acb-b0da-4a32-82f6-82764c20c031",
+      "author": "derek.norrbom",
+      "text": "Investigating requirements-sync run 22978450860 blocked by ruleset despite release-bot bypass. Collecting run logs + ruleset actor/bypass details to identify mismatch.",
+      "created_at": "2026-03-12T15:50:06.484980Z"
+    },
+    {
+      "id": "f23a5367-da4d-44ed-aecf-50cf82082ea9",
+      "author": "derek.norrbom",
+      "text": "Root cause confirmed for run 22978450860: failure is from CI semantic-release push on main using GH_TOKEN=secrets.GITHUB_TOKEN (github-actions bot), not from requirements-sync. Patched ci.yaml so semantic-release push config uses ANTHUSBOT_GH_TOKEN, sets bot git identity, rewrites origin remote with bot token, and uses GH_TOKEN/GITHUB_TOKEN from ANTHUSBOT_GH_TOKEN only for release step.",
+      "created_at": "2026-03-12T15:50:32.202440Z"
+    },
+    {
+      "id": "d605350e-5c52-4738-b28e-c638a6b4cf68",
+      "author": "derek.norrbom",
+      "text": "Updating requirements generation script to prepend explanatory comments in requirements.txt (auto-generated, do not edit manually, intended for Snyk dependency scanning).",
+      "created_at": "2026-03-12T16:41:03.290871Z"
+    }
+  ],
+  "created_at": "2026-03-11T17:17:47.271266Z",
+  "updated_at": "2026-03-12T16:41:03.290871Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,30 @@
+{
+  "id": "plx-77cd45f4-bb37-4d43-a791-642519c7413c",
+  "title": "[Snyk Code] Hardcoded Non-Cryptographic Secret",
+  "description": "## Hardcoded Non-Cryptographic Secret\n\n**Severity:** low\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/Evaluation_feedback_test.py`\n**Location:** line 69, column 13 to line 69, column 24\n**Classes:** CWE-CWE-547\n### Snippet (plexus/Evaluation_feedback_test.py:67-71)\n```\n  67 |             evaluation_id=\"eval-789\",\n  68 |             account_id=\"account-123\",\n  69 |             account_key=\"test-account-key\"\n  70 |         )\n  71 |         \n```\n\n**Issue Key:** 06a58e83-6f44-496b-b214-fd3f4781ff3b\n\n### Details\nHardcoded Non-Cryptographic Secret\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.697963Z",
+  "updated_at": "2026-03-11T21:27:00.605899Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 13,
+    "snyk_end_column": 24,
+    "snyk_end_line": 69,
+    "snyk_file": "plexus/Evaluation_feedback_test.py",
+    "snyk_key": "06a58e83-6f44-496b-b214-fd3f4781ff3b",
+    "snyk_line": 69,
+    "snyk_severity": "low",
+    "snyk_type": "code"
+  }
+}

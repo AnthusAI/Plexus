@@ -1,0 +1,30 @@
+{
+  "id": "plx-c3954bc5-b489-45b7-af87-e3b03766baa2",
+  "title": "[Snyk Code] Jinja auto-escape is set to false.",
+  "description": "## Jinja auto-escape is set to false.\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/scores/nodes/MultiClassClassifier.py`\n**Location:** line 195, column 36 to line 195, column 44\n**Classes:** CWE-CWE-79\n### Snippet (plexus/scores/nodes/MultiClassClassifier.py:193-197)\n```\n 193 |                         \n 194 |                         # Format the explanation message using Jinja2 template\n 195 |                         template = Template(self.parameters.explanation_message)\n 196 |                         formatted_explanation_message = template.render(**template_state)\n 197 |                         \n```\n\n**Issue Key:** 3ea1f46d-3ff8-4a52-b09e-2b1f491c4057\n\n### Details\nJinja auto-escape is set to false.\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.692032Z",
+  "updated_at": "2026-03-11T21:27:00.590166Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 36,
+    "snyk_end_column": 44,
+    "snyk_end_line": 195,
+    "snyk_file": "plexus/scores/nodes/MultiClassClassifier.py",
+    "snyk_key": "3ea1f46d-3ff8-4a52-b09e-2b1f491c4057",
+    "snyk_line": 195,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ddbac3e6-3dd1-483d-a7de-133ff258162d",
+  "issue_id": "plx-34ee238a-1392-48cf-8722-024bcd96db0d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T02:08:13.336Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Add explicit topic lifecycle flags: new=short&&!medium&&!long and trending=(short||medium)&&!long. Derive from multi-window/history signals and expose in report output/UI.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Add new/trending topic taxonomy for Semantic Reinforcement Memory"
+  }
+}
