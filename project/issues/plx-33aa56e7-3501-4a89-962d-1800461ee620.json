@@ -52,10 +52,16 @@
       "author": "derek.norrbom",
       "text": "Root cause confirmed for run 22978450860: failure is from CI semantic-release push on main using GH_TOKEN=secrets.GITHUB_TOKEN (github-actions bot), not from requirements-sync. Patched ci.yaml so semantic-release push config uses ANTHUSBOT_GH_TOKEN, sets bot git identity, rewrites origin remote with bot token, and uses GH_TOKEN/GITHUB_TOKEN from ANTHUSBOT_GH_TOKEN only for release step.",
       "created_at": "2026-03-12T15:50:32.202440Z"
+    },
+    {
+      "id": "d605350e-5c52-4738-b28e-c638a6b4cf68",
+      "author": "derek.norrbom",
+      "text": "Updating requirements generation script to prepend explanatory comments in requirements.txt (auto-generated, do not edit manually, intended for Snyk dependency scanning).",
+      "created_at": "2026-03-12T16:41:03.290871Z"
     }
   ],
   "created_at": "2026-03-11T17:17:47.271266Z",
-  "updated_at": "2026-03-12T15:50:32.202440Z",
+  "updated_at": "2026-03-12T16:41:03.290871Z",
   "closed_at": null,
   "custom": {}
 }
