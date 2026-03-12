@@ -113,7 +113,8 @@ class FeedbackAnalysis(BaseReportBlock):
                 or self.params.get("param_score")
             )
             if cc_question_id_param is not None:
-                cc_question_id_param = str(cc_question_id_param).strip() or None
+                _s = str(cc_question_id_param).strip()
+                cc_question_id_param = None if not _s or _s.lower() == "none" else _s
 
             # Parse date strings
             if start_date_str:
