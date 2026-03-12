@@ -44,13 +44,6 @@ export async function listFromModel<T extends { id: string }>(
         return { data: [], nextToken: null };
       }
 
-      console.log('Attempting to query evaluations for account:', {
-        accountId,
-        accountIdType: typeof accountId,
-        accountIdLength: accountId.length,
-        filter
-      });
-
       // Try to use the GSI through GraphQL
       try {
         const variables = {
@@ -59,8 +52,6 @@ export async function listFromModel<T extends { id: string }>(
           limit: limit || 100,
           nextToken
         };
-
-        console.log('Executing GraphQL query with variables:', variables);
 
         const graphqlResponse = await model.graphql.query({
           query: `
@@ -145,11 +136,6 @@ export async function listFromModel<T extends { id: string }>(
           authMode: 'apiKey'
         });
 
-        console.log('Raw GraphQL response:', {
-          data: graphqlResponse?.data,
-          errors: graphqlResponse?.errors
-        });
-
         if (graphqlResponse?.errors) {
           throw new Error(JSON.stringify(graphqlResponse.errors));
         }
@@ -159,21 +145,10 @@ export async function listFromModel<T extends { id: string }>(
           data: graphqlResponse?.data?.listEvaluationByAccountIdAndUpdatedAt?.items || [],
           nextToken: graphqlResponse?.data?.listEvaluationByAccountIdAndUpdatedAt?.nextToken
         };
-
-        console.log('GraphQL query results:', {
-          dataLength: response?.data?.length,
-          hasNextToken: !!response?.nextToken,
-          firstItem: response?.data?.[0]?.updatedAt,
-          lastItem: response?.data?.[response?.data?.length - 1]?.updatedAt,
-          allDates: response?.data?.map((item: { updatedAt: string }) => item.updatedAt).sort((a: string, b: string) => 
-            new Date(b).getTime() - new Date(a).getTime()
-          )
-        });
       } catch (gsiError) {
         console.error('GraphQL query failed:', gsiError);
         
         // Fall back to filtered list with sorting
-        console.log('Falling back to regular list query');
         response = await model.list({
           filter: { accountId: { eq: accountId } },
           limit: 100,
@@ -182,16 +157,6 @@ export async function listFromModel<T extends { id: string }>(
             field: 'updatedAt',
             direction: 'DESC'
           }
-        });
-
-        console.log('Fallback query results:', {
-          dataLength: response?.data?.length,
-          hasNextToken: !!response?.nextToken,
-          firstItem: response?.data?.[0]?.updatedAt,
-          lastItem: response?.data?.[response?.data?.length - 1]?.updatedAt,
-          allDates: response?.data?.map((item: { updatedAt: string }) => item.updatedAt).sort((a: string, b: string) => 
-            new Date(b).getTime() - new Date(a).getTime()
-          )
         });
       }
     } else {
@@ -237,14 +202,6 @@ export function observeQueryFromModel<T>(
                           model?.constructor?.name?.replace('Model', '') || 
                           Object.keys(model || {}).find(key => key.endsWith('Model'))?.replace('Model', '') ||
                           'Unknown';
-  
-  console.log('Setting up subscription for model:', {
-    providedModelName: modelName,
-    detectedModelName,
-    modelConstructor: model?.constructor?.name,
-    modelKeys: Object.keys(model || {})
-  });
-  console.log('Filter:', filter);
 
   // Define fields based on model name
   let fields: any[];
@@ -320,8 +277,6 @@ export function observeQueryFromModel<T>(
       break;
   }
 
-  console.log('Using fields for subscription:', fields);
-
   const subscription = model.observeQuery({
     filter: filter || undefined,
     fields
@@ -339,9 +294,8 @@ export async function getFromModel<T>(
 }
 
 export function observeScoreResults(client: any, evaluationId: string) {
-  console.log('Setting up score results subscription for evaluation:', evaluationId)
-  
   const subscriptions: { unsubscribe: () => void }[] = []
+  let fetchTimer: any = null
 
   return {
     subscribe: (handlers: {
@@ -351,80 +305,65 @@ export function observeScoreResults(client: any, evaluationId: string) {
       // Function to fetch latest data using the GSI with pagination
       const fetchLatestData = async () => {
         try {
-          console.log('Starting to fetch ScoreResults for evaluation:', evaluationId)
-          
           let allData: Schema['ScoreResult']['type'][] = []
           let nextToken: string | null = null
           let pageCount = 0
+          const query = `
+            query ($evaluationId: String!, $limit: Int, $nextToken: String) {
+              listScoreResultByEvaluationId(
+                evaluationId: $evaluationId
+                limit: $limit
+                nextToken: $nextToken
+              ) {
+                items {
+                  id
+                  value
+                  explanation
+                  confidence
+                  metadata
+                  trace
+                  correct
+                  type
+                  itemId
+                  evaluationId
+                  createdAt
+                  feedbackItemId
+                  feedbackItem { id editCommentValue initialAnswerValue finalAnswerValue editorName editedAt }
+                  item {
+                    id
+                    itemIdentifiers { items { name value url position } }
+                  }
+                }
+                nextToken
+              }
+            }
+          `;
           
           do {
             pageCount++
-            console.log('Fetching ScoreResult page:', {
-              pageNumber: pageCount,
-              nextToken,
-              evaluationId
-            })
 
-            const response: {
-              data: Schema['ScoreResult']['type'][]
-              nextToken: string | null
-            } = await client.models.ScoreResult.listScoreResultByEvaluationId({
-              evaluationId,
-              limit: 10000,
-              nextToken,
-              fields: [
-                'id',
-                'value',
-                'confidence',
-                'metadata',
-                'explanation',
-                'correct',
-                'itemId',
-                'accountId',
-                'scoringJobId',
-                'evaluationId',
-                'scorecardId',
-                'createdAt'
-              ]
-            })
+            const response = await client.graphql({
+              query,
+              variables: { evaluationId, limit: 1000, nextToken }
+            }) as any;
+            const respData = response?.data?.listScoreResultByEvaluationId;
+            const items: Schema['ScoreResult']['type'][] = respData?.items || []
+            const pageNextToken: string | null = respData?.nextToken || null
             
-            const pageSize = response?.data?.length || 0
-            console.log('Received page response:', {
-              pageNumber: pageCount,
-              pageSize,
-              hasNextToken: !!response.nextToken,
-              nextToken: response.nextToken,
-              firstId: response.data?.[0]?.id,
-              lastId: response.data?.[pageSize - 1]?.id
-            })
+            allData = [...allData, ...items]
             
-            if (response?.data) {
-              allData = [...allData, ...response.data]
-            }
-            
-            nextToken = response.nextToken
-            
-            console.log('Pagination status:', {
-              pageNumber: pageCount,
-              newRecordsInPage: pageSize,
-              totalRecordsSoFar: allData.length,
-              hasMorePages: !!nextToken
-            })
+            nextToken = pageNextToken
           } while (nextToken)
 
-          // Sort all results in memory
-          const sortedData = [...allData].sort((a, b) => {
+          // Dedupe by id and sort by createdAt desc to avoid duplicates across pages
+          const uniqueMap = new Map<string, Schema['ScoreResult']['type']>()
+          for (const r of allData) {
+            if (r && r.id) uniqueMap.set(r.id, r)
+          }
+          const sortedData = Array.from(uniqueMap.values()).sort((a, b) => {
             const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             return bDate - aDate;
-          })
-
-          console.log('Completed fetching all ScoreResults:', {
-            totalPages: pageCount,
-            totalRecords: sortedData.length,
-            evaluationId,
-            firstRecordId: sortedData[0]?.id,
-            lastRecordId: sortedData[sortedData.length - 1]?.id
           })
 
           handlers.next({
@@ -442,14 +381,25 @@ export function observeScoreResults(client: any, evaluationId: string) {
         }
       }
 
+      const scheduleFetch = () => {
+        if (fetchTimer) return
+        fetchTimer = setTimeout(() => {
+          fetchTimer = null
+          fetchLatestData()
+        }, 300)
+      }
+
       // Get initial data
       fetchLatestData()
 
       // Subscribe to create events
       const createSub = client.models.ScoreResult.onCreate().subscribe({
-        next: () => {
-          console.log('ScoreResult onCreate triggered, fetching latest data')
-          fetchLatestData()
+        next: (evt: any) => {
+          try {
+            const ev = evt?.data?.onCreateScoreResult || evt?.data || evt
+            if (!ev || (ev.evaluationId && ev.evaluationId !== evaluationId)) return
+          } catch {}
+          scheduleFetch()
         },
         error: (error: Error) => {
           console.error('ScoreResult onCreate error:', error)
@@ -460,9 +410,12 @@ export function observeScoreResults(client: any, evaluationId: string) {
 
       // Subscribe to update events
       const updateSub = client.models.ScoreResult.onUpdate().subscribe({
-        next: () => {
-          console.log('ScoreResult onUpdate triggered, fetching latest data')
-          fetchLatestData()
+        next: (evt: any) => {
+          try {
+            const ev = evt?.data?.onUpdateScoreResult || evt?.data || evt
+            if (!ev || (ev.evaluationId && ev.evaluationId !== evaluationId)) return
+          } catch {}
+          scheduleFetch()
         },
         error: (error: Error) => {
           console.error('ScoreResult onUpdate error:', error)
@@ -473,9 +426,12 @@ export function observeScoreResults(client: any, evaluationId: string) {
 
       // Subscribe to delete events
       const deleteSub = client.models.ScoreResult.onDelete().subscribe({
-        next: () => {
-          console.log('ScoreResult onDelete triggered, fetching latest data')
-          fetchLatestData()
+        next: (evt: any) => {
+          try {
+            const ev = evt?.data?.onDeleteScoreResult || evt?.data || evt
+            if (!ev || (ev.evaluationId && ev.evaluationId !== evaluationId)) return
+          } catch {}
+          scheduleFetch()
         },
         error: (error: Error) => {
           console.error('ScoreResult onDelete error:', error)
@@ -487,6 +443,10 @@ export function observeScoreResults(client: any, evaluationId: string) {
       return {
         unsubscribe: () => {
           subscriptions.forEach(sub => sub.unsubscribe())
+          if (fetchTimer) {
+            clearTimeout(fetchTimer)
+            fetchTimer = null
+          }
         }
       }
     }

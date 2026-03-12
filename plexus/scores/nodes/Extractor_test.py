@@ -19,7 +19,8 @@ def basic_parameters():
         "use_exact_matching": False,
         "trust_model_output": False,
         "prompt_templates": ["Extract the relevant quote: {text}"],
-        "model_name": "gpt-4o-mini-2024-07-18"
+        "model_name": "gpt-4o-mini-2024-07-18",
+        "name": "extractor"
     }
 
 @pytest.fixture
@@ -149,7 +150,11 @@ def test_end_to_end_chain_integration_with_dummy_model(basic_parameters):
     extractor_instance = Extractor(**basic_parameters)
     
     # Override the model with a dummy model that always returns a fixed output
-    dummy_model = lambda x: 'Quote: "Extract the key sentence."'
+    class DummyModel:
+        def invoke(self, messages):
+            return 'Quote: "Extract the key sentence."'
+    
+    dummy_model = DummyModel()
     extractor_instance.model = dummy_model
     
     # Ensure get_prompt_templates returns a valid prompt template list to avoid index errors
@@ -168,5 +173,5 @@ def test_end_to_end_chain_integration_with_dummy_model(basic_parameters):
     result = node_func(state)
     
     # Validate that the chain returns the expected extracted text
-    assert "extracted_text" in result
-    assert result["extracted_text"] == "Extract the key sentence." 
+    assert hasattr(result, "extracted_text")
+    assert result.extracted_text == "Extract the key sentence." 

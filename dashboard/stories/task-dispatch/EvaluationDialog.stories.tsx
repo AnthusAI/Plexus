@@ -4,7 +4,7 @@ import { EvaluationDialog } from '@/components/task-dispatch'
 import { ClipboardCheck } from 'lucide-react'
 
 const meta: Meta<typeof EvaluationDialog> = {
-  title: 'Task Dispatch/EvaluationDialog',
+  title: 'Evaluations/Dispatch/EvaluationDialog',
   component: EvaluationDialog,
   parameters: {
     layout: 'centered',

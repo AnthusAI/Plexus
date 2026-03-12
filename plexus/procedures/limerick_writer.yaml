@@ -1,0 +1,119 @@
+name: limerick_writer
+version: 4.0.0
+class: LuaDSL
+description: "AI poet that writes limericks - demonstrates basic agent loop with HITL messaging"
+
+params:
+  topic:
+    type: string
+    default: "neurosymbolic AI"
+    description: "The topic for the limerick"
+
+outputs:
+  limerick:
+    type: string
+    required: true
+    description: "The generated limerick text"
+  node_id:
+    type: string
+    required: true
+    description: "Graph node ID containing the limerick"
+  success:
+    type: boolean
+    required: true
+    description: "Whether the limerick was successfully created"
+  metadata:
+    type: object
+    required: false
+    description: "Additional metadata about the limerick"
+
+agents:
+  poet:
+    system_prompt: |
+      You are a creative poet who specializes in limericks.
+
+      Your task: Write a limerick about {params.topic}.
+
+      A limerick is a humorous five-line poem with an AABBA rhyme scheme.
+      Make it witty, clever, and scientifically accurate.
+
+      When you've written your limerick, call the done tool with your poem as the reason.
+
+    initial_message: |
+      Please write a creative limerick about {params.topic}.
+      Make it both entertaining and technically insightful!
+
+    tools:
+      - done
+
+stages:
+  - writing
+  - recording
+  - complete
+
+workflow: |
+  -- Get the topic parameter
+  local topic = "neurosymbolic AI"  -- default topic
+  State.set("topic", topic)
+
+  -- Notify user that workflow is starting
+  Human.notify({
+    message = "Starting limerick generation",
+    content = "**Limerick Writer** is now running\\n\\nGenerating a creative limerick about: **" .. topic .. "**"
+  })
+
+  -- Stage 1: Get the poet to write the limerick
+  State.set("stage", "writing")
+
+  repeat
+    Poet.turn()
+  until Tool.called("done") or Iterations.exceeded(10)
+
+  -- Stage 2: Extract and record the limerick
+  local success = Tool.called("done")
+  local limerick = ""
+  local node_id = ""
+
+  if success then
+    State.set("stage", "recording")
+
+    local done_call = Tool.last_call("done")
+    limerick = done_call.args.reason or "No limerick provided"
+
+    -- Create a graph node with the limerick
+    local node = GraphNode.create(limerick, {
+      type = "poem",
+      genre = "limerick",
+      topic = topic,
+      author = "AI Poet"
+    })
+
+    node_id = node.id
+    State.set("node_id", node_id)
+    State.set("limerick", limerick)
+    State.set("stage", "complete")
+
+    -- Notify user of completion with the limerick
+    Human.notify({
+      message = "Limerick complete!",
+      content = "**Limerick Writer** has finished\\n\\n" .. limerick
+    })
+  else
+    -- Notify user of failure
+    Human.notify({
+      message = "Limerick generation failed",
+      content = "**Limerick Writer** could not complete the task\\n\\n❌ Failed after " .. tostring(Iterations.current()) .. " iterations",
+      level = "error"
+    })
+  end
+
+  -- Return results matching output schema
+  return {
+    limerick = limerick,
+    node_id = node_id,
+    success = success,
+    metadata = {
+      iterations = Iterations.current(),
+      topic = topic
+    }
+  }

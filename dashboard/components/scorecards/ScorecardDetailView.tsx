@@ -22,6 +22,7 @@ export interface ScorecardDetailData {
           name: string
           key: string
           description: string
+          guidelines?: string
           order: number
           type: string
           configuration: any
@@ -102,7 +103,14 @@ const DetailContent = React.memo(({
                   {section.scores?.items?.map(score => (
                     <ScoreComponent
                       key={score.id}
-                      score={score}
+                      score={{
+                        id: score.id,
+                        name: score.name,
+                        description: score.description || '',
+                        type: score.type,
+                        order: score.order,
+                        key: score.key || ''
+                      }}
                       onClick={() => onScoreSelect?.(score)}
                       variant="grid"
                     />

@@ -1,0 +1,22 @@
+# Example: Legacy score format (backwards compatible)
+# This demonstrates the old format with processors under 'data'
+# Still works! But item.processors is now preferred.
+
+name: Legacy Format Score
+key: legacy_format
+external_id: legacy_format_001
+description: Old format with data.processors - still supported for backwards compatibility
+
+class: LangGraphScore
+
+# OLD FORMAT: Processors under 'data' section
+# This still works, but item.processors is preferred for new configs
+data:
+  processors:
+    - class: FilterCustomerOnlyProcessor
+      parameters: {}
+    - class: RemoveSpeakerIdentifiersTranscriptFilter
+      parameters: {}
+
+# Note: If both item.processors and data.processors exist,
+# item.processors takes precedence

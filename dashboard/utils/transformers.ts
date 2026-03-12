@@ -66,6 +66,8 @@ export function convertToAmplifyTask(rawData: any): AmplifyTask {
     errorDetails: rawData.errorDetails,
     stdout: rawData.stdout ?? null,
     stderr: rawData.stderr ?? null,
+    output: rawData.output ?? null,
+    attachedFiles: rawData.attachedFiles ?? null,
     currentStageId: rawData.currentStageId ?? null,
     stages: stagesLoader,
     dispatchStatus: rawData.dispatchStatus ?? null,
@@ -193,6 +195,7 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
             explanation?: string | null;
             itemId?: string | null;
             createdAt: string;
+            trace?: any | null;
           }) => ({
             id: item.id,
             value: item.value,
@@ -200,7 +203,8 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
             metadata: item.metadata,
             explanation: item.explanation ?? null,
             itemId: item.itemId ?? null,
-            createdAt: item.createdAt
+            createdAt: item.createdAt,
+            trace: item.trace ?? null
           }));
         }
       }
@@ -263,6 +267,8 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
     errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
     stdout: task.stdout ?? undefined,
     stderr: task.stderr ?? undefined,
+    output: task.output ?? undefined,
+    attachedFiles: task.attachedFiles ?? undefined,
     currentStageId: task.currentStageId ?? undefined,
     stages,
     dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,

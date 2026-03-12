@@ -1,0 +1,41 @@
+name: simple_assistant
+version: 1.0.0
+class: LuaDSL
+
+description: Simple single-agent ReAct loop
+
+params:
+  task:
+    type: string
+    required: true
+    default: "Complete a simple task"
+
+agents:
+  assistant:
+    system_prompt: |
+      You are a helpful assistant. Complete this task: {params.task}
+      When finished, call the done tool with a summary.
+
+    initial_message: |
+      Please begin working on the task.
+
+    tools:
+      - done
+
+stages:
+  - working
+  - complete
+
+workflow: |
+  -- Simple ReAct loop
+  -- Agent runs until it calls done or hits iteration limit
+
+  repeat
+    Assistant.turn()
+  until Tool.called("done") or Iterations.exceeded(50)
+
+  -- Return completion info
+  return {
+    completed = Tool.called("done"),
+    iterations = Iterations.current()
+  }

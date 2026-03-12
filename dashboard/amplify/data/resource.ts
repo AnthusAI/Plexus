@@ -1,6 +1,11 @@
-import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { type ClientSchema, a, defineData, defineFunction } from "@aws-amplify/backend";
 import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { Construct } from 'constructs';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as path from 'path';
+import { DockerImage, Duration } from 'aws-cdk-lib';
+import { execSync } from 'child_process';
+import { Stack } from 'aws-cdk-lib';
 
 // Define types for authorization callback
 type AuthorizationCallback = {
@@ -11,30 +16,47 @@ type AuthorizationCallback = {
 // Define model-specific index types
 type AccountIndexFields = "name" | "key" | "description";
 type ScorecardIndexFields = "name" | "key" | "description" | "accountId" | 
-    "externalId" | "itemId";
+    "externalId";
 type ScorecardSectionIndexFields = "name" | "scorecardId" | "order";
 type ScoreIndexFields = "name" | "order" | "sectionId" | "type" | "accuracy" | 
-    "version" | "aiProvider" | "aiModel" | "externalId" | "key";
+    "version" | "aiProvider" | "aiModel" | "externalId" | "key" | "scorecardId";
 type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" | 
     "scoreId" | "status" | "updatedAt" | "createdAt" | "startedAt" | "elapsedSeconds" | 
     "estimatedRemainingSeconds" | "totalItems" | "processedItems" | "errorMessage" | 
     "scoreGoal" | "metricsExplanation" | "inferences" | "cost";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName" | "batchId";
-type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation";
+type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation" | "createdByType";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt";
+    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "code" | "type" | "feedbackItemId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
 type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
-type DatasetIndexFields = "scorecardId" | "scoreId";
-type DatasetVersionIndexFields = "datasetId";
-type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
+type ReportConfigurationIndexFields = "accountId" | "name";
+type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
+type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
+type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "editedAt";
+type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
+type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
+type AggregatedMetricsIndexFields = "accountId" | "compositeKey" | "scorecardId" | "scoreId" | "recordType" | "timeRangeStart" | "timeRangeEnd" | "numberOfMinutes" | "count" | "cost" | "decisionCount" | "externalAiApiCount" | "cachedAiApiCount" | "errorCount" | "createdAt" | "updatedAt";
+type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
+type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
+type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
+type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "rootNodeId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
+type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
+
+// New index types for Feedback Analysis
+// type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
+
+// Define the share token handler function
+const getResourceByShareTokenHandler = defineFunction({
+    entry: './resolvers/getResourceByShareToken.ts'
+});
 
 const schema = a.schema({
     Account: a
@@ -50,8 +72,19 @@ const schema = a.schema({
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
             tasks: a.hasMany('Task', 'accountId'),
+            reportConfigurations: a.hasMany('ReportConfiguration', 'accountId'),
+            reports: a.hasMany('Report', 'accountId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'accountId'),
+            identifiers: a.hasMany('Identifier', 'accountId'),
+            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'accountId'),
+            dataSources: a.hasMany('DataSource', 'accountId'),
+            dataSets: a.hasMany('DataSet', 'accountId'),
+            procedures: a.hasMany('Procedure', 'accountId'),
+            graphNodes: a.hasMany('GraphNode', 'accountId'),
+            chatSessions: a.hasMany('ChatSession', 'accountId'),
+            chatMessages: a.hasMany('ChatMessage', 'accountId')
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -64,29 +97,35 @@ const schema = a.schema({
             name: a.string().required(),
             key: a.string().required(),
             description: a.string(),
+            guidelines: a.string(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             sections: a.hasMany('ScorecardSection', 'scorecardId'),
+            scores: a.hasMany('Score', 'scorecardId'),
             evaluations: a.hasMany('Evaluation', 'scorecardId'),
             batchJobs: a.hasMany('BatchJob', 'scorecardId'),
             scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
-            datasets: a.hasMany('Dataset', 'scorecardId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'scorecardId'),
             externalId: a.string(),
-            itemId: a.string(),
-            item: a.belongsTo('Item', 'itemId'),
-            updatedAt: a.datetime(),
+            exampleItems: a.hasMany('ScorecardExampleItem', 'scorecardId'),
+            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scorecardId'),
+            dataSources: a.hasMany('DataSource', 'scorecardId'),
+            dataSets: a.hasMany('DataSet', 'scorecardId'),
+            procedures: a.hasMany('Procedure', 'scorecardId'),
+            chatSessions: a.hasMany('ChatSession', 'scorecardId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"]),
-            idx("key" as any),
-            idx("externalId" as any),
-            idx("name" as any)
+        .secondaryIndexes((idx: (field: ScorecardIndexFields) => any) => [
+            idx("accountId"),
+            idx("key"),
+            idx("externalId"),
+            idx("name"),
+            idx("accountId").sortKeys(["externalId"]).name("byAccountIdAndExternalId")
         ]),
 
     ScorecardSection: a
@@ -97,7 +136,7 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scores: a.hasMany('Score', 'sectionId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -112,23 +151,34 @@ const schema = a.schema({
             description: a.string(),
             order: a.integer().required(),
             type: a.string().required(),
+            targetAgreement: a.float(),
             accuracy: a.float(),
             version: a.string(),
             aiProvider: a.string(),
             aiModel: a.string(),
             sectionId: a.string().required(),
             section: a.belongsTo('ScorecardSection', 'sectionId'),
+            scorecardId: a.string().required(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             evaluations: a.hasMany('Evaluation', 'scoreId'),
             batchJobs: a.hasMany('BatchJob', 'scoreId'),
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
-            datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
             versions: a.hasMany('ScoreVersion', 'scoreId'),
+            items: a.hasMany('Item', 'scoreId'),
+            scoreResults: a.hasMany('ScoreResult', 'scoreId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'scoreId'),
+            dataSources: a.hasMany('DataSource', 'scoreId'),
+            dataSets: a.hasMany('DataSet', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
-            externalId: a.string().required()
+            externalId: a.string().required(),
+            isDisabled: a.boolean(),
+            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scoreId'),
+            procedures: a.hasMany('Procedure', 'scoreId'),
+            chatSessions: a.hasMany('ChatSession', 'scoreId')
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -136,7 +186,8 @@ const schema = a.schema({
             idx("sectionId"),
             idx("externalId"),
             idx("key"),
-            idx("name")
+            idx("name"),
+            idx("scorecardId").sortKeys(["externalId"]).name("byScorecardIdAndExternalId")
         ]),
 
     ScoreVersion: a
@@ -144,24 +195,27 @@ const schema = a.schema({
             scoreId: a.string().required(),
             score: a.belongsTo('Score', 'scoreId'),
             configuration: a.string().required(),
+            guidelines: a.string(),
             isFeatured: a.boolean().required(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             note: a.string(),
+            branch: a.string(),
             scoreResults: a.hasMany('ScoreResult', 'scoreVersionId'),
             scoresAsChampion: a.hasMany('Score', 'championVersionId'),
             parentVersionId: a.string(),
             parentVersion: a.belongsTo('ScoreVersion', 'parentVersionId'),
             childVersions: a.hasMany('ScoreVersion', 'parentVersionId'),
-            evaluations: a.hasMany('Evaluation', 'scoreVersionId')
+            evaluations: a.hasMany('Evaluation', 'scoreVersionId'),
+            dataSets: a.hasMany('DataSet', 'scoreVersionId'),
+            procedures: a.hasMany('Procedure', 'scoreVersionId')
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("scoreId").sortKeys(["createdAt"]),
-            idx("updatedAt")
+            idx("scoreId").sortKeys(["createdAt"])
         ]),
 
     Evaluation: a
@@ -201,11 +255,13 @@ const schema = a.schema({
             predictedClassDistribution: a.json(),
             isPredictedClassDistributionBalanced: a.boolean(),
             taskId: a.string(),
-            task: a.belongsTo('Task', 'taskId')
+            task: a.belongsTo('Task', 'taskId'),
+            universalCode: a.string()
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -238,7 +294,7 @@ const schema = a.schema({
             modelProvider: a.string().required(),
             modelName: a.string().required(),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -251,25 +307,66 @@ const schema = a.schema({
 
     Item: a
         .model({
-            name: a.string().required(),
+            externalId: a.string(),
             description: a.string(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scoringJobs: a.hasMany('ScoringJob', 'itemId'),
             scoreResults: a.hasMany('ScoreResult', 'itemId'),
-            scorecards: a.hasMany('Scorecard', 'itemId'),
             evaluationId: a.string(),
             evaluation: a.belongsTo('Evaluation', 'evaluationId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
             isEvaluation: a.boolean().required(),
+            createdByType: a.string(), // "evaluation" or "prediction" - tracks original creation context
+            identifiers: a.json(),
+            feedbackItems: a.hasMany('FeedbackItem', 'itemId'),
+            attachedFiles: a.string().array(),
+            text: a.string(),
+            metadata: a.json(),
+            asExampleFor: a.hasMany('ScorecardExampleItem', 'itemId'),
+            itemIdentifiers: a.hasMany('Identifier', 'itemId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"])
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["createdAt"]),
+            idx("scoreId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["createdAt"]),
+            // Composite GSI for accountId+externalId to enforce uniqueness within an account
+            idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId"),
+        ]),
+
+    Identifier: a
+        .model({
+            itemId: a.string().required(),
+            name: a.string().required(),      // e.g., "Customer ID", "Order ID"
+            value: a.string().required(),     // e.g., "CUST-123456", "ORD-789012"
+            url: a.string(),                  // Optional clickable link
+            position: a.integer().required(), // Sort order for display
+            accountId: a.string().required(), // For data isolation
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            
+            // Relationships
+            item: a.belongsTo('Item', 'itemId'),
+            account: a.belongsTo('Account', 'accountId'),
+        })
+        .identifier(['itemId', 'name'])  // Composite primary key prevents duplicates
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: IdentifierIndexFields) => any) => [
+            idx("accountId").sortKeys(["value"]).name("byAccountAndValue"),  // PRIMARY: Direct-hit search by exact value
+            idx("accountId").sortKeys(["name", "value"]).name("byAccountNameAndValue"), // Search within identifier type
+            idx("itemId").sortKeys(["position"]).name("byItemAndPosition"),  // Get all identifiers for an item ordered by position
+            idx("itemId").sortKeys(["name"]).name("byItemAndName"), // Check for duplicates by item + name
         ]),
 
     ScoringJob: a
@@ -295,16 +392,16 @@ const schema = a.schema({
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
             idx("accountId"),
+            idx("accountId").sortKeys(["createdAt"]).name("byAccountAndCreatedAt"),
             idx("itemId"),
-            idx("scorecardId"),
-            idx("scoreId"),
-            idx("evaluationId")
+            idx("itemId").sortKeys(["scoreId"]).name("byItemScore"),
+            idx("scoreId")
         ]),
 
     ScoreResult: a
@@ -313,7 +410,12 @@ const schema = a.schema({
             explanation: a.string(),
             confidence: a.float(),
             metadata: a.json(),
+            trace: a.json(),
             correct: a.boolean(),
+            cost: a.json(), // Cost information including tokens, API calls, and monetary cost
+            attachments: a.string().array(), // Array of file paths for trace and log files
+            type: a.string(), // Type of score result: "prediction", "evaluation", etc.
+            status: a.string(), // Status of the score result (e.g. "pending", "synced", "error")
             itemId: a.string().required(),
             item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
@@ -326,20 +428,31 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            code: a.string(), // HTTP response code (e.g., "200", "404", "500")
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
+            feedbackItemId: a.string(),
+            feedbackItem: a.belongsTo('FeedbackItem', 'feedbackItemId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ScoreResultIndexFields) => any) => [
-            idx("accountId").sortKeys(["updatedAt"]),
-            idx("itemId"),
-            idx("scoringJobId"),
-            idx("scorecardId"),
-            idx("evaluationId"),
-            idx("scoreVersionId")
+        .secondaryIndexes((index) => [
+            index("accountId").sortKeys(["updatedAt"]),
+            index("itemId"),
+            index("scoringJobId"),
+            index("scorecardId").sortKeys(["updatedAt"]),
+            index("scorecardId").sortKeys(["itemId", "createdAt"]).name("byScorecardItemAndCreatedAt"),
+            index("evaluationId"),
+            index("scoreVersionId"),
+            index("scoreId"),
+            index("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
+            index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
+            index("type").sortKeys(["status", "updatedAt"]).name("byTypeStatusUpdated"),
+            index("itemId").sortKeys(["type", "scoreId", "updatedAt"]).name("byItemIdAndTypeAndScoreIdAndUpdatedAt")
         ]),
 
     BatchJobScoringJob: a
@@ -349,7 +462,7 @@ const schema = a.schema({
             batchJob: a.belongsTo('BatchJob', 'batchJobId'),
             scoringJob: a.belongsTo('ScoringJob', 'scoringJobId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -375,6 +488,9 @@ const schema = a.schema({
             errorDetails: a.json(),
             stdout: a.string(),
             stderr: a.string(),
+            output: a.string(), // Universal Code YAML output
+            error: a.string(), // Structured error message
+            attachedFiles: a.string().array(), // Array of S3 file keys for attachments
             currentStageId: a.string(),
             scorecardId: a.string(),
             account: a.belongsTo('Account', 'accountId'),
@@ -386,17 +502,18 @@ const schema = a.schema({
             celeryTaskId: a.string(),
             workerNodeId: a.string(),
             updatedAt: a.datetime(),
-            evaluation: a.hasOne('Evaluation', 'taskId')
+            evaluation: a.hasOne('Evaluation', 'taskId'),
+            report: a.hasOne('Report', 'taskId')
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId"),
-            idx("updatedAt")
+            idx("scoreId")
         ]),
 
     TaskStage: a
@@ -414,78 +531,15 @@ const schema = a.schema({
             totalItems: a.integer(),
             tasksAsCurrentStage: a.hasMany('Task', 'currentStageId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
-            idx("taskId"),
-            idx("name"),
-            idx("order"),
-            idx("status")
+            idx("taskId")
         ]),
 
-    Dataset: a
-        .model({
-            name: a.string().required(),
-            description: a.string(),
-            scorecardId: a.string().required(),
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            scoreId: a.string(),
-            score: a.belongsTo('Score', 'scoreId'),
-            currentVersionId: a.string(),
-            currentVersion: a.belongsTo('DatasetVersion', 'currentVersionId'),
-            versions: a.hasMany('DatasetVersion', 'datasetId'),
-            profiles: a.hasMany('DatasetProfile', 'datasetId'),
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
-        })
-        .authorization((allow: AuthorizationCallback) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: DatasetIndexFields) => any) => [
-            idx("scorecardId"),
-            idx("scoreId")
-        ]),
-
-    DatasetVersion: a
-        .model({
-            datasetId: a.string().required(),
-            dataset: a.belongsTo('Dataset', 'datasetId'),
-            versionNumber: a.integer().required(),
-            configuration: a.json().required(),
-            createdAt: a.datetime().required(),
-            profiles: a.hasMany('DatasetProfile', 'datasetVersionId'),
-            datasetsAsCurrentVersion: a.hasMany('Dataset', 'currentVersionId'),
-        })
-        .authorization((allow: AuthorizationCallback) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: DatasetVersionIndexFields) => any) => [
-            idx("datasetId")
-        ]),
-
-    DatasetProfile: a
-        .model({
-            datasetId: a.string().required(),
-            dataset: a.belongsTo('Dataset', 'datasetId'),
-            datasetVersionId: a.string().required(),
-            datasetVersion: a.belongsTo('DatasetVersion', 'datasetVersionId'),
-            columnList: a.string().array().required(),
-            recordCounts: a.json().required(),
-            answerDistribution: a.json().required(),
-            createdAt: a.datetime().required(),
-        })
-        .authorization((allow: AuthorizationCallback) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: DatasetProfileIndexFields) => any) => [
-            idx("datasetId"),
-            idx("datasetVersionId")
-        ]),
         
     ShareLink: a
         .model({
@@ -509,7 +563,446 @@ const schema = a.schema({
             idx("accountId"),
             idx("resourceType"),
             idx("resourceId")
+        ]),
+
+    ResourceByShareTokenResponse: a.customType({
+        shareLink: a.customType({
+            token: a.string(),
+            resourceType: a.string(),
+            resourceId: a.string(),
+            viewOptions: a.json()
+        }),
+        data: a.json()
+    }),
+    
+    getResourceByShareToken: a
+        .query()
+        .arguments({ token: a.string().required() })
+        .returns(a.ref('ResourceByShareTokenResponse'))
+        .authorization(allow => [
+            allow.guest(),
+            allow.publicApiKey(),
+            allow.authenticated()
         ])
+        .handler(a.handler.function(getResourceByShareTokenHandler)),
+
+    ReportConfiguration: a
+        .model({
+            name: a.string().required(),
+            description: a.string(),
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            configuration: a.string().required(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            reports: a.hasMany('Report', 'reportConfigurationId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
+        ])
+        .secondaryIndexes((idx: (field: ReportConfigurationIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["name"])
+        ]),
+
+    Report: a
+        .model({
+            name: a.string(), // Can be auto-generated or user-defined
+            createdAt: a.datetime().required(),
+            parameters: a.json(), // Parameters used for this specific run
+            output: a.string(), // Generated report output (original markdown template)
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            reportConfigurationId: a.string().required(),
+            reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
+            reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
+            updatedAt: a.datetime().required(),
+            taskId: a.string(),
+            task: a.belongsTo('Task', 'taskId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("reportConfigurationId").sortKeys(["createdAt"]),
+            idx("taskId")
+        ]),
+
+    ReportBlock: a
+        .model({
+            reportId: a.string().required(),
+            report: a.belongsTo('Report', 'reportId'),
+            name: a.string(), // Optional name for the block
+            position: a.integer().required(), // Required position for ordering
+            type: a.string().required(), // Required type for the block
+            output: a.string(), // Corrected type to string, and made it optional
+            log: a.string(), // Optional log output from the block
+            warning: a.string(), // Optional warning message (styled as 'false' alert)
+            error: a.string(), // Optional error message (styled as red 'danger' alert)
+            attachedFiles: a.string().array(), // This is the corrected field name and type
+            dataSetId: a.string(), // Optional dataset association
+            dataSet: a.belongsTo('DataSet', 'dataSetId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
+        ])
+        .secondaryIndexes((idx: (field: ReportBlockIndexFields) => any) => [
+            idx("reportId").sortKeys(["name"]).name("byReportAndName"),
+            idx("reportId").sortKeys(["position"]).name("byReportAndPosition"),
+            idx("dataSetId").sortKeys(["position"]).name("byDataSetAndPosition")
+        ]),
+
+    FeedbackItem: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string().required(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            cacheKey: a.string().required(),
+            scoreId: a.string().required(),
+            score: a.belongsTo('Score', 'scoreId'),
+            itemId: a.string().required(),
+            item: a.belongsTo('Item', 'itemId'),
+            initialAnswerValue: a.string(),
+            finalAnswerValue: a.string(),
+            initialCommentValue: a.string(),
+            finalCommentValue: a.string(),
+            editCommentValue: a.string(),
+            editedAt: a.datetime(),
+            editorName: a.string(),
+            isAgreement: a.boolean(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            scoreResults: a.hasMany('ScoreResult', 'feedbackItemId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: FeedbackItemIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["editedAt"]),
+            idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt"),
+            idx("accountId").sortKeys(["scorecardId", "scoreId", "editedAt"]).name("byAccountScorecardScoreEditedAt"),
+            idx("cacheKey").name("byCacheKey"), // GSI for FeedbackItem deduplication
+            idx("itemId"),
+        ]),
+
+    ScorecardExampleItem: a
+        .model({
+            scorecardId: a.id().required(),
+            itemId: a.id().required(),
+            addedAt: a.datetime(),
+            addedBy: a.string(),
+            notes: a.string(),
+            
+            // Relationships to both ends
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            item: a.belongsTo('Item', 'itemId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ScorecardExampleItemIndexFields) => any) => [
+            idx("scorecardId"),
+            idx("itemId"),
+            idx("scorecardId").sortKeys(["addedAt"]),
+        ]),
+
+    AggregatedMetrics: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            compositeKey: a.string().required(), // "recordType#timeRangeStart#numberOfMinutes"
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            recordType: a.string().required(), // "items" or "scoreResults"
+            timeRangeStart: a.datetime().required(),
+            timeRangeEnd: a.datetime().required(),
+            numberOfMinutes: a.integer().required(), // Duration: 1, 5, 15, or 60 minutes
+            count: a.integer().required(),
+            cost: a.integer(), // Fixed-point currency values (optional)
+            decisionCount: a.integer(), // Number of decisions made (optional)
+            externalAiApiCount: a.integer(), // External AI API calls (optional)
+            cachedAiApiCount: a.integer(), // Cached AI API calls (optional)
+            errorCount: a.integer(), // Number of errors (optional)
+            metadata: a.json(),
+            complete: a.boolean().required(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .identifier(['accountId', 'compositeKey'])
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: AggregatedMetricsIndexFields) => any) => [
+            // Primary access pattern: account + time + record type
+            idx("accountId").sortKeys(["timeRangeStart", "recordType"]).name("byAccountTimeRangeRecord"),
+            // Scorecard-specific access pattern
+            idx("scorecardId").sortKeys(["timeRangeStart", "recordType"]).name("byScorecardTimeRangeRecord"),
+            // Score-specific access pattern  
+            idx("scoreId").sortKeys(["timeRangeStart", "recordType"]).name("byScoreTimeRangeRecord"),
+            // Maintenance/cleanup access pattern
+            idx("accountId").sortKeys(["recordType", "timeRangeStart"]).name("byAccountRecordType"),
+            // Additional useful indexes
+            idx("recordType").sortKeys(["timeRangeStart"]).name("byRecordTypeAndTime")
+        ]),
+
+
+    DataSource: a
+        .model({
+            name: a.string().required(),
+            key: a.string(),
+            description: a.string(),
+            yamlConfiguration: a.string(),
+            attachedFiles: a.string().array(),
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            versions: a.hasMany('DataSourceVersion', 'dataSourceId'),
+            currentVersionId: a.string(),
+            currentVersion: a.belongsTo('DataSourceVersion', 'currentVersionId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: DataSourceIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["name"]),
+            idx("accountId").sortKeys(["key"]),
+            idx("scorecardId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["updatedAt"])
+        ]),
+
+    DataSourceVersion: a
+        .model({
+            dataSourceId: a.string().required(),
+            dataSource: a.belongsTo('DataSource', 'dataSourceId'),
+            yamlConfiguration: a.string().required(),
+            isFeatured: a.boolean().required(),
+            note: a.string(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            parentVersionId: a.string(),
+            parentVersion: a.belongsTo('DataSourceVersion', 'parentVersionId'),
+            childVersions: a.hasMany('DataSourceVersion', 'parentVersionId'),
+            dataSourcesAsCurrentVersion: a.hasMany('DataSource', 'currentVersionId'),
+            dataSets: a.hasMany('DataSet', 'dataSourceVersionId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: DataSourceVersionIndexFields) => any) => [
+            idx("dataSourceId").sortKeys(["createdAt"])
+        ]),
+
+    DataSet: a
+        .model({
+            name: a.string(),
+            description: a.string(),
+            file: a.string(), // S3 path to the generated dataset file
+            attachedFiles: a.string().array(),
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            scoreVersionId: a.string(),
+            scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
+            dataSourceVersionId: a.string().required(),
+            dataSourceVersion: a.belongsTo('DataSourceVersion', 'dataSourceVersionId'),
+            reportBlocks: a.hasMany('ReportBlock', 'dataSetId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: DataSetIndexFields) => any) => [
+            idx("accountId").sortKeys(["createdAt"]),
+            idx("scorecardId").sortKeys(["updatedAt"]),
+            idx("scorecardId").sortKeys(["createdAt"]),
+            idx("scoreId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["createdAt"]),
+            idx("scoreVersionId").sortKeys(["updatedAt"]),
+            idx("scoreVersionId").sortKeys(["createdAt"]),
+            idx("dataSourceVersionId").sortKeys(["updatedAt"]),
+            idx("dataSourceVersionId").sortKeys(["createdAt"])
+        ]),
+
+    Procedure: a
+        .model({
+            name: a.string().required(),
+            description: a.string(),
+            featured: a.boolean(),
+            isTemplate: a.boolean(), // True if this is a template, false if it's an instance
+            parentProcedureId: a.string(), // References template procedure if this is an instance
+            parentProcedure: a.belongsTo('Procedure', 'parentProcedureId'),
+            childProcedures: a.hasMany('Procedure', 'parentProcedureId'), // Instances created from this template
+            code: a.string(), // YAML template code (for templates) or copied code (for instances)
+            category: a.string(), // For templates: e.g., "hypothesis_generation", "beam_search"
+            version: a.string(), // For templates: version (e.g., "1.0", "2.1")
+            isDefault: a.boolean(), // For templates: whether this is the default for the category
+            rootNodeId: a.id(),
+            status: a.string(), // Execution status: PENDING, RUNNING, WAITING_FOR_HUMAN, COMPLETE, ERROR
+            waitingOnMessageId: a.string(), // ID of PENDING_* message blocking execution
+            metadata: a.json(), // Checkpoints, state, and lua_state for idempotent execution
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            scoreVersionId: a.string(),
+            scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
+            nodes: a.hasMany('GraphNode', 'procedureId'),
+            chatSessions: a.hasMany('ChatSession', 'procedureId'),
+            chatMessages: a.hasMany('ChatMessage', 'procedureId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ProcedureIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("scorecardId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["updatedAt"]),
+            idx("parentProcedureId").sortKeys(["updatedAt"]),
+            idx("rootNodeId"),
+            idx("category").sortKeys(["version"]).name("byCategory"),
+            idx("status").sortKeys(["updatedAt"]).name("byStatus")
+        ]),
+
+    GraphNode: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            procedureId: a.id().required(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
+            parentNodeId: a.id(),
+            parentNode: a.belongsTo('GraphNode', 'parentNodeId'),
+            childNodes: a.hasMany('GraphNode', 'parentNodeId'),
+            name: a.string(),
+            status: a.string(),
+            metadata: a.json(), // Consolidated field for code, hypothesis, insight, value, etc.
+            chatSessions: a.hasMany('ChatSession', 'nodeId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: GraphNodeIndexFields) => any) => [
+            idx("accountId").sortKeys(["createdAt"]).name("byAccountAndCreatedAt"),
+            idx("procedureId").sortKeys(["createdAt"]).name("nodesByProcedureCreatedAt"),
+            idx("parentNodeId").name("nodesByParent")
+        ]),
+
+    ChatSession: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            procedureId: a.string(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
+            nodeId: a.string(),
+            node: a.belongsTo('GraphNode', 'nodeId'),
+            name: a.string(),
+            category: a.string(),
+            status: a.enum(['ACTIVE', 'COMPLETED', 'ERROR']),
+            metadata: a.json(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            messages: a.hasMany('ChatMessage', 'sessionId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("procedureId").sortKeys(["createdAt"]),
+            idx("nodeId").sortKeys(["createdAt"]),
+            idx("status").sortKeys(["updatedAt"])
+        ]),
+
+    ChatMessage: a
+        .model({
+            accountId: a.string(),
+            account: a.belongsTo('Account', 'accountId'),
+            sessionId: a.string().required(),
+            session: a.belongsTo('ChatSession', 'sessionId'),
+            procedureId: a.string(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
+            role: a.enum(['USER', 'ASSISTANT', 'SYSTEM', 'TOOL']),
+            humanInteraction: a.enum([
+                'INTERNAL',           // Agent-only, hidden from human UI
+                'CHAT',               // Human message in conversation
+                'CHAT_ASSISTANT',     // AI response in conversation
+                'NOTIFICATION',       // Non-blocking notification from procedure
+                'ALERT_INFO',         // System info alert
+                'ALERT_WARNING',      // System warning alert
+                'ALERT_ERROR',        // System error alert
+                'ALERT_CRITICAL',     // System critical alert
+                'PENDING_APPROVAL',   // Waiting for yes/no from human
+                'PENDING_INPUT',      // Waiting for free-form input
+                'PENDING_REVIEW',     // Waiting for human review
+                'PENDING_ESCALATION', // Escalated to human, blocks indefinitely
+                'RESPONSE',           // Human's response to pending request
+                'TIMED_OUT',          // Request expired without response
+                'CANCELLED'           // Request was cancelled
+            ]),
+            content: a.string().required(),
+            metadata: a.json(),
+            messageType: a.enum(['MESSAGE', 'TOOL_CALL', 'TOOL_RESPONSE']),
+            toolName: a.string(), // Name of the tool being called (for TOOL_CALL and TOOL_RESPONSE)
+            toolParameters: a.json(), // Parameters passed to the tool (for TOOL_CALL)
+            toolResponse: a.json(), // Response from the tool (for TOOL_RESPONSE)
+            parentMessageId: a.string(), // Links tool responses to their calls, or chains related messages
+            parentMessage: a.belongsTo('ChatMessage', 'parentMessageId'),
+            childMessages: a.hasMany('ChatMessage', 'parentMessageId'),
+            sequenceNumber: a.integer(), // Order within the session for proper conversation flow
+            createdAt: a.datetime().required()
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("sessionId").sortKeys(["sequenceNumber"]),
+            idx("sessionId").sortKeys(["createdAt"]),
+            idx("procedureId").sortKeys(["createdAt"]),
+            idx("parentMessageId"),
+            idx("humanInteraction").sortKeys(["createdAt"]),
+            idx("accountId").sortKeys(["createdAt"])
+        ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;

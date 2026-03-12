@@ -1,0 +1,22 @@
+#!/bin/bash
+cd /home/ec2-user/projects/Plexus
+
+echo "Installing package..."
+/home/ec2-user/miniconda3/bin/conda run -n py311 pip install --upgrade-strategy only-if-needed .
+
+# Only restart services if they exist
+if sudo systemctl list-unit-files | grep -q plexus-command-worker; then
+    echo "Restarting Plexus Command Worker..."
+    sudo systemctl restart plexus-command-worker
+else
+    echo "Plexus Command Worker service not found (staging environment)"
+fi
+
+if sudo systemctl list-unit-files | grep -q fastapi.service; then
+    echo "Restarting FastAPI service..."
+    sudo systemctl restart fastapi
+else
+    echo "FastAPI service not found (staging environment)"
+fi
+
+echo "Deployment completed successfully!" 

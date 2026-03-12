@@ -3,13 +3,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from .base import BaseModel
 from .account import Account
-from ..client import _BaseAPIClient
 import logging
 import uuid
 import json
+import os
 
 if TYPE_CHECKING:
     from .task_stage import TaskStage
+    from ..client import _BaseAPIClient
 
 @dataclass
 class Task(BaseModel):
@@ -29,6 +30,9 @@ class Task(BaseModel):
     errorDetails: Optional[Dict] = None
     stdout: Optional[str] = None
     stderr: Optional[str] = None
+    output: Optional[str] = None  # Universal Code YAML output
+    error: Optional[str] = None   # Structured error message
+    attachedFiles: Optional[List[str]] = None  # Array of S3 file keys
     currentStageId: Optional[str] = None
     workerNodeId: Optional[str] = None
     dispatchStatus: Optional[str] = None
@@ -56,12 +60,15 @@ class Task(BaseModel):
         errorDetails: Optional[Dict] = None,
         stdout: Optional[str] = None,
         stderr: Optional[str] = None,
+        output: Optional[str] = None,
+        error: Optional[str] = None,
+        attachedFiles: Optional[List[str]] = None,
         currentStageId: Optional[str] = None,
         workerNodeId: Optional[str] = None,
         dispatchStatus: Optional[str] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.accountId = accountId
@@ -80,6 +87,9 @@ class Task(BaseModel):
         self.errorDetails = errorDetails
         self.stdout = stdout
         self.stderr = stderr
+        self.output = output
+        self.error = error
+        self.attachedFiles = attachedFiles
         self.currentStageId = currentStageId
         self.workerNodeId = workerNodeId
         self.dispatchStatus = dispatchStatus
@@ -106,6 +116,9 @@ class Task(BaseModel):
             errorDetails
             stdout
             stderr
+            output
+            error
+            attachedFiles
             currentStageId
             workerNodeId
             dispatchStatus
@@ -129,10 +142,13 @@ class Task(BaseModel):
 
     @classmethod
     def _get_account_id(cls, client) -> str:
-        """Get the account ID for the call-criteria account."""
-        account = Account.list_by_key(client, "call-criteria")
+        """Get the account ID from PLEXUS_ACCOUNT_KEY environment variable."""
+        account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+        if not account_key:
+            raise ValueError("PLEXUS_ACCOUNT_KEY environment variable must be set")
+        account = Account.list_by_key(client, account_key)
         if not account:
-            raise ValueError("No account found with key: call-criteria")
+            raise ValueError(f"No account found with key: {account_key}")
         return account.id
 
     @classmethod
@@ -203,6 +219,271 @@ class Task(BaseModel):
         task_data = response['createTask']
         return cls.from_dict(task_data, client)
 
+    @classmethod
+    def create_with_stages(cls, client, type: str, target: str, command: str, stages: list, **kwargs) -> 'Task':
+        """Create a new task record with stages in a single GraphQL request.
+        
+        Args:
+            client: The API client instance
+            type: Task type
+            target: Task target
+            command: Command string
+            stages: List of stage configurations in the format 
+                   [{"name": str, "order": int, "status": str, "statusMessage": str, 
+                     "totalItems": int, "estimatedCompletionAt": str}]
+            **kwargs: Additional task fields
+        
+        Returns:
+            Task: The created task instance with stages initialized
+        """
+        # Get the account ID if not provided
+        if 'accountId' not in kwargs:
+            kwargs['accountId'] = cls._get_account_id(client)
+
+        # Get current timestamp for createdAt and updatedAt
+        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+        # Prepare input data
+        input_data = {
+            "type": type,
+            "target": target,
+            "command": command,
+            "status": "PENDING",  # Default status for new tasks
+            "createdAt": now,
+            "updatedAt": now,  # Set initial updatedAt
+            **kwargs
+        }
+
+        # Execute a multi-operation request that creates the task and all stages in one HTTP call
+        # Each operation needs a unique name in the multi-operation request
+        operations = """
+        mutation CreateTaskAndStages(
+            $taskInput: CreateTaskInput!
+            $stage1: CreateTaskStageInput
+            $stage2: CreateTaskStageInput
+            $stage3: CreateTaskStageInput
+            $stage4: CreateTaskStageInput
+            $stage5: CreateTaskStageInput
+        ) {
+            # First create the task
+            createTask(input: $taskInput) {
+                id
+                type
+                target
+                command
+                accountId
+                status
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                updatedAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                scorecardId
+                scoreId
+            }
+            
+            # Then create each stage if variables are provided
+            stage1: createTaskStage(input: $stage1) @include(if: $hasStage1) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+            
+            stage2: createTaskStage(input: $stage2) @include(if: $hasStage2) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+            
+            stage3: createTaskStage(input: $stage3) @include(if: $hasStage3) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+            
+            stage4: createTaskStage(input: $stage4) @include(if: $hasStage4) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+            
+            stage5: createTaskStage(input: $stage5) @include(if: $hasStage5) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+        }
+        """
+        
+        # Prepare variables with conditional flags for stage inclusion
+        variables = {
+            "taskInput": input_data,
+            "hasStage1": False,
+            "hasStage2": False,
+            "hasStage3": False,
+            "hasStage4": False,
+            "hasStage5": False,
+        }
+        
+        # Maximum of 5 stages in a single request
+        if len(stages) > 5:
+            raise ValueError("Cannot create more than 5 stages in a single request")
+        
+        # Add stage variables
+        for i, stage in enumerate(stages, 1):
+            stage_key = f"stage{i}"
+            has_stage_key = f"hasStage{i}"
+            
+            variables[has_stage_key] = True
+            variables[stage_key] = {
+                "name": stage["name"],
+                "order": stage["order"],
+                "status": stage.get("status", "PENDING"),
+                # Dummy taskId will be replaced after task creation
+                "taskId": "PLACEHOLDER"
+            }
+            
+            # Add optional fields
+            if "statusMessage" in stage:
+                variables[stage_key]["statusMessage"] = stage["statusMessage"]
+            if "totalItems" in stage:
+                variables[stage_key]["totalItems"] = stage["totalItems"]
+            if "estimatedCompletionAt" in stage:
+                variables[stage_key]["estimatedCompletionAt"] = stage["estimatedCompletionAt"]
+        
+        try:
+            # Create the task first
+            create_response = client.execute(
+                """
+                mutation CreateTask($input: CreateTaskInput!) {
+                    createTask(input: $input) {
+                        id
+                        type
+                        target
+                        command
+                        accountId
+                        status
+                        description
+                        dispatchStatus
+                        metadata
+                        createdAt
+                        updatedAt
+                        startedAt
+                        completedAt
+                        estimatedCompletionAt
+                        scorecardId
+                        scoreId
+                    }
+                }
+                """,
+                {"input": input_data}
+            )
+            
+            task_data = create_response['createTask']
+            task_id = task_data['id']
+            
+            # Now create all stages with the actual task ID
+            stage_data_list = []
+            for i, stage in enumerate(stages):
+                stage_input = {
+                    "taskId": task_id,
+                    "name": stage["name"],
+                    "order": stage["order"],
+                    "status": stage.get("status", "PENDING"),
+                }
+                
+                # Add optional fields
+                if "statusMessage" in stage:
+                    stage_input["statusMessage"] = stage["statusMessage"]
+                if "totalItems" in stage:
+                    stage_input["totalItems"] = stage["totalItems"]
+                if "estimatedCompletionAt" in stage:
+                    stage_input["estimatedCompletionAt"] = stage["estimatedCompletionAt"]
+                
+                # Create the stage
+                stage_response = client.execute(
+                    """
+                    mutation CreateTaskStage($input: CreateTaskStageInput!) {
+                        createTaskStage(input: $input) {
+                            id
+                            taskId
+                            name
+                            order
+                            status
+                            statusMessage
+                            startedAt
+                            completedAt
+                            estimatedCompletionAt
+                            processedItems
+                            totalItems
+                        }
+                    }
+                    """,
+                    {"input": stage_input}
+                )
+                
+                stage_data = stage_response['createTaskStage']
+                stage_data_list.append(stage_data)
+                
+                # If this is the first stage, set it as the current stage
+                if i == 0:
+                    client.execute(
+                        """
+                        mutation UpdateTask($input: UpdateTaskInput!) {
+                            updateTask(input: $input) {
+                                id
+                                currentStageId
+                            }
+                        }
+                        """,
+                        {
+                            "input": {
+                                "id": task_id,
+                                "accountId": input_data["accountId"],
+                                "type": input_data["type"],
+                                "status": input_data["status"],
+                                "target": input_data["target"],
+                                "command": input_data["command"],
+                                "currentStageId": stage_data["id"]
+                            }
+                        }
+                    )
+            
+            # Create the task instance
+            task = cls.from_dict(task_data, client)
+            
+            # Attach the stages data for later access
+            task._stages = stage_data_list
+            
+            return task
+            
+        except Exception as e:
+            logging.error(f"Failed to create task with stages: {str(e)}")
+            raise ValueError(f"Failed to create task with stages: {str(e)}")
+
     @staticmethod
     def _parse_datetime(value: Any) -> Optional[datetime]:
         """Safely parse a datetime value from various formats."""
@@ -243,7 +524,7 @@ class Task(BaseModel):
             return None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Task':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Task':
         # Convert datetime fields
         for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt', 'estimatedCompletionAt']:
             if date_field in data:
@@ -308,7 +589,7 @@ class Task(BaseModel):
         return self.from_dict(result['updateTask'], self._client)
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Task':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'Task':
         query = """
         query GetTask($id: ID!) {
             getTask(id: $id) {
@@ -493,6 +774,106 @@ class Task(BaseModel):
             logging.error(f"Failed to update stage '{current_stage.name}' status: {str(e)}", exc_info=True)
             raise  # Re-raise to prevent silent failures
 
+    def create_stages_batch(
+        self,
+        stage_configs: List[Dict[str, Any]]
+    ) -> List['TaskStage']:
+        """Create multiple TaskStages in a single GraphQL mutation.
+        
+        Args:
+            stage_configs: List of dictionaries containing stage configuration.
+                          Each dict should have keys: name, order, status, and optional fields.
+        
+        Returns:
+            List[TaskStage]: List of created TaskStage instances
+        """
+        from .task_stage import TaskStage
+        
+        if not stage_configs:
+            return []
+        
+        # Build a batch mutation to create all stages at once
+        mutation_parts = []
+        variables = {}
+        
+        for i, config in enumerate(stage_configs):
+            # Validate required fields
+            if not all(key in config for key in ['name', 'order']):
+                raise ValueError(f"Stage config {i} missing required fields (name, order)")
+            
+            # Prepare input data for this stage
+            stage_input = {
+                'taskId': self.id,
+                'name': config['name'],
+                'order': config['order'],
+                'status': config.get('status', 'PENDING')
+            }
+            
+            # Add optional fields if provided
+            optional_fields = [
+                'statusMessage', 'totalItems', 'processedItems',
+                'startedAt', 'completedAt', 'estimatedCompletionAt'
+            ]
+            for field in optional_fields:
+                if field in config and config[field] is not None:
+                    stage_input[field] = config[field]
+            
+            # Create variable name for this stage
+            var_name = f'stage{i}Input'
+            variables[var_name] = stage_input
+            
+            # Add mutation part for this stage
+            mutation_parts.append(f"""
+                stage{i}: createTaskStage(input: ${var_name}) {{
+                    {TaskStage.fields()}
+                }}
+            """)
+        
+        # Build complete mutation
+        mutation = f"""
+        mutation CreateTaskStagesBatch(
+            {', '.join(f'${var_name}: CreateTaskStageInput!' for var_name in variables.keys())}
+        ) {{
+            {''.join(mutation_parts)}
+        }}
+        """
+        
+        logging.info(f"Executing batch TaskStage creation for {len(stage_configs)} stages")
+        logging.debug(f"Batch mutation variables: {variables}")
+        
+        result = self._client.execute(mutation, variables)
+        
+        # Check for GraphQL errors
+        if 'errors' in result:
+            error_messages = [error.get('message', 'Unknown error') for error in result['errors']]
+            error_str = '; '.join(error_messages)
+            logging.error(f"GraphQL errors creating stages: {error_str}")
+            logging.error(f"Full error response: {result['errors']}")
+            raise Exception(f"Failed to create TaskStages: {error_str}")
+        
+        # Extract stage data from result
+        created_stages = []
+        for i in range(len(stage_configs)):
+            stage_key = f'stage{i}'
+            if stage_key in result:
+                stage_data = result[stage_key]
+                if stage_data:
+                    stage = TaskStage.from_dict(stage_data, self._client)
+                    created_stages.append(stage)
+                else:
+                    logging.error(f"No data returned for stage {i}")
+            else:
+                logging.error(f"Stage {i} not found in result")
+        
+        # Update task's currentStageId to the first stage if we created any
+        if created_stages:
+            first_stage = min(created_stages, key=lambda s: s.order)
+            self.update(currentStageId=first_stage.id)
+            logging.info(f"==== STAGE: {first_stage.name} ====")
+        
+        logging.info(f"Successfully created {len(created_stages)} stages in batch")
+        return created_stages
+    
     def create_stage(
         self,
         name: str,
@@ -546,6 +927,9 @@ class Task(BaseModel):
         
         # Add any additional fields from kwargs
         for key, value in kwargs.items():
+            # Explicitly skip the 'client' argument if passed via kwargs
+            if key == 'client':
+                continue
             if value is not None:
                 variables['input'][key] = value
         
@@ -651,7 +1035,7 @@ class Task(BaseModel):
         self.update(lock_token=None, lock_expires=None)
 
     @classmethod
-    def list_tasks(cls, client: _BaseAPIClient, updated_at: str = "", limit: int = 100) -> List['Task']:
+    def list_tasks(cls, client: '_BaseAPIClient', updated_at: str = "", limit: int = 100) -> List['Task']:
         """List tasks using the listTaskByUpdatedAt query for proper pagination.
         
         Args:
@@ -663,7 +1047,7 @@ class Task(BaseModel):
             List[Task]: List of Task instances
         """
         query = """
-        query ListTaskByUpdatedAt($updatedAt: String!, $limit: Int, $nextToken: String) {
+        query ListTaskByUpdatedAt($updatedAt: AWSDateTime!, $limit: Int, $nextToken: String) {
             listTaskByUpdatedAt(updatedAt: $updatedAt, limit: $limit, nextToken: $nextToken) {
                 items {
                     %s

@@ -1,0 +1,3 @@
+{
+  "template": "Extract all questions asked by customers in this transcript. Include ONLY direct questions (sentences ending with a question mark or clearly phrased as questions). Do not include implied questions or statements that seem like they're asking for information but aren't phrased as questions.\n\nFor each customer question:\n1. Extract the exact question text verbatim\n2. If the exact same question appears multiple times, include it only once\n\n{text}\n\n{format_instructions}"
+} 

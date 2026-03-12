@@ -1,0 +1,58 @@
+parameters:
+  - name: scorecard
+    label: Scorecard
+    type: scorecard_select
+    required: true
+    description: Scorecard for feedback items (transcript source)
+  - name: score_id
+    label: Target Score
+    type: score_select
+    depends_on: scorecard
+    required: false
+    description: Optional specific score to analyze. If empty, analyzes all scores in the scorecard.
+  - name: days
+    label: Analysis Period (days)
+    type: number
+    min: 1
+    max: 365
+    default: 10
+    description: Number of days of feedback to include
+
+---
+
+# Semantic Reinforcement Memory Report
+## Scorecard: {{ scorecard_name }}
+{% if score_id is defined and score_id %}
+## Score: {{ score_id_name }}
+{% endif %}
+## Last {{ days }} days
+
+Rebuilds topic memory from **edit comments** (reviewer feedback) in this scorecard and date range. Clusters what reviewers are saying when they correct scores. Re-indexes into S3 Vectors with S3 embedding cache, global clustering, and memory weights.
+
+```block name="Vector Topic Memory"
+class: VectorTopicMemory
+scorecard: {{ scorecard }}
+{% if score_id is defined and score_id %}
+score_id: {{ score_id }}
+{% endif %}
+days: {{ days }}
+data:
+  content_source: edit_comment
+s3_vectors:
+  region: us-west-2
+clustering:
+  min_topic_size: 8
+  coarse_min_topic_fraction: 0.02
+  coarse_target_max_topics_per_score: 12
+  min_samples: 2
+  cluster_selection_method: eom
+  cluster_selection_epsilon: 0.5
+label:
+  use_llm: true
+  model: gpt-4o-mini
+  batch_one_pass: true
+  batch_model: gpt-4o
+  request_timeout_seconds: 45
+  batch_request_timeout_seconds: 45
+  api_key_env_var: OPENAI_API_KEY
+```

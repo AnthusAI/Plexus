@@ -3,7 +3,7 @@ import { StoryFn, Meta } from "@storybook/react"
 import ScorecardContext, { ScorecardContextProps } from "@/components/ScorecardContext"
 
 export default {
-  title: "Context/ScorecardContext",
+  title: "General/ScorecardContext",
   component: ScorecardContext,
 } as Meta
 
@@ -37,4 +37,13 @@ Loading.args = {
   selectedScore: null,
   setSelectedScore: () => {},
   useMockData: false,
+}
+
+export const SkeletonMode = Template.bind({})
+SkeletonMode.args = {
+  selectedScorecard: null,
+  setSelectedScorecard: () => {},
+  selectedScore: null,
+  setSelectedScore: () => {},
+  skeletonMode: true,
 }

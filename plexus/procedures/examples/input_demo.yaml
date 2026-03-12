@@ -1,0 +1,81 @@
+name: input_demo
+version: 1.0.0
+description: Simple demonstration of Human-in-the-Loop input collection
+
+class: LuaDSL
+
+params:
+  question:
+    type: string
+    required: false
+    default: "What is your name?"
+  context_info:
+    type: string
+    required: false
+    default: "Please enter your full name for the registration form."
+
+outputs:
+  user_input:
+    type: string
+    required: true
+  received_at:
+    type: string
+    required: true
+  message:
+    type: string
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "This is a placeholder agent (not used in this workflow)"
+    initial_message: "Placeholder"
+    tools: []
+
+stages:
+  - notifying
+  - awaiting_input
+  - processing
+  - complete
+
+workflow: |
+  Human.notify({
+    message = "📝 Requesting user input...",
+    level = "info"
+  })
+
+  local user_input = Human.input({
+    message = "**" .. params.question .. "**\n\n" ..
+              params.context_info .. "\n\n" ..
+              "Please provide your response below:",
+    placeholder = "Enter your response here...",
+    timeout = 3600,
+    default = "",
+    context = {
+      question = params.question,
+      requested_at = os.date("%Y-%m-%dT%H:%M:%SZ")
+    }
+  })
+
+  local received_at = os.date("%Y-%m-%dT%H:%M:%SZ")
+
+  if user_input and user_input ~= "" then
+    Human.notify({
+      message = "✅ **Input Received**\n\nYou entered: " .. user_input,
+      level = "info"
+    })
+    return {
+      user_input = user_input,
+      received_at = received_at,
+      message = "Successfully collected input: " .. user_input
+    }
+  else
+    Human.notify({
+      message = "⚠️ **No Input Provided**\n\nUsing default empty response",
+      level = "warning"
+    })
+    return {
+      user_input = "",
+      received_at = received_at,
+      message = "No input was provided by user"
+    }
+  end

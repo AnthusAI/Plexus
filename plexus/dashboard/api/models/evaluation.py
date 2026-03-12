@@ -12,12 +12,14 @@ non-blocking operation.
 """
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Thread
 from .base import BaseModel
-from ..client import _BaseAPIClient
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,7 @@ class Evaluation(BaseModel):
     errorDetails: Optional[Dict] = None
     scorecardId: Optional[str] = None
     scoreId: Optional[str] = None
+    scoreVersionId: Optional[str] = None
     confusionMatrix: Optional[Dict] = None
     scoreGoal: Optional[str] = None
     datasetClassDistribution: Optional[Dict] = None
@@ -58,7 +61,7 @@ class Evaluation(BaseModel):
         status: str,
         createdAt: datetime,
         updatedAt: datetime,
-        client: Optional[_BaseAPIClient] = None,
+        client: Optional['_BaseAPIClient'] = None,
         parameters: Optional[Dict] = None,
         metrics: Optional[Dict] = None,
         inferences: Optional[int] = None,
@@ -73,6 +76,7 @@ class Evaluation(BaseModel):
         errorDetails: Optional[Dict] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
+        scoreVersionId: Optional[str] = None,
         confusionMatrix: Optional[Dict] = None,
         scoreGoal: Optional[str] = None,
         datasetClassDistribution: Optional[Dict] = None,
@@ -101,6 +105,7 @@ class Evaluation(BaseModel):
         self.errorDetails = errorDetails
         self.scorecardId = scorecardId
         self.scoreId = scoreId
+        self.scoreVersionId = scoreVersionId
         self.confusionMatrix = confusionMatrix
         self.scoreGoal = scoreGoal
         self.datasetClassDistribution = datasetClassDistribution
@@ -133,6 +138,7 @@ class Evaluation(BaseModel):
             errorDetails
             scorecardId
             scoreId
+            scoreVersionId
             confusionMatrix
             scoreGoal
             datasetClassDistribution
@@ -145,7 +151,7 @@ class Evaluation(BaseModel):
     @classmethod
     def create(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         type: str,
         accountId: str,
         *,  # Force keyword arguments
@@ -183,7 +189,7 @@ class Evaluation(BaseModel):
         """ % cls.fields()
         
         result = client.execute(mutation, {'input': input_data})
-        logger.info(f"Create Evaluation response: {result}")
+        logger.debug(f"Create Evaluation response: {result}")
         
         if not result or 'createEvaluation' not in result:
             raise Exception(f"Failed to create Evaluation. Response: {result}")
@@ -191,7 +197,7 @@ class Evaluation(BaseModel):
         return cls.from_dict(result['createEvaluation'], client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Evaluation':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Evaluation':
         # Convert string dates to datetime objects
         for date_field in ['createdAt', 'updatedAt', 'startedAt']:
             if data.get(date_field):
@@ -218,6 +224,7 @@ class Evaluation(BaseModel):
             errorDetails=data.get('errorDetails'),
             scorecardId=data.get('scorecardId'),
             scoreId=data.get('scoreId'),
+            scoreVersionId=data.get('scoreVersionId'),
             confusionMatrix=data.get('confusionMatrix'),
             scoreGoal=data.get('scoreGoal'),
             datasetClassDistribution=data.get('datasetClassDistribution'),
@@ -269,7 +276,7 @@ class Evaluation(BaseModel):
         thread.start()
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient, include_score_results: bool = False) -> 'Evaluation':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient', include_score_results: bool = False) -> 'Evaluation':
         query = """
         query GetEvaluation($id: ID!) {
             getEvaluation(id: $id) {

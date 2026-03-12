@@ -2,7 +2,39 @@
 *.egg-info/
 build/
 .coverage
+htmlcov/
+coverage_*/
+.pytest_cache/
 mlruns/
-reports/
+/reports/
 .DS_Store
 .env
+tmp/
+.langchain.db/
+.plexus_training_data_cache/
+/scorecards/
+.plexus/
+.codeql/
+node_modules
+node_modules/*
+plexus/scores/reports/Test_scorecard/None/configuration.json
+.env.docker
+score_results/
+infrastructure/cdk.out/
+infrastructure/build/
+fine-tuning/dataset/
+dashboard/public/brands
+
+# Root-level config files (in case recreated)
+/babel.config.js
+/jest.config.ts
+/tsconfig.json
+/package.json
+/package-lock.json
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.cursor/rules/snyk_rules.mdc
+check_report.py
+
+# Kanbus overlay (ephemeral local state)
+project/.overlay/

@@ -58,7 +58,13 @@ export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 's
     confidence: number | null;
     metadata: any;
     explanation: string | null;
+    trace: any | null;
     itemId: string | null;
+    itemIdentifiers?: Array<{
+      name: string;
+      value: string;
+      url?: string;
+    }> | null;
     createdAt: string;
   }>;
 };
@@ -80,6 +86,8 @@ export type AmplifyTask = {
   errorDetails?: any;
   stdout?: string | null;
   stderr?: string | null;
+  output?: string | null; // Universal Code YAML output
+  attachedFiles?: string[] | null; // Array of S3 file keys for attachments
   currentStageId?: string | null;
   stages?: LazyLoader<{
     data?: {
@@ -125,6 +133,8 @@ export type ProcessedTask = {
   errorDetails?: string;
   stdout?: string;
   stderr?: string;
+  output?: string; // Universal Code YAML output
+  attachedFiles?: string[]; // Array of S3 file keys for attachments
   currentStageId?: string;
   stages: ProcessedTaskStage[];
   dispatchStatus?: 'DISPATCHED';
@@ -234,9 +244,82 @@ type SubscriptionHandler<T> = {
 };
 
 // Add a type guard for GraphQL results
-function isGraphQLResult<T>(response: GraphQLResult<T> | GraphQLSubscription<T>): response is GraphQLResult<T> {
-  return !('subscribe' in response);
+function isGraphQLResult(response: any): response is GraphQLResult<any> {
+  return response && typeof response === 'object' && ('data' in response || 'errors' in response);
 }
+
+// Define the evaluation fields to use in GraphQL queries
+const EVALUATION_FIELDS = `
+  id
+  type
+  parameters
+  metrics
+  metricsExplanation
+  inferences
+  accuracy
+  cost
+  createdAt
+  updatedAt
+  status
+  startedAt
+  elapsedSeconds
+  estimatedRemainingSeconds
+  totalItems
+  processedItems
+  errorMessage
+  errorDetails
+  accountId
+  scorecardId
+  scorecard {
+    id
+    name
+  }
+  scoreId
+  score {
+    id
+    name
+  }
+  scoreVersionId
+  confusionMatrix
+  scoreGoal
+  datasetClassDistribution
+  isDatasetClassDistributionBalanced
+  predictedClassDistribution
+  isPredictedClassDistributionBalanced
+  taskId
+  task {
+    id
+    type
+    status
+    target
+    command
+    description
+    dispatchStatus
+    metadata
+    createdAt
+    startedAt
+    completedAt
+    estimatedCompletionAt
+    errorMessage
+    errorDetails
+    currentStageId
+    stages {
+      items {
+        id
+        name
+        order
+        status
+        statusMessage
+        startedAt
+        completedAt
+        estimatedCompletionAt
+        processedItems
+        totalItems
+      }
+    }
+  }
+  # scoreResults intentionally omitted; will be lazy-loaded per selected evaluation
+`;
 
 export async function listFromModel<T>(
   modelName: keyof AmplifyClient['models'],
@@ -351,182 +434,143 @@ export async function updateTask(
   }
 }
 
-export async function listRecentEvaluations(limit: number = 100): Promise<any[]> {
-  console.debug('listRecentEvaluations called with limit:', limit);
+export async function listRecentEvaluations(
+  limit: number = 100,
+  accountId: string | null = null,
+  selectedScorecard: string | null = null,
+  selectedScore: string | null = null,
+  nextToken: string | null = null
+): Promise<{ items: any[], nextToken: string | null }> {
   try {
-    const currentClient = getClient();
-
-    // Get the account ID by key
-    const ACCOUNT_KEY = 'call-criteria';
-    const accountResponse = await listFromModel<Schema['Account']['type']>(
-      'Account',
-      { filter: { key: { eq: ACCOUNT_KEY } } }
-    );
-
-    if (!accountResponse.data?.length) {
-      console.error('No account found with key:', ACCOUNT_KEY);
-      return [];
+    const client = getClient();
+    
+    // Get the account ID if not provided
+    if (!accountId) {
+      const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || '';
+      if (!ACCOUNT_KEY) {
+        throw new Error('NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY environment variable not set');
+      }
+      const accountResponse = await (client.models.Account as any).list({ 
+        filter: { key: { eq: ACCOUNT_KEY } } 
+      });
+      
+      if (!accountResponse.data?.length) {
+        throw new Error(`No account found with key: ${ACCOUNT_KEY}`);
+      }
+      
+      accountId = accountResponse.data[0].id;
     }
-
-    const accountId = accountResponse.data[0].id;
-    console.debug('Fetching evaluations for account:', accountId);
-
-    const response = await currentClient.graphql({
-      query: `
+    
+    let query = '';
+    let variables: any = {
+      sortDirection: 'DESC',
+      limit: limit || 100,
+      nextToken: nextToken
+    };
+    
+    // Determine which GSI to use based on the filters
+    if (selectedScorecard && selectedScore) {
+      // If both scorecard and score are selected, use the scoreId GSI directly
+      query = `
+        query ListEvaluationByScoreIdAndUpdatedAt(
+          $scoreId: String!
+          $sortDirection: ModelSortDirection!
+          $limit: Int
+          $nextToken: String
+        ) {
+          listEvaluationByScoreIdAndUpdatedAt(
+            scoreId: $scoreId
+            sortDirection: $sortDirection
+            limit: $limit
+            nextToken: $nextToken
+          ) {
+            items {
+              ${EVALUATION_FIELDS}
+            }
+            nextToken
+          }
+        }
+      `;
+      variables.scoreId = selectedScore;
+    } else if (selectedScorecard) {
+      // If only scorecard is selected, use the scorecardId GSI
+      query = `
+        query ListEvaluationByScorecardIdAndUpdatedAt(
+          $scorecardId: String!
+          $sortDirection: ModelSortDirection!
+          $limit: Int
+          $nextToken: String
+        ) {
+          listEvaluationByScorecardIdAndUpdatedAt(
+            scorecardId: $scorecardId
+            sortDirection: $sortDirection
+            limit: $limit
+            nextToken: $nextToken
+          ) {
+            items {
+              ${EVALUATION_FIELDS}
+            }
+            nextToken
+          }
+        }
+      `;
+      variables.scorecardId = selectedScorecard;
+    } else {
+      // Default to accountId GSI
+      query = `
         query ListEvaluationByAccountIdAndUpdatedAt(
           $accountId: String!
           $sortDirection: ModelSortDirection!
           $limit: Int
+          $nextToken: String
         ) {
           listEvaluationByAccountIdAndUpdatedAt(
             accountId: $accountId
             sortDirection: $sortDirection
             limit: $limit
+            nextToken: $nextToken
           ) {
             items {
-              id
-              type
-              parameters
-              metrics
-              metricsExplanation
-              inferences
-              accuracy
-              cost
-              createdAt
-              updatedAt
-              status
-              startedAt
-              elapsedSeconds
-              estimatedRemainingSeconds
-              totalItems
-              processedItems
-              errorMessage
-              errorDetails
-              accountId
-              scorecardId
-              scorecard {
-                id
-                name
-              }
-              scoreId
-              score {
-                id
-                name
-              }
-              confusionMatrix
-              scoreGoal
-              datasetClassDistribution
-              isDatasetClassDistributionBalanced
-              predictedClassDistribution
-              isPredictedClassDistributionBalanced
-              taskId
-              task {
-                id
-                type
-                status
-                target
-                command
-                description
-                dispatchStatus
-                metadata
-                createdAt
-                startedAt
-                completedAt
-                estimatedCompletionAt
-                errorMessage
-                errorDetails
-                currentStageId
-                stages {
-                  items {
-                    id
-                    name
-                    order
-                    status
-                    statusMessage
-                    startedAt
-                    completedAt
-                    estimatedCompletionAt
-                    processedItems
-                    totalItems
-                  }
-                }
-              }
-              scoreResults {
-                items {
-                  id
-                  value
-                  confidence
-                  metadata
-                  explanation
-                  itemId
-                  createdAt
-                  scoringJob {
-                    id
-                    status
-                    metadata
-                  }
-                }
-              }
+              ${EVALUATION_FIELDS}
             }
             nextToken
           }
         }
-      `,
-      variables: {
-        accountId: accountId.trim(),
-        sortDirection: 'DESC',
-        limit: limit || 100
-      }
-    });
-
-    console.debug('GraphQL response:', {
-      hasData: isGraphQLResult(response) && !!response.data,
-      hasErrors: isGraphQLResult(response) && !!response.errors,
-      itemCount: isGraphQLResult(response) ? response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.length : 0,
-      firstItem: isGraphQLResult(response) && response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.[0] ? {
-        id: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].id,
-        type: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].type,
-        metrics: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].metrics,
-        task: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
-        taskCompletedAt: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.completedAt,
-        taskStartedAt: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.startedAt,
-        taskStatus: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.status,
-        rawTask: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
-        taskKeys: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task ? Object.keys(response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task) : [],
-        taskType: typeof response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
-        scoreResults: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].scoreResults
-      } : null
-    });
-
-    if (!isGraphQLResult(response)) {
-      console.error('Unexpected response type');
-      return [];
+      `;
+      variables.accountId = accountId;
     }
-
-    if (response.errors?.length) {
-      console.error('GraphQL errors:', response.errors);
-      throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
+    
+    const response = await client.graphql({
+      query,
+      variables
+    }) as GraphQLResult<any>;
+    
+    // Extract data from the response
+    const responseData = response?.data || {};
+    
+    // Extract items from the response based on which query was used
+    const result = 
+      responseData?.listEvaluationByAccountIdAndUpdatedAt || 
+      responseData?.listEvaluationByScorecardIdAndUpdatedAt || 
+      responseData?.listEvaluationByScoreIdAndUpdatedAt;
+    
+    if (!result?.items) {
+      return { items: [], nextToken: null };
     }
-
-    if (!response.data) {
-      console.error('No data returned from GraphQL query');
-      return [];
-    }
-
-    const result = response.data;
-    if (!result?.listEvaluationByAccountIdAndUpdatedAt?.items) {
-      console.error('No items found in GraphQL response');
-      return [];
-    }
-
-    return result.listEvaluationByAccountIdAndUpdatedAt.items;
+    
+    return { items: result.items, nextToken: result.nextToken || null };
   } catch (error) {
-    console.error('Error listing recent evaluations:', error);
-    return [];
+    console.error('Error in listRecentEvaluations:', error);
+    return { items: [], nextToken: null };
   }
 }
 
-export function observeRecentEvaluations(limit: number = 100): Observable<{ items: any[], isSynced: boolean }> {
+export function observeRecentEvaluations(
+  limit: number = 100,
+  accountId: string | null = null,
+  selectedScorecard: string | null = null,
+  selectedScore: string | null = null
+): Observable<{ items: any[], isSynced: boolean }> {
   return new Observable(subscriber => {
     let evaluations: any[] = [];
     let subscriptionCleanup: { unsubscribe: () => void }[] = [];
@@ -534,25 +578,9 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
     // Load initial data
     async function loadInitialEvaluations() {
       try {
-        const response = await listRecentEvaluations(limit);
-        console.debug('Initial evaluations response:', {
-          count: response.length,
-          firstEvaluation: response[0] ? {
-            id: response[0].id,
-            type: response[0].type,
-            metrics: response[0].metrics,
-            task: response[0].task,
-            taskCompletedAt: response[0].task?.completedAt,
-            taskStartedAt: response[0].task?.startedAt,
-            taskStatus: response[0].task?.status,
-            rawTask: response[0].task,
-            taskKeys: response[0].task ? Object.keys(response[0].task) : [],
-            taskType: typeof response[0].task,
-            scoreResults: response[0].scoreResults
-          } : null
-        });
+        const response = await listRecentEvaluations(limit, accountId, selectedScorecard, selectedScore, null);
         
-        evaluations = response;
+        evaluations = response.items;
         subscriber.next({ items: evaluations, isSynced: true });
       } catch (error) {
         console.error('Error loading initial evaluations:', error);
@@ -562,27 +590,25 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
     // Set up subscription
     try {
-      console.debug('Setting up evaluation subscriptions...');
       const client = getClient();
 
       // Helper function to handle evaluation changes
       const handleEvaluationChange = (evaluation: any, action: 'create' | 'update') => {
-        console.debug(`Handling ${action} for evaluation:`, {
-          evaluationId: evaluation.id,
-          type: evaluation.type,
-          taskData: evaluation.task,
-          taskId: evaluation.task?.id,
-          taskStatus: evaluation.task?.status,
-          taskType: typeof evaluation.task,
-          taskKeys: evaluation.task ? Object.keys(evaluation.task) : []
-        });
-
         if (action === 'create') {
           evaluations = [evaluation, ...evaluations];
         } else {
-          evaluations = evaluations.map(e => 
-            e.id === evaluation.id ? evaluation : e
-          );
+          evaluations = evaluations.map(e => {
+            if (e.id === evaluation.id) {
+              // Preserve scorecard/score data from existing evaluation if missing in update
+              const updatedEvaluation = {
+                ...evaluation,
+                scorecard: evaluation.scorecard || e.scorecard,
+                score: evaluation.score || e.score
+              };
+              return updatedEvaluation;
+            }
+            return e;
+          });
         }
         
         subscriber.next({ items: evaluations, isSynced: true });
@@ -666,17 +692,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
             task {
               ...TaskFields
             }
-            scoreResults {
-              items {
-                id
-                value
-                confidence
-                metadata
-                explanation
-                itemId
-                createdAt
-              }
-            }
+            # scoreResults intentionally omitted; will be lazy-loaded per selected evaluation
           }
         }
         ${TASK_FIELDS_FRAGMENT}
@@ -725,17 +741,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
             task {
               ...TaskFields
             }
-            scoreResults {
-              items {
-                id
-                value
-                confidence
-                metadata
-                explanation
-                itemId
-                createdAt
-              }
-            }
+            # scoreResults intentionally omitted; will be lazy-loaded per selected evaluation
           }
         }
         ${TASK_FIELDS_FRAGMENT}
@@ -746,8 +752,9 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
       const createSub = (client.graphql({ query: createEvaluationSubscriptionQuery }) as unknown as { subscribe: (observer: { next: ({ data }: { data: any }) => void, error: (error: any) => void }) => any }).subscribe({
         next: ({ data }: { data: any }) => {
           // Handle the subscription event
-          console.debug('Create subscription event received:', { data });
-          // Existing logic to handle create event
+          if (data?.onCreateEvaluation) {
+            handleEvaluationChange(data.onCreateEvaluation, 'create');
+          }
         },
         error: (error: any) => {
           console.error('Error in create subscription:', error);
@@ -758,8 +765,9 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
       // For update subscription
       const updateSub = (client.graphql({ query: updateEvaluationSubscriptionQuery }) as unknown as { subscribe: (observer: { next: ({ data }: { data: any }) => void, error: (error: any) => void }) => any }).subscribe({
         next: ({ data }: { data: any }) => {
-          console.debug('Update subscription event received:', { data });
-          // Existing logic to handle update event
+          if (data?.onUpdateEvaluation) {
+            handleEvaluationChange(data.onUpdateEvaluation, 'update');
+          }
         },
         error: (error: any) => {
           console.error('Error in update subscription:', error);
@@ -777,7 +785,6 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
     // Cleanup function
     return () => {
-      console.debug('Cleaning up evaluation subscriptions');
       subscriptionCleanup.forEach(sub => {
         try {
           if (sub && typeof sub.unsubscribe === 'function') {
@@ -805,6 +812,11 @@ export interface LocalScoreResult {
   };
   explanation: string | null;
   itemId: string | null;
+  itemIdentifiers?: Array<{
+    name: string;
+    value: string;
+    url?: string;
+  }> | null;
   createdAt: string;
 }
 
@@ -823,6 +835,11 @@ type RawScoreResult = {
   metadata: any;
   explanation: string | null;
   itemId: string | null;
+  itemIdentifiers?: Array<{
+    name: string;
+    value: string;
+    url?: string;
+  }> | null;
   correct: boolean;
   createdAt: string;
   scoringJob?: {
@@ -836,19 +853,7 @@ type RawScoreResults = {
   items: RawScoreResult[];
 };
 
-// Update the transformEvaluation function's score results handling
 export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvaluation | null {
-  console.debug('transformEvaluation input:', {
-    evaluationId: evaluation?.id,
-    hasTask: !!evaluation?.task,
-    taskType: typeof evaluation?.task,
-    taskData: evaluation?.task,
-    taskKeys: evaluation?.task ? Object.keys(evaluation.task) : [],
-    status: evaluation?.status,
-    type: evaluation?.type,
-    hasScoreResults: !!evaluation?.scoreResults,
-    scoreResultsType: evaluation?.scoreResults ? typeof evaluation.scoreResults : 'undefined'
-  });
 
   if (!evaluation) return null;
 
@@ -867,14 +872,22 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
       taskData = evaluation.task as AmplifyTask;
     }
   }
+  
+  // Get stage items - handle both LazyLoader and direct object formats
+  let stageItems: any[] = [];
+  if (taskData?.stages) {
+    // Check if stages is a LazyLoader function
+    if (typeof taskData.stages === 'function') {
+      const stageResponse = getValueFromLazyLoader(taskData.stages);
+      stageItems = stageResponse?.data?.items || [];
+  } else {
+      // Handle direct object format (new structure)
+      const direct: any = taskData.stages as unknown as { data?: { items?: any[] }, items?: any[] };
+      stageItems = direct?.data?.items || direct?.items || [];
+    }
+  }
 
-  console.debug('Task data after processing:', {
-    hasTaskData: !!taskData,
-    taskId: taskData?.id,
-    taskStatus: taskData?.status,
-    taskType: taskData?.type,
-    taskStages: taskData?.stages
-  });
+
 
   // Get scorecard and score data
   const scorecardData = evaluation.scorecard ? 
@@ -900,32 +913,88 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     }
   }
 
-  console.debug('Score results after initial processing:', {
-    hasRawScoreResults: !!rawScoreResults,
-    rawScoreResultsType: typeof rawScoreResults,
-    isArray: Array.isArray(rawScoreResults),
-    hasItems: rawScoreResults && typeof rawScoreResults === 'object' && 'items' in rawScoreResults
-  });
 
-  // Standardize score results to ensure consistent format
-  const standardizedScoreResults = standardizeScoreResults(rawScoreResults);
+  // Extract score results array
+  let standardizedScoreResults: any[] = [];
+  if (rawScoreResults) {
+    if (Array.isArray(rawScoreResults)) {
+      standardizedScoreResults = rawScoreResults;
+    } else if (typeof rawScoreResults === 'object' && 'items' in rawScoreResults && Array.isArray(rawScoreResults.items)) {
+      standardizedScoreResults = rawScoreResults.items;
+    }
+  }
 
-  console.debug('Score results after standardization:', {
-    count: standardizedScoreResults.length,
-    firstResult: standardizedScoreResults[0],
-    isArray: Array.isArray(standardizedScoreResults)
-  });
 
   // Transform score results into the expected format
-  const transformedScoreResults = standardizedScoreResults.map(result => ({
-    id: result.id,
-    value: result.value,
-    confidence: result.confidence ?? null,
-    metadata: result.metadata ?? null,
-    explanation: result.explanation ?? null,
-    itemId: result.itemId ?? null,
-    createdAt: result.createdAt || new Date().toISOString()
-  }));
+  const transformedScoreResults = standardizedScoreResults.map((result: any) => {
+    // Extract item identifier data if available
+    let itemIdentifiers = null;
+    
+    if (result.item?.itemIdentifiers?.items) {
+      itemIdentifiers = result.item.itemIdentifiers.items
+        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0)) // Sort by position
+        .map((identifier: any) => ({
+          name: identifier.name,
+          value: identifier.value,
+          url: identifier.url || undefined
+        }));
+    } else if (result.item?.identifiers) {
+      // Handle legacy JSON identifiers format
+      try {
+        const parsed = JSON.parse(result.item.identifiers);
+        if (Array.isArray(parsed)) {
+          itemIdentifiers = parsed.map((identifier: any) => ({
+            name: identifier.name,
+            value: identifier.value || identifier.id, // Support both value and id fields
+            url: identifier.url || undefined
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to parse legacy identifiers JSON:', error);
+      }
+    }
+
+    // Parse metadata (which might be JSON string, sometimes double-encoded)
+    let parsedMetadata;
+    try {
+      if (typeof result.metadata === 'string') {
+        parsedMetadata = JSON.parse(result.metadata);
+        if (typeof parsedMetadata === 'string') {
+          parsedMetadata = JSON.parse(parsedMetadata);
+        }
+      } else {
+        parsedMetadata = result.metadata || {};
+      }
+    } catch (e) {
+      console.warn('Error parsing metadata:', e);
+      parsedMetadata = {};
+    }
+
+    // Extract results from nested structure if present
+    const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
+    const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
+
+    // Construct properly formatted metadata object
+    const processedMetadata = {
+      human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? null,
+      correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct),
+      human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null,
+      text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? null
+    };
+
+    return {
+      id: result.id,
+      value: result.value,
+      confidence: result.confidence ?? null,
+      metadata: processedMetadata,
+      explanation: result.explanation ?? scoreResult?.explanation ?? null,
+      trace: result.trace ?? scoreResult?.trace ?? null,
+      itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
+      itemIdentifiers,
+      createdAt: result.createdAt || new Date().toISOString(),
+      feedbackItem: result.feedbackItem ?? null  // Preserve feedbackItem relationship
+    };
+  });
 
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: ProcessedEvaluation = {
@@ -944,15 +1013,6 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     scoreResults: transformedScoreResults
   };
 
-  console.debug('Final transformed evaluation:', {
-    evaluationId: transformedEvaluation.id,
-    hasTask: !!transformedEvaluation.task,
-    taskType: typeof transformedEvaluation.task,
-    taskKeys: transformedEvaluation.task ? Object.keys(transformedEvaluation.task) : [],
-    taskStages: transformedEvaluation.task?.stages,
-    scoreResultsCount: transformedEvaluation.scoreResults?.length,
-    firstScoreResult: transformedEvaluation.scoreResults?.[0]
-  });
 
   return transformedEvaluation;
 }
@@ -990,9 +1050,18 @@ export type Evaluation = {
       value: string | number;
       confidence: number | null;
       metadata: any;
+      trace: any | null;
       itemId: string | null;
+      itemIdentifiers?: Array<{
+        name: string;
+        value: string;
+        url?: string;
+      }> | null;
     }>;
   } | null;
+  scorecardId?: string | null;
+  scoreId?: string | null;
+  scoreVersionId?: string | null;
 };
 
 // Add type definitions for subscription events
@@ -1020,41 +1089,3 @@ export type TaskStageSubscriptionEvent = {
 export type { BaseEvaluation };
 
 // Add a standardization function for score results
-export function standardizeScoreResults(scoreResults: any): Array<any> {
-  console.log('standardizeScoreResults input:', {
-    type: typeof scoreResults,
-    isNull: scoreResults === null,
-    isUndefined: scoreResults === undefined,
-    isArray: Array.isArray(scoreResults),
-    hasItems: scoreResults && typeof scoreResults === 'object' && 'items' in scoreResults,
-    raw: scoreResults
-  });
-
-  // Case 1: null or undefined
-  if (!scoreResults) {
-    console.log('standardizeScoreResults: input is null or undefined, returning empty array');
-    return [];
-  }
-
-  // Case 2: already an array
-  if (Array.isArray(scoreResults)) {
-    console.log('standardizeScoreResults: input is already an array with length', scoreResults.length);
-    return scoreResults;
-  }
-
-  // Case 3: object with items property that is an array
-  if (typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
-    console.log('standardizeScoreResults: input is an object with items array of length', scoreResults.items.length);
-    return scoreResults.items;
-  }
-
-  // Case 4: object with items property that is not an array
-  if (typeof scoreResults === 'object' && 'items' in scoreResults) {
-    console.log('standardizeScoreResults: input has items property but it is not an array:', scoreResults.items);
-    return [];
-  }
-
-  // Case 5: unknown format
-  console.log('standardizeScoreResults: unknown format, returning empty array');
-  return [];
-}

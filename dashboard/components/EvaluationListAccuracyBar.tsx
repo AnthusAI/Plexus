@@ -44,7 +44,7 @@ export function EvaluationListAccuracyBar({
               className={cn(
                 "absolute top-0 left-0 h-full flex items-center pl-2 text-sm font-medium",
                 isSelected ? "bg-true-selected" : "bg-true",
-                isFocused ? "text-focus" : isSelected ? "text-true-selected-foreground" : "text-primary-foreground"
+                isFocused ? "text-focus" : isSelected ? "text-foreground-true" : "text-primary-foreground"
               )}
               style={{ 
                 width: `${trueWidth}%`, 

@@ -55,6 +55,31 @@ export default function AdvancedPage() {
             </Link>
           </div>
         </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Universal Code Snippets</h2>
+          <div className="space-y-4">
+            <p className="text-muted-foreground mb-4">
+              Learn about Plexus's universal YAML code format designed for seamless communication 
+              between humans, AI models, and other systems.
+            </p>
+            <Link href="/documentation/advanced/universal-code">
+              <DocButton>Explore Universal Code Snippets</DocButton>
+            </Link>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Plexus MCP Server</h2>
+          <div className="space-y-4">
+            <p className="text-muted-foreground mb-4">
+              Enable AI agents and tools to interact with Plexus functionality using the Multi-Agent Cooperative Protocol (MCP).
+            </p>
+            <Link href="/documentation/advanced/mcp-server">
+              <DocButton>Explore MCP Server</DocButton>
+            </Link>
+          </div>
+        </section>
       </div>
     </div>
   )

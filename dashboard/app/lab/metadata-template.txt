@@ -1,0 +1,37 @@
+/*
+  METADATA TEMPLATE FOR LAB ROUTES
+  
+  Copy this template to create a layout.tsx file in any lab route folder
+  where you want to customize the metadata for that route.
+  
+  Example usage:
+  1. Copy this template
+  2. Create a layout.tsx file in your route folder (e.g., /lab/your-route/layout.tsx)
+  3. Customize the title and description
+  
+  Note: This is a server component, so it cannot use client-side hooks or state.
+*/
+
+import React from 'react'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: "Your Route Title",
+  description: "Your route description goes here.",
+  openGraph: {
+    title: "Your Route Title",
+    description: "Your route description goes here.",
+  },
+  twitter: {
+    title: "Your Route Title",
+    description: "Your route description goes here.",
+  }
+}
+
+export default function YourRouteLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return children
+} 
