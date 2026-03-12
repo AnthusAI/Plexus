@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "88867be8-49b6-41eb-aad1-c16e26603a48",
+  "issue_id": "plx-5269b3d3-f84b-432a-858c-8bee66d69b86",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-11T00:00:12.930Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "Memory topics in the FeedbackAnalysis report are missing recency indicators. The original semantic reinforcement memory system tracked days_inactive for each topic. The backend should compute days_inactive (days since a topic last received new documents) and include it in the topic output. The frontend TopicList component already supports days_inactive in its interface and will render a badge automatically. In plexus/reports/blocks/feedback_analysis.py _run_memory_analysis, track last_seen timestamps per cluster and compute days_inactive when serializing topics to the output YAML.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 1,
+    "status": "open",
+    "title": "Add recency indicators to memory topics"
+  }
+}
