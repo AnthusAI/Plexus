@@ -94,10 +94,22 @@
       "author": "derek.norrbom",
       "text": "Updated CI workflow to avoid no-op semantic-release pushes causing GH013. Added semrel_check outputs (last_released, next_version, should_release), gated semantic-release auth/publish steps on should_release==true, and added token-identity validation to ensure ANTHUSBOT_GH_TOKEN resolves to anthusbot in runner.",
       "created_at": "2026-03-12T18:58:01.622525Z"
+    },
+    {
+      "id": "d6b01809-e4ac-4a73-a674-34ee6e27b42d",
+      "author": "derek.norrbom",
+      "text": "Addressing CodeQL alert actions/untrusted-checkout/high in release.yml by removing tainted workflow_run head_sha checkout. Plan: gate workflow_run to push events on main from same repo and checkout trusted refs/heads/main instead of workflow_run.head_sha.",
+      "created_at": "2026-03-12T20:12:52.626446Z"
+    },
+    {
+      "id": "1966e75a-6318-47d1-a467-08130113a139",
+      "author": "derek.norrbom",
+      "text": "Implemented CodeQL fix for workflow_run untrusted checkout: release job now requires workflow_run.event==push, head_branch==main, head_repository==current repo, and checkout uses trusted ref refs/heads/main instead of workflow_run.head_sha.",
+      "created_at": "2026-03-12T20:13:08.750117Z"
     }
   ],
   "created_at": "2026-03-11T17:17:47.271266Z",
-  "updated_at": "2026-03-12T18:58:01.622525Z",
+  "updated_at": "2026-03-12T20:13:08.750117Z",
   "closed_at": null,
   "custom": {}
 }
