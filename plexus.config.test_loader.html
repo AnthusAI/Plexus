@@ -1,0 +1,333 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.config.test_loader module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.core package" href="plexus.core.html" />
+    <link rel="prev" title="plexus.config.loader module" href="plexus.config.loader.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.config.html">plexus.config package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.config.html#plexus.config.ConfigLoader"><code class="docutils literal notranslate"><span class="pre">ConfigLoader</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.config.html#plexus.config.load_config"><code class="docutils literal notranslate"><span class="pre">load_config()</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.config.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.config.html">plexus.config package</a></li>
+      <li class="breadcrumb-item active">plexus.config.test_loader module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.config.test_loader.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.config.test_loader">
+<span id="plexus-config-test-loader-module"></span><h1>plexus.config.test_loader module<a class="headerlink" href="#module-plexus.config.test_loader" title="Link to this heading"></a></h1>
+<p>Tests for Plexus configuration loader.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.config.test_loader.</span></span><span class="sig-name descname"><span class="pre">TestConfigLoader</span></span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test cases for ConfigLoader class.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.setup_method">
+<span class="sig-name descname"><span class="pre">setup_method</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.setup_method" title="Link to this definition"></a></dt>
+<dd><p>Set up test fixtures.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.teardown_method">
+<span class="sig-name descname"><span class="pre">teardown_method</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.teardown_method" title="Link to this definition"></a></dt>
+<dd><p>Clean up after tests.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_change_working_directory">
+<span class="sig-name descname"><span class="pre">test_change_working_directory</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_expanduser</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_isdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_chdir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_change_working_directory" title="Link to this definition"></a></dt>
+<dd><p>Test changing working directory.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_change_working_directory_missing">
+<span class="sig-name descname"><span class="pre">test_change_working_directory_missing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_expanduser</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_isdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_chdir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_change_working_directory_missing" title="Link to this definition"></a></dt>
+<dd><p>Test changing to non-existent working directory.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_current_directory_vs_home_directory_precedence">
+<span class="sig-name descname"><span class="pre">test_current_directory_vs_home_directory_precedence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_current_directory_vs_home_directory_precedence" title="Link to this definition"></a></dt>
+<dd><p>Test that current directory config takes precedence over home directory.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_discover_config_sources">
+<span class="sig-name descname"><span class="pre">test_discover_config_sources</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_discover_config_sources" title="Link to this definition"></a></dt>
+<dd><p>Test configuration source discovery.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_environment_variable_precedence">
+<span class="sig-name descname"><span class="pre">test_environment_variable_precedence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_environment_variable_precedence" title="Link to this definition"></a></dt>
+<dd><p>Test that environment variables take precedence over YAML config.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_get_available_sources">
+<span class="sig-name descname"><span class="pre">test_get_available_sources</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_get_available_sources" title="Link to this definition"></a></dt>
+<dd><p>Test getting available configuration sources.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_get_config_value">
+<span class="sig-name descname"><span class="pre">test_get_config_value</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_get_config_value" title="Link to this definition"></a></dt>
+<dd><p>Test getting configuration values after loading.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_get_nested_value">
+<span class="sig-name descname"><span class="pre">test_get_nested_value</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_get_nested_value" title="Link to this definition"></a></dt>
+<dd><p>Test getting nested values from configuration.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_init">
+<span class="sig-name descname"><span class="pre">test_init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_init" title="Link to this definition"></a></dt>
+<dd><p>Test ConfigLoader initialization.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_load_config_multiple_files">
+<span class="sig-name descname"><span class="pre">test_load_config_multiple_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_load_yaml</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_load_config_multiple_files" title="Link to this definition"></a></dt>
+<dd><p>Test loading and merging configuration from multiple files.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_load_config_no_files">
+<span class="sig-name descname"><span class="pre">test_load_config_no_files</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_load_config_no_files" title="Link to this definition"></a></dt>
+<dd><p>Test loading configuration when no files exist.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_load_config_single_file">
+<span class="sig-name descname"><span class="pre">test_load_config_single_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_load_yaml</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_load_config_single_file" title="Link to this definition"></a></dt>
+<dd><p>Test loading configuration from a single file.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_load_yaml_file">
+<span class="sig-name descname"><span class="pre">test_load_yaml_file</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_load_yaml_file" title="Link to this definition"></a></dt>
+<dd><p>Test loading YAML configuration files.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_load_yaml_file_missing">
+<span class="sig-name descname"><span class="pre">test_load_yaml_file_missing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_load_yaml_file_missing" title="Link to this definition"></a></dt>
+<dd><p>Test loading non-existent YAML file.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_load_yaml_file_yml_extension">
+<span class="sig-name descname"><span class="pre">test_load_yaml_file_yml_extension</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_load_yaml_file_yml_extension" title="Link to this definition"></a></dt>
+<dd><p>Test loading YAML configuration files with .yml extension.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_merge_configs">
+<span class="sig-name descname"><span class="pre">test_merge_configs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_merge_configs" title="Link to this definition"></a></dt>
+<dd><p>Test merging configuration dictionaries.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_missing_config_files">
+<span class="sig-name descname"><span class="pre">test_missing_config_files</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_missing_config_files" title="Link to this definition"></a></dt>
+<dd><p>Test behavior when no config files exist.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_set_environment_variables">
+<span class="sig-name descname"><span class="pre">test_set_environment_variables</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_set_environment_variables" title="Link to this definition"></a></dt>
+<dd><p>Test setting environment variables from configuration.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_set_environment_variables_no_working_dir_change">
+<span class="sig-name descname"><span class="pre">test_set_environment_variables_no_working_dir_change</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_set_environment_variables_no_working_dir_change" title="Link to this definition"></a></dt>
+<dd><p>Test setting environment variables when working directory change fails.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_set_nested_value">
+<span class="sig-name descname"><span class="pre">test_set_nested_value</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_set_nested_value" title="Link to this definition"></a></dt>
+<dd><p>Test setting nested values in configuration.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestConfigLoader.test_yaml_vs_yml_extension_precedence">
+<span class="sig-name descname"><span class="pre">test_yaml_vs_yml_extension_precedence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestConfigLoader.test_yaml_vs_yml_extension_precedence" title="Link to this definition"></a></dt>
+<dd><p>Test that .yaml extension takes precedence over .yml in same directory.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestEnvironmentVariableMapping">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.config.test_loader.</span></span><span class="sig-name descname"><span class="pre">TestEnvironmentVariableMapping</span></span><a class="headerlink" href="#plexus.config.test_loader.TestEnvironmentVariableMapping" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test environment variable mapping completeness.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestEnvironmentVariableMapping.test_env_var_mapping_completeness">
+<span class="sig-name descname"><span class="pre">test_env_var_mapping_completeness</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestEnvironmentVariableMapping.test_env_var_mapping_completeness" title="Link to this definition"></a></dt>
+<dd><p>Test that all important environment variables are mapped.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestEnvironmentVariableMapping.test_yaml_key_format">
+<span class="sig-name descname"><span class="pre">test_yaml_key_format</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestEnvironmentVariableMapping.test_yaml_key_format" title="Link to this definition"></a></dt>
+<dd><p>Test that YAML keys follow consistent naming conventions.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestLoadConfigFunction">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.config.test_loader.</span></span><span class="sig-name descname"><span class="pre">TestLoadConfigFunction</span></span><a class="headerlink" href="#plexus.config.test_loader.TestLoadConfigFunction" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the convenience load_config function.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestLoadConfigFunction.setup_method">
+<span class="sig-name descname"><span class="pre">setup_method</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestLoadConfigFunction.setup_method" title="Link to this definition"></a></dt>
+<dd><p>Set up test fixtures.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestLoadConfigFunction.teardown_method">
+<span class="sig-name descname"><span class="pre">teardown_method</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestLoadConfigFunction.teardown_method" title="Link to this definition"></a></dt>
+<dd><p>Clean up after tests.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.config.test_loader.TestLoadConfigFunction.test_load_config_function">
+<span class="sig-name descname"><span class="pre">test_load_config_function</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_load_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.config.test_loader.TestLoadConfigFunction.test_load_config_function" title="Link to this definition"></a></dt>
+<dd><p>Test the convenience load_config function.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.config.loader.html" class="btn btn-neutral float-left" title="plexus.config.loader module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.core.html" class="btn btn-neutral float-right" title="plexus.core package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,452 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.lua_dsl.primitives.procedure module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.lua_dsl.primitives.retry module" href="plexus.cli.procedure.lua_dsl.primitives.retry.html" />
+    <link rel="prev" title="plexus.cli.procedure.lua_dsl.primitives.log module" href="plexus.cli.procedure.lua_dsl.primitives.log.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.lua_dsl.html">plexus.cli.procedure.lua_dsl package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.lua_dsl.primitives.html">plexus.cli.procedure.lua_dsl.primitives package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.lua_dsl.primitives.procedure module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.lua_dsl.primitives.procedure.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.lua_dsl.primitives.procedure">
+<span id="plexus-cli-procedure-lua-dsl-primitives-procedure-module"></span><h1>plexus.cli.procedure.lua_dsl.primitives.procedure module<a class="headerlink" href="#module-plexus.cli.procedure.lua_dsl.primitives.procedure" title="Link to this heading"></a></h1>
+<p>Procedure Primitive - Sub-procedure invocation and orchestration.</p>
+<p>Provides:
+- Procedure.run(procedure_id, params) - Execute sub-procedure synchronously
+- Procedure.spawn(procedure_id, params) - Launch sub-procedure asynchronously
+- Procedure.wait(procedure_id) - Wait for sub-procedure completion
+- Procedure.status(procedure_id) - Check sub-procedure status
+- Procedure.cancel(procedure_id) - Cancel running sub-procedure</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.procedure.</span></span><span class="sig-name descname"><span class="pre">ProcedurePrimitive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parent_procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mcp_server</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">openai_api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lua_sandbox</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Handles sub-procedure invocation and orchestration.</p>
+<p>Enables workflows to:
+- Execute sub-procedures synchronously or asynchronously
+- Monitor sub-procedure status
+- Cancel running sub-procedures
+- Build hierarchical workflow compositions</p>
+<p>Initialize Procedure primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: PlexusDashboardClient instance
+account_id: Account ID for procedure operations
+parent_procedure_id: ID of the parent procedure
+mcp_server: MCP server for tool access
+openai_api_key: Optional OpenAI API key
+lua_sandbox: Optional LuaSandbox for Lua table construction</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parent_procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mcp_server</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">openai_api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lua_sandbox</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize Procedure primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: PlexusDashboardClient instance
+account_id: Account ID for procedure operations
+parent_procedure_id: ID of the parent procedure
+mcp_server: MCP server for tool access
+openai_api_key: Optional OpenAI API key
+lua_sandbox: Optional LuaSandbox for Lua table construction</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.all_complete">
+<span class="sig-name descname"><span class="pre">all_complete</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.all_complete" title="Link to this definition"></a></dt>
+<dd><p>Check if all tasks have completed.</p>
+<dl>
+<dt>Args:</dt><dd><p>handles: List of task IDs</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if all tasks complete, False if any still running</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local batch = {}
+for i = 1, 10 do</p>
+<blockquote>
+<div><p>table.insert(batch, Procedure.spawn(“item”, {id = i}))</p>
+</div></blockquote>
+<p>end</p>
+<dl class="simple">
+<dt>while not Procedure.all_complete(batch) do</dt><dd><p>Log.info(“Processing batch…”)
+Sleep(5)</p>
+</dd>
+</dl>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.cancel">
+<span class="sig-name descname"><span class="pre">cancel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.cancel" title="Link to this definition"></a></dt>
+<dd><p>Cancel a running sub-procedure.</p>
+<dl>
+<dt>Args:</dt><dd><p>task_id: Task ID returned by spawn()</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if cancelled successfully, False if already completed</p>
+</dd>
+<dt>Raises:</dt><dd><p>RuntimeError: If task not found</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local task_id = Procedure.spawn(“slow-task”, {})</p>
+<p>– Cancel if taking too long
+Sleep(10)
+if Procedure.status(task_id) == “RUNNING” then</p>
+<blockquote>
+<div><p>Procedure.cancel(task_id)
+Log.info(“Task cancelled”)</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.inject">
+<span class="sig-name descname"><span class="pre">inject</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.inject" title="Link to this definition"></a></dt>
+<dd><p>Inject a message into a running sub-procedure’s queue.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>handle: Task ID from spawn()
+message: Message to inject</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if injected successfully, False otherwise</p>
+</dd>
+<dt>Raises:</dt><dd><p>RuntimeError: If task not found</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local task = Procedure.spawn(“analysis”, {})
+Procedure.inject(task, “Focus on security patterns”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.is_complete">
+<span class="sig-name descname"><span class="pre">is_complete</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.is_complete" title="Link to this definition"></a></dt>
+<dd><p>Check if a task has completed (success, failure, or cancellation).</p>
+<dl>
+<dt>Args:</dt><dd><p>handle: Task ID from spawn()</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if task is in terminal state, False if still running</p>
+</dd>
+<dt>Raises:</dt><dd><p>RuntimeError: If task not found</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local task = Procedure.spawn(“analysis”, {})
+while not Procedure.is_complete(task) do</p>
+<blockquote>
+<div><p>Log.info(“Still running…”)
+Sleep(2)</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.run" title="Link to this definition"></a></dt>
+<dd><p>Execute a sub-procedure synchronously and wait for completion.</p>
+<dl>
+<dt>Args:</dt><dd><p>procedure_id: ID of the procedure to execute
+params: Optional parameters to pass to the procedure</p>
+</dd>
+<dt>Returns:</dt><dd><p>Result from the sub-procedure</p>
+</dd>
+<dt>Raises:</dt><dd><p>RuntimeError: If procedure execution fails</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local result = Procedure.run(“score-analysis-proc”, {</dt><dd><p>scorecard = “compliance”,
+days = 7</p>
+</dd>
+</dl>
+<p>})
+Log.info(“Sub-procedure complete”, {status = result.status})</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.spawn">
+<span class="sig-name descname"><span class="pre">spawn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.spawn" title="Link to this definition"></a></dt>
+<dd><p>Launch a sub-procedure asynchronously without waiting.</p>
+<dl>
+<dt>Args:</dt><dd><p>procedure_id: ID of the procedure to execute
+params: Optional parameters to pass to the procedure</p>
+</dd>
+<dt>Returns:</dt><dd><p>Task ID or execution identifier for the spawned procedure</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local task_id = Procedure.spawn(“data-processing”, {</dt><dd><p>input_file = “/tmp/data.json”</p>
+</dd>
+</dl>
+<p>})
+Log.info(“Spawned sub-procedure”, {task_id = task_id})</p>
+<p>– Continue with other work…</p>
+<p>– Later, wait for completion
+local result = Procedure.wait(task_id)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.status">
+<span class="sig-name descname"><span class="pre">status</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.status" title="Link to this definition"></a></dt>
+<dd><p>Check the status of a spawned sub-procedure.</p>
+<dl>
+<dt>Args:</dt><dd><p>task_id: Task ID returned by spawn()</p>
+</dd>
+<dt>Returns:</dt><dd><p>Status string: ‘RUNNING’, ‘COMPLETED’, ‘FAILED’, ‘CANCELLED’, ‘PENDING’</p>
+</dd>
+<dt>Raises:</dt><dd><p>RuntimeError: If task not found</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local task_id = Procedure.spawn(“long-running”, {})</p>
+<dl class="simple">
+<dt>while Procedure.status(task_id) == “RUNNING” do</dt><dd><p>Log.info(“Still running…”)
+Sleep(5)</p>
+</dd>
+</dl>
+<p>end</p>
+<p>Log.info(“Task finished”, {status = Procedure.status(task_id)})</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.wait">
+<span class="sig-name descname"><span class="pre">wait</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.wait" title="Link to this definition"></a></dt>
+<dd><p>Wait for a spawned sub-procedure to complete.</p>
+<dl>
+<dt>Args:</dt><dd><p>task_id: Task ID returned by spawn()
+timeout: Optional timeout in seconds (None = wait forever)</p>
+</dd>
+<dt>Returns:</dt><dd><p>Result from the sub-procedure</p>
+</dd>
+<dt>Raises:</dt><dd><p>RuntimeError: If task not found or execution fails
+TimeoutError: If timeout exceeded</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local task_id = Procedure.spawn(“analysis”, {data = data})</p>
+<p>– Do other work…</p>
+<p>local result = Procedure.wait(task_id, 60)  – Wait up to 60 seconds
+Log.info(“Analysis complete”, {result = result})</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.wait_all">
+<span class="sig-name descname"><span class="pre">wait_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.wait_all" title="Link to this definition"></a></dt>
+<dd><p>Wait for all sub-procedures to complete.</p>
+<dl>
+<dt>Args:</dt><dd><p>handles: List of task IDs
+timeout: Optional timeout in seconds</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dict/Lua table mapping handle -&gt; result</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local tasks = {</dt><dd><p>Procedure.spawn(“process-1”, {}),
+Procedure.spawn(“process-2”, {})</p>
+</dd>
+</dl>
+<p>}
+local results = Procedure.wait_all(tasks, 120)
+for handle, result in pairs(results) do</p>
+<blockquote>
+<div><p>Log.info(“Result”, {handle = handle, success = result.success})</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.wait_any">
+<span class="sig-name descname"><span class="pre">wait_any</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.procedure.ProcedurePrimitive.wait_any" title="Link to this definition"></a></dt>
+<dd><p>Wait for first sub-procedure to complete.</p>
+<dl>
+<dt>Args:</dt><dd><p>handles: List of task IDs (Lua table or Python list)
+timeout: Optional timeout in seconds</p>
+</dd>
+<dt>Returns:</dt><dd><p>Tuple of (completed_handle, result)</p>
+</dd>
+<dt>Raises:</dt><dd><p>RuntimeError: If no handles or handle not found
+TimeoutError: If timeout exceeded</p>
+</dd>
+<dt>Example (Lua):</dt><dd><dl class="simple">
+<dt>local tasks = {</dt><dd><p>Procedure.spawn(“fast”, {}),
+Procedure.spawn(“slow”, {})</p>
+</dd>
+</dl>
+<p>}
+local winner, result = Procedure.wait_any(tasks, 30)
+Log.info(“First complete”, {winner = winner})</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.lua_dsl.primitives.log.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.lua_dsl.primitives.log module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.lua_dsl.primitives.retry.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.lua_dsl.primitives.retry module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

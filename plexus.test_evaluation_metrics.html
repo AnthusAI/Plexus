@@ -1,0 +1,351 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.test_evaluation_metrics module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.test_prediction_commands module" href="plexus.test_prediction_commands.html" />
+    <link rel="prev" title="plexus.confidence_calibration module" href="plexus.confidence_calibration.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.CustomLogging.html">plexus.CustomLogging module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Evaluation.html">plexus.Evaluation module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.LangChainUser.html">plexus.LangChainUser module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.PromptTemplateLoader.html">plexus.PromptTemplateLoader module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Registries.html">plexus.Registries module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Scorecard.html">plexus.Scorecard module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResults.html">plexus.ScorecardResults module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResultsAnalysis.html">plexus.ScorecardResultsAnalysis module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.confidence_calibration.html">plexus.confidence_calibration module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.test_evaluation_metrics module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.MockScorecard"><code class="docutils literal notranslate"><span class="pre">MockScorecard</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.TestConfusionMatrixBuilding"><code class="docutils literal notranslate"><span class="pre">TestConfusionMatrixBuilding</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.TestDistributionCalculations"><code class="docutils literal notranslate"><span class="pre">TestDistributionCalculations</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.TestErrorHandling"><code class="docutils literal notranslate"><span class="pre">TestErrorHandling</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.TestLabelStandardization"><code class="docutils literal notranslate"><span class="pre">TestLabelStandardization</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.TestMetricsCalculation"><code class="docutils literal notranslate"><span class="pre">TestMetricsCalculation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.TestMultiScoreHandling"><code class="docutils literal notranslate"><span class="pre">TestMultiScoreHandling</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.create_mock_evaluation_results"><code class="docutils literal notranslate"><span class="pre">create_mock_evaluation_results()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.create_mock_score_result"><code class="docutils literal notranslate"><span class="pre">create_mock_score_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_evaluation_metrics.mock_evaluation"><code class="docutils literal notranslate"><span class="pre">mock_evaluation()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_prediction_commands.html">plexus.test_prediction_commands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_score.html">plexus.test_score module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.training_data_lake.html">plexus.training_data_lake module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.test_evaluation_metrics module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.test_evaluation_metrics.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.test_evaluation_metrics">
+<span id="plexus-test-evaluation-metrics-module"></span><h1>plexus.test_evaluation_metrics module<a class="headerlink" href="#module-plexus.test_evaluation_metrics" title="Link to this heading"></a></h1>
+<p>Focused tests for Evaluation.py prediction processing and metrics computation.</p>
+<p>Tests the most critical business logic:
+- Metrics calculation accuracy
+- Label standardization 
+- Confusion matrix building
+- Distribution calculations
+- Edge cases and error handling</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.MockScorecard">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">MockScorecard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'test_scorecard'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.MockScorecard" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Mock scorecard for testing</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.MockScorecard.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'test_scorecard'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.MockScorecard.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.MockScorecard.get_accumulated_costs">
+<span class="sig-name descname"><span class="pre">get_accumulated_costs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.MockScorecard.get_accumulated_costs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.MockScorecard.score_names">
+<span class="sig-name descname"><span class="pre">score_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.MockScorecard.score_names" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestConfusionMatrixBuilding">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">TestConfusionMatrixBuilding</span></span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestConfusionMatrixBuilding" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test confusion matrix construction logic</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestConfusionMatrixBuilding.test_binary_confusion_matrix_structure">
+<span class="sig-name descname"><span class="pre">test_binary_confusion_matrix_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestConfusionMatrixBuilding.test_binary_confusion_matrix_structure" title="Link to this definition"></a></dt>
+<dd><p>Test binary confusion matrix has correct structure</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestConfusionMatrixBuilding.test_multiclass_confusion_matrix">
+<span class="sig-name descname"><span class="pre">test_multiclass_confusion_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestConfusionMatrixBuilding.test_multiclass_confusion_matrix" title="Link to this definition"></a></dt>
+<dd><p>Test confusion matrix for multiclass classification</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestConfusionMatrixBuilding.test_single_class_confusion_matrix">
+<span class="sig-name descname"><span class="pre">test_single_class_confusion_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestConfusionMatrixBuilding.test_single_class_confusion_matrix" title="Link to this definition"></a></dt>
+<dd><p>Test confusion matrix when only one class is present</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestDistributionCalculations">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">TestDistributionCalculations</span></span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestDistributionCalculations" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test predicted and actual label distribution calculations</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestDistributionCalculations.test_actual_distribution_accuracy">
+<span class="sig-name descname"><span class="pre">test_actual_distribution_accuracy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestDistributionCalculations.test_actual_distribution_accuracy" title="Link to this definition"></a></dt>
+<dd><p>Test actual label distribution is calculated correctly</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestDistributionCalculations.test_distribution_with_standardized_labels">
+<span class="sig-name descname"><span class="pre">test_distribution_with_standardized_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestDistributionCalculations.test_distribution_with_standardized_labels" title="Link to this definition"></a></dt>
+<dd><p>Test distribution calculation with label standardization</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestDistributionCalculations.test_predicted_distribution_accuracy">
+<span class="sig-name descname"><span class="pre">test_predicted_distribution_accuracy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestDistributionCalculations.test_predicted_distribution_accuracy" title="Link to this definition"></a></dt>
+<dd><p>Test predicted label distribution is calculated correctly</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestErrorHandling">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">TestErrorHandling</span></span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestErrorHandling" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test error handling in metrics computation</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestErrorHandling.test_all_error_results">
+<span class="sig-name descname"><span class="pre">test_all_error_results</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestErrorHandling.test_all_error_results" title="Link to this definition"></a></dt>
+<dd><p>Test handling when all results are errors</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestErrorHandling.test_error_as_legitimate_class_label">
+<span class="sig-name descname"><span class="pre">test_error_as_legitimate_class_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestErrorHandling.test_error_as_legitimate_class_label" title="Link to this definition"></a></dt>
+<dd><p>Test that ‘error’ as a class label (without error attribute) is counted in metrics</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestErrorHandling.test_error_results_filtered_out">
+<span class="sig-name descname"><span class="pre">test_error_results_filtered_out</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestErrorHandling.test_error_results_filtered_out" title="Link to this definition"></a></dt>
+<dd><p>Test that ERROR results are filtered out of metrics</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestErrorHandling.test_missing_metadata_handling">
+<span class="sig-name descname"><span class="pre">test_missing_metadata_handling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestErrorHandling.test_missing_metadata_handling" title="Link to this definition"></a></dt>
+<dd><p>Test handling of results with missing metadata</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestLabelStandardization">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">TestLabelStandardization</span></span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestLabelStandardization" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test label standardization and comparison logic</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestLabelStandardization.test_case_insensitive_matching">
+<span class="sig-name descname"><span class="pre">test_case_insensitive_matching</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestLabelStandardization.test_case_insensitive_matching" title="Link to this definition"></a></dt>
+<dd><p>Test that label matching is case insensitive</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestLabelStandardization.test_mixed_null_representations">
+<span class="sig-name descname"><span class="pre">test_mixed_null_representations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestLabelStandardization.test_mixed_null_representations" title="Link to this definition"></a></dt>
+<dd><p>Test mixed null representations in actual vs predicted</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestLabelStandardization.test_null_value_standardization">
+<span class="sig-name descname"><span class="pre">test_null_value_standardization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestLabelStandardization.test_null_value_standardization" title="Link to this definition"></a></dt>
+<dd><p>Test various null representations are standardized to ‘na’</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestLabelStandardization.test_whitespace_handling">
+<span class="sig-name descname"><span class="pre">test_whitespace_handling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestLabelStandardization.test_whitespace_handling" title="Link to this definition"></a></dt>
+<dd><p>Test whitespace is handled in label comparison</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestMetricsCalculation">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">TestMetricsCalculation</span></span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestMetricsCalculation" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test core metrics calculation logic</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestMetricsCalculation.test_all_positive_predictions">
+<span class="sig-name descname"><span class="pre">test_all_positive_predictions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestMetricsCalculation.test_all_positive_predictions" title="Link to this definition"></a></dt>
+<dd><p>Test edge case where all predictions are positive</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestMetricsCalculation.test_empty_results">
+<span class="sig-name descname"><span class="pre">test_empty_results</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestMetricsCalculation.test_empty_results" title="Link to this definition"></a></dt>
+<dd><p>Test handling of empty results</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestMetricsCalculation.test_imperfect_binary_classification">
+<span class="sig-name descname"><span class="pre">test_imperfect_binary_classification</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestMetricsCalculation.test_imperfect_binary_classification" title="Link to this definition"></a></dt>
+<dd><p>Test binary classification with some errors</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestMetricsCalculation.test_perfect_binary_classification">
+<span class="sig-name descname"><span class="pre">test_perfect_binary_classification</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestMetricsCalculation.test_perfect_binary_classification" title="Link to this definition"></a></dt>
+<dd><p>Test perfect binary classification metrics</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestMultiScoreHandling">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">TestMultiScoreHandling</span></span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestMultiScoreHandling" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test handling of multiple scores in evaluation</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.TestMultiScoreHandling.test_primary_score_filtering">
+<span class="sig-name descname"><span class="pre">test_primary_score_filtering</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_evaluation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.TestMultiScoreHandling.test_primary_score_filtering" title="Link to this definition"></a></dt>
+<dd><p>Test that only primary score is used for metrics when specified</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.create_mock_evaluation_results">
+<span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">create_mock_evaluation_results</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prediction_pairs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'test_score'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.create_mock_evaluation_results" title="Link to this definition"></a></dt>
+<dd><p>Create mock evaluation results from (predicted, actual) pairs</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.create_mock_score_result">
+<span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">create_mock_score_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">predicted_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">actual_label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">correct</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'test_score'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.create_mock_score_result" title="Link to this definition"></a></dt>
+<dd><p>Create a mock Score.Result for testing</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.test_evaluation_metrics.mock_evaluation">
+<span class="sig-prename descclassname"><span class="pre">plexus.test_evaluation_metrics.</span></span><span class="sig-name descname"><span class="pre">mock_evaluation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_evaluation_metrics.mock_evaluation" title="Link to this definition"></a></dt>
+<dd><p>Create a mock evaluation instance</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.confidence_calibration.html" class="btn btn-neutral float-left" title="plexus.confidence_calibration module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.test_prediction_commands.html" class="btn btn-neutral float-right" title="plexus.test_prediction_commands module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
