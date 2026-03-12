@@ -70,10 +70,16 @@
       "author": "derek.norrbom",
       "text": "Validated why simplified requirements still fail locally. Root cause was local miniconda corruption: packaging-25.0.dist-info missing METADATA, which caused Snyk internal resolver crash. After repairing packaging, Snyk error changed to expected 'Required packages missing: dateparser' (local mode requires deps installed) and passes with --skip-unresolved.",
       "created_at": "2026-03-12T17:05:49.688867Z"
+    },
+    {
+      "id": "e6e7f389-b558-44ca-ab50-cb466039fa76",
+      "author": "derek.norrbom",
+      "text": "Root-cause validation for PR #109 Snyk check: in a clean Python resolver environment (python:3.11-slim), installing generated root requirements fails immediately on VCS dependency line because git binary is absent (Cannot find command 'git'). This matches 'Packages installation failed' behavior from Snyk Git integration. Lambda manifest may appear healthy because unchanged manifests are not necessarily part of the PR check scope.",
+      "created_at": "2026-03-12T17:28:56.542404Z"
     }
   ],
   "created_at": "2026-03-11T17:17:47.271266Z",
-  "updated_at": "2026-03-12T17:05:49.688867Z",
+  "updated_at": "2026-03-12T17:28:56.542404Z",
   "closed_at": null,
   "custom": {}
 }
