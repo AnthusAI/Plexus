@@ -25,6 +25,7 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
         memory_weight: number;
         memory_tier: "hot" | "warm" | "cold";
         lifecycle_tier: string;
+        cause?: string;
         is_new: boolean;
         is_trending: boolean;
       }>;
