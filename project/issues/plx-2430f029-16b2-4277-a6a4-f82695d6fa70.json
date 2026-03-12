@@ -1,0 +1,18 @@
+{
+  "id": "plx-2430f029-16b2-4277-a6a4-f82695d6fa70",
+  "title": "Move memories data to S3 attachment to avoid DynamoDB size limit",
+  "description": "The memories section of FeedbackAnalysis report output is ~116KB and growing, which risks hitting DynamoDB's 400KB item size limit. The memories data should be offloaded to S3 as an attachment, similar to how indexed_items_file already works for score details. In plexus/reports/blocks/feedback_analysis.py: (1) serialize the memories dict to a YAML file, (2) upload it via attach_detail_file() to get an S3 key, (3) replace the inline memories: section in the output with a memories_file: key pointing to the S3 path. The frontend FeedbackAnalysis.tsx must then lazily fetch and parse memories_file when needed before merging topics into scores.",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T00:00:33.002897Z",
+  "updated_at": "2026-03-11T00:12:39.104505Z",
+  "closed_at": "2026-03-11T00:12:39.104505Z",
+  "custom": {}
+}
