@@ -723,26 +723,46 @@ class FeedbackAnalysis(BaseReportBlock):
                     else:
                         t["label"] = result
 
-            # Parallel causal inference — one LLM call per exemplar that has context
+            # Phase 2: Parallel per-exemplar causal inference — intermediate results, not written to output
             if use_causal_inference:
                 causal_tasks = []
-                causal_exemplar_refs = []
+                causal_topic_refs = []  # which topic each task belongs to
                 for s in scores_out:
                     for t in s["topics"]:
                         for ex in t["exemplars"]:
                             ctx = ex.pop("_causal_context", None)
                             if ctx:
                                 causal_tasks.append(asyncio.to_thread(self._infer_root_cause_llm, **ctx))
-                                causal_exemplar_refs.append(ex)
+                                causal_topic_refs.append(t)
                 if causal_tasks:
                     self._log(f"Memory analysis: inferring root causes for {len(causal_tasks)} exemplar(s) in parallel")
                     causal_results = await asyncio.gather(*causal_tasks, return_exceptions=True)
-                    causes_found = 0
-                    for ex, result in zip(causal_exemplar_refs, causal_results):
+                    for t, result in zip(causal_topic_refs, causal_results):
                         if not isinstance(result, Exception) and result:
-                            ex["cause"] = result
-                            causes_found += 1
-                    self._log(f"Memory analysis: root causes inferred for {causes_found}/{len(causal_tasks)} exemplar(s)")
+                            t.setdefault("_exemplar_causes", []).append(result)
+
+            # Phase 3: Synthesize per-topic cause from intermediate exemplar causes
+            if use_causal_inference:
+                synthesis_tasks = []
+                synthesis_topic_refs = []
+                for s in scores_out:
+                    for t in s["topics"]:
+                        causes = t.pop("_exemplar_causes", None)
+                        if causes:
+                            synthesis_tasks.append(asyncio.to_thread(
+                                self._synthesize_topic_cause_llm,
+                                t["label"], t.get("keywords", []), causes,
+                            ))
+                            synthesis_topic_refs.append(t)
+                if synthesis_tasks:
+                    self._log(f"Memory analysis: synthesizing root cause for {len(synthesis_tasks)} topic(s) in parallel")
+                    synthesis_results = await asyncio.gather(*synthesis_tasks, return_exceptions=True)
+                    synth_found = 0
+                    for t, result in zip(synthesis_topic_refs, synthesis_results):
+                        if not isinstance(result, Exception) and result:
+                            t["cause"] = result
+                            synth_found += 1
+                    self._log(f"Memory analysis: root causes synthesized for {synth_found}/{len(synthesis_tasks)} topic(s)")
 
             self._log(f"Memory analysis complete: {len(scores_out)} score(s) with topics.")
             return {"scores": scores_out} if scores_out else None
@@ -751,6 +771,47 @@ class FeedbackAnalysis(BaseReportBlock):
             self._log(f"Memory analysis failed (non-fatal): {e}", level="WARNING")
             import traceback
             self._log(traceback.format_exc(), level="DEBUG")
+            return None
+
+    def _synthesize_topic_cause_llm(
+        self,
+        topic_label: str,
+        keywords: List[str],
+        exemplar_causes: List[str],
+    ) -> Optional[str]:
+        """Synthesize a single root cause statement for a topic bucket from per-exemplar causes."""
+        try:
+            import boto3
+            import json as _json
+
+            keyword_str = ", ".join(keywords[:8]) if keywords else ""
+            causes_str = "\n".join(f"{i+1}. {c}" for i, c in enumerate(exemplar_causes))
+            prompt = (
+                f"You are synthesizing root cause analyses for a cluster of similar AI classifier misalignment cases.\n"
+                f"The cluster is labeled \"{topic_label}\".\n"
+                f"Keywords: {keyword_str}\n\n"
+                f"Root causes inferred from individual examples in this cluster:\n{causes_str}\n\n"
+                f"Based on these, summarize the single most likely shared root cause for this cluster "
+                f"in 1-2 concise sentences. Be specific and actionable."
+            )
+
+            client = boto3.client("bedrock-runtime", region_name="us-east-1")
+            body = _json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 100,
+                "messages": [{"role": "user", "content": prompt}],
+            })
+            response = client.invoke_model(
+                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                body=body,
+                contentType="application/json",
+                accept="application/json",
+            )
+            result = _json.loads(response["body"].read())
+            cause = result["content"][0]["text"].strip()
+            return cause if cause else None
+        except Exception as e:
+            self._log(f"Topic cause synthesis LLM call failed: {e}", level="WARNING")
             return None
 
     async def _gather_causal_context(
