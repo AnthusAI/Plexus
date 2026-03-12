@@ -58,10 +58,22 @@
       "author": "derek.norrbom",
       "text": "Updating requirements generation script to prepend explanatory comments in requirements.txt (auto-generated, do not edit manually, intended for Snyk dependency scanning).",
       "created_at": "2026-03-12T16:41:03.290871Z"
+    },
+    {
+      "id": "e4e588db-30c2-4296-bee0-1aa3a961c7c2",
+      "author": "derek.norrbom",
+      "text": "Investigated Snyk requirements scan failure. Tested lambda-style VCS dependency syntax (git+ URL without package-name prefix) and confirmed pip install behavior is equivalent. Local Snyk still fails with internal resolver traceback: FileNotFoundError for packaging-25.0.dist-info/METADATA. Also reproduced that clean Linux env without git fails any VCS dependency install. Next step: normalize generated requirements VCS lines to lambda-style and add guard comments/recommendation for Snyk-compatible manifest.",
+      "created_at": "2026-03-12T17:01:11.802380Z"
+    },
+    {
+      "id": "089a0525-6387-4710-b162-35a0cbfc6a3f",
+      "author": "derek.norrbom",
+      "text": "Validated why simplified requirements still fail locally. Root cause was local miniconda corruption: packaging-25.0.dist-info missing METADATA, which caused Snyk internal resolver crash. After repairing packaging, Snyk error changed to expected 'Required packages missing: dateparser' (local mode requires deps installed) and passes with --skip-unresolved.",
+      "created_at": "2026-03-12T17:05:49.688867Z"
     }
   ],
   "created_at": "2026-03-11T17:17:47.271266Z",
-  "updated_at": "2026-03-12T16:41:03.290871Z",
+  "updated_at": "2026-03-12T17:05:49.688867Z",
   "closed_at": null,
   "custom": {}
 }
