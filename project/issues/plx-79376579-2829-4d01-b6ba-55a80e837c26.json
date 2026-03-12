@@ -1,0 +1,30 @@
+{
+  "id": "plx-79376579-2829-4d01-b6ba-55a80e837c26",
+  "title": "[Snyk Code] Path Traversal",
+  "description": "## Path Traversal\n\n**Severity:** medium\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/cli/score_chat/repl.py`\n**Location:** line 1062, column 18 to line 1062, column 22\n**Classes:** CWE-CWE-23\n### Snippet (plexus/cli/score_chat/repl.py:1060-1064)\n```\n1060 |             \n1061 |             # Write to file\n1062 |             with open(yaml_path, 'w') as f:\n1063 |                 f.write(version_data['configuration'])\n1064 |             \n```\n\n**Issue Key:** 7f0727cf-a92e-4ff9-ab25-2f5212a9dba6\n\n### Details\nPath Traversal\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.693013Z",
+  "updated_at": "2026-03-11T21:27:00.591893Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 18,
+    "snyk_end_column": 22,
+    "snyk_end_line": 1062,
+    "snyk_file": "plexus/cli/score_chat/repl.py",
+    "snyk_key": "7f0727cf-a92e-4ff9-ab25-2f5212a9dba6",
+    "snyk_line": 1062,
+    "snyk_severity": "medium",
+    "snyk_type": "code"
+  }
+}

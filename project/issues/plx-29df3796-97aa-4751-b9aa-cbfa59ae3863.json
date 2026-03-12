@@ -1,0 +1,30 @@
+{
+  "id": "plx-29df3796-97aa-4751-b9aa-cbfa59ae3863",
+  "title": "[Snyk Code] Hardcoded Non-Cryptographic Secret",
+  "description": "## Hardcoded Non-Cryptographic Secret\n\n**Severity:** low\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/dashboard/api/client_test.py`\n**Location:** line 31, column 59 to line 31, column 66\n**Classes:** CWE-CWE-547\n### Snippet (plexus/dashboard/api/client_test.py:29-33)\n```\n  29 | def mock_client():\n  30 |     \"\"\"Create a mock client for testing batch scoring jobs\"\"\"\n  31 |     client = PlexusDashboardClient(api_url=\"http://test\", api_key=\"test-key\")\n  32 |     \n  33 |     # Mock the execute method\n```\n\n**Issue Key:** 234e947d-1218-4011-ab53-2c71697b2ef2\n\n### Details\nHardcoded Non-Cryptographic Secret\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.695532Z",
+  "updated_at": "2026-03-11T21:27:00.603109Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 59,
+    "snyk_end_column": 66,
+    "snyk_end_line": 31,
+    "snyk_file": "plexus/dashboard/api/client_test.py",
+    "snyk_key": "234e947d-1218-4011-ab53-2c71697b2ef2",
+    "snyk_line": 31,
+    "snyk_severity": "low",
+    "snyk_type": "code"
+  }
+}

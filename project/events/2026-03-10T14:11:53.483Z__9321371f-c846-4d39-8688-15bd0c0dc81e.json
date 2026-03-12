@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9321371f-c846-4d39-8688-15bd0c0dc81e",
+  "issue_id": "plx-17451fed-8300-4510-a74f-70825f15ac0b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T14:11:53.483Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** frontend developer, **I want** the topic rendering logic extracted from `VectorTopicMemory.tsx` into a shared `TopicList` component, **so that** both `VectorTopicMemory` and `FeedbackAnalysis` can render memory topics without duplicating code.\n\n## Background\n\n`VectorTopicMemory.tsx` contains a `TopicCard` function component and topic list rendering logic that displays memory tiers (hot/warm/cold badges), lifecycle tiers (new/trending/established), keywords, exemplars, member counts, and days inactive. This rendering is currently tightly coupled to the VectorTopicMemory block.\n\nFeedbackAnalysis needs to render the same topic cards in its memories section. Rather than duplicating the rendering code, extract it into a reusable component.\n\n## Solution\n\nCreate `dashboard/components/ui/topic-list.tsx` containing:\n\n- `TopicCard` component — renders a single topic with all its metadata badges, keywords, and exemplars\n- `TopicList` component — renders a list of `TopicCard` items, optionally grouped by score\n\nProps interface:\n\n```typescript\ninterface TopicItem {\n  cluster_id: number;\n  label: string;\n  keywords?: string[];\n  exemplars?: Array<string | { text: string; item_id?: string; identifiers?: Record<string, string> }>;\n  memory_weight: number;\n  memory_tier: string;\n  lifecycle_tier?: string;\n  is_new?: boolean;\n  is_trending?: boolean;\n  member_count: number;\n  p95_distance?: number;\n  days_inactive?: number;\n  has_short_term_memory?: boolean;\n  has_medium_term_memory?: boolean;\n  has_long_term_memory?: boolean;\n}\n\ninterface TopicListProps {\n  topics: TopicItem[];\n  title?: string;\n  collapsible?: boolean;\n  defaultExpanded?: boolean;\n}\n```\n\nThe `exemplars` type is a union to support both the old format (plain strings from existing VectorTopicMemory output) and the new format (objects with item_id and identifiers from Story plx-679a29).\n\nAfter extraction, `VectorTopicMemory.tsx` imports and uses the shared component instead of its inline rendering.\n\n## Key Files\n\n- Create: `dashboard/components/ui/topic-list.tsx`\n- Modify: `dashboard/components/blocks/VectorTopicMemory.tsx` — replace inline rendering with shared component\n\n## Dependencies\n\nNone. Can start in parallel with backend stories.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+    "priority": 2,
+    "status": "open",
+    "title": "Extract shared TopicList component from VectorTopicMemory"
+  }
+}

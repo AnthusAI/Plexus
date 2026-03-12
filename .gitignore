@@ -34,5 +34,8 @@ dashboard/public/brands
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor/rules/snyk_rules.mdc
-
 .tactus/
+check_report.py
+
+# Kanbus overlay (ephemeral local state)
+project/.overlay/

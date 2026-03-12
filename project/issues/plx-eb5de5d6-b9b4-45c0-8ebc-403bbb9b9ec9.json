@@ -1,0 +1,30 @@
+{
+  "id": "plx-eb5de5d6-b9b4-45c0-8ebc-403bbb9b9ec9",
+  "title": "[Snyk Code] Insecure Temporary File",
+  "description": "## Insecure Temporary File\n\n**Severity:** low\n**Project:** `AnthusAI/Plexus`\n**File:** `plexus/reports/s3_utils_test.py`\n**Location:** line 68, column 22 to line 68, column 37\n**Classes:** CWE-CWE-377\n### Snippet (plexus/reports/s3_utils_test.py:66-70)\n```\n  66 |         \n  67 |         # Call the function with a specified path\n  68 |         local_path = tempfile.mktemp()\n  69 |         content, path = download_report_block_file(\n  70 |             s3_path=\"reportblocks/test-block-id/test.txt\",\n```\n\n**Issue Key:** 6b85a5b5-35cb-4c3d-8984-9a10684b92dc\n\n### Details\nInsecure Temporary File\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.694617Z",
+  "updated_at": "2026-03-11T21:27:00.600776Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 22,
+    "snyk_end_column": 37,
+    "snyk_end_line": 68,
+    "snyk_file": "plexus/reports/s3_utils_test.py",
+    "snyk_key": "6b85a5b5-35cb-4c3d-8984-9a10684b92dc",
+    "snyk_line": 68,
+    "snyk_severity": "low",
+    "snyk_type": "code"
+  }
+}

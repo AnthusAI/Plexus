@@ -1,0 +1,57 @@
+2026-03-04 08:35:57,263  [WARNING] AWS region not set, CloudWatch metrics       
+disabled                                                                        
+Creating client...
+2026-03-04 08:36:01,835  [INFO] Loaded Plexus configuration from 2 file(s):     
+/Users/ryan.porter/.plexus/config.yaml,                                         
+/Users/ryan.porter/Projects/Plexus/.plexus/config.yaml - Set 37 environment     
+variables                                                                       
+Account ID: 9c929f25-a91f-4db7-8943-5aa93498b8e9
+Resolved config by name: 'Vector Topic Memory' to ID 
+2e6dcc26-ff55-4c7d-a906-def69a5ee528
+Syncing config from /Users/ryan.porter/Projects/Plexus/vector_topic_memory_report.md...
+Using config: 2e6dcc26-ff55-4c7d-a906-def69a5ee528 (Vector Topic Memory)
+Running report for all scores in scorecard 1438 (Vector Topic Memory only)...
+2026-03-04 08:36:05,943  [INFO] [RunScript] Loading configuration               
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:36:05,945  [INFO] Loading report configuration from API:          
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:36:06,890  [INFO] Successfully loaded configuration:              
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 08:36:06,890  [INFO] [RunScript] Loaded configuration: Vector Topic  
+Memory                                                                          
+2026-03-04 08:36:06,891  [INFO] [RunScript] Configuration requires 3 parameters 
+2026-03-04 08:36:06,891  [INFO] [RunScript] Parameters validated: {'scorecard': 
+'1438', 'days': 180}                                                            
+2026-03-04 08:36:09,497  [INFO] [RunScript] Parameters enriched with names:     
+{'scorecard': '1438', 'days': 180, 'scorecard_name': 'SelectQuote HCS           
+Medium-Risk'}                                                                   
+2026-03-04 08:36:09,500  [ERROR] Jinja2 template rendering failed: 'score_id' is
+undefined                                                                       
+2026-03-04 08:36:09,501  [ERROR] [RunScript] Failed to render configuration with
+parameters: 'score_id' is undefined                                             
+Traceback (most recent call last):
+  File "/Users/ryan.porter/Projects/Plexus/plexus/reports/service.py", line 966, in generate_report_with_parameters
+    rendered_config = render_configuration_with_parameters(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ryan.porter/Projects/Plexus/plexus/reports/parameter_utils.py", line 184, in render_configuration_with_parameters
+    rendered = template.render(**parameters)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/jinja2/environment.py", line 1295, in render
+    self.environment.handle_exception()
+  File "/opt/anaconda3/lib/python3.12/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "<template>", line 3, in top-level template code
+jinja2.exceptions.UndefinedError: 'score_id' is undefined
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/ryan.porter/Projects/Plexus/scripts/run_vector_topic_memory_report.py", line 83, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/Users/ryan.porter/Projects/Plexus/scripts/run_vector_topic_memory_report.py", line 64, in main
+    report_id, first_block_error, task_id = generate_report_with_parameters(
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ryan.porter/Projects/Plexus/plexus/reports/service.py", line 975, in generate_report_with_parameters
+    raise ValueError(error_msg) from e
+ValueError: Failed to render configuration with parameters: 'score_id' is undefined

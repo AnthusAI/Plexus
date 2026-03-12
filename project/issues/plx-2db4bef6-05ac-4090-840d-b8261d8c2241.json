@@ -1,0 +1,61 @@
+{
+  "id": "plx-2db4bef6-05ac-4090-840d-b8261d8c2241",
+  "title": "Post-removal deploy and regression validation",
+  "description": "Deploy post-removal stack/runtime and run regression reports to confirm behavior after OpenSearch removal.\n\nRecord:\n- deployment status\n- report IDs\n- acceptance summary",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "039338c9-9b79-49d1-a14a-d56faf1d16ee",
+      "author": "unknown",
+      "text": "Resumed after disconnect. Running end-to-end validation of S3-only report path and collecting concrete run evidence (report IDs / outputs) for acceptance notes.",
+      "created_at": "2026-03-05T00:55:48.639947Z"
+    },
+    {
+      "id": "fa80d68a-fada-4148-81de-5086ad84651b",
+      "author": "unknown",
+      "text": "Starting live run: scripts/run_score_result_no_vector_topic_memory_report.py --scorecard 1438 --days 30 to capture concrete post-cutover evidence.",
+      "created_at": "2026-03-05T00:56:13.050810Z"
+    },
+    {
+      "id": "a3085602-8712-435d-9102-1182f0fe08ce",
+      "author": "unknown",
+      "text": "Validation run exposed query compatibility bug in ScoreResult source mode (unsupported GraphQL field by score). Applying fix and re-running to collect valid regression evidence.",
+      "created_at": "2026-03-05T01:02:34.053970Z"
+    },
+    {
+      "id": "7a6a2055-a2f5-4087-aa87-932f56e2caef",
+      "author": "unknown",
+      "text": "Live validation still running. Data-selection phase now confirms substantial candidate volume in the new mode (e.g., 441 retained No-explanation items for Patient Cognition, after 3546 fetched records). Awaiting full embedding/clustering completion and final report output.",
+      "created_at": "2026-03-05T01:16:23.498691Z"
+    },
+    {
+      "id": "da477536-f70a-4353-948a-64084f83a833",
+      "author": "unknown",
+      "text": "Applied runtime optimization after slow live validation: one scorecard-window query + local score partitioning. Starting fresh regression run to confirm end-to-end timing and outputs.",
+      "created_at": "2026-03-05T01:28:03.542370Z"
+    },
+    {
+      "id": "7c6a81a7-2d3c-4ac0-9982-f3fc144bc35d",
+      "author": "unknown",
+      "text": "Regression evidence captured post-fix: S3 ScoreResult-No report succeeded (report f715b6a6-ebc0-46aa-b967-355a05cf2202, task 1fefef21-80b0-4839-897b-8a51d31f5db0). Verified live pipeline activity: data selection, embeddings, S3 vector index writes, and topic clustering with non-empty output.",
+      "created_at": "2026-03-05T01:34:58.906639Z"
+    },
+    {
+      "id": "ee6a84be-7215-401a-8688-1a3a876cdd29",
+      "author": "unknown",
+      "text": "Follow-up delivery complete: fix commit b70b2424 pushed to feature/reinforcement-memory and merged into staging as ba91f933. Report evidence remains f715b6a6-ebc0-46aa-b967-355a05cf2202 / task 1fefef21-80b0-4839-897b-8a51d31f5db0.",
+      "created_at": "2026-03-05T01:36:24.041628Z"
+    }
+  ],
+  "created_at": "2026-03-04T17:13:52.943517Z",
+  "updated_at": "2026-03-05T01:36:24.041628Z",
+  "closed_at": "2026-03-05T01:35:23.709039Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0843869d-c336-423d-967b-5d1b199c09f8",
+  "issue_id": "plx-679a2904-5fe5-45c0-adf0-720b8f133d2e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T14:06:11.353Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "**As a** report consumer, **I want** each exemplar in a memory topic to carry its source Item ID and identifiers, **so that** I can navigate from an exemplar to the original call/interaction it came from.\n\n## Background\n\nExemplars in VectorTopicMemory output are currently plain strings: `\"exemplars\": [\"Some text...\", ...]`. The calling code has access to a `doc_ids` list (Item IDs in the feedback path) aligned by index with the documents list, but this linkage is lost when `_get_representative_docs` returns only text.\n\nWith Story plx-ce3556 providing `_get_representative_doc_indices()`, the calling code can now map `index → doc_ids[index] → Item ID`. This story enriches the exemplar output to carry that provenance.\n\n## Solution\n\nChange exemplars from `string[]` to `object[]`:\n\n```json\n{\n  \"exemplars\": [\n    {\n      \"text\": \"The agent failed to verify...\",\n      \"item_id\": \"a1b2c3d4-...\",\n      \"identifiers\": {\"form_id\": \"12345\", \"customer_id\": \"67890\"}\n    }\n  ]\n}\n```\n\nDuring dataset resolution, Item identifiers are fetched (Items are already loaded to get transcript text). Store `{item_id: identifiers}` in the dataset dict. During topic assembly, use `_get_representative_doc_indices()` to map exemplars to their doc_ids (Item IDs) and look up identifiers.\n\nBoth VectorTopicMemory and (later) FeedbackAnalysis benefit from this enrichment.\n\n## Key Files\n\n- Modify: `plexus/reports/blocks/vector_topic_memory.py` — topic assembly loop\n- Modify: `plexus/reports/blocks/vector_topic_memory_test.py`\n- Modify: `plexus/analysis/topic_clusterer.py` — use new `_get_representative_doc_indices()`\n\n## Dependencies\n\nStory plx-ce3556 (TopicClusterer returns exemplar indices)",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+    "priority": 2,
+    "status": "open",
+    "title": "VectorTopicMemory exemplars carry Item ID and identifiers"
+  }
+}

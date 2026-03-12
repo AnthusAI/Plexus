@@ -39,7 +39,9 @@ class FeedbackAnalysis(BaseReportBlock):
                                    If provided, overrides 'days'.
         end_date (str, optional): End date for analysis in YYYY-MM-DD format.
                                  Defaults to today if not specified.
-        score_id (str, optional): Specific score ID to analyze.
+        score_id (str, optional): Specific score to analyze. May be Plexus score UUID or
+                                 external ID (e.g. Call Criteria question ID). Also read from
+                                 report params as 'score' or 'score_id' when not in config.
                                  If specified, only this score will be analyzed.
     """
     
@@ -101,7 +103,17 @@ class FeedbackAnalysis(BaseReportBlock):
             days = int(self.config.get("days", 14))
             start_date_str = self.config.get("start_date")
             end_date_str = self.config.get("end_date")
-            cc_question_id_param = self.config.get("score_id") # Optional CC Question ID
+            # Optional: specific score. From config (score_id or score) or report params (score or score_id; keys may be param_score/param_score_id when from CLI).
+            cc_question_id_param = (
+                self.config.get("score_id")
+                or self.config.get("score")
+                or self.params.get("score_id")
+                or self.params.get("score")
+                or self.params.get("param_score_id")
+                or self.params.get("param_score")
+            )
+            if cc_question_id_param is not None:
+                cc_question_id_param = str(cc_question_id_param).strip() or None
 
             # Parse date strings
             if start_date_str:
@@ -163,14 +175,33 @@ class FeedbackAnalysis(BaseReportBlock):
             scores_to_process = [] # List of {'plexus_score_id': str, 'plexus_score_name': str, 'cc_question_id': str}
             
             if cc_question_id_param:
-                self._log(f"Looking up specific Plexus Score for CC Question ID: {cc_question_id_param} on Plexus Scorecard: {plexus_scorecard_obj.id}")
+                self._log(f"Looking up specific Plexus Score for identifier: {cc_question_id_param} on Plexus Scorecard: {plexus_scorecard_obj.id}")
                 try:
-                    plexus_score_obj = await asyncio.to_thread(
-                        Score.get_by_external_id,
-                        external_id=str(cc_question_id_param),
-                        scorecard_id=plexus_scorecard_obj.id,
-                        client=self.api_client
+                    # Accept either Plexus score UUID or external ID (e.g. Call Criteria question ID)
+                    is_uuid_like = (
+                        len(cc_question_id_param) == 36
+                        and cc_question_id_param.count("-") == 4
+                        and all(c in "0123456789abcdefABCDEF-" for c in cc_question_id_param)
                     )
+                    if is_uuid_like:
+                        plexus_score_obj = await asyncio.to_thread(
+                            Score.get_by_id,
+                            id=cc_question_id_param,
+                            client=self.api_client
+                        )
+                        if plexus_score_obj and plexus_score_obj.scorecard_id != plexus_scorecard_obj.id:
+                            self._log(
+                                f"WARNING: Score {cc_question_id_param} belongs to a different scorecard. Skipping.",
+                                level="WARNING"
+                            )
+                            plexus_score_obj = None
+                    else:
+                        plexus_score_obj = await asyncio.to_thread(
+                            Score.get_by_external_id,
+                            external_id=str(cc_question_id_param),
+                            scorecard_id=plexus_scorecard_obj.id,
+                            client=self.api_client
+                        )
                     if plexus_score_obj:
                         scores_to_process.append({
                             'plexus_score_id': plexus_score_obj.id,
@@ -179,9 +210,9 @@ class FeedbackAnalysis(BaseReportBlock):
                         })
                         self._log(f"Found specific Plexus Score: '{plexus_score_obj.name}' (ID: {plexus_score_obj.id})")
                     else:
-                        self._log(f"WARNING: Plexus Score not found for CC Question ID: {cc_question_id_param} on Scorecard '{plexus_scorecard_obj.name}'. This score will be skipped.", level="WARNING")
+                        self._log(f"WARNING: Plexus Score not found for identifier: {cc_question_id_param} on Scorecard '{plexus_scorecard_obj.name}'. This score will be skipped.", level="WARNING")
                 except Exception as e:
-                    self._log(f"ERROR looking up specific Plexus Score (CC Question ID: {cc_question_id_param}): {e}. This score will be skipped.", level="ERROR")
+                    self._log(f"ERROR looking up specific Plexus Score (identifier: {cc_question_id_param}): {e}. This score will be skipped.", level="ERROR")
             else:
                 self._log(f"Fetching all Plexus Scores for Scorecard '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id}) to find mappable scores.")
                 # Use the utility function to fetch scores
@@ -213,6 +244,8 @@ class FeedbackAnalysis(BaseReportBlock):
             all_feedback_items_retrieved_count = 0
             all_date_filtered_feedback_items = [] # For overall calculation
             per_score_analysis_results = []
+            # For optional memory analysis: collect edit comment texts per score
+            per_score_raw_texts: List[Dict] = []
             
             # Store the report block ID when created for attaching files later
             report_block_id = None
@@ -232,6 +265,30 @@ class FeedbackAnalysis(BaseReportBlock):
                 self._log(f"Retrieved {len(items_for_this_score)} FeedbackItems for this score within date range: {start_date.date()} - {end_date.date()}")
                 
                 all_date_filtered_feedback_items.extend(items_for_this_score)
+
+                # Collect mismatching edit comments for optional memory analysis
+                # Try editCommentValue first, fall back to finalCommentValue
+                score_edit_comments = []
+                mismatches_for_score = [
+                    fi for fi in items_for_this_score
+                    if fi.initialAnswerValue != fi.finalAnswerValue
+                ]
+                for fi in mismatches_for_score:
+                    _raw = fi.editCommentValue or fi.finalCommentValue or ""
+                    text = _raw.strip() if isinstance(_raw, str) else ""
+                    if text:
+                        score_edit_comments.append((fi.id or fi.itemId or "", text, fi.itemId, fi.editedAt))
+                if mismatches_for_score:
+                    self._log(
+                        f"Memory analysis: {len(mismatches_for_score)} mismatches for '{score_info['plexus_score_name']}', "
+                        f"{len(score_edit_comments)} have edit/final comments"
+                    )
+                if score_edit_comments:
+                    per_score_raw_texts.append({
+                        "score_id": score_info["plexus_score_id"],
+                        "score_name": score_info["plexus_score_name"],
+                        "items": score_edit_comments,
+                    })
 
                 if not items_for_this_score:
                     self._log("No feedback items for this score within the date range.", level="WARNING")
@@ -381,6 +438,31 @@ class FeedbackAnalysis(BaseReportBlock):
                 "block_title": self.DEFAULT_NAME,
                 "block_description": self.DEFAULT_DESCRIPTION
             }
+            # --- 7b. Optional Memory Analysis ---
+            run_memory = self.config.get("memory_analysis", True)
+            if run_memory:
+                if per_score_raw_texts:
+                    memories = await self._run_memory_analysis(per_score_raw_texts)
+                    if memories:
+                        # Offload memories to S3 to avoid DynamoDB 400KB limit
+                        if report_block_id:
+                            try:
+                                memories_yaml = yaml.dump(memories, indent=2, allow_unicode=True, sort_keys=False)
+                                from plexus.reports.s3_utils import add_file_to_report_block
+                                all_paths = add_file_to_report_block(report_block_id, "memories.yaml", memories_yaml, content_type="text/yaml", client=self.api_client)
+                                # add_file_to_report_block returns full list; the new file is always last
+                                memories_path = all_paths[-1] if isinstance(all_paths, list) else all_paths
+                                final_output_data["memories_file"] = memories_path
+                                self._log(f"Memories offloaded to S3: {memories_path}")
+                            except Exception as e:
+                                self._log(f"Failed to offload memories to S3, embedding inline: {e}", level="WARNING")
+                                final_output_data["memories"] = memories
+                        else:
+                            # No report_block_id available (e.g. test mode), embed inline
+                            final_output_data["memories"] = memories
+                else:
+                    self._log("Memory analysis: no scores had edit/final comments on mismatches — skipping.")
+
             # Don't log the full output data - it's redundant and can be large
             self._log(f"Finished generating analysis for {len(scores_to_process)} scores with {all_feedback_items_retrieved_count} total feedback items.")
 
@@ -428,6 +510,213 @@ class FeedbackAnalysis(BaseReportBlock):
         # Always return the detailed_log as the second return value to ensure logs are saved to S3
         # The service.py code will use this to upload to S3
         return final_output_data, detailed_log
+
+
+    def _generate_topic_label_llm(self, keywords: List[str], exemplars: List[str]) -> Optional[str]:
+        """Call Bedrock to generate a human-readable topic label from keywords and exemplar texts."""
+        try:
+            import boto3
+            import json as _json
+
+            keyword_str = ", ".join(keywords[:8]) if keywords else ""
+            exemplar_str = "\n".join(f'- "{e[:200]}"' for e in exemplars[:3] if e)
+            prompt = (
+                "You are labeling a topic cluster from customer feedback comments. "
+                "Given the following keywords and example comments, write a concise 2–5 word topic label "
+                "that describes what these feedback comments are about. "
+                "Return ONLY the label text, no quotes, no punctuation at the end.\n\n"
+                f"Keywords: {keyword_str}\n\nExample comments:\n{exemplar_str}\n\nTopic label:"
+            )
+
+            client = boto3.client("bedrock-runtime", region_name="us-east-1")
+            body = _json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 32,
+                "messages": [{"role": "user", "content": prompt}],
+            })
+            response = client.invoke_model(
+                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                body=body,
+                contentType="application/json",
+                accept="application/json",
+            )
+            result = _json.loads(response["body"].read())
+            label = result["content"][0]["text"].strip().strip('"').strip("'")
+            return label if label else None
+        except Exception as e:
+            self._log(f"LLM topic label generation failed: {e}", level="WARNING")
+            return None
+
+    async def _run_memory_analysis(self, per_score_raw_texts: List[Dict]) -> Optional[Dict]:
+        """Run topic clustering on edit comments and return memories structure."""
+        try:
+            import numpy as np
+            from datetime import timezone as _tz
+            from plexus.analysis.embedding_cache import EmbeddingService, EmbeddingCache
+            from plexus.analysis.topic_clusterer import TopicClusterer
+            from plexus.analysis.memory_weights import tier_from_weight
+
+            cache_bucket = self.config.get("memory_cache_bucket", "")
+            model_id = self.config.get("memory_model_id", "all-MiniLM-L6-v2")
+            min_topic_size = self.config.get("memory_min_topic_size", 5)
+            use_llm_labels = self.config.get("memory_llm_labels", True)
+
+            cache = EmbeddingCache(bucket_name=cache_bucket) if cache_bucket else None
+            embed_svc = EmbeddingService(
+                model_id=model_id,
+                cache=cache,
+            )
+
+            now = datetime.now(_tz.utc)
+            scores_out = []
+            for score_data in per_score_raw_texts:
+                doc_ids = [item[0] for item in score_data["items"]]
+                texts = [item[1] for item in score_data["items"]]
+                item_ids = [item[2] if len(item) > 2 else None for item in score_data["items"]]
+                edited_ats = [item[3] if len(item) > 3 else None for item in score_data["items"]]
+
+                if len(texts) < 2:
+                    continue
+
+                self._log(f"Memory analysis: embedding {len(texts)} edit comments for score '{score_data['score_name']}'")
+                embeddings = np.array(await asyncio.to_thread(embed_svc.batch_embed, texts))
+
+                clusterer = TopicClusterer(min_topic_size=min(min_topic_size, max(2, len(texts) // 3)))
+                topic_ids, _ = clusterer.cluster(embeddings, texts)
+
+                topics = []
+                for tid in sorted(set(topic_ids)):
+                    if tid == -1:
+                        continue
+                    member_count = int(np.sum(topic_ids == tid))
+                    keywords = clusterer.get_keywords(int(tid), n=8)
+                    exemplars_raw = clusterer.get_representative_exemplars(int(tid), n=3)
+
+                    # Build exemplars with item_id and identifiers fetched via GSI query
+                    exemplars = []
+                    for ex_idx, ex_text in exemplars_raw:
+                        truncated = ex_text[:300] + "…" if len(ex_text) > 300 else ex_text
+                        item_id = item_ids[ex_idx] if ex_idx < len(item_ids) else None
+                        identifiers_list = None
+                        if item_id and self.api_client:
+                            try:
+                                gql = """
+                                query ListIdentifiersByItemId($itemId: String!) {
+                                    listIdentifierByItemIdAndPosition(itemId: $itemId) {
+                                        items { name value url position }
+                                    }
+                                }
+                                """
+                                result = await asyncio.to_thread(
+                                    self.api_client.execute, gql, {"itemId": item_id}
+                                )
+                                raw = (result or {}).get("listIdentifierByItemIdAndPosition", {}).get("items") or []
+                                if raw:
+                                    identifiers_list = [
+                                        {"name": i["name"], "value": i["value"], **({"url": i["url"]} if i.get("url") else {})}
+                                        for i in sorted(raw, key=lambda x: x.get("position") or 0)
+                                    ]
+                            except Exception:
+                                pass
+                        exemplar: Dict = {"text": truncated, "item_id": item_id}
+                        if identifiers_list:
+                            exemplar["identifiers"] = identifiers_list
+                        exemplars.append(exemplar)
+
+                    # Compute days_inactive from most recent editedAt in this cluster
+                    member_indices = list(np.where(topic_ids == tid)[0])
+                    cluster_edited_ats = [
+                        edited_ats[i] for i in member_indices
+                        if i < len(edited_ats) and edited_ats[i] is not None
+                    ]
+                    days_inactive: Optional[int] = None
+                    if cluster_edited_ats:
+                        most_recent = max(
+                            (ea if ea.tzinfo else ea.replace(tzinfo=_tz.utc) for ea in cluster_edited_ats)
+                        )
+                        days_inactive = max(0, (now - most_recent).days)
+
+                    weight = 0.5  # Baseline for FeedbackAnalysis memories
+                    tier = tier_from_weight(weight)
+
+                    # Derive lifecycle tier from member timestamps (same windowed logic as VectorTopicMemory)
+                    _SHORT_TERM = 14
+                    _MEDIUM_TERM = 30
+                    _has_short = _has_medium = _has_long = False
+                    for _ea in cluster_edited_ats:
+                        _ea_aware = _ea if _ea.tzinfo else _ea.replace(tzinfo=_tz.utc)
+                        _age = max(0, (now - _ea_aware).days)
+                        if _age <= _SHORT_TERM:
+                            _has_short = True
+                        elif _age <= _MEDIUM_TERM:
+                            _has_medium = True
+                        else:
+                            _has_long = True
+                    _is_new = _has_short and not _has_medium and not _has_long
+                    _is_trending = (_has_short or _has_medium) and not _has_long
+                    if _is_new:
+                        _lifecycle_tier = "new"
+                    elif _is_trending:
+                        _lifecycle_tier = "trending"
+                    else:
+                        _lifecycle_tier = "established"
+
+                    topic_entry: Dict = {
+                        "topic_id": int(tid),
+                        "label": None,  # Will be filled after parallel LLM calls
+                        "keywords": keywords,
+                        "exemplars": exemplars,
+                        "member_count": member_count,
+                        "memory_weight": weight,
+                        "memory_tier": tier,
+                        "lifecycle_tier": _lifecycle_tier,
+                        "is_new": _is_new,
+                        "is_trending": _is_trending,
+                        "_llm_input": (keywords, [e["text"] for e in exemplars]) if use_llm_labels and keywords else None,
+                    }
+                    if days_inactive is not None:
+                        topic_entry["days_inactive"] = days_inactive
+                    topics.append(topic_entry)
+
+                if topics:
+                    scores_out.append({
+                        "score_id": score_data["score_id"],
+                        "score_name": score_data["score_name"],
+                        "topics": topics,
+                    })
+
+            # Parallel LLM label generation for all topics across all scores
+            all_topic_entries = [t for s in scores_out for t in s["topics"]]
+            llm_tasks = []
+            llm_indices = []
+            for i, t in enumerate(all_topic_entries):
+                llm_input = t.pop("_llm_input", None)
+                if llm_input:
+                    llm_tasks.append(asyncio.to_thread(self._generate_topic_label_llm, llm_input[0], llm_input[1]))
+                    llm_indices.append(i)
+                else:
+                    kw = t.get("keywords", [])
+                    t["label"] = ", ".join(kw[:3]) if kw else f"Topic {t['topic_id']}"
+
+            if llm_tasks:
+                self._log(f"Memory analysis: generating {len(llm_tasks)} LLM topic labels in parallel")
+                llm_results = await asyncio.gather(*llm_tasks, return_exceptions=True)
+                for idx, result in zip(llm_indices, llm_results):
+                    t = all_topic_entries[idx]
+                    kw = t.get("keywords", [])
+                    if isinstance(result, Exception) or not result:
+                        t["label"] = ", ".join(kw[:3]) if kw else f"Topic {t['topic_id']}"
+                    else:
+                        t["label"] = result
+
+            self._log(f"Memory analysis complete: {len(scores_out)} score(s) with topics.")
+            return {"scores": scores_out} if scores_out else None
+
+        except Exception as e:
+            self._log(f"Memory analysis failed (non-fatal): {e}", level="WARNING")
+            import traceback
+            self._log(traceback.format_exc(), level="DEBUG")
+            return None
 
     async def _fetch_all_scorecards(self) -> List[Scorecard]:
         """
@@ -1347,15 +1636,15 @@ class FeedbackAnalysis(BaseReportBlock):
         if hasattr(feedback_item, 'item') and feedback_item.item is not None:
             # Item is already loaded
             return True
-            
+
         if not feedback_item.itemId or not self.api_client:
             # No itemId or client to load with
             return False
-            
+
         try:
             # Import here to avoid circular imports
             from plexus.dashboard.api.models.item import Item
-            
+
             # Construct a GraphQL query to fetch the item
             query = """
             query GetItem($id: ID!) {
@@ -1366,12 +1655,12 @@ class FeedbackAnalysis(BaseReportBlock):
                 }
             }
             """
-            
+
             variables = {"id": feedback_item.itemId}
-            
+
             # Execute the query
             result = await asyncio.to_thread(self.api_client.execute, query, variables)
-            
+
             if result and 'getItem' in result and result['getItem']:
                 item_data = result['getItem']
                 # Create an Item instance and attach it

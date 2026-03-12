@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1fdde6b1-2b95-4cc2-83a5-f1fe67afe71a",
+  "issue_id": "plx-b64ee626-4de0-43b6-9287-ab0c7a91c257",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T00:46:06.232Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Extend semantic reinforcement memory data sourcing to use production ScoreResult records where value='No' and run clustering over ScoreResult.explanation text within the report time range.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement No-value ScoreResult explanation source mode"
+  }
+}

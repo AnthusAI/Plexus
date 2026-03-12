@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "256cb27b-8d7e-48ea-acfd-e3cb838e1f69",
+  "issue_id": "plx-b19db514-6d76-4108-a827-47801d5add45",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T02:00:03.058Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Change score/topic ranking order in Semantic Reinforcement Memory outputs from best-to-worst to worst-to-best and validate with report run.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Flip Semantic Reinforcement Memory ranking to worst-to-best"
+  }
+}

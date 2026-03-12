@@ -1,0 +1,21 @@
+{
+  "id": "plx-97288524-a4ce-4861-ad5e-3048d8088f7c",
+  "title": "Snyk Vulnerability Remediation",
+  "description": "Track remediation of Snyk vulnerabilities.",
+  "type": "initiative",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.669486Z",
+  "updated_at": "2026-03-11T20:41:39.669486Z",
+  "closed_at": null,
+  "custom": {}
+}
