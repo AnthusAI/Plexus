@@ -1,41 +1,24 @@
 import os
 import json
-import mlflow
 import pandas as pd
-import numpy as np
-import inspect
-import functools
 from pydantic import BaseModel, ValidationError, field_validator, ConfigDict
-from typing import Optional, Union, List, Any
+from typing import Optional, Union, List
 from abc import ABC, abstractmethod
-import matplotlib.pyplot as plt
-import seaborn as sns
 # from tensorflow.keras.utils import plot_model
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import roc_curve, auc, precision_recall_curve
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
-from sklearn.calibration import calibration_curve
-import matplotlib.ticker as ticker
-from rich.table import Table
-from rich.panel import Panel
-from rich.columns import Columns
-from rich.text import Text
-from plexus.CustomLogging import logging, console
-from sklearn.preprocessing import LabelBinarizer
+from plexus.CustomLogging import logging
 from collections import Counter
-import xgboost as xgb
 
 from plexus.Registries import scorecard_registry
 from plexus.scores.core.ScoreData import ScoreData
 from plexus.scores.core.ScoreVisualization import ScoreVisualization
-from plexus.scores.core.ScoreMLFlow import ScoreMLFlow
 from plexus.scores.core.utils import ensure_report_directory_exists
+from plexus.scores.core.CostAccumulator import CostAccumulator
 
-class Score(ABC, mlflow.pyfunc.PythonModel,
+class Score(ABC,
     # Core Score functionality.   
     ScoreData,
-    ScoreVisualization,
-    ScoreMLFlow
+    ScoreVisualization
 ):
     """
     Abstract base class for implementing classification and scoring models in Plexus.
@@ -51,7 +34,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
     The Score class provides:
     - Standard input/output interfaces using Pydantic models
-    - MLFlow integration for experiment tracking
     - Visualization tools for model performance
     - Cost tracking for API-based models
     - Metrics computation and logging
@@ -118,6 +100,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         label_field: Optional[str] = None
 
         @field_validator('data')
+        @classmethod
         def convert_data_percentage(cls, value):
             """
             Convert the percentage value in the data dictionary to a float.
@@ -138,46 +121,9 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
                 value['percentage'] = 100.0
             return value
 
-    class Input(BaseModel):
-        """
-        Standard input structure for all Score classifications in Plexus.
-
-        The Input class standardizes how content is passed to Score classifiers,
-        supporting both the content itself and contextual metadata. It's used by:
-        - Individual Score predictions
-        - Batch processing jobs
-        - Evaluation runs
-        - Dashboard API integrations
-
-        Attributes:
-            text: The content to classify. Can be a transcript, document, etc.
-            metadata: Additional context like source, timestamps, or tracking IDs
-            results: Optional list of previous classification results, used for:
-                    - Composite scores that depend on other scores
-                    - Multi-step classification pipelines
-                    - Score dependency resolution
-
-        Common usage:
-        1. Basic classification:
-            input = Score.Input(
-                text="content to classify",
-                metadata={"source": "phone_call"}
-            )
-
-        2. With dependencies:
-            input = Score.Input(
-                text="content to classify",
-                metadata={"source": "phone_call"},
-                results=[{
-                    "name": "PriorScore",
-                    "result": prior_score_result
-                }]
-            )
-        """
-        model_config = ConfigDict(protected_namespaces=())
-        text:     str
-        metadata: dict = {}
-        results: Optional[List[Any]] = None
+    # Import lightweight ScoreInput to avoid psycopg import dependencies
+    # The Input class is now defined in ScoreInput.py to avoid circular imports
+    from plexus.core.ScoreInput import ScoreInput as Input
 
     class Result(BaseModel):
         """
@@ -194,6 +140,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         Attributes:
             parameters: Configuration used for this classification
             value: The classification result (e.g., "Yes"/"No" or class label)
+            explanation: Detailed explanation of why this result was chosen
+            confidence: Confidence score for the classification (0.0 to 1.0)
             metadata: Additional context about the classification
             error: Optional error message if classification failed
 
@@ -203,35 +151,38 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         - __eq__: Compare results (case-insensitive)
 
         Common usage:
-        1. Basic classification:
+        1. Basic classification with explanation:
             result = Score.Result(
                 parameters=self.parameters,
                 value="Yes",
-                metadata={"confidence": 0.95}
+                explanation="Clear greeting found at beginning of transcript",
+                confidence=0.95
             )
 
-        2. With explanation:
+        2. Classification with metadata:
             result = Score.Result(
                 parameters=self.parameters,
                 value="No",
-                metadata={
-                    "confidence": 0.88,
-                    "explanation": "No greeting found in transcript"
-                }
+                explanation="No greeting found in transcript",
+                confidence=0.88,
+                metadata={"source": "phone_call"}
             )
 
         3. Error case:
             result = Score.Result(
                 parameters=self.parameters,
-                value="Error",
+                value="ERROR",
                 error="API timeout"
             )
         """
         model_config = ConfigDict(protected_namespaces=())
         parameters: 'Score.Parameters'
         value:      Union[str, bool]
+        explanation: Optional[str] = None
+        confidence:  Optional[float] = None
         metadata:   dict = {}
         error:      Optional[str] = None
+        code:       Optional[str] = None
 
         def __eq__(self, other):
             if isinstance(other, Score.Result):
@@ -245,6 +196,16 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         def is_no(self):
             return self.value.lower() == 'no'
+        
+        @property
+        def explanation_from_metadata(self) -> Optional[str]:
+            """Backwards compatibility: explanation from metadata"""
+            return self.metadata.get('explanation') if self.metadata else None
+        
+        @property
+        def confidence_from_metadata(self) -> Optional[float]:
+            """Backwards compatibility: confidence from metadata"""
+            return self.metadata.get('confidence') if self.metadata else None
         
     def __init__(self, **parameters):
         """
@@ -264,6 +225,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             self.parameters = self.Parameters(**parameters)
             self._is_multi_class = None
             self._number_of_classes = None
+            # Generic cost accumulator available to all score types
+            self._cost_accumulator: CostAccumulator = CostAccumulator()
         except ValidationError as e:
             Score.log_validation_errors(e)
             raise
@@ -289,7 +252,9 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             logging.error(message)
 
     def report_directory_path(self):
-        return f"./reports/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
+        import os
+        base_dir = os.getenv('PLEXUS_REPORTS_DIR', './tmp/reports')
+        return f"{base_dir}/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
     def model_directory_path(self):
         return f"./models/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
 
@@ -311,17 +276,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             The full path to the report file with spaces replaced by underscores.
         """
         return os.path.join(self.report_directory_path(), file_name).replace(' ', '_')
-
-    def train_model(self):
-        """
-        Train the model on the training data.
-
-        Returns
-        -------
-        object
-            The trained model.
-        """
-        pass
 
     def predict_validation(self):
         """
@@ -354,9 +308,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         recall = recall_score(self.val_labels, self.val_predictions_labels, average='weighted')
         precision = precision_score(self.val_labels, self.val_predictions_labels, average='weighted')
 
-        mlflow.log_metric("validation_f1_score", f1)
-        mlflow.log_metric("validation_recall", recall)
-        mlflow.log_metric("validation_precision", precision)
 
         print(f"Validation Accuracy: {accuracy:.4f}")
         print(f"Validation F1 Score: {f1:.4f}")
@@ -396,7 +347,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             })
         self._record_metrics(metrics)
 
-        mlflow.end_run()
 
     def register_model(self):
         """
@@ -410,16 +360,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         pass
 
-    def load_context(self, context):
-        """
-        Load the trained model and any necessary artifacts based on the MLflow context.
-
-        Parameters
-        ----------
-        context : mlflow.pyfunc.PythonModelContext
-            The context object containing artifacts and other information.
-        """
-        # self.model = mlflow.keras.load_model(context.artifacts["model"])
 
     @abstractmethod
     def predict(self, context, model_input: Input) -> Union[Result, List[Result]]:
@@ -429,7 +369,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         Parameters
         ----------
         context : Any
-            Context for the prediction (e.g., MLflow context)
+            Context for the prediction
         model_input : Score.Input
             The input data for making predictions.
 
@@ -519,6 +459,21 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         with open(file_name, 'w') as json_file:
             json.dump(metrics, json_file, indent=4)
 
+    @ensure_report_directory_exists
+    def record_configuration(self, configuration):
+        """
+        Record the provided configuration dictionary as a JSON file in the appropriate report folder for this model.
+
+        Parameters
+        ----------
+        configuration : dict
+            Dictionary containing the configuration to be recorded.
+        """
+        file_name = self.report_file_name("configuration.json")
+
+        with open(file_name, 'w') as json_file:
+            json.dump(configuration, json_file, indent=4)
+
     @property
     def is_multi_class(self):
         """
@@ -560,13 +515,25 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         Get the expenses that have been accumulated over all the computed elements.
 
         Returns:
-            dict: A dictionary containing only one accumulated expense:
-                  'total_cost'
+            dict: Aggregated cost information with totals and components
         """
-
-        return {
-            "total_cost":  0
-        }
+        # Prefer any costs accumulated by implementations via the shared accumulator
+        if hasattr(self, "_cost_accumulator") and isinstance(self._cost_accumulator, CostAccumulator):
+            costs_dict = self._cost_accumulator.to_dict()
+            # Backward-compatibility: if accumulator is effectively empty, return the minimal legacy shape
+            if (
+                (not costs_dict.get("total_cost")) and
+                costs_dict.get("prompt_tokens", 0) == 0 and
+                costs_dict.get("completion_tokens", 0) == 0 and
+                costs_dict.get("cached_tokens", 0) == 0 and
+                costs_dict.get("api_calls", 0) == 0 and
+                costs_dict.get("duration_ms", 0) == 0 and
+                not costs_dict.get("components")
+            ):
+                return {"total_cost": 0}
+            return costs_dict
+        # Backward compatibility fallback
+        return {"total_cost": 0}
 
     def get_label_score_name(self):
         """
@@ -586,6 +553,220 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         return score_name
 
     @classmethod
+    def load(cls, scorecard_identifier: str, score_name: str, use_cache: bool = True, yaml_only: bool = False):
+        """
+        Load a single score configuration with configurable caching behavior.
+        
+        Args:
+            scorecard_identifier: A string that identifies the scorecard (ID, name, key, or external ID)
+            score_name: Name of the specific score to load
+            use_cache: If True (default), cache API data to local YAML files. If False, don't cache.
+            yaml_only: If True, load only from local YAML files without API calls.
+            
+        Returns:
+            Score: An initialized Score instance
+            
+        Raises:
+            ValueError: If the score cannot be loaded
+        """
+        from pathlib import Path
+        from ruamel.yaml import YAML
+        from plexus.cli.shared.client_utils import create_client
+        from plexus.cli.shared import get_score_yaml_path
+        
+        logging.info(f"Loading score '{score_name}' from scorecard '{scorecard_identifier}' (use_cache={use_cache}, yaml_only={yaml_only})")
+        
+        try:
+            if yaml_only:
+                # Mode 3: Load from local YAML file only, no API calls
+                return cls._load_from_yaml_file_only(scorecard_identifier, score_name)
+            
+            # For both default and no-cache modes, we need API client and scorecard resolution
+            client = create_client()
+            if not client:
+                if use_cache:
+                    # Fall back to YAML file if API is unavailable
+                    logging.warning("API client unavailable, falling back to local YAML file")
+                    return cls._load_from_yaml_file_only(scorecard_identifier, score_name)
+                else:
+                    raise ValueError("API client unavailable and caching disabled")
+            
+            # Import API resolution functions
+            from plexus.cli.shared.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
+            from plexus.cli.shared.fetch_scorecard_structure import fetch_scorecard_structure
+            
+            # Resolve scorecard identifier
+            scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+            if not scorecard_id:
+                raise ValueError(f"Could not resolve scorecard identifier: {scorecard_identifier}")
+            
+            # Fetch scorecard structure
+            scorecard_structure = fetch_scorecard_structure(client, scorecard_id)
+            if not scorecard_structure:
+                raise ValueError(f"Could not fetch structure for scorecard: {scorecard_id}")
+            
+            # Find the specific score in the scorecard structure
+            target_score = None
+            for section in scorecard_structure.get('sections', {}).get('items', []):
+                for score in section.get('scores', {}).get('items', []):
+                    if (score.get('name') == score_name or 
+                        score.get('key') == score_name or 
+                        score.get('id') == score_name or 
+                        score.get('externalId') == score_name):
+                        target_score = score
+                        break
+                if target_score:
+                    break
+            
+            if not target_score:
+                raise ValueError(f"Score '{score_name}' not found in scorecard '{scorecard_identifier}'")
+            
+            # Get the score configuration
+            if use_cache:
+                # Mode 1: Default - check cache, fetch if needed, use cached result
+                yaml_path = get_score_yaml_path(scorecard_structure.get('name'), score_name)
+                
+                if yaml_path.exists():
+                    # Use cached version
+                    logging.debug(f"Using cached configuration from {yaml_path}")
+                    try:
+                        with open(yaml_path, 'r') as f:
+                            config_yaml = f.read()
+                    except Exception as e:
+                        logging.warning(f"Error reading cached file, fetching from API: {str(e)}")
+                        config_yaml = cls._fetch_score_config_from_api(client, target_score)
+                        cls._cache_score_config(yaml_path, config_yaml)
+                else:
+                    # Fetch from API and cache
+                    config_yaml = cls._fetch_score_config_from_api(client, target_score)
+                    cls._cache_score_config(yaml_path, config_yaml)
+            else:
+                # Mode 2: No cache - fetch from API only
+                config_yaml = cls._fetch_score_config_from_api(client, target_score)
+            
+            # Parse the YAML configuration
+            yaml_parser = YAML(typ='safe')
+            config = yaml_parser.load(config_yaml)
+            
+            if not isinstance(config, dict):
+                raise ValueError(f"Invalid configuration format for score '{score_name}'")
+            
+            # Create Score instance from the configuration
+            score_instance = cls._create_score_from_config(config)
+            
+            loading_mode = "yaml-only" if yaml_only else ("api-with-cache" if use_cache else "api-no-cache")
+            logging.info(f"Successfully loaded score '{score_name}' (mode: {loading_mode})")
+            return score_instance
+            
+        except Exception as e:
+            error_msg = f"Error loading score '{score_name}' from scorecard '{scorecard_identifier}': {str(e)}"
+            logging.error(error_msg)
+            raise ValueError(error_msg) from e
+    
+    @classmethod
+    def _load_from_yaml_file_only(cls, scorecard_identifier: str, score_name: str):
+        """Load score from local YAML file only, without API calls."""
+        from plexus.cli.shared import get_score_yaml_path
+        from ruamel.yaml import YAML
+        
+        logging.info(f"Loading score '{score_name}' from local YAML file only")
+        
+        # Try to find the YAML file - we need the actual scorecard name
+        yaml_path = get_score_yaml_path(scorecard_identifier, score_name)
+        
+        if not yaml_path.exists():
+            raise ValueError(f"YAML file not found: {yaml_path}")
+        
+        try:
+            with open(yaml_path, 'r') as f:
+                config_yaml = f.read()
+            
+            yaml_parser = YAML(typ='safe')
+            config = yaml_parser.load(config_yaml)
+            
+            if not isinstance(config, dict):
+                raise ValueError(f"Invalid configuration format in {yaml_path}")
+            
+            score_instance = cls._create_score_from_config(config)
+            logging.info(f"Successfully loaded score '{score_name}' from {yaml_path}")
+            return score_instance
+            
+        except Exception as e:
+            raise ValueError(f"Error loading score from {yaml_path}: {str(e)}") from e
+    
+    @classmethod
+    def _fetch_score_config_from_api(cls, client, score_data: dict) -> str:
+        """Fetch score configuration from API."""
+        from gql import gql
+        
+        champion_version_id = score_data.get('championVersionId')
+        if not champion_version_id:
+            raise ValueError(f"No champion version ID found for score {score_data.get('name')}")
+        
+        query = """
+        query GetScoreVersion($id: ID!) {
+            getScoreVersion(id: $id) {
+                id
+                configuration
+            }
+        }
+        """
+        
+        try:
+            with client as session:
+                result = session.execute(gql(query), variable_values={"id": champion_version_id})
+            
+            version_data = result.get('getScoreVersion', {})
+            config_yaml = version_data.get('configuration')
+            
+            if not config_yaml:
+                raise ValueError(f"No configuration found for version: {champion_version_id}")
+            
+            return config_yaml
+            
+        except Exception as e:
+            raise ValueError(f"Error fetching configuration from API: {str(e)}") from e
+    
+    @classmethod
+    def _cache_score_config(cls, yaml_path, config_yaml: str):
+        """Cache score configuration to local YAML file."""
+        try:
+            # Ensure directory exists
+            yaml_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(yaml_path, 'w') as f:
+                f.write(config_yaml)
+            
+            logging.info(f"Cached score configuration to {yaml_path}")
+            
+        except Exception as e:
+            logging.warning(f"Failed to cache configuration to {yaml_path}: {str(e)}")
+    
+    @classmethod
+    def _create_score_from_config(cls, config: dict):
+        """Create a Score instance from configuration dictionary."""
+        import importlib
+        
+        # Get the score class
+        class_name = config.get('class')
+        if not class_name:
+            raise ValueError("No 'class' field found in score configuration")
+        
+        try:
+            # Import the score class
+            module = importlib.import_module('plexus.scores')
+            score_class = getattr(module, class_name)
+            
+            # Create instance with parameters from config
+            parameters = {k: v for k, v in config.items() if k != 'class'}
+            score_instance = score_class(**parameters)
+            
+            return score_instance
+            
+        except Exception as e:
+            raise ValueError(f"Error creating score instance from config: {str(e)}") from e
+
+    @classmethod
     def from_name(cls, scorecard, score):
         
         scorecard_class = scorecard_registry.get(scorecard)
@@ -599,5 +780,83 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             raise ValueError(f"Score '{score}' not found in scorecard '{scorecard}'")
         
         return score_class(**score_parameters)
+
+    @staticmethod
+    def apply_processors(
+        score_input: "Score.Input", processors_config: list
+    ) -> "Score.Input":
+        """
+        Apply a list of processors to a Score.Input and return the transformed Score.Input.
+
+        Args:
+            score_input: Input object containing text/metadata/results.
+            processors_config: List of processor configurations.
+
+        Returns:
+            Transformed Score.Input after all configured processors run.
+        """
+        if not processors_config or not score_input:
+            return score_input
+
+        # Import here to avoid circular dependency
+        from plexus.processors import ProcessorFactory
+
+        processed_input = score_input
+
+        # Apply each processor in sequence
+        for processor_config in processors_config:
+            processor_class = processor_config.get("class")
+            if not processor_class:
+                logging.warning(
+                    f"Processor config missing 'class' field: {processor_config}"
+                )
+                continue
+
+            processor_parameters = processor_config.get("parameters", {})
+
+            try:
+                processor_instance = ProcessorFactory.create_processor(
+                    processor_class, **processor_parameters
+                )
+                processed_input = processor_instance.process(processed_input)
+            except Exception as e:
+                logging.error(f"Error applying processor {processor_class}: {e}")
+                # Continue with other processors even if one fails
+                continue
+
+        return processed_input
+
+    @staticmethod
+    def apply_processors_to_text(
+        text: str, processors_config: list, metadata: dict = None
+    ) -> str:
+        """
+        Apply a list of processors to text for production predictions.
+
+        This method applies the same processor pipeline used during training/evaluation
+        to production prediction inputs. It creates a Score.Input, applies
+        all configured processors, and returns the processed text.
+
+        Args:
+            text: Input text to process
+            processors_config: List of processor configurations, each with 'class' and optional 'parameters'
+                              Example: [{'class': 'FilterCustomerOnlyProcessor'},
+                                       {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}]
+
+        Returns:
+            Processed text after applying all processors
+
+        Example:
+            processors = [
+                {'class': 'FilterCustomerOnlyProcessor'},
+                {'class': 'RemoveSpeakerIdentifiersTranscriptFilter'}
+            ]
+            processed_text = Score.apply_processors_to_text(raw_text, processors)
+        """
+        if not processors_config or not text:
+            return text
+
+        score_input = Score.Input(text=text, metadata=metadata or {})
+        return Score.apply_processors(score_input, processors_config).text
 
 Score.Result.model_rebuild()

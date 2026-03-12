@@ -1,26 +1,34 @@
-import pandas as pd
 import contractions
-from plexus.processors.DataframeProcessor import DataframeProcessor
+from typing import TYPE_CHECKING
+from plexus.processors.DataframeProcessor import Processor
 
-class ExpandContractionsProcessor(DataframeProcessor):
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
 
-    def __init__(self, **parameters):
-        super().__init__(**parameters)
 
-    def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
-        random_row_index = dataframe.sample(n=1).index[0]
-        original_transcript = dataframe.at[random_row_index, 'text']
-        truncated_original_transcript = (original_transcript[:512] + '...') if len(original_transcript) > 512 else original_transcript
+class ExpandContractionsProcessor(Processor):
+    """
+    Processor that expands contractions in text (e.g., "don't" -> "do not").
+    """
 
-        dataframe['text'] = dataframe['text'].apply(
-            lambda transcript: contractions.fix(transcript)
+    def process(self, score_input: 'Score.Input') -> 'Score.Input':
+        """
+        Process the Score.Input by expanding contractions.
+
+        Args:
+            score_input: Score.Input with text
+
+        Returns:
+            Score.Input with contractions expanded
+        """
+        from plexus.scores.Score import Score
+
+        # Expand contractions
+        expanded_text = contractions.fix(score_input.text)
+
+        # Return new Score.Input with expanded text
+        return Score.Input(
+            text=expanded_text,
+            metadata=score_input.metadata,
+            results=score_input.results
         )
-
-        modified_transcript = dataframe.at[random_row_index, 'text']
-        truncated_modified_transcript = (modified_transcript[:512] + '...') if len(modified_transcript) > 512 else modified_transcript
-
-        self.before_summary = truncated_original_transcript
-        self.after_summary = truncated_modified_transcript
-
-        self.display_summary()
-        return dataframe

@@ -1,0 +1,124 @@
+name: procedure_demo
+version: 1.0.0
+description: Demonstration of Procedure primitive for sub-procedure orchestration
+
+class: LuaDSL
+
+params:
+  test_mode:
+    type: string
+    required: false
+    default: "basic"
+
+outputs:
+  status:
+    type: string
+    required: true
+  tests_completed:
+    type: number
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+workflow: |
+  Log.info("Procedure primitive demonstration")
+
+  local tests_count = 0
+
+  -- Test 1: Spawn async sub-procedure
+  Log.info("Test 1: Spawning sub-procedure asynchronously")
+
+  local task_id = Procedure.spawn("test-sub-procedure", {
+    input_data = "test value",
+    processing_mode = "fast"
+  })
+
+  Log.info("Sub-procedure spawned", {
+    task_id = task_id
+  })
+  tests_count = tests_count + 1
+
+  -- Test 2: Check status
+  Log.info("Test 2: Checking sub-procedure status")
+
+  local status = Procedure.status(task_id)
+
+  Log.info("Status check", {
+    task_id = task_id,
+    status = status
+  })
+  tests_count = tests_count + 1
+
+  -- Test 3: Spawn multiple procedures
+  Log.info("Test 3: Spawning multiple procedures")
+
+  local task1 = Procedure.spawn("analysis-proc", {step = 1})
+  local task2 = Procedure.spawn("analysis-proc", {step = 2})
+  local task3 = Procedure.spawn("analysis-proc", {step = 3})
+
+  Log.info("Multiple procedures spawned", {
+    task_count = 3,
+    task_ids = {task1, task2, task3}
+  })
+  tests_count = tests_count + 1
+
+  -- Test 4: Cancel a procedure
+  Log.info("Test 4: Cancelling a procedure")
+
+  local cancelled = Procedure.cancel(task2)
+  local status_after_cancel = Procedure.status(task2)
+
+  Log.info("Cancellation result", {
+    task_id = task2,
+    cancelled = cancelled,
+    new_status = status_after_cancel
+  })
+  tests_count = tests_count + 1
+
+  -- Test 5: Try to wait for completed task (simulated)
+  Log.info("Test 5: Attempting to wait for task")
+
+  -- Note: Since async execution is not fully implemented,
+  -- wait will return a placeholder result
+  local result = Procedure.wait(task_id, 5)  -- 5 second timeout
+
+  Log.info("Wait result", {
+    task_id = task_id,
+    has_result = (result ~= nil)
+  })
+  tests_count = tests_count + 1
+
+  -- Test 6: Error handling - try to access non-existent task
+  Log.info("Test 6: Error handling for non-existent task")
+
+  local error_caught = false
+  local error_message = nil
+
+  -- Wrap in pcall to catch error
+  local success, err = pcall(function()
+    Procedure.status("non-existent-task-id")
+  end)
+
+  if not success then
+    error_caught = true
+    error_message = tostring(err)
+  end
+
+  Log.info("Error handling test", {
+    error_caught = error_caught,
+    expected_error = true
+  })
+  tests_count = tests_count + 1
+
+  Log.info("Procedure primitive demonstration complete", {
+    tests_completed = tests_count
+  })
+
+  return {
+    status = "success",
+    tests_completed = tests_count
+  }

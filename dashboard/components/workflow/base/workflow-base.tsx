@@ -111,7 +111,6 @@ const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
 
       // If too much time has passed and we have a cycle function, force a restart
       if (timeSinceLastCycle > MAX_CYCLE_AGE && cycleStatesFnRef.current && isPageVisibleRef.current) {
-        console.log('Watchdog detected stale cycle, forcing restart')
         cycleStatesFnRef.current()
       }
     }, WATCHDOG_INTERVAL)

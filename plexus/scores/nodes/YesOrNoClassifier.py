@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import time
+from jinja2 import Template
 
 class YesOrNoClassifier(BaseNode):
     """
@@ -107,11 +108,18 @@ class YesOrNoClassifier(BaseNode):
                 explanation = result["explanation"]
 
                 if self.parameters.explanation_message:
+                    # Create state dict with classification for template formatting
+                    template_state = {**state.dict(), **result}
+                    
+                    # Format the explanation message using Jinja2 template
+                    template = Template(self.parameters.explanation_message)
+                    formatted_explanation_message = template.render(**template_state)
+                    
                     explanation_messages = ChatPromptTemplate(
                         messages=[
                             HumanMessage(initial_prompt.format(text=state.text)),
                             AIMessage(content=result['classification']),
-                            HumanMessage(content=self.parameters.explanation_message)
+                            HumanMessage(content=formatted_explanation_message)
                         ]
                     )
                     explanation_model = (

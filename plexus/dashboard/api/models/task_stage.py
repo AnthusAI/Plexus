@@ -1,8 +1,10 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
-from ..client import _BaseAPIClient
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 @dataclass
 class TaskStage(BaseModel):
@@ -30,7 +32,7 @@ class TaskStage(BaseModel):
         estimatedCompletionAt: Optional[datetime] = None,
         processedItems: Optional[int] = None,
         totalItems: Optional[int] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.taskId = taskId
@@ -63,7 +65,7 @@ class TaskStage(BaseModel):
     @classmethod
     def create(
         cls,
-        client: _BaseAPIClient,
+        client: '_BaseAPIClient',
         taskId: str,
         name: str,
         order: int,
@@ -101,7 +103,7 @@ class TaskStage(BaseModel):
         return cls.from_dict(result['createTaskStage'], client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'TaskStage':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'TaskStage':
         # Convert datetime fields
         for date_field in ['startedAt', 'completedAt', 'estimatedCompletionAt']:
             if data.get(date_field):
@@ -197,7 +199,7 @@ class TaskStage(BaseModel):
         return self
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'TaskStage':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'TaskStage':
         query = """
         query GetTaskStage($id: ID!) {
             getTaskStage(id: $id) {

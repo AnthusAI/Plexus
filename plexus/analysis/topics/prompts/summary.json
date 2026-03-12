@@ -1,0 +1,3 @@
+{
+  "template": "Extract the main topics from this call transcript. For each topic, provide 1-2 concise sentences in bullet point format. Focus on customer issues, product mentions, and key discussion points only.\n\n{text}\n\nTopics:"
+} 

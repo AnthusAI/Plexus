@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3475b298-9f4a-4dd9-a3e3-4b26d0bb3cfa",
+  "issue_id": "plx-5d77fbfe-fda7-4b03-bb32-9858de0fad15",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-06T17:05:51.361Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 2,
+    "status": "open",
+    "title": "Refresh Kanbus configuration to current format"
+  }
+}

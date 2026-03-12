@@ -1,0 +1,26 @@
+{
+  "score-001": {
+    "getScoreVersion": {
+      "id": "v-001",
+      "configuration": "name: Simple Score\nkey: simple_score\nclass: Score\ndescription: A simple score with no dependencies\nmetrics:\n  - name: accuracy\n    type: float\n    range: [0, 1]\n    description: Accuracy of the score"
+    }
+  },
+  "score-002": {
+    "getScoreVersion": {
+      "id": "v-002",
+      "configuration": "name: Dependent Score\nkey: dependent_score\nclass: Score\ndescription: A score that depends on base_score\ndepends_on:\n  - Base Score\nmetrics:\n  - name: accuracy\n    type: float\n    range: [0, 1]\n    description: Accuracy of the score"
+    }
+  },
+  "score-003": {
+    "getScoreVersion": {
+      "id": "v-003",
+      "configuration": "name: Base Score\nkey: base_score\nclass: Score\ndescription: A base score that others depend on\nmetrics:\n  - name: accuracy\n    type: float\n    range: [0, 1]\n    description: Accuracy of the score"
+    }
+  },
+  "score-004": {
+    "getScoreVersion": {
+      "id": "v-004",
+      "configuration": "name: Complex Score\nkey: complex_score\nclass: Score\ndescription: A score with complex dependencies\ndepends_on:\n  - Base Score\n  - Simple Score\nmetrics:\n  - name: accuracy\n    type: float\n    range: [0, 1]\n    description: Accuracy of the score"
+    }
+  }
+} 

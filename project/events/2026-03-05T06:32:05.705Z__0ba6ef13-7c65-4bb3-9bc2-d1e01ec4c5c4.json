@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0ba6ef13-7c65-4bb3-9bc2-d1e01ec4c5c4",
+  "issue_id": "plx-10aac752-d464-43ff-99a1-b3c6e98fd13d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T06:32:05.705Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Run 60-day Semantic Reinforcement Memory for Andersen Windows IB Sales"
+  }
+}

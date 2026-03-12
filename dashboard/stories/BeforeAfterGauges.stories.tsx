@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import BeforeAfterGauges from '../components/BeforeAfterGauges'
 
 export default {
-  title: 'Visualization/BeforeAfterGauges',
+  title: 'General/Components/BeforeAfterGauges',
   component: BeforeAfterGauges,
   tags: ['autodocs'],
 } satisfies Meta<typeof BeforeAfterGauges>

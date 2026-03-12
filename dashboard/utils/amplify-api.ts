@@ -128,7 +128,6 @@ export async function listRecentTasks(limit: number = 12): Promise<{ tasks: Proc
     }
 
     const accountId = accountResponse.data[0].id;
-    console.debug('Fetching tasks for account:', accountId);
 
     const response = await currentClient.graphql({
       query: `
@@ -157,6 +156,10 @@ export async function listRecentTasks(limit: number = 12): Promise<{ tasks: Proc
               estimatedCompletionAt
               errorMessage
               errorDetails
+              stdout
+              stderr
+              output
+              attachedFiles
               currentStageId
               scorecardId
               scoreId
@@ -250,6 +253,7 @@ export async function listRecentTasks(limit: number = 12): Promise<{ tasks: Proc
       console.error('No items found in GraphQL response');
       return { tasks: [] };
     }
+
 
     const tasks = await Promise.all(
       result.listTaskByAccountIdAndUpdatedAt.items.map(async (item: any) => {

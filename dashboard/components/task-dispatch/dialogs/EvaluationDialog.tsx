@@ -10,11 +10,6 @@ import {
   Label,
   Button,
   Switch,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Input
 } from "../types"
 import { TaskDialogProps } from "../types"
@@ -32,17 +27,20 @@ interface EvaluationOptions {
   randomSeed?: number
   visualize: boolean
   logToLanggraph: boolean
+  versionId?: string
 }
 
-export function EvaluationDialog({ action, isOpen, onClose, onDispatch }: TaskDialogProps) {
+export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialOptions }: TaskDialogProps & { initialOptions?: Partial<EvaluationOptions> }) {
   const [options, setOptions] = useState<EvaluationOptions>({
-    scorecardName: 'termlifev1',
-    scoreName: 'Assumptive Close',
-    numberOfSamples: 10,
-    samplingMethod: 'random',
-    loadFresh: false,
-    visualize: false,
-    logToLanggraph: false
+    scorecardName: initialOptions?.scorecardName || 'termlifev1',
+    scoreName: initialOptions?.scoreName || 'Assumptive Close',
+    numberOfSamples: initialOptions?.numberOfSamples || 10,
+    samplingMethod: initialOptions?.samplingMethod || 'random',
+    loadFresh: initialOptions?.loadFresh || false,
+    randomSeed: initialOptions?.randomSeed,
+    visualize: initialOptions?.visualize || false,
+    logToLanggraph: initialOptions?.logToLanggraph || false,
+    versionId: initialOptions?.versionId
   })
 
   const handleDispatch = () => {
@@ -63,20 +61,17 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch }: TaskDi
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-card border-0" hideCloseButton>
-        <div className="absolute right-4 top-4">
-          <CardButton
-            icon={X}
-            onClick={onClose}
-            aria-label="Close"
-          />
-        </div>
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            {action.icon}
-            <DialogTitle>{action.name}</DialogTitle>
+        <DialogHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-xl font-semibold">{action.name}</DialogTitle>
+            <CardButton
+              icon={X}
+              onClick={onClose}
+              aria-label="Close"
+            />
           </div>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-6 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="scorecardName" className="text-right">
               Scorecard Name
@@ -103,6 +98,22 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch }: TaskDi
             />
           </div>
 
+          {options.versionId && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="versionId" className="text-right">
+                Version ID
+              </Label>
+              <Input
+                id="versionId"
+                value={options.versionId}
+                className="col-span-3 font-mono bg-background border-0"
+                readOnly
+                disabled
+                tabIndex={-1}
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="numberOfSamples" className="text-right">
               Number of Samples
@@ -119,25 +130,6 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch }: TaskDi
           </div>
 
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="samplingMethod" className="text-right">
-              Sampling Method
-            </Label>
-            <Select
-              value={options.samplingMethod}
-              onValueChange={(value: 'random' | 'sequential') => 
-                setOptions({ ...options, samplingMethod: value })}
-            >
-              <SelectTrigger className="col-span-3 border-0 bg-background" tabIndex={-1}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-0 bg-background">
-                <SelectItem value="random">Random</SelectItem>
-                <SelectItem value="sequential">Sequential</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="loadFresh" className="text-right">
               Load Fresh Data
             </Label>
@@ -150,56 +142,6 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch }: TaskDi
               />
             </div>
           </div>
-
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="visualize" className="text-right">
-              Visualize
-            </Label>
-            <div className="col-span-3 flex items-center">
-              <Switch
-                id="visualize"
-                checked={options.visualize}
-                onCheckedChange={(checked) => setOptions({ ...options, visualize: checked })}
-                tabIndex={-1}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="logToLanggraph" className="text-right">
-              Log to Langgraph
-            </Label>
-            <div className="col-span-3 flex items-center">
-              <Switch
-                id="logToLanggraph"
-                checked={options.logToLanggraph}
-                onCheckedChange={(checked) => setOptions({ ...options, logToLanggraph: checked })}
-                tabIndex={-1}
-              />
-            </div>
-          </div>
-
-          {options.samplingMethod === 'random' && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="randomSeed" className="text-right">
-                Random Seed (Optional)
-              </Label>
-              <div className="col-span-3">
-                <Input
-                  type="number"
-                  value={options.randomSeed || ''}
-                  onChange={(e) => setOptions({ 
-                    ...options, 
-                    randomSeed: e.target.value ? parseInt(e.target.value) : undefined 
-                  })}
-                  className="font-mono bg-background border-0"
-                  placeholder="Leave empty for random seed"
-                  min={0}
-                  tabIndex={-1}
-                />
-              </div>
-            </div>
-          )}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} className="bg-border border-0" tabIndex={-1}>
@@ -210,4 +152,4 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch }: TaskDi
       </DialogContent>
     </Dialog>
   )
-} 
+}

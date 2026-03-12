@@ -385,10 +385,11 @@ class ExplainableClassifier(Score):
 
     class Result(Score.Result):
         """
-        This Score has an additional output attribute, explanation, which is a string
+        ExplainableClassifier result.
+        
+        Inherits explanation and confidence fields from Score.Result base class.
         """
-        confidence: float
-        explanation: str
+        pass
 
     # New method to vectorize a single transcript
     def vectorize_transcript(self, transcript: str):        

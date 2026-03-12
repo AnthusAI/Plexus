@@ -5,7 +5,7 @@ import { expect } from '@storybook/test'
 import { within } from '@storybook/testing-library'
 
 const meta: Meta<typeof DualPhaseProgressBar> = {
-  title: 'Progress Bars/DualPhaseProgressBar',
+  title: 'General/Components/DualPhaseProgressBar',
   component: DualPhaseProgressBar,
   parameters: {
     layout: 'padded',

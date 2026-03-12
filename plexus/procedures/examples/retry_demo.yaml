@@ -1,0 +1,181 @@
+name: retry_demo
+version: 1.0.0
+description: Demonstration of Retry primitive for error handling with exponential backoff
+
+class: LuaDSL
+
+params:
+  target_attempts:
+    type: number
+    required: false
+    default: 2
+
+outputs:
+  status:
+    type: string
+    required: true
+  tests_completed:
+    type: number
+    required: true
+
+agents:
+  dummy:
+    system_prompt: "Placeholder agent"
+    initial_message: "Starting"
+    tools: []
+
+workflow: |
+  Log.info("Retry primitive demonstration")
+
+  local tests_count = 0
+
+  -- Test 1: Success on first attempt
+  Log.info("Test 1: Success on first attempt")
+  local attempt_counter_1 = 0
+  local result1 = Retry.with_backoff(function()
+    attempt_counter_1 = attempt_counter_1 + 1
+    Log.info("Test 1 attempt", {attempt = attempt_counter_1})
+    return "success"
+  end, {
+    max_attempts = 3,
+    initial_delay = 0.5
+  })
+
+  Log.info("Test 1 result", {
+    result = result1,
+    attempts = attempt_counter_1
+  })
+  tests_count = tests_count + 1
+
+  -- Test 2: Success after retries
+  Log.info("Test 2: Success after retries")
+  local attempt_counter_2 = 0
+  local target = params.target_attempts
+
+  local result2 = Retry.with_backoff(function()
+    attempt_counter_2 = attempt_counter_2 + 1
+    Log.info("Test 2 attempt", {
+      attempt = attempt_counter_2,
+      target = target
+    })
+
+    if attempt_counter_2 < target then
+      error("Not ready yet")
+    end
+
+    return {value = "success", attempts = attempt_counter_2}
+  end, {
+    max_attempts = 5,
+    initial_delay = 0.5,
+    backoff_factor = 2
+  })
+
+  Log.info("Test 2 result", {
+    value = result2.value,
+    attempts = result2.attempts
+  })
+  tests_count = tests_count + 1
+
+  -- Test 3: Retry with error callback
+  Log.info("Test 3: Retry with error callback")
+  local attempt_counter_3 = 0
+  local error_count = 0
+
+  local result3 = Retry.with_backoff(function()
+    attempt_counter_3 = attempt_counter_3 + 1
+    Log.info("Test 3 attempt", {attempt = attempt_counter_3})
+
+    if attempt_counter_3 < 2 then
+      error("Transient error")
+    end
+
+    return "recovered"
+  end, {
+    max_attempts = 3,
+    initial_delay = 0.5,
+    on_error = function(info)
+      error_count = error_count + 1
+      Log.warn("Error callback triggered", {
+        error_number = error_count,
+        attempt = info.attempt,
+        max_attempts = info.max_attempts,
+        error = info.error,
+        next_delay = info.delay
+      })
+    end
+  })
+
+  Log.info("Test 3 result", {
+    result = result3,
+    total_errors = error_count,
+    successful_attempt = attempt_counter_3
+  })
+  tests_count = tests_count + 1
+
+  -- Test 4: Exponential backoff timing
+  Log.info("Test 4: Exponential backoff delays")
+  local attempt_counter_4 = 0
+  local delays_observed = {}
+
+  local result4 = Retry.with_backoff(function()
+    attempt_counter_4 = attempt_counter_4 + 1
+    Log.info("Test 4 attempt", {attempt = attempt_counter_4})
+
+    if attempt_counter_4 < 3 then
+      error("Keep retrying")
+    end
+
+    return "backoff_complete"
+  end, {
+    max_attempts = 3,
+    initial_delay = 0.3,
+    backoff_factor = 2,
+    max_delay = 10,
+    on_error = function(info)
+      Log.info("Backoff delay", {
+        attempt = info.attempt,
+        next_delay = info.delay
+      })
+    end
+  })
+
+  Log.info("Test 4 result", {
+    result = result4,
+    total_attempts = attempt_counter_4
+  })
+  tests_count = tests_count + 1
+
+  -- Test 5: Custom backoff configuration
+  Log.info("Test 5: Custom backoff settings")
+  local attempt_counter_5 = 0
+
+  local result5 = Retry.with_backoff(function()
+    attempt_counter_5 = attempt_counter_5 + 1
+    Log.info("Test 5 attempt", {attempt = attempt_counter_5})
+
+    if attempt_counter_5 == 1 then
+      error("First attempt fails")
+    end
+
+    return "configured"
+  end, {
+    max_attempts = 4,
+    initial_delay = 0.2,
+    max_delay = 5,
+    backoff_factor = 3
+  })
+
+  Log.info("Test 5 result", {
+    result = result5,
+    attempts = attempt_counter_5
+  })
+  tests_count = tests_count + 1
+
+  Log.info("Retry demonstration complete", {
+    tests_completed = tests_count
+  })
+
+  return {
+    status = "success",
+    tests_completed = tests_count
+  }

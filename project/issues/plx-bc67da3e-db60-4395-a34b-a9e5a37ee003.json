@@ -1,0 +1,30 @@
+{
+  "id": "plx-bc67da3e-db60-4395-a34b-a9e5a37ee003",
+  "title": "[Snyk Code] Hardcoded Non-Cryptographic Secret",
+  "description": "## Hardcoded Non-Cryptographic Secret\n\n**Severity:** high\n**Project:** `AnthusAI/Plexus`\n**File:** `dashboard/utils/amplify-api.ts`\n**Location:** line 119, column 11 to line 119, column 22\n**Classes:** CWE-CWE-547\n### Snippet (dashboard/utils/amplify-api.ts:117-121)\n```\n 117 | \n 118 |     // Get the account ID by key\n 119 |     const ACCOUNT_KEY = 'call-criteria';\n 120 |     const accountResponse = await listFromModel<Schema['Account']['type']>(\n 121 |       'Account',\n```\n\n**Issue Key:** cdc276eb-e1bd-4553-8785-41442728ceb9\n\n### Details\nHardcoded Non-Cryptographic Secret\n\n**Fix:** Review and remediate in code.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e16e4d66-276c-4952-b24b-54438281bd27",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T20:41:39.687530Z",
+  "updated_at": "2026-03-11T21:27:00.584187Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_column": 11,
+    "snyk_end_column": 22,
+    "snyk_end_line": 119,
+    "snyk_file": "dashboard/utils/amplify-api.ts",
+    "snyk_key": "cdc276eb-e1bd-4553-8785-41442728ceb9",
+    "snyk_line": 119,
+    "snyk_severity": "high",
+    "snyk_type": "code"
+  }
+}

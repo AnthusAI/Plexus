@@ -1,6 +1,6 @@
 import os
 import json
-import mlflow
+# import mlflow
 from plexus.scores import Score
 from pydantic import BaseModel, validator, ValidationError
 import numpy as np
@@ -503,9 +503,11 @@ class DeepLearningSemanticClassifier(Score):
 
     class Result(Score.Result):
         """
-        This Score has an additional output attribute, confidence, which is a float
+        DeepLearningSemanticClassifier result.
+        
+        Inherits explanation and confidence fields from Score.Result base class.
         """
-        confidence: float
+        pass
 
     def load_weights_and_label_map(self):
         if not hasattr(self, 'model') or self.model is None:
@@ -619,4 +621,4 @@ class DeepLearningSemanticClassifier(Score):
         plt.savefig(file_name)
         plt.show()
 
-        mlflow.log_artifact(file_name)
+        # mlflow.log_artifact(file_name)

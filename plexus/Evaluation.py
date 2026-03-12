@@ -1,61 +1,36 @@
+from __future__ import annotations
+
 import os
-import math
 import yaml
 import json
-import copy
-import base64
 import pandas as pd
-import requests
-import random
 import time
 import traceback
 from datetime import datetime, timezone
-import string
-import pprint
+from typing import List, Optional
 import asyncio
-from decimal import Decimal
-from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tenacity import retry, wait_fixed, stop_after_attempt, before_log, retry_if_exception_type, AsyncRetrying, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.exceptions import Timeout, RequestException
-import mlflow
-from concurrent.futures import ThreadPoolExecutor
-from asyncio import Queue
-import importlib
 import logging
 
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from matplotlib.colors import ListedColormap
 from collections import Counter
 
-from graphviz import Digraph
-from jinja2 import Template
-
-from plexus.scores.CompositeScore import CompositeScore
 from plexus.scores.Score import Score
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
-from plexus.cli.CommandProgress import CommandProgress
 
 from sklearn.metrics import confusion_matrix
 
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
-from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
-from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
-from plexus.dashboard.api.models.score import Score as DashboardScore
-from plexus.dashboard.api.models.score_result import ScoreResult
-from plexus.dashboard.api.models.task import Task
 
-from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
-from plexus.utils.dict_utils import truncate_dict_strings_inner
+from plexus.scores.LangGraphScore import LangGraphScore
+import inspect
 from plexus.CustomLogging import logging, setup_logging, set_log_group
-
-from plexus.cli.task_progress_tracker import StageConfig, TaskProgressTracker
 
 # Set up logging for evaluations
 set_log_group('plexus/evaluation')
@@ -66,14 +41,12 @@ class Evaluation:
     Base class for evaluating Scorecard performance through accuracy testing and consistency checking.
 
     Evaluation is used to measure how well a Scorecard performs against labeled data or to check
-    consistency of results. It integrates with MLFlow for tracking experiments and the Plexus
-    dashboard for monitoring. The class supports:
+    consistency of results. It integrates with the Plexus dashboard for monitoring. The class supports:
 
     - Accuracy testing against labeled data
     - Consistency checking through repeated scoring
     - Automatic metrics calculation and visualization
     - Cost tracking and reporting
-    - Integration with MLFlow experiments
     - Real-time progress tracking in the dashboard
 
     There are two main subclasses:
@@ -98,8 +71,8 @@ class Evaluation:
         )
         await evaluation.run()
 
-    3. Using with MLFlow tracking:
-        with evaluation:  # Automatically starts/ends MLFlow run
+    3. Using with context management:
+        with evaluation:
             await evaluation.run()
 
     4. Monitoring in dashboard:
@@ -127,17 +100,25 @@ class Evaluation:
         subset_of_score_names = None,
         experiment_label = None,
         max_mismatches_to_report=5,
-        account_key: str = 'call-criteria',
+        account_key: str = None,
         score_id: str = None,
         visualize: bool = False,
         task_id: str = None,
+        allow_no_labels: bool = False,
     ):
         # Immediately store task_id so that it is available for evaluation record creation
+        self.allow_no_labels = allow_no_labels
         self.task_id = task_id
+        
+        # Use PLEXUS_ACCOUNT_KEY environment variable if no account_key provided
+        if account_key is None:
+            account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+            if account_key is None:
+                raise ValueError("account_key must be provided or PLEXUS_ACCOUNT_KEY environment variable must be set")
         
         # Set up logging for evaluations
         self.logging = logging.getLogger('plexus/evaluation')
-        self.logging.info("Starting Evaluation initialization...")
+        # Initialize evaluation
 
         # Initialize basic parameters
         self.scorecard_name = scorecard_name
@@ -162,40 +143,80 @@ class Evaluation:
 
         # Initialize dashboard client
         try:
-            self.logging.info("Initializing Plexus Dashboard client...")
             self.dashboard_client = PlexusDashboardClient.for_account(account_key)
             
-            self.logging.info(f"Looking up account with key: {account_key}")
             account = Account.list_by_key(key=account_key, client=self.dashboard_client)
             if not account:
                 raise ValueError(f"No account found with key: {account_key}")
-            self.logging.info(f"Found account: {account.name} ({account.id})")
+            self.logging.info(f"Initialized evaluation for account: {account.name}")
             
             self.account_id = account.id
             
-            # Initialize scorecard_id as None
+            # Initialize scorecard_id as None - will be set immediately below
             self.scorecard_id = None
             
-            self.logging.info(f"Looking up scorecard with name: {self.scorecard.name}")
+            # Prefer deterministic ID resolution shared with CLI helpers
+            # Determine a display identifier to resolve the scorecard ID
+            scorecard_display_name = None
+            if hasattr(self.scorecard, 'name') and callable(self.scorecard.name):
+                scorecard_display_name = self.scorecard.name()
+            elif hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
+                scorecard_display_name = self.scorecard.properties.get('name') or self.scorecard.properties.get('key')
+            else:
+                scorecard_display_name = str(self.scorecard_name)
+
             try:
-                if hasattr(self.scorecard, 'key'):
-                    self.logging.info(f"Using scorecard key: {self.scorecard.key}")
-                    scorecard_obj = DashboardScorecard.get_by_key(self.scorecard.key, self.dashboard_client)
-                elif hasattr(self.scorecard, 'id'):
-                    self.logging.info(f"Using scorecard ID: {self.scorecard.id}")
-                    scorecard_obj = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
-                else:
-                    self.logging.info(f"Looking up scorecard by name: {self.scorecard.name}")
-                    scorecard_obj = DashboardScorecard.get_by_name(self.scorecard.name, self.dashboard_client)
+                # Use the same identifier resolution helpers as the CLI to get DynamoDB IDs
+                from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+                resolved_scorecard_id = resolve_scorecard_identifier(self.dashboard_client, scorecard_display_name or self.scorecard_name)
+                if not resolved_scorecard_id:
+                    # As a backup, try the raw scorecard_name
+                    resolved_scorecard_id = resolve_scorecard_identifier(self.dashboard_client, self.scorecard_name)
+                if not resolved_scorecard_id:
+                    self.logging.error("Failed to resolve scorecard ID via identifier resolution")
+                    raise ValueError(f"Could not resolve scorecard ID for: {scorecard_display_name or self.scorecard_name}")
+                self.scorecard_id = resolved_scorecard_id
+
+                # Resolve score ID if a single target score is specified
+                single_score_name = None
+                if self.subset_of_score_names and isinstance(self.subset_of_score_names, (list, tuple)) and len(self.subset_of_score_names) == 1:
+                    single_score_name = self.subset_of_score_names[0]
                 
-                if scorecard_obj:
-                    self.logging.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
-                    self.scorecard_id = scorecard_obj.id
-                else:
-                    self.logging.error("Failed to find scorecard")
-                    raise ValueError(f"Could not find scorecard with name: {self.scorecard.name}")
+                if single_score_name:
+                    try:
+                        resolved_score_id = resolve_score_identifier(self.dashboard_client, self.scorecard_id, single_score_name)
+                        if resolved_score_id:
+                            self.score_id = resolved_score_id
+                            self.logging.info(f"Resolved score identifier to UUID: {self.score_id}")
+                        else:
+                            self.logging.warning(f"Could not resolve score identifier for score: {single_score_name}")
+                    except Exception as score_lookup_error:
+                        self.logging.warning(f"Failed to lookup score: {score_lookup_error}")
+
+                # Update the evaluation record immediately with both IDs now that they're both set
+                if hasattr(self, 'evaluation_id') and self.evaluation_id:
+                    update_data = {'scorecardId': self.scorecard_id}
+                    if getattr(self, 'score_id', None) and isinstance(self.score_id, str) and '-' in self.score_id and len(self.score_id.split('-')) == 5:
+                        update_data['scoreId'] = self.score_id
+                    try:
+                        mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                            updateEvaluation(input: $input) {
+                                id
+                                scorecardId
+                                scoreId
+                            }
+                        }"""
+                        self.dashboard_client.execute(mutation, {
+                            'input': {
+                                'id': self.evaluation_id,
+                                **update_data
+                            }
+                        })
+                    except Exception as e:
+                        self.logging.error(f"Failed to update evaluation record: {str(e)}")
+                        # Continue initialization even if update fails
             except Exception as e:
-                self.logging.error(f"Error looking up scorecard: {str(e)}")
+                self.logging.error(f"Error resolving IDs: {str(e)}")
                 raise
 
         except Exception as e:
@@ -212,60 +233,40 @@ class Evaluation:
         self.mismatches = []
         self.total_correct = 0
         self.total_questions = 0
+        self.total_skipped = 0  # Track scores skipped due to unmet conditions
+
+    @staticmethod
+    def _format_alignment_metric_value(alignment_value: Optional[float]) -> float:
+        """
+        Convert native Gwet's AC1 [-1, 1] into legacy-compatible percentage [0, 100].
+        """
+        if alignment_value is None:
+            return 0.0
+        # Clamp to valid AC1 range before mapping to avoid drift from floating point noise.
+        clamped = max(-1.0, min(1.0, float(alignment_value)))
+        return ((clamped + 1.0) / 2.0) * 100.0
+
 
     def __enter__(self):
-        self.start_mlflow_run()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        mlflow.end_run()
+        pass
 
     def start_mlflow_run(self):
-        logging.getLogger('mlflow').setLevel(logging.WARNING)
-
-        # First, make sure any existing run is ended
-        try:
-            mlflow.end_run()
-        except Exception:
-            pass  # Ignore any errors from ending non-existent runs
-
-        mlflow_tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
-        if mlflow_tracking_uri:
-            logging.info(f"Using MLFlow tracking URL: {mlflow_tracking_uri}")
-            mlflow.set_tracking_uri(mlflow_tracking_uri)
-        else:
-            mlflow.set_tracking_uri(f'file:///{os.path.abspath("./mlruns")}')
-
-        experiment_name = self.scorecard.__class__.name
-        if os.getenv('MLFLOW_EXPERIMENT_NAME'):
-            experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
-        if self.experiment_label:
-            experiment_name = experiment_name + " - " + self.experiment_label
-        mlflow.set_experiment(experiment_name)
-
-        # Now start the new run
-        try:
-            mlflow.start_run()
-        except Exception as e:
-            print("Error: ", e)
-            print("Attempting to end the previous run and start a new one.")
-            mlflow.end_run()
-            mlflow.start_run()
-
-        # Add notes about the run
-        mlflow.set_tag("scorecard", self.scorecard.name)
-        mlflow.set_tag("experiment_type", self.__class__.__name__)
-        if self.task_id:  # Add task_id as a tag if available
-            mlflow.set_tag("task_id", self.task_id)
-
-        self.log_parameters()
+        pass
     
     def log_parameters(self):
-        mlflow.log_param("sampling_method", self.sampling_method)
-        mlflow.log_param("number_of_texts_to_sample", self.number_of_texts_to_sample)
+        pass
 
     def score_names(self):
-        return self.subset_of_score_names if self.subset_of_score_names is not None else self.scorecard.score_names()
+        if self.subset_of_score_names is not None:
+            return self.subset_of_score_names
+        # Use instance method if available (for instances from create_instance_from_api_data)
+        # Otherwise fall back to class method (for classes from create_from_yaml)
+        if hasattr(self.scorecard, 'get_score_names'):
+            return self.scorecard.get_score_names()
+        return self.scorecard.score_names()
 
     def score_names_to_process(self):
         all_score_names_to_process = self.scorecard.score_names_to_process()
@@ -281,10 +282,7 @@ class Evaluation:
             end_time = time.time()
             execution_time = end_time - start_time
             time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
-            mlflow.log_metric("execution_time", execution_time)
-            mlflow.log_metric("time_per_text", time_per_text)
-            print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
-            logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
+            logging.info(f"{func.__name__} executed in {execution_time:.2f} seconds. Average per text: {time_per_text:.2f}s")
             return result
 
         def sync_wrapper(self, *args, **kwargs):
@@ -293,10 +291,7 @@ class Evaluation:
             end_time = time.time()
             execution_time = end_time - start_time
             time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
-            mlflow.log_metric("execution_time", execution_time)
-            mlflow.log_metric("time_per_text", time_per_text)
-            print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
-            logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
+            logging.info(f"{func.__name__} executed in {execution_time:.2f} seconds. Average per text: {time_per_text:.2f}s")
             return result
 
         if asyncio.iscoroutinefunction(func):
@@ -350,78 +345,166 @@ class Evaluation:
         wait=wait_exponential(multiplier=1, min=4, max=10)
     )
     async def log_to_dashboard(self, metrics, status="RUNNING"):
-        """Log metrics to Plexus Dashboard with retry logic"""
-        if not self.experiment_id:
-            self.logging.warning("Experiment ID not available - skipping metrics update")
+        """Log metrics to the Plexus Dashboard with retry logic"""
+        if not self.task_id:
+            logging.info("No task_id provided, skipping metrics logging")
             return
-        
-        self.logging.info(f"Starting dashboard update for experiment {self.experiment_id}")
-        
-        try:
-            elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
-            
-            # Convert metrics to percentages for the dashboard
-            metrics_list = [
-                {"name": "Accuracy", "value": metrics["accuracy"] * 100},
-                {"name": "Precision", "value": metrics["precision"] * 100},
-                {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
-                {"name": "Specificity", "value": metrics["specificity"] * 100}
-            ]
-            
-            # Format confusion matrix data for the API
-            confusion_matrix_data = metrics["confusion_matrices"][0]  # Get first score's matrix
-            matrix_data = {
-                "matrix": confusion_matrix_data["matrix"],
-                "labels": confusion_matrix_data["labels"]
-            }
-            
-            # Calculate total items based on status
-            if status == "COMPLETED":
-                # For final update, use actual total from distribution data
-                total_predictions = 0
-                if metrics["predicted_distribution"]:
-                    first_score = metrics["predicted_distribution"][0]["score"]
-                    total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
-                                         if item["score"] == first_score)
-            else:
-                # During evaluation, use the initial sample size
-                total_predictions = self.number_of_texts_to_sample
-            
-            update_params = {
-                "id": self.experiment_id,
-                "status": status,
-                "metrics": json.dumps(metrics_list),
-                "processedItems": self.processed_items,
-                "totalItems": total_predictions,
-                "elapsedSeconds": elapsed_seconds,
-                "estimatedRemainingSeconds": int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items) if self.processed_items > 0 else total_predictions,
-                "accuracy": metrics["accuracy"] * 100,
-                "confusionMatrix": json.dumps(matrix_data),
-                "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
-                "datasetClassDistribution": json.dumps(metrics["actual_distribution"])
-            }
 
-            if self.task_id:  # Ensure taskId is included in all updates
-                update_params["taskId"] = self.task_id
+        class MethodSafeEncoder(json.JSONEncoder):
+            """Custom JSON encoder that safely handles methods and other non-serializable objects."""
+            def default(self, obj):
+                if inspect.ismethod(obj) or inspect.isfunction(obj) or callable(obj):
+                    return f"<method: {obj.__name__ if hasattr(obj, '__name__') else str(obj)}>"
+                elif hasattr(obj, 'tolist') and callable(obj.tolist):
+                    # Handle numpy arrays and similar objects with tolist method
+                    return obj.tolist()
+                elif hasattr(obj, '__dict__'):
+                    # Handle custom objects by converting to dict when possible
+                    try:
+                        return {k: v for k, v in obj.__dict__.items() 
+                                if not k.startswith('_') and not callable(v)}
+                    except (TypeError, AttributeError):
+                        return str(obj)
+                else:
+                    try:
+                        return super().default(obj)
+                    except (TypeError, OverflowError):
+                        return str(obj)
+
+        def safe_json_dumps(obj):
+            """Convert object to JSON string using our safe encoder"""
+            try:
+                return json.dumps(obj, cls=MethodSafeEncoder)
+            except (TypeError, OverflowError) as e:
+                # If we still have serialization errors, try to identify the problematic paths
+                problematic_paths = []
+                
+                def find_problematic_paths(obj, path=""):
+                    """Recursively identify paths to non-serializable objects"""
+                    if obj is None or isinstance(obj, (str, int, float, bool)):
+                        return []
+                    
+                    problems = []
+                    
+                    # Check if this object itself is problematic
+                    try:
+                        json.dumps(obj)
+                    except (TypeError, OverflowError):
+                        problems.append(path)
+                    
+                    # Recursively check components
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            problems.extend(find_problematic_paths(v, f"{path}.{k}" if path else k))
+                    elif isinstance(obj, (list, tuple)):
+                        for i, item in enumerate(obj):
+                            problems.extend(find_problematic_paths(item, f"{path}[{i}]"))
+                    elif hasattr(obj, '__dict__'):
+                        try:
+                            for k, v in obj.__dict__.items():
+                                if not k.startswith('_'):
+                                    problems.extend(find_problematic_paths(v, f"{path}.{k}" if path else k))
+                        except Exception:
+                            # If we can't access __dict__ attributes, mark the whole object
+                            problems.append(path)
+                    
+                    return problems
+                
+                problematic_paths = find_problematic_paths(obj)
+                logging.error(f"JSON serialization error: {e}. Problematic paths: {problematic_paths}")
+                
+                # Try again with a simpler encoder that just converts everything to strings
+                cleaned_obj = {}
+                for k, v in obj.items() if isinstance(obj, dict) else []:
+                    try:
+                        json.dumps({k: v})
+                        cleaned_obj[k] = v
+                    except (TypeError, OverflowError):
+                        cleaned_obj[k] = str(v)
+                
+                return json.dumps(cleaned_obj)
+
+        # Create a fresh client for each update
+        client = PlexusDashboardClient()
+        try:
+            # Construct the mutation for updateEvaluation
+            mutation = self._get_update_mutation()
             
-            variables = {
-                "input": update_params
-            }
+            # Construct the variables
+            variables = self._get_update_variables(metrics, status)
             
-            self.logging.info("Executing dashboard update...")
-            # Use synchronous execution during cleanup, async otherwise
-            if status in ["COMPLETED", "FAILED"]:
-                self.dashboard_client.execute(self._get_update_mutation(), variables)
-            else:
-                await asyncio.to_thread(self.dashboard_client.execute, self._get_update_mutation(), variables)
-            self.logging.info("Successfully completed dashboard update")
-            
+            # Ensure we have valid JSON before sending
+            try:
+                # Serialize variables safely and log them for debugging
+                serialized_variables = safe_json_dumps(variables)
+                clean_variables = json.loads(serialized_variables)
+                
+                # Updating evaluation metrics
+                
+                # Execute the mutation with proper client handling
+                # Use asyncio.to_thread for the synchronous execute method
+                result = await asyncio.to_thread(client.execute, mutation, clean_variables)
+                
+                # Log the success
+                logging.info(f"Successfully updated evaluation metrics for task {self.task_id}")
+                return result
+                
+            except json.JSONDecodeError as je:
+                logging.error(f"JSON serialization error: {je}. Unable to prepare variables for API call.")
+                raise
+                
         except Exception as e:
-            self.logging.error(f"Error updating dashboard experiment: {e}")
+            # Log full error details including the mutation and variables
+            logging.error(f"Error updating evaluation metrics for task {self.task_id}: {str(e)}")
+            if variables:
+                logging.error(f"Failed mutation variables: {variables}")
+            
+            # Re-raise for retry
             raise
+            
+        finally:
+            # Ensure client is properly closed
+            if hasattr(client, 'close') and callable(client.close):
+                try:
+                    await client.close()
+                except Exception as e:
+                    logging.warning(f"Error closing GraphQL client: {str(e)}")
 
     def calculate_metrics(self, results):
-        logging.info(f"\nStarting metrics calculation with {len(results)} results")
+        if not results:
+            self.logging.warning("No results to calculate metrics")
+            # Return default/empty metrics to avoid crashing
+            return {
+                "accuracy": 0,
+                "alignment": 0,
+                "precision": 0,
+                "recall": 0,
+                "confusionMatrix": {
+                    "matrix": [[0, 0], [0, 0]],
+                    "labels": ['yes', 'no']
+                },
+                "predictedClassDistribution": [{
+                    "score": "no_data",
+                    "label": "no_data",
+                    "count": 0,
+                    "percentage": 0
+                }],
+                "datasetClassDistribution": [{
+                    "score": "no_data", 
+                    "label": "no_data",
+                    "count": 0,
+                    "percentage": 0
+                }]
+            }
+
+        # Import metrics classes
+        from plexus.analysis.metrics.gwet_ac1 import GwetAC1
+        from plexus.analysis.metrics.accuracy import Accuracy
+        from plexus.analysis.metrics.precision import Precision
+        from plexus.analysis.metrics.recall import Recall
+        from plexus.analysis.metrics.metric import Metric
+
+        self.logging.info(f"Calculating metrics for {len(results)} results")
         predicted_distributions = {}
         actual_distributions = {}
         confusion_matrices = {}
@@ -429,26 +512,46 @@ class Evaluation:
         total_correct = 0
         total_predictions = 0
         
+        # For Gwet's AC1 calculation, track all predictions and actuals
+        all_predictions = []
+        all_actuals = []
+        
         # Get the primary score name - if we're evaluating a specific score, use that
         primary_score_name = None
         if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
             primary_score_name = self.subset_of_score_names[0]
         
         # First pass: build distributions and confusion matrices
+        logged_results_count = 0
         for result in results:
-            logging.debug(f"\nProcessing result for form_id: {result['form_id']}")
-            
             for score_identifier, score_result in result['results'].items():
-                # Skip if the score result is an error
-                if isinstance(score_result.value, str) and score_result.value == "Error":
+                if not hasattr(score_result, 'value'):
+                    self.logging.warning(f"Score result has no 'value' attribute: {score_identifier}")
                     continue
+
+                # Skip if the score result is a system error (has error attribute) or was skipped due to unmet conditions
+                # Note: Don't skip if "error" is a legitimate class label (no error attribute)
+                if isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                    continue
+                if isinstance(score_result.value, str) and score_result.value.upper() == "ERROR" and hasattr(score_result, 'error') and score_result.error:
+                    continue
+
+                # Ensure parameters attribute exists before accessing name
+                if not hasattr(score_result, 'parameters') or not hasattr(score_result.parameters, 'name'):
+                    self.logging.warning(f"Skipping result without valid parameters: {score_identifier}")
+                    continue
+                score_name = score_result.parameters.name
 
                 # Skip if this is a dependency score and not our primary score
-                score_name = score_result.parameters.name
                 if primary_score_name and score_name != primary_score_name:
-                    logging.info(f"Skipping metrics for dependency score: {score_name}")
                     continue
 
+                # Ensure metadata and human_label exist before accessing
+                if not hasattr(score_result, 'metadata') or 'human_label' not in score_result.metadata:
+                    self.logging.warning(f"Skipping result missing metadata: {score_identifier}")
+                    continue
+
+                # Standardize and prepare predicted & actual values
                 predicted = str(score_result.value).lower().strip()
                 actual = str(score_result.metadata['human_label']).lower().strip()
                 
@@ -456,13 +559,23 @@ class Evaluation:
                 predicted = 'na' if predicted in ['', 'nan', 'n/a', 'none', 'null'] else predicted
                 actual = 'na' if actual in ['', 'nan', 'n/a', 'none', 'null'] else actual
                 
-                logging.debug(f"Score: {score_name}")
-                logging.debug(f"Predicted: '{predicted}'")
-                logging.debug(f"Actual: '{actual}'")
-                logging.debug(f"Correct: {score_result.metadata['correct']}")
+                # Collect predictions and actuals for Gwet's AC1 calculation
+                all_predictions.append(predicted)
+                all_actuals.append(actual)
                 
-                # Update total correct and predictions - only for the primary score
-                if score_result.metadata['correct']:
+                # Log the first few results for inspection
+                if logged_results_count < 5:
+                    self.logging.info(f"Sample {logged_results_count + 1}: {score_name} - Predicted: '{predicted}', Actual: '{actual}'")
+                    logged_results_count += 1
+
+                # Determine correctness - check if predicted value exactly matches the actual value
+                is_correct = predicted == actual
+                
+                # Update score_result metadata to ensure correct value is set
+                score_result.metadata['correct'] = is_correct
+                
+                # Update total correct and predictions
+                if is_correct:
                     total_correct += 1
                 total_predictions += 1
                 
@@ -500,31 +613,160 @@ class Evaluation:
                 # Update confusion matrix
                 confusion_matrices[score_name]['matrix'][actual][predicted] += 1
 
-        # Calculate overall accuracy
-        accuracy = total_correct / total_predictions if total_predictions > 0 else 0
+        # Calculate overall accuracy using the Accuracy metric class
+        accuracy_value = 0
+        if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
+            try:
+                # Calculate accuracy
+                
+                # Create an Accuracy instance and use proper Metric.Input interface
+                accuracy_calculator = Accuracy()
+                metric_input = Metric.Input(
+                    reference=all_actuals,
+                    predictions=all_predictions
+                )
+                result = accuracy_calculator.calculate(metric_input)
+                accuracy_value = result.value
+                # Accuracy calculated successfully
+            except Exception as e:
+                self.logging.error(f"Error calculating Accuracy: {str(e)}")
+                # Fall back to manual calculation if the Accuracy class fails
+                accuracy_value = total_correct / total_predictions if total_predictions > 0 else 0
+        else:
+            # If lists are empty or unequal, use the original calculation
+            accuracy_value = total_correct / total_predictions if total_predictions > 0 else 0
         
-        # For binary classification scores, calculate additional metrics
-        precision = accuracy
-        sensitivity = accuracy
-        specificity = accuracy
+        # Calculate Gwet's AC1 for alignment
+        gwet_ac1_value = 0
+        if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
+            try:
+                # Calculate AC1
+                
+                # Create a GwetAC1 instance and use proper Metric.Input interface
+                gwet_calculator = GwetAC1()
+                metric_input = Metric.Input(
+                    reference=all_actuals,
+                    predictions=all_predictions
+                )
+                result = gwet_calculator.calculate(metric_input)
+                gwet_ac1_value = result.value
+                # Keep native AC1 [-1, 1] internally; convert only when formatting for API/UI payloads.
+            except Exception as e:
+                self.logging.error(f"Error calculating Gwet's AC1: {str(e)}")
+                gwet_ac1_value = 0
         
-        # If we have binary classification data (yes/no), calculate detailed metrics
+        # Calculate precision using the Precision metric class
+        precision_value = accuracy_value  # Default fallback is to use accuracy
+        
+        # First check if we have binary classification data (yes/no) for specialized binary metrics
+        binary_confusion_matrix = None
         for score_name, matrix_data in confusion_matrices.items():
             labels = sorted(list(matrix_data['labels']))
+            
             if len(labels) == 2 and 'yes' in labels and 'no' in labels:
-                tp = matrix_data['matrix'].get('yes', {}).get('yes', 0)
-                tn = matrix_data['matrix'].get('no', {}).get('no', 0)
-                fp = matrix_data['matrix'].get('no', {}).get('yes', 0)
-                fn = matrix_data['matrix'].get('yes', {}).get('no', 0)
+                binary_confusion_matrix = matrix_data
+                break
+        
+        # Calculate precision using the Precision class
+        if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
+            try:
+                # Calculate Precision
                 
-                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-                sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
-                specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-                break  # Use the first binary score found for these metrics
+                # Create a Precision instance and use proper Metric.Input interface
+                precision_calculator = Precision(positive_labels=['yes'])
+                metric_input = Metric.Input(
+                    reference=all_actuals,
+                    predictions=all_predictions
+                )
+                result = precision_calculator.calculate(metric_input)
+                precision_value = result.value
+                precision_value = result.value
+            except Exception as e:
+                self.logging.error(f"Error calculating Precision: {str(e)}")
+                self.logging.exception("Stack trace for Precision calculation error:")
+                
+                # Fall back to manual calculation if the Precision class fails
+                if binary_confusion_matrix:
+                    # Manual calculation from confusion matrix
+                    tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
+                    fp = binary_confusion_matrix['matrix'].get('no', {}).get('yes', 0)
+                    precision_value = tp / (tp + fp) if (tp + fp) > 0 else 0
+                    # Fallback to manual precision calculation from matrix
+                else:
+                    # If no binary confusion matrix, use accuracy as a fallback
+                    precision_value = accuracy_value
+                    # Using accuracy as fallback for precision
+        elif binary_confusion_matrix:
+            # If we have a binary confusion matrix but couldn't use the Precision class
+            tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
+            fp = binary_confusion_matrix['matrix'].get('no', {}).get('yes', 0)
+            precision_value = tp / (tp + fp) if (tp + fp) > 0 else 0
+            self.logging.info(f"Calculated precision manually from confusion matrix: {precision_value}")
+        else:
+            # Default fallback - using accuracy as fallback for precision due to insufficient data
+            precision_value = accuracy_value
+        
+        # Calculate recall using the Recall metric class
+        recall_value = accuracy_value  # Default fallback is to use accuracy
+        
+        # Calculate recall using the Recall class
+        if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
+            try:
+                # Calculate Recall
+                
+                # Create a Recall instance and use proper Metric.Input interface
+                recall_calculator = Recall(positive_labels=['yes'])
+                metric_input = Metric.Input(
+                    reference=all_actuals,
+                    predictions=all_predictions
+                )
+                result = recall_calculator.calculate(metric_input)
+                recall_value = result.value
+                recall_value = result.value
+            except Exception as e:
+                self.logging.error(f"Error calculating Recall: {str(e)}")
+                self.logging.exception("Stack trace for Recall calculation error:")
+                
+                # Fall back to manual calculation if the Recall class fails
+                if binary_confusion_matrix:
+                    # Manual calculation from confusion matrix
+                    tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
+                    fn = binary_confusion_matrix['matrix'].get('yes', {}).get('no', 0)
+                    recall_value = tp / (tp + fn) if (tp + fn) > 0 else 0
+                    # Fallback to manual recall calculation from matrix
+                else:
+                    # If no binary confusion matrix, use accuracy as a fallback
+                    recall_value = accuracy_value
+                    # Using accuracy as fallback for recall
+        elif binary_confusion_matrix:
+            # If we have a binary confusion matrix but couldn't use the Recall class
+            tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
+            fn = binary_confusion_matrix['matrix'].get('yes', {}).get('no', 0)
+            recall_value = tp / (tp + fn) if (tp + fn) > 0 else 0
+            self.logging.info(f"Calculated recall manually from confusion matrix: {recall_value}")
+        else:
+            # Default fallback - using accuracy as fallback for recall due to insufficient data
+            recall_value = accuracy_value
+        
+        # Alignment is calculated with Gwet's AC1
+        alignment = gwet_ac1_value
 
-        # Format confusion matrices for API
-        formatted_confusion_matrices = []
-        for score_name, matrix_data in confusion_matrices.items():
+        # Format the confusion matrix for the primary score (or first score) for the API
+        primary_confusion_matrix_dict = None
+        # Determine primary score name again for clarity
+        primary_score_name_for_cm = None
+        if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+            primary_score_name_for_cm = self.subset_of_score_names[0]
+
+        if primary_score_name_for_cm and primary_score_name_for_cm in confusion_matrices:
+            matrix_data = confusion_matrices[primary_score_name_for_cm]
+        elif confusion_matrices: # Fallback to the first matrix if primary not found or not set
+            first_score_name = next(iter(confusion_matrices))
+            matrix_data = confusion_matrices[first_score_name]
+        else:
+            matrix_data = None # No matrices calculated
+
+        if matrix_data:
             labels = sorted(list(matrix_data['labels']))
             matrix = []
             
@@ -536,18 +778,19 @@ class Evaluation:
             for i, actual_label in enumerate(labels):
                 for j, predicted_label in enumerate(labels):
                     matrix[i][j] = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
-            
-            formatted_confusion_matrices.append({
-                "score_name": score_name,
+
+            primary_confusion_matrix_dict = {
                 "matrix": matrix,
                 "labels": labels
-            })
-            
-            # Log the confusion matrix for debugging
-            logging.info(f"\nConfusion Matrix for {score_name}:")
-            logging.info(f"Labels: {labels}")
-            for i, row in enumerate(matrix):
-                logging.info(f"{labels[i]}: {row}")
+            }
+            # Confusion matrix prepared for API
+        else:
+            # Create a default empty matrix if none were generated
+            self.logging.warning("No confusion matrix data generated, creating default structure.")
+            primary_confusion_matrix_dict = {
+                "matrix": [[0, 0], [0, 0]],
+                "labels": ['yes', 'no'] # Default labels
+            }
 
         # Format distributions for API - now including score names in the distribution
         predicted_label_distributions = []
@@ -573,12 +816,11 @@ class Evaluation:
                 })
 
         # Ensure we have at least one entry in each required field
-        if not formatted_confusion_matrices:
-            formatted_confusion_matrices.append({
-                "score_name": primary_score_name or self.score_names()[0],
+        if not primary_confusion_matrix_dict:
+            primary_confusion_matrix_dict = {
                 "matrix": [[0, 0], [0, 0]],
                 "labels": ['yes', 'no']
-            })
+            }
         
         if not predicted_label_distributions:
             predicted_label_distributions.append({
@@ -596,38 +838,41 @@ class Evaluation:
                 "percentage": 0
             })
 
-        logging.info("\nCalculated metrics:")
-        logging.info(f"Total predictions: {total_predictions}")
-        logging.info(f"Total correct: {total_correct}")
-        logging.info(f"Accuracy: {accuracy}")
-        logging.info(f"Precision: {precision}")
-        logging.info(f"Sensitivity: {sensitivity}")
-        logging.info(f"Specificity: {specificity}")
-        logging.info(f"Predicted distributions: {predicted_label_distributions}")
-        logging.info(f"Actual distributions: {actual_label_distributions}")
+        # Log final metrics summary
+        self.logging.info(f"Metrics: {total_correct}/{total_predictions} correct, Accuracy: {accuracy_value:.3f}, Precision: {precision_value:.3f}, Alignment: {alignment:.3f}, Recall: {recall_value:.3f}")
 
         return {
-            "accuracy": accuracy,
-            "precision": precision,
-            "sensitivity": sensitivity,
-            "specificity": specificity,
-            "predicted_distribution": predicted_label_distributions,
-            "actual_distribution": actual_label_distributions,
-            "confusion_matrices": formatted_confusion_matrices
+            "accuracy": accuracy_value,
+            "precision": precision_value,
+            "alignment": alignment,  # Changed from sensitivity to alignment
+            "recall": recall_value,        # Changed from specificity to recall
+            "confusionMatrix": primary_confusion_matrix_dict, # Use the new single dict
+            "predictedClassDistribution": predicted_label_distributions,
+            "datasetClassDistribution": actual_label_distributions,
+            # "confusion_matrices": formatted_confusion_matrices # Removed old key
         }
 
     async def _async_run(self):
+        # Starting evaluation
+
         # Configure logging
         # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
         # Determine the correct report folder
         if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
-            score_instance = Score.from_name(self.scorecard_name, self.subset_of_score_names[0])
-            report_folder_path = score_instance.report_directory_path()
-            report_folder_path = report_folder_path.rstrip('/')
+            try:
+                score_instance = self.get_score_instance(self.subset_of_score_names[0])
+                report_folder_path = score_instance.report_directory_path()
+                report_folder_path = report_folder_path.rstrip('/')
+            except ValueError as e:
+                self.logging.info(f"Could not get score instance for report folder: {e}")
+                # Fallback to default report folder structure
+                scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
+                score_name = self.subset_of_score_names[0].replace(' ', '_')
+                report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
         else:
             scorecard_name = self.scorecard.name.replace(' ', '_')
-            report_folder_path = f"./reports/{scorecard_name}/combined"
+            report_folder_path = f"./score_results/{scorecard_name}/combined"
 
         # Ensure the report folder exists
         os.makedirs(report_folder_path, exist_ok=True)
@@ -648,8 +893,12 @@ class Evaluation:
         is_dataset_balanced = True  # Track overall dataset balance
         
         for score_name in self.score_names():
-            score_instance = Score.from_name(self.scorecard_name, score_name)
-            label_score_name = score_instance.get_label_score_name()
+            try:
+                score_instance = self.get_score_instance(score_name)
+                label_score_name = score_instance.get_label_score_name()
+            except ValueError as e:
+                self.logging.info(f"Could not get score instance for label distribution: {e}, skipping {score_name}")
+                continue
             
             # Try both possible column names for labels
             label_column = label_score_name + '_label'
@@ -712,6 +961,12 @@ class Evaluation:
             logging.warning("'Session ID' column not found. Using content_id as Session ID.")
             df['Session ID'] = df['content_id']
 
+        # Optional: 'feedback_item_id' column can be included to link score results to existing feedback items
+        if 'feedback_item_id' in df.columns:
+            logging.info("Found 'feedback_item_id' column - will link score results to existing feedback items")
+        else:
+            logging.info("No 'feedback_item_id' column found - score results will be created without feedback item links")
+
         fine_tuning_ids = set()
         fine_tuning_ids_file = f"tuning/{self.scorecard_name}/{self.subset_of_score_names[0]}/training_ids.txt"
         original_shape = df.shape
@@ -769,8 +1024,6 @@ class Evaluation:
             except ValueError as e:
                 logging.error(f"Sampling error: {e}")
                 selected_sample_rows = df
-        elif self.sampling_method == 'all':
-            selected_sample_rows = df
         elif self.sampling_method == 'sequential':
             logging.info(f"DataFrame shape before sampling: {df.shape}")
             logging.info(f"First few DataFrame indices: {df.index[:5].tolist()}")
@@ -782,6 +1035,10 @@ class Evaluation:
             logging.info(f"Sampled DataFrame shape: {selected_sample_rows.shape}")
             logging.info(f"First few sampled indices: {selected_sample_rows.index[:5].tolist()}")
             logging.info(f"First few sampled session IDs: {selected_sample_rows['Session ID'].head(5).tolist()}")
+        elif self.sampling_method == 'provided':
+            # Samples are already provided and pre-processed, use them as-is
+            selected_sample_rows = df
+            self.logging.info(f"Using {len(df)} provided samples without additional sampling")
         else:
             logging.warning(f"Unknown sampling method '{self.sampling_method}'. Defaulting to random.")
             selected_sample_rows = df.sample(
@@ -807,12 +1064,10 @@ class Evaluation:
         if not os.path.exists(report_folder_path):
             os.makedirs(report_folder_path)
 
-        logging.info("Logging scorecard results as an artifact in MLFlow.")
         scorecard_results = ScorecardResults(self.all_results)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         results_filename = f"scorecard_results_{timestamp}.json"
         scorecard_results.save_to_file(f"{report_folder_path}/{results_filename}")
-        mlflow.log_artifact(f"{report_folder_path}/{results_filename}")
 
         logging.info("Scoring completed.")
 
@@ -821,6 +1076,13 @@ class Evaluation:
             logging.info(f"Form ID: {result['form_id']}")
             for question in self.score_names():
                 score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
+                
+                # Skip counting if score was skipped due to unmet conditions
+                if score_result and isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                    logging.info(f"Question: {question}, skipped due to unmet dependency conditions")
+                    self.total_skipped += 1
+                    continue
+                
                 score_value = str(score_result.value).lower() if score_result else None
                 human_label = str(score_result.metadata['human_label']).lower() if score_result and hasattr(score_result, 'metadata') and 'human_label' in score_result.metadata else None
                 logging.info(f"Question: {question}, score Label: {score_value}, Human Label: {human_label}")
@@ -848,7 +1110,6 @@ class Evaluation:
         def log_accuracy_heatmap():
             try:
                 analysis.plot_accuracy_heatmap()
-                mlflow.log_artifact(f"{report_folder_path}/accuracy_heatmap.png")
             except Exception as e:
                 logging.error(f"Failed to log accuracy heatmap: {e}")
 
@@ -859,7 +1120,6 @@ class Evaluation:
                 report_filename = f"scorecard_report_{timestamp}.html"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log HTML report: {e}")
 
@@ -870,7 +1130,6 @@ class Evaluation:
                 report_filename = f"scorecard_report_incorrect_scores_{timestamp}.html"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log incorrect scores report: {e}")
 
@@ -881,19 +1140,12 @@ class Evaluation:
                 report_filename = f"scorecard_report_no_costs_{timestamp}.html"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log no costs report: {e}")
 
         def log_scorecard_costs():
             try:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 analysis.plot_scorecard_costs(results=self.all_results)
-                mlflow.log_artifact(f"{report_folder_path}/scorecard_input_output_costs_{timestamp}.png")
-                mlflow.log_artifact(f"{report_folder_path}/histogram_of_total_costs_{timestamp}.png")
-                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_{timestamp}.png")
-                mlflow.log_artifact(f"{report_folder_path}/total_llm_calls_by_score_{timestamp}.png")
-                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_by_element_type_{timestamp}.png")
             except Exception as e:
                 logging.error(f"Failed to log scorecard costs: {e}")
 
@@ -903,7 +1155,6 @@ class Evaluation:
                 report_filename = f"scorecard_report_for_incorrect_results_{timestamp}.csv"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(analysis.generate_csv_scorecard_report(results=self.all_results))
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log CSV report: {e}")
 
@@ -912,14 +1163,11 @@ class Evaluation:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 report_filename = f"question_accuracy_report_{timestamp}.csv"
                 analysis.generate_question_accuracy_csv(output_file=f"{report_folder_path}/{report_filename}")
-                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log question accuracy CSV: {e}")
 
         expenses = self.scorecard.get_accumulated_costs()
         expenses['cost_per_text'] = expenses['total_cost'] / len(selected_sample_rows)    
-
-        loop = asyncio.get_running_loop()
 
         # Run these operations concurrently
         await asyncio.gather(
@@ -936,22 +1184,89 @@ class Evaluation:
 
         # Calculate overall accuracy
         overall_accuracy = (self.total_correct / self.total_questions) * 100 if self.total_questions > 0 else 0
-        mlflow.log_metric("overall_accuracy", overall_accuracy)
-
-        # Log the results to MLflow
-        mlflow.log_metric("number_of_texts", len(selected_sample_rows))
-        mlflow.log_metric("number_of_scores", len(self.score_names()))
-        mlflow.log_metric("total_cost", expenses['total_cost'])
-        mlflow.log_metric("cost_per_text", expenses['cost_per_text'])
 
         # Generate the Excel report
         self.generate_excel_report(report_folder_path, self.all_results, selected_sample_rows)
 
         logging.info(f"Expenses: {expenses}")
         logging.info(f"{overall_accuracy:.1f}% accuracy / {len(selected_sample_rows)} samples")
+        if self.total_skipped > 0:
+            logging.info(f"Skipped {self.total_skipped} score results due to unmet dependency conditions")
         logging.info(f"cost: ${expenses['cost_per_text']:.6f} per call / ${expenses['total_cost']:.6f} total")
 
-        report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
+        # Build confusion matrix metrics for the summary
+        confusion_metrics = self._build_confusion_metrics_from_results()
+
+        # Analyze confidence calibration if confidence features are detected (preserve raw values)
+        calibration_report = None
+        try:
+            from plexus.confidence_calibration import (
+                detect_confidence_feature_enabled,
+                extract_confidence_accuracy_pairs,
+                compute_isotonic_regression_calibration,
+                serialize_calibration_model,
+                generate_calibration_report
+            )
+
+            logging.info(f"About to check confidence detection on {len(self.all_results)} results")
+            print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+            confidence_detected = detect_confidence_feature_enabled(self.all_results)
+            logging.info(f"Confidence detection result: {confidence_detected}")
+            print(f"DEBUG: Confidence detection result: {confidence_detected}")
+
+            if confidence_detected:
+                logging.info("Confidence feature detected - computing isotonic regression calibration")
+
+                # Extract confidence-accuracy pairs
+                confidence_scores, accuracy_labels = extract_confidence_accuracy_pairs(self.all_results)
+
+                if len(confidence_scores) >= 10:
+                    # Compute calibration model
+                    calibration_model = compute_isotonic_regression_calibration(confidence_scores, accuracy_labels)
+
+                    if calibration_model is not None:
+                        # Generate calibration report with serialized model data
+                        calibration_report = generate_calibration_report(
+                            confidence_scores, accuracy_labels, calibration_model
+                        )
+
+                        # Add serialized calibration data for future use
+                        calibration_report["calibration_model"] = serialize_calibration_model(calibration_model)
+
+                        # Generate reliability diagram visualization
+                        try:
+                            from plexus.confidence_calibration import plot_reliability_diagram
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            reliability_plot_path = f"{report_folder_path}/reliability_diagram_{timestamp}.png"
+
+                            plot_reliability_diagram(
+                                confidence_scores=confidence_scores,
+                                accuracy_labels=accuracy_labels,
+                                save_path=reliability_plot_path,
+                                title="Confidence Calibration - Raw Model Output",
+                                n_bins=20  # 5% buckets
+                            )
+
+                            logging.info(f"Reliability diagram saved to: {reliability_plot_path}")
+                        except Exception as e:
+                            logging.warning(f"Could not generate reliability diagram: {e}")
+
+                        logging.info(f"Computed isotonic regression calibration from {len(confidence_scores)} confidence scores")
+                        logging.info(f"Expected Calibration Error: {calibration_report.get('expected_calibration_error', 'N/A'):.4f}")
+                        logging.info("Raw confidence values preserved - calibration data stored for future application")
+                    else:
+                        logging.warning("Could not compute calibration model")
+                else:
+                    logging.info(f"Insufficient data for calibration: {len(confidence_scores)} samples (need at least 10)")
+            else:
+                logging.debug("No confidence features detected - skipping calibration")
+
+        except ImportError:
+            logging.warning("sklearn not available - skipping confidence calibration")
+        except Exception as e:
+            logging.error(f"Error during confidence calibration: {e}")
+
+        report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows), confusion_metrics)
         logging.info(report)
 
         await asyncio.to_thread(self.generate_and_log_confusion_matrix, self.all_results, report_folder_path)
@@ -959,7 +1274,7 @@ class Evaluation:
         for question in self.score_names():
             self.create_performance_visualization(self.all_results, question, report_folder_path)
 
-        self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
+        self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses, calibration_report)
 
     async def score_all_texts_for_score(self, selected_sample_rows, score_name: str, tracker):
         """Score all texts for a specific score with controlled concurrency"""
@@ -977,6 +1292,11 @@ class Evaluation:
         processed_counter = 0
         total_rows = len(selected_sample_rows)
         
+        # Add counter for ScoreResult creation attempts
+        self.scoreresult_creation_attempts = getattr(self, 'scoreresult_creation_attempts', 0)
+        self.scoreresult_creation_successes = getattr(self, 'scoreresult_creation_successes', 0)
+        self.scoreresult_creation_failures = getattr(self, 'scoreresult_creation_failures', 0)
+        
         async def process_text(row, idx):
             async with semaphore:  # This ensures only N concurrent operations
                 try:
@@ -992,8 +1312,10 @@ class Evaluation:
                         self.processed_items = sum(self.processed_items_by_score.values())
                         
                         # Update tracker with actual count of processed items
-                        tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
-                        tracker.update(current_items=self.processed_items)
+                        if tracker and tracker.current_stage:
+                            tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
+                        if tracker:
+                            tracker.update(current_items=self.processed_items)
                         
                         # Start metrics task if needed
                         is_final_result = processed_counter == total_rows
@@ -1001,7 +1323,24 @@ class Evaluation:
                         
                         return result
                 except Exception as e:
+                    # Enhanced error logging with more context
+                    error_context = {
+                        'score_name': score_name,
+                        'text_index': idx,
+                        'content_id': row.get('content_id', 'unknown'),
+                        'text_preview': str(row.get('text', ''))[:100] + '...' if row.get('text') else 'No text',
+                        'error_type': type(e).__name__,
+                        'error_message': str(e),
+                        'traceback': traceback.format_exc()
+                    }
                     logging.error(f"Error processing text at index {idx} for {score_name}: {e}")
+                    logging.error(f"Error context: {json.dumps(error_context, indent=2)}")
+                    
+                    # For NoneType iteration errors, provide specific guidance
+                    if 'NoneType' in str(e) and 'iterable' in str(e):
+                        logging.error("DEBUGGING TIP: This error usually occurs when None is used with 'in' operator or iteration")
+                        logging.error("Check for None values in metadata, score parameters, or workflow state")
+                    
                     raise
 
         # Create tasks for all rows but process them with controlled concurrency
@@ -1056,14 +1395,23 @@ class Evaluation:
                     # For final updates, use synchronous execution
                     if status == "COMPLETED":
                         try:
+                            # Create a client instance specifically for this final update
+                            final_client = PlexusDashboardClient()
                             update_variables = self._get_update_variables(metrics, status)
                             if self.task_id:  # Ensure taskId is preserved in final update
                                 update_variables['input']['taskId'] = self.task_id
-                            self.dashboard_client.execute(
+                            # Use the new client instance for the synchronous call
+                            final_client.execute(
                                 self._get_update_mutation(),
                                 update_variables
                             )
                             last_processed_count = current_count
+                            # Close the client if possible (assuming synchronous close or relying on GC)
+                            if hasattr(final_client, 'close') and callable(final_client.close):
+                                # If close is async this would need background execution;
+                                # rely on GC here to preserve existing behavior.
+                                pass
+
                         except Exception as e:
                             self.logging.error(f"Error in final metrics update: {e}")
                     else:
@@ -1143,56 +1491,128 @@ class Evaluation:
         elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
         
         # Format metrics for API
-        metrics_list = [
-            {"name": "Accuracy", "value": metrics["accuracy"] * 100},
-            {"name": "Precision", "value": metrics["precision"] * 100},
-            {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
-            {"name": "Specificity", "value": metrics["specificity"] * 100}
-        ]
+        metrics_for_api = []
+        if metrics.get("alignment") is not None:
+            alignment_value = self._format_alignment_metric_value(metrics["alignment"])
+            metrics_for_api.append({"name": "Alignment", "value": alignment_value})
+            # Added alignment to metrics
+        if metrics.get("accuracy") is not None:
+            metrics_for_api.append({"name": "Accuracy", "value": metrics["accuracy"] * 100})
+        if metrics.get("precision") is not None:
+            metrics_for_api.append({"name": "Precision", "value": metrics["precision"] * 100})
+        if metrics.get("recall") is not None:
+            metrics_for_api.append({"name": "Recall", "value": metrics["recall"] * 100})
         
-        # Get first score's confusion matrix
-        confusion_matrix_data = metrics["confusion_matrices"][0]
-        matrix_data = {
-            "matrix": confusion_matrix_data["matrix"],
-            "labels": confusion_matrix_data["labels"]
-        }
+        # Metrics prepared for API
         
         # Calculate total items based on status
+        total_predictions = 0
         if status == "COMPLETED":
             # For final update, use actual total from distribution data
-            total_predictions = 0
-            if metrics["predicted_distribution"]:
-                first_score = metrics["predicted_distribution"][0]["score"]
-                total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
-                                     if item["score"] == first_score)
+            if metrics.get("predicted_distribution"):
+                first_score = next(iter(metrics["predicted_distribution"]), {}).get("score")
+                if first_score:
+                    total_predictions = sum(item.get("count", 0) for item in metrics["predicted_distribution"] 
+                                         if item.get("score") == first_score)
         else:
             # During evaluation, use the initial sample size
             total_predictions = self.number_of_texts_to_sample
         
-        # Build update input that matches the schema
+        # Build update input with only valid fields for UpdateEvaluationInput
+        # Only include the fields that are allowed by the schema
         update_input = {
             "id": self.experiment_id,
             "status": status,
-            "metrics": json.dumps(metrics_list),
-            "processedItems": self.processed_items,
-            "totalItems": total_predictions,
-            "elapsedSeconds": elapsed_seconds,
             "accuracy": metrics["accuracy"] * 100,
-            "taskId": self.task_id  # Always include taskId in all updates
+            "processedItems": self.processed_items  # Add processed items count for progress tracking
         }
+        
+        # Add score ID and version ID if available
+        if hasattr(self, 'score_id') and self.score_id:
+            # Validate score_id format - should be a UUID with hyphens
+            if not (isinstance(self.score_id, str) and '-' in self.score_id):
+                self.logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {self.score_id}")
+                self.logging.warning(f"This will cause issues with Evaluation records. Expected format is UUID with hyphens.")
+                self.logging.warning(f"Will not add this Score ID to the evaluation record update.")
+            else:
+                update_input["scoreId"] = self.score_id
+        
+        if hasattr(self, 'score_version_id') and self.score_version_id:
+            update_input["scoreVersionId"] = self.score_version_id
+        
+        # Add metrics if valid - ensure we always have all metrics represented
+        if metrics_for_api:  # Ensure the list is not empty
+            # Double check that we have our alignment metric if it should be there
+            has_alignment = any(m["name"] == "Alignment" for m in metrics_for_api)
+            if "alignment" in metrics and not has_alignment:
+                # Force add alignment if missing
+                alignment_value = self._format_alignment_metric_value(metrics["alignment"])
+                metrics_for_api.append({"name": "Alignment", "value": alignment_value})
+            
+            # Additional validation to ensure all required metrics are included
+            metric_names = [m["name"] for m in metrics_for_api]
+            
+            # Force append any missing metrics with default N/A value (-1 displays as N/A in UI)
+            required_metrics = ["Alignment", "Accuracy", "Precision", "Recall"]
+            for required_metric in required_metrics:
+                if required_metric not in metric_names:
+                    metrics_for_api.append({"name": required_metric, "value": -1})
+            
+            # Final check and sort for consistent order
+            metrics_for_api.sort(key=lambda x: required_metrics.index(x["name"]) if x["name"] in required_metrics else 999)
+            
+            update_input["metrics"] = json.dumps(metrics_for_api)
+        else:
+            # Create default metrics list with all required metrics if empty
+            default_metrics = [
+                {"name": "Alignment", "value": self._format_alignment_metric_value(metrics.get("alignment", 0))},
+                {"name": "Accuracy", "value": metrics.get("accuracy", 0) * 100},
+                {"name": "Precision", "value": metrics.get("precision", 0) * 100},
+                {"name": "Recall", "value": metrics.get("recall", 0) * 100}
+            ]
+            update_input["metrics"] = json.dumps(default_metrics)
+        
+        # Add confusion matrix if available in metrics
+        confusion_matrix_val = metrics.get("confusionMatrix")
+        if confusion_matrix_val:
+            try:
+                update_input["confusionMatrix"] = json.dumps(confusion_matrix_val)
+            except (TypeError, OverflowError) as e:
+                logging.error(f"Error serializing confusion matrix: {e}")
+                update_input["confusionMatrix"] = json.dumps({"error": "Serialization failed"})
+        else:
+            update_input["confusionMatrix"] = json.dumps(None)
 
-        # Only add optional fields if they have values
-        if self.processed_items > 0:
-            update_input["estimatedRemainingSeconds"] = int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items)
-        
-        if confusion_matrix_data["matrix"]:
-            update_input["confusionMatrix"] = json.dumps(matrix_data)
-        
-        if metrics["predicted_distribution"]:
-            update_input["predictedClassDistribution"] = json.dumps(metrics["predicted_distribution"])
-        
-        if metrics["actual_distribution"]:
-            update_input["datasetClassDistribution"] = json.dumps(metrics["actual_distribution"])
+        # Add class distributions if available
+        predicted_dist_val = metrics.get("predictedClassDistribution")
+        if predicted_dist_val:
+            try:
+                update_input["predictedClassDistribution"] = json.dumps(predicted_dist_val)
+            except (TypeError, OverflowError) as e:
+                logging.error(f"Error serializing predicted class distribution: {e}")
+                update_input["predictedClassDistribution"] = json.dumps([{"error": "Serialization failed"}])
+        else:
+            update_input["predictedClassDistribution"] = json.dumps([])
+
+        dataset_dist_val = metrics.get("datasetClassDistribution")
+        if dataset_dist_val:
+            try:
+                update_input["datasetClassDistribution"] = json.dumps(dataset_dist_val)
+            except (TypeError, OverflowError) as e:
+                logging.error(f"Error serializing dataset class distribution: {e}")
+                update_input["datasetClassDistribution"] = json.dumps([{"error": "Serialization failed"}])
+        else:
+            update_input["datasetClassDistribution"] = json.dumps([])
+            
+        # Add estimatedRemainingSeconds if appropriate
+        if self.processed_items > 0 and total_predictions > self.processed_items and status != "COMPLETED":
+            estimate = int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items)
+            update_input["estimatedRemainingSeconds"] = estimate
+        elif status == "COMPLETED":
+            update_input["estimatedRemainingSeconds"] = 0
+            
+        # Log the update fields we're sending (summary only for performance)
+        # logging.info(f"Sending update to evaluation {self.experiment_id} with fields: {json.dumps(update_input, default=str)}") # Comment out previous log
 
         return {
             "input": update_input
@@ -1245,10 +1665,10 @@ class Evaluation:
                     })
 
         df_records = pd.DataFrame(records)
-        excel_file_path = f"{report_folder_path}/Evaluation Report for {filename_safe_score_names}.xlsx"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        excel_file_path = f"{report_folder_path}/Evaluation Report for {filename_safe_score_names}_{timestamp}.xlsx"
         df_records.to_excel(excel_file_path, index=False)
-        mlflow.log_artifact(excel_file_path)
-
+        
         logging.info(f"Excel report generated at {excel_file_path}")
 
     def generate_and_log_confusion_matrix(self, results, report_folder_path):
@@ -1296,8 +1716,6 @@ class Evaluation:
             plt.savefig(cm_path, bbox_inches='tight', dpi=600)
             plt.close()
 
-            mlflow.log_artifact(cm_path)
-
     def create_performance_visualization(self, results, question, report_folder_path):
         # Sanitize the question name for use in filename
         safe_question = question.replace('/', '_').replace('\\', '_').replace(':', '_')
@@ -1322,7 +1740,7 @@ class Evaluation:
             total = true_labels.count(label)
             accuracies.append(correct / total if total > 0 else 0)
         
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
+        _, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
         
         x = np.arange(len(unique_labels))
         width = 0.35
@@ -1352,9 +1770,7 @@ class Evaluation:
         plt.savefig(f"{report_folder_path}/performance_{safe_question}.png", bbox_inches='tight', dpi=600)
         plt.close()
         
-        mlflow.log_artifact(f"{report_folder_path}/performance_{safe_question}.png")
-        
-    def generate_metrics_json(self, report_folder_path, sample_size, expenses):
+    def generate_metrics_json(self, report_folder_path, sample_size, expenses, calibration_report=None):
         overall_accuracy = None if self.total_questions == 0 else (self.total_correct / self.total_questions) * 100
         
         if sample_size < 120:
@@ -1368,10 +1784,15 @@ class Evaluation:
             "overall_accuracy": accuracy_format.format(overall_accuracy) if overall_accuracy is not None else 0,
             "number_correct": self.total_correct,
             "total_questions": self.total_questions,
+            "total_skipped": self.total_skipped,
             "number_of_samples": sample_size,
             "cost_per_call": f"{expenses['cost_per_text']:.7f}".rstrip('0').rstrip('.'),
             "total_cost": f"{expenses['total_cost']:.7f}".rstrip('0').rstrip('.')
         }
+
+        # Add calibration report if available
+        if calibration_report is not None:
+            metrics["confidence_calibration"] = calibration_report
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         metrics_filename = f"metrics_{timestamp}.json"
@@ -1379,16 +1800,151 @@ class Evaluation:
         with open(metrics_file_path, 'w') as f:
             json.dump(metrics, f, indent=2)
 
-        mlflow.log_artifact(metrics_file_path)
         logging.info(f"Metrics JSON file generated at {metrics_file_path}")
 
-        for key, value in metrics.items():
-            if key in ["overall_accuracy", "cost_per_call", "total_cost"]:
-                mlflow.log_metric(key, float(value))
+    def _format_confusion_matrix_for_summary(self, final_metrics):
+        """Format confusion matrix for the concise evaluation summary."""
+        confusion_matrix = final_metrics.get('confusionMatrix')
+        if not confusion_matrix:
+            return ""
+        
+        summary_lines = []
+        
+        # Handle different confusion matrix formats (similar to evaluations.py)
+        matrix_dict = {}
+        all_classes = set()
+        
+        if isinstance(confusion_matrix, dict):
+            if 'matrix' in confusion_matrix and 'labels' in confusion_matrix:
+                # Format: {'matrix': [[7, 0], [2, 10]], 'labels': ['no', 'yes']}
+                matrix_2d = confusion_matrix['matrix']
+                labels = confusion_matrix['labels']
+                
+                if isinstance(matrix_2d, list) and isinstance(labels, list):
+                    all_classes = set(labels)
+                    matrix_dict = {}
+                    for i, actual_class in enumerate(labels):
+                        matrix_dict[actual_class] = {}
+                        for j, pred_class in enumerate(labels):
+                            if i < len(matrix_2d) and j < len(matrix_2d[i]):
+                                matrix_dict[actual_class][pred_class] = matrix_2d[i][j]
+                            else:
+                                matrix_dict[actual_class][pred_class] = 0
             else:
-                mlflow.log_metric(key, value)
+                # Standard nested dict format
+                matrix_dict = confusion_matrix
+                for actual, predicted_dict in confusion_matrix.items():
+                    all_classes.add(actual)
+                    if isinstance(predicted_dict, dict):
+                        all_classes.update(predicted_dict.keys())
+        
+        if not matrix_dict or not all_classes:
+            return ""
+        
+        all_classes = sorted(list(all_classes))
+        
+        # Create concise confusion matrix
+        summary_lines.append("CONFUSION MATRIX:")
+        summary_lines.append("                    Predicted")
+        header = "              "
+        for pred_class in all_classes:
+            header += f"{pred_class}".rjust(8)
+        summary_lines.append(header)
+        summary_lines.append("Actual      " + "-" * (8 * len(all_classes)))
+        
+        for actual_class in all_classes:
+            row = f"{actual_class}".ljust(10) + " | "
+            for pred_class in all_classes:
+                count = matrix_dict.get(actual_class, {}).get(pred_class, 0)
+                row += f"{count}".rjust(8)
+            summary_lines.append(row)
+        
+        # Add key insights
+        summary_lines.append("")
+        summary_lines.append("Key Insights:")
+        
+        # Find most common errors
+        errors = []
+        for actual_class in all_classes:
+            for pred_class in all_classes:
+                if actual_class != pred_class:
+                    count = matrix_dict.get(actual_class, {}).get(pred_class, 0)
+                    if count > 0:
+                        errors.append((count, actual_class, pred_class))
+        
+        errors.sort(reverse=True)  # Sort by count, highest first
+        
+        if errors:
+            summary_lines.append(f"• Most common error: {errors[0][1]} → {errors[0][2]} ({errors[0][0]} cases)")
+            if len(errors) > 1:
+                summary_lines.append(f"• Second most common: {errors[1][1]} → {errors[1][2]} ({errors[1][0]} cases)")
+        
+        # Add per-class accuracy
+        for cls in all_classes:
+            tp = matrix_dict.get(cls, {}).get(cls, 0)
+            total_actual = sum(matrix_dict.get(cls, {}).get(pred_cls, 0) for pred_cls in all_classes)
+            if total_actual > 0:
+                class_accuracy = tp / total_actual
+                summary_lines.append(f"• '{cls}' accuracy: {class_accuracy:.1%} ({tp}/{total_actual})")
+        
+        return "\n".join(summary_lines)
 
-    def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
+    def _build_confusion_metrics_from_results(self):
+        """Build confusion matrix metrics from the evaluation results."""
+        if not hasattr(self, 'all_results') or not self.all_results:
+            return {}
+        
+        # For now, focus on the first score (primary score)
+        score_names = self.score_names()
+        if not score_names:
+            return {}
+        
+        primary_score_name = score_names[0]
+        
+        # Collect actual and predicted labels
+        y_true = []
+        y_pred = []
+        
+        for result in self.all_results:
+            score_result = next((r for r in result['results'].values() if r.parameters.name == primary_score_name), None)
+            if score_result:
+                true_label = score_result.metadata['human_label']
+                pred_label = str(score_result.value).lower()
+                y_true.append(true_label)
+                y_pred.append(pred_label)
+        
+        if not y_true or not y_pred:
+            return {}
+        
+        # Get unique classes
+        all_classes = sorted(list(set(y_true + y_pred)))
+        
+        # Build confusion matrix in the format expected by the summary formatter
+        matrix_dict = {}
+        for actual_class in all_classes:
+            matrix_dict[actual_class] = {}
+            for pred_class in all_classes:
+                matrix_dict[actual_class][pred_class] = 0
+        
+        # Fill in the counts
+        for actual, pred in zip(y_true, y_pred):
+            matrix_dict[actual][pred] += 1
+        
+        # Build class distributions
+        from collections import Counter
+        dataset_dist = dict(Counter(y_true))
+        predicted_dist = dict(Counter(y_pred))
+        
+        return {
+            'confusionMatrix': {
+                'matrix': [[matrix_dict[actual].get(pred, 0) for pred in all_classes] for actual in all_classes],
+                'labels': all_classes
+            },
+            'datasetClassDistribution': dataset_dist,
+            'predictedClassDistribution': predicted_dist
+        }
+
+    def generate_report(self, score_instance, overall_accuracy, expenses, sample_size, final_metrics=None):
         score_config = score_instance.parameters
 
         report = f"""
@@ -1396,7 +1952,7 @@ Evaluation Report:
 ------------------
 
 Prompts:
-{yaml.dump(score_config.graph, default_flow_style=False)}
+{yaml.dump(score_config.graph, default_flow_style=False) if hasattr(score_config, 'graph') else 'N/A (non-LangGraph score)'}
 
 Mismatches (up to {self.max_mismatches_to_report}):
 """
@@ -1407,6 +1963,7 @@ Question:     {mismatch['question']}
 
 Predicted:    {mismatch['predicted']}
 Ground Truth: {mismatch['ground_truth']}
+QA Reasoning for Ground Truth: {mismatch['human_explanation']}
 
 Explanation:
 {mismatch['explanation']}
@@ -1416,12 +1973,20 @@ Transcript:
 
 ---
 """
+        # Add confusion matrix summary if available
+        confusion_summary = ""
+        if final_metrics and final_metrics.get('confusionMatrix'):
+            confusion_summary = self._format_confusion_matrix_for_summary(final_metrics)
+        
         report += f"""
 
 Overall Accuracy: {overall_accuracy:.1f}% ({self.total_correct} / {self.total_questions})
 Sample Size:      {sample_size}
+Skipped Results:  {self.total_skipped} (due to unmet dependency conditions)
 Cost per call:    ${expenses['cost_per_text']:.6f}
 Total cost:       ${expenses['total_cost']:.6f}
+
+{confusion_summary}
 """            
 
         return report
@@ -1440,6 +2005,55 @@ Total cost:       ${expenses['total_cost']:.6f}
                 columns = row.get('columns', {})
                 form_id = columns.get('form_id', '')
                 metadata_string = columns.get('metadata', {})
+
+                # Get feedback_item_id from the dataset if available
+                feedback_item_id = row.get('feedback_item_id', None)
+
+                # Fetch Item object if item_id is available (needed for input sources)
+                item = None
+                item_client = None
+                if hasattr(self.scorecard, 'client') and self.scorecard.client:
+                    item_client = self.scorecard.client
+                elif getattr(self, 'dashboard_client', None):
+                    item_client = self.dashboard_client
+
+                item_id = row.get('item_id')
+                if item_id:
+                    try:
+                        from plexus.dashboard.api.models.item import Item
+                        item = Item.get_by_id(item_id, item_client) if item_client else None
+                        if not item_client:
+                            logging.warning(f"No dashboard client available to fetch Item {item_id}")
+                        elif not item:
+                            logging.warning(f"Item lookup returned no result for item_id={item_id}")
+                    except Exception as e:
+                        logging.warning(f"Could not fetch Item {item_id}: {e}")
+
+                # Some datasets only include report ID as content_id (no item_id column).
+                # Resolve the Item via reportId identifier for those rows.
+                if not item and item_client:
+                    content_id = row.get('content_id')
+                    account_id = getattr(self, 'account_id', None)
+                    if content_id and account_id:
+                        try:
+                            from plexus.dashboard.api.models.item import Item
+                            item = Item.find_by_identifier(
+                                client=item_client,
+                                account_id=account_id,
+                                identifier_key="reportId",
+                                identifier_value=str(content_id),
+                                debug=False,
+                            )
+                            if item:
+                                logging.info(
+                                    f"Resolved Item {item.id} from reportId/content_id={content_id}"
+                                )
+                        except Exception as e:
+                            logging.warning(
+                                f"Could not fetch Item via reportId={content_id}: {e}"
+                            )
+
+                # Extract feedback_item_id if available
                 
                 # Initialize human_labels dictionary
                 human_labels = {}
@@ -1453,7 +2067,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         logging.warning(f"Failed to parse metadata as JSON. Using empty dict. Metadata: {metadata_string}")
                         metadata = {}
 
-                logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
+                # Processing text
 
                 # If score_name is provided, only process that score
                 score_names_to_process = [score_name] if score_name else self.score_names_to_process()
@@ -1468,18 +2082,23 @@ Total cost:       ${expenses['total_cost']:.6f}
                             {}
                         )
                         if score_config.get('class') == 'LangGraphScore':
-                            score_instance = Score.from_name(self.scorecard_name, score_to_process)
-                            if isinstance(score_instance, LangGraphScore):
-                                await score_instance.async_setup()  # Ensure the graph is built
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
-                                score_instance.generate_graph_visualization(output_path)
-                                logging.info(f"Generated graph visualization at {output_path}")
+                            try:
+                                score_instance = self.get_score_instance(score_to_process)
+                                if isinstance(score_instance, LangGraphScore):
+                                    await score_instance.async_setup()  # Ensure the graph is built
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
+                                    score_instance.generate_graph_visualization(output_path)
+                                    # Generated graph visualization
+                            except ValueError as e:
+                                # Skip visualization if score instance not found
+                                pass
                 
                 scorecard_results = await self.scorecard.score_entire_text(
                     text=text,
                     metadata=metadata,
-                    subset_of_score_names=score_names_to_process
+                    subset_of_score_names=score_names_to_process,
+                    item=item
                 )
 
                 # Create a new dictionary for filtered results
@@ -1492,6 +2111,12 @@ Total cost:       ${expenses['total_cost']:.6f}
                     'results': filtered_results,  # Use the filtered results dictionary
                     'human_labels': human_labels
                 }
+                
+                # Preserve all original dataframe columns for identifier extraction
+                # This ensures FeedbackItems IDs column and other dataset-specific columns are available
+                for col_name in row.index:
+                    if col_name not in result:  # Don't overwrite the explicitly set keys above
+                        result[col_name] = row[col_name]
 
                 # Track if we've processed any scores for this text
                 has_processed_scores = False
@@ -1505,36 +2130,71 @@ Total cost:       ${expenses['total_cost']:.6f}
                 for score_identifier in scorecard_results.keys():
                     try:
                         score_result = scorecard_results[score_identifier]
-                        score_instance = Score.from_name(self.scorecard.name, score_identifier)
-                        label_score_name = score_instance.get_label_score_name()
-                        score_name = score_instance.parameters.name
+                        
+                        # --- Refactor: Get score config directly from loaded scorecard --- 
+                        score_config = None
+                        current_score_name = getattr(score_result.parameters, 'name', score_identifier)
+                        for config in self.scorecard.scores:
+                            if config.get('name') == current_score_name or config.get('id') == score_identifier:
+                                score_config = config
+                                break
+                        
+                        if not score_config:
+                            logging.warning(f"Score configuration not found: {current_score_name}")
+                            continue
+                            
+                        # Determine label score name from config or default to current score name
+                        label_score_name = score_config.get('label_score_name', current_score_name)
+                        score_name = current_score_name # Use the name from the result parameters
+                        # --- End Refactor ---
 
                         # Skip if this is a dependency score and not our primary score
                         if primary_score_name and score_name != primary_score_name:
-                            logging.info(f"Skipping result creation for dependency score: {score_name}")
+                            continue
+                        
+                        # Handle skipped scores - don't try to process them for evaluation
+                        if isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                            logging.info(f"Score '{score_name}' was skipped due to unmet dependency conditions for content_id {content_id}")
+                            self.total_skipped += 1
                             continue
 
                         # First check for override
                         human_label = None
+                        label_found = False
+                        
                         if form_id in self.override_data and score_name in self.override_data[form_id]:
                             human_label = self.override_data[form_id][score_name]
+                            label_found = True
                             logging.info(f"Using override for form {form_id}, score {score_name}: {human_label}")
                         else:
                             # Fall back to row data if no override exists
                             label_column = label_score_name + '_label'
                             if label_column in row.index:
                                 human_label = row[label_column]
+                                label_found = True
                             elif label_score_name in row.index:
                                 human_label = row[label_score_name]
+                                label_found = True
                             else:
-                                logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
-                                continue
+                                # Check if we're allowing evaluations without labels
+                                if not getattr(self, 'allow_no_labels', False):
+                                    logging.warning(f"Label column not found for score: {score_identifier}")
+                                    continue
+                                else:
+                                    # No label found, but that's okay - we're in label-optional mode
+                                    logging.debug(f"No label found for score: {score_identifier}, continuing in label-optional mode")
+                                    human_label = None
+                                    label_found = False
 
-                        human_label = str(human_label).lower().rstrip('.!?')
-                        if human_label == 'nan':
-                            human_label = ''
-                        if human_label == 'n/a':
-                            human_label = 'na'
+                        # Process label if found
+                        if label_found and human_label is not None:
+                            human_label = str(human_label).lower().rstrip('.!?')
+                            if human_label == 'nan':
+                                human_label = ''
+                            if human_label == 'n/a':
+                                human_label = 'na'
+                        else:
+                            human_label = ''  # Empty string for no label
 
                         human_explanation = columns.get(f"{label_score_name} comment", 'None')
 
@@ -1543,62 +2203,129 @@ Total cost:       ${expenses['total_cost']:.6f}
                         if form_id in self.override_data:
                             for override_question_name, correct_value in self.override_data[form_id].items():
                                 if str(override_question_name) in human_labels:
-                                    logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_labels[str(override_question_name)]}' to '{correct_value}'")
+                                    # Override applied
                                     human_labels[str(override_question_name)] = correct_value
 
+                        if score_result.metadata is None:
+                            score_result.metadata = {}
                         score_result.metadata['human_label'] = human_label
                         score_result.metadata['human_explanation'] = human_explanation
-                        score_result.metadata['correct'] = score_result_value.strip() == human_label.strip()
-                        score_result.metadata['text'] = text
+                        # Only calculate correctness if we have a label
+                        if label_found and human_label:
+                            score_result.metadata['correct'] = score_result_value.strip() == human_label.strip()
+                        else:
+                            score_result.metadata['correct'] = None  # No label to compare against
+                        # Preserve scorecard-provided scoring text if available; fallback to original row text.
+                        if 'text' not in score_result.metadata:
+                            score_result.metadata['text'] = text
 
                         # Add to filtered results only if we get here (i.e., all conditions are met)
                         filtered_results[score_identifier] = score_result
                         has_processed_scores = True
 
                         # Create ScoreResult in a non-blocking way only for the primary score
-                        if self.dashboard_client and self.experiment_id:
-                            await self._create_score_result(
-                                score_result=score_result,
-                                content_id=content_id,
-                                result=result
-                            )
+                        logging.info(f"DEBUG: About to check ScoreResult creation conditions - dry_run={getattr(self, 'dry_run', False)}, dashboard_client={self.dashboard_client is not None}, experiment_id={self.experiment_id}")
+                        if getattr(self, 'dry_run', False):
+                            pass  # Skip ScoreResult creation in dry run
+                        elif self.dashboard_client and self.experiment_id:
+                            try:
+                                self.scoreresult_creation_attempts = getattr(self, 'scoreresult_creation_attempts', 0) + 1
+                                await self._create_score_result(
+                                    score_result=score_result,
+                                    content_id=content_id,
+                                    result=result,
+                                    feedback_item_id=feedback_item_id
+                                )
+                                self.scoreresult_creation_successes = getattr(self, 'scoreresult_creation_successes', 0) + 1
+                            except Exception as score_result_error:
+                                self.scoreresult_creation_failures = getattr(self, 'scoreresult_creation_failures', 0) + 1
+                                self.logging.error(f"Failed to create ScoreResult: {str(score_result_error)}")
+                                # Don't re-raise - continue with evaluation but log the failure
 
                     except Exception as e:
-                        logging.exception(f"Error processing {score_identifier}: {e}")
+                        # Enhanced error logging for score processing
+                        error_info = {
+                            'score_identifier': score_identifier,
+                            'content_id': content_id,
+                            'error_type': type(e).__name__,
+                            'error_message': str(e),
+                            'text_preview': text[:200] + '...' if len(text) > 200 else text
+                        }
+                        
+                        logging.error(f"Error processing {score_identifier}: {e}")
+                        logging.error(f"Detailed error info: {json.dumps(error_info, indent=2)}")
+                        
+                        # Specific handling for NoneType iteration errors
+                        if 'NoneType' in str(e) and 'iterable' in str(e):
+                            logging.error(f"NoneType iteration error in score '{score_identifier}'")
+                            logging.error("This usually indicates None values in score configuration or workflow state")
+                            logging.error("Common causes: missing parameters, None metadata values, or None results")
+                        
+                        logging.exception(f"Full traceback for {score_identifier}:")
+                        
+                        # Ensure parameters uses the correct scorecard name string
                         score_result = Score.Result(
-                            value="Error", 
+                            value="ERROR", 
                             error=str(e),
                             parameters=Score.Parameters(
                                 name=score_identifier,
-                                scorecard=self.scorecard_name
+                                scorecard=self.scorecard_name # Use string name here too
                             )
                         )
+                        # Add the error result to filtered_results so it's logged/counted
+                        filtered_results[score_identifier] = score_result
 
-                # Remove the result accumulation from here since it's now handled in _async_run
-                if has_processed_scores:
-                    self.processed_items += 1
+                # Remove the result accumulation from here since it's now handled in _run_evaluation / score_all_texts_for_score
+                # We still need to track overall progress if only one score is being evaluated
+                if has_processed_scores and score_name: # Check if we are processing a specific score
+                    self.processed_items_by_score[score_name] = self.processed_items_by_score.get(score_name, 0) + 1
+                    self.processed_items = sum(self.processed_items_by_score.values())
 
-                return result
+                return result # Return the processed result dict
 
             except (Timeout, RequestException) as e:
                 if attempt == max_attempts - 1:  # Last attempt
-                    raise  # Re-raise the last error
+                    logging.error(f"Max attempts reached for content_id {row.get('content_id')}. Error: {e}")
+                    # Return an error result instead of raising
+                    return {
+                        'content_id': row.get('content_id', ''),
+                        'session_id': row.get('Session ID', row.get('content_id', '')),
+                        'form_id': row.get('columns', {}).get('form_id', ''),
+                        'results': {
+                             score_name or 'processing_error': Score.Result(
+                                 value="Error",
+                                 error=f"Timeout/RequestException after {max_attempts} attempts: {e}",
+                                 parameters=Score.Parameters(name=score_name or 'processing_error', scorecard=self.scorecard_name)
+                            )
+                        },
+                        'human_labels': {}
+                    }
                 
                 # Calculate exponential backoff delay
                 delay = min(base_delay * (2 ** attempt), max_delay)
-                logging.info(f"Attempt {attempt + 1} failed with error: {e}. Retrying in {delay} seconds...")
+                logging.info(f"Attempt {attempt + 1} failed for content_id {row.get('content_id')} with error: {e}. Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
 
-    async def _create_score_result(self, *, score_result, content_id, result):
-        """Create a score result in the dashboard."""
-        try:
-            # Log the raw inputs
-            logging.info("Creating score result with raw inputs:")
-            logging.info(f"score_result value: {score_result.value}")
-            logging.info(f"score_result metadata: {truncate_dict_strings_inner(score_result.metadata)}")
-            logging.info(f"content_id: {content_id}")
-            logging.info(f"result dict: {truncate_dict_strings_inner(result)}")
+        # If loop completes without returning (e.g., all attempts failed but didn't hit max_attempts check correctly)
+        logging.error(f"Scoring loop completed for content_id {row.get('content_id')} without returning a result or error after {max_attempts} attempts.")
+        return {
+            'content_id': row.get('content_id', ''),
+            'session_id': row.get('Session ID', row.get('content_id', '')),
+            'form_id': row.get('columns', {}).get('form_id', ''),
+            'results': {
+                score_name or 'processing_error': Score.Result(
+                    value="Error",
+                    error=f"Scoring failed after {max_attempts} attempts.",
+                    parameters=Score.Parameters(name=score_name or 'processing_error', scorecard=self.scorecard_name)
+                )
+            },
+            'human_labels': {}
+        }
 
+    async def _create_score_result(self, *, score_result, content_id, result, feedback_item_id=None):
+        """Create a score result in the dashboard."""
+        logging.info(f"DEBUG: _create_score_result called for content_id={content_id}")
+        try:
             # Validate required attributes are available
             if not hasattr(self, 'experiment_id') or not self.experiment_id:
                 raise ValueError("experiment_id is not set")
@@ -1610,13 +2337,16 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Ensure we have a valid string value
             value = str(score_result.value) if score_result.value is not None else "N/A"
             
+            # Extract feedback_item_id if available
+            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
+            
             # Ensure we have valid metadata
             metadata_dict = {
                 'item_id': result.get('form_id', ''),
                 'results': {
                     score_result.parameters.name: {
                         'value': value,
-                        'confidence': None,
+                        'confidence': score_result.confidence,
                         'explanation': score_result.metadata.get('explanation', ''),
                         'metadata': {
                             'human_label': score_result.metadata.get('human_label', ''),
@@ -1628,27 +2358,67 @@ Total cost:       ${expenses['total_cost']:.6f}
                 }
             }
             
+            # Add feedback_item_id to metadata if available
+            if feedback_item_id:
+                metadata_dict['feedback_item_id'] = feedback_item_id
+            
+            # The Item should already exist from dataset creation - evaluations don't create Items
+            # Use content_id as the itemId since Items are created by the data loading process
+            
             # Create data dictionary with all required fields
+            # MARKER: CODE VERSION 2025-10-17-v3 - This ensures we're using the updated code
             data = {
                 'evaluationId': self.experiment_id,
-                'itemId': str(result.get('form_id', '')),  # Ensure itemId is a string
+                'itemId': content_id,  # Use content_id directly
                 'accountId': self.account_id,
                 'scorecardId': self.scorecard_id,
-                'value': value,
-                'metadata': json.dumps(metadata_dict)  # Ensure metadata is a JSON string
+                'metadata': json.dumps(metadata_dict),  # Add the metadata that was created earlier
+                'value': value,  # Add the score result value
+                'confidence': score_result.confidence,  # Add confidence from Score.Result
+                'explanation': score_result.explanation,  # Add explanation from Score.Result
+                'code': '200',  # Add success code
+                'status': 'COMPLETED',  # Add status
+                'type': 'evaluation',  # Add type field required by byTypeStatusUpdated GSI
             }
+            logging.info(f"🔧 CODE VERSION 2025-10-17-v3 ACTIVE - Creating ScoreResult with type='{data.get('type')}' and status='{data.get('status')}'")
+            logging.info(f"🔧 Full data dict keys: {list(data.keys())}")
+            
+            # Add scoreId - try multiple sources
+            score_id = None
+            if hasattr(score_result, 'parameters') and hasattr(score_result.parameters, 'id'):
+                score_id = score_result.parameters.id
+            elif hasattr(self, 'score_id') and self.score_id is not None:
+                score_id = self.score_id
+            else:
+                self.logging.warning("No score ID found")
+            
+            if score_id is not None:
+                data['scoreId'] = score_id
+            else:
+                logging.error("score_id is None, not adding to data")
+            
+            # Add feedback item ID if provided from the dataset
+            if feedback_item_id:
+                data['feedbackItemId'] = feedback_item_id
 
-            # Log the data being sent
-            self.logging.info("Preparing to create score result with data:")
-            for key, value in data.items():
-                self.logging.info(f"{key}: {truncate_dict_strings_inner(value)}")
+            # Add feedbackItemId as a direct field if available
+            if feedback_item_id:
+                data['feedbackItemId'] = feedback_item_id
+
+            # Add trace data if available           
+            if score_result.metadata and 'trace' in score_result.metadata:
+                data['trace'] = json.dumps(score_result.metadata['trace'])
+
+            # Prepare data for GraphQL mutation
+
+            # Debug logging to see what's actually in the data dict
+            logging.info(f"DEBUG: ScoreResult data keys: {list(data.keys())}")
+            logging.info(f"DEBUG: type={data.get('type')}, status={data.get('status')}, updatedAt={data.get('updatedAt')}")
 
             # Validate all required fields are present and not None
-            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata']
-            missing_fields = [field for field in required_fields if not data.get(field)]
+            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'scoreId', 'value', 'metadata', 'code', 'status']
+            missing_fields = [field for field in required_fields if field not in data or data[field] is None]
             if missing_fields:
-                self.logging.error(f"Missing required fields: {', '.join(missing_fields)}")
-                self.logging.error(f"Current data: {data}")
                 raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
             mutation = """
@@ -1659,8 +2429,16 @@ Total cost:       ${expenses['total_cost']:.6f}
                     itemId
                     accountId
                     scorecardId
+                    scoreId
                     value
+                    confidence
+                    explanation
                     metadata
+                    trace
+                    code
+                    type
+                    feedbackItemId
+                    status
                 }
             }
             """
@@ -1668,14 +2446,14 @@ Total cost:       ${expenses['total_cost']:.6f}
             variables = {
                 "input": data
             }
-            
-            # Log the exact mutation and variables being sent
-            logging.info("Sending GraphQL mutation:")
-            logging.info(f"Mutation: {mutation}")
-            logging.info("Variables:")
-            for key, value in data.items():
-                logging.info(f"{key}: {value}")
-            
+
+            # DEBUG: Log the data being sent to GraphQL
+            logging.info(f"🚀 CREATING SCORERESULT WITH DATA:")
+            logging.info(f"   value = {data.get('value')!r}")
+            logging.info(f"   confidence = {data.get('confidence')!r}")
+            logging.info(f"   explanation = {data.get('explanation')!r}")
+            logging.info(f"   evaluationId = {data.get('evaluationId')!r}")
+
             # Execute the API call in a non-blocking way
             response = await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
             
@@ -1683,22 +2461,75 @@ Total cost:       ${expenses['total_cost']:.6f}
             if 'errors' in response:
                 error_messages = [error.get('message', 'Unknown error') for error in response.get('errors', [])]
                 error_str = '; '.join(error_messages)
-                logging.error(f"GraphQL errors creating score result: {error_str}")
-                logging.error(f"Full error response: {response['errors']}")
+                self.logging.error(f"GraphQL errors creating score result: {error_str}")
                 raise Exception(f"Failed to create score result: {error_str}")
             
             if not response.get('createScoreResult'):
-                logging.error(f"No data returned from createScoreResult mutation. Full response: {response}")
                 raise Exception("Failed to create score result - no data returned")
-            
-            # Log the successful response
-            logging.debug("Successfully created score result:")
-            logging.debug(f"Response: {truncate_dict_strings_inner(response)}")
+
+            # DEBUG: Log the response from GraphQL
+            created_result = response.get('createScoreResult', {})
+            logging.info(f"✅ SCORERESULT CREATED SUCCESSFULLY:")
+            logging.info(f"   id = {created_result.get('id')!r}")
+            logging.info(f"   confidence = {created_result.get('confidence')!r}")
+            logging.info(f"   explanation = {created_result.get('explanation')!r}")
+            logging.info(f"   value = {created_result.get('value')!r}")
             
         except Exception as e:
-            logging.error(f"Error creating score result: {e}")
-            logging.error(f"Error details:", exc_info=True)
+            self.logging.error(f"ScoreResult creation failed: {str(e)}")
             raise
+
+    # REMOVED: _create_or_upsert_item method
+    # Items should already exist from dataset creation (FeedbackItems, CallCriteriaDBCache)
+    # Evaluations should not be creating Items - that's duplication of functionality
+
+    # REMOVED: _extract_identifiers_from_dataset_row method
+    # This was only used for Item creation, which evaluations shouldn't be doing
+
+    # DEPRECATED: This method is no longer used. feedback_item_id now comes directly from the dataset.
+    async def _find_feedback_item(self, *, content_id: str, score_name: str) -> str | None:
+        """Find the feedback item associated with this content_id and score."""
+        try:
+            # Query for feedback items that match the item and score
+            query = """
+            query FindFeedbackItem($accountId: String!, $scorecardId: String!, $scoreId: String!, $itemId: String!) {
+                listFeedbackItems(
+                    filter: {
+                        accountId: { eq: $accountId }
+                        scorecardId: { eq: $scorecardId }
+                        scoreId: { eq: $scoreId }
+                        itemId: { eq: $itemId }
+                    }
+                    limit: 1
+                ) {
+                    items {
+                        id
+                        editCommentValue
+                    }
+                }
+            }
+            """
+            
+            variables = {
+                "accountId": self.account_id,
+                "scorecardId": self.scorecard_id,
+                "scoreId": self.score_id,
+                "itemId": content_id
+            }
+            
+            response = await asyncio.to_thread(self.dashboard_client.execute, query, variables)
+            
+            if response.get('listFeedbackItems', {}).get('items'):
+                feedback_item = response['listFeedbackItems']['items'][0]
+                logging.info(f"Found feedback item for content_id {content_id}: {feedback_item['id']}")
+                return feedback_item['id']
+            else:
+                # No feedback item found
+                return None
+                
+        except Exception as e:
+            logging.warning(f"Error finding feedback item for content_id {content_id}: {e}")
+            return None
 
     async def cleanup(self):
         """Clean up all resources"""
@@ -1734,11 +2565,11 @@ Total cost:       ${expenses['total_cost']:.6f}
                 try:
                     await asyncio.wait(tasks, timeout=2.0)
                 except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
+                    self.logging.debug("Task cleanup wait cancelled or timed out")
 
         except Exception as e:
             self.logging.error(f"Error during {self.__class__.__name__} cleanup: {e}")
-            self.logging.debug("Cleanup error details:", exc_info=True)
+            # Cleanup completed with errors
 
     async def __aenter__(self):
         return self
@@ -1753,6 +2584,249 @@ Total cost:       ${expenses['total_cost']:.6f}
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.__aexit__(exc_type, exc_val, exc_tb))
 
+    @staticmethod
+    def get_evaluation_info(evaluation_id: str, include_score_results: bool = False) -> dict:
+        """
+        Get detailed information about an evaluation by its ID.
+        
+        Args:
+            evaluation_id: The ID of the evaluation to look up
+            include_score_results: Whether to include score results in the response
+            
+        Returns:
+            dict: Evaluation information including scorecard name, score name, and metrics
+        """
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+        from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+        from plexus.dashboard.api.models.score import Score as DashboardScore
+        
+        try:
+            client = PlexusDashboardClient()
+            
+            # Get the evaluation
+            evaluation = DashboardEvaluation.get_by_id(evaluation_id, client, include_score_results=include_score_results)
+            
+            # Get scorecard name if scorecard ID is available
+            scorecard_name = None
+            if evaluation.scorecardId:
+                try:
+                    scorecard = DashboardScorecard.get_by_id(evaluation.scorecardId, client)
+                    scorecard_name = scorecard.name
+                except Exception as e:
+                    logging.warning(f"Could not fetch scorecard name for ID {evaluation.scorecardId}: {e}")
+                    scorecard_name = evaluation.scorecardId
+            
+            # Get score name if score ID is available
+            score_name = None
+            if evaluation.scoreId:
+                try:
+                    score = DashboardScore.get_by_id(evaluation.scoreId, client)
+                    score_name = score.name
+                except Exception as e:
+                    logging.warning(f"Could not fetch score name for ID {evaluation.scoreId}: {e}")
+                    score_name = evaluation.scoreId
+            
+            # Parse metrics if available
+            metrics = None
+            if evaluation.metrics:
+                try:
+                    if isinstance(evaluation.metrics, str):
+                        metrics = json.loads(evaluation.metrics)
+                    else:
+                        metrics = evaluation.metrics
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse metrics: {e}")
+                    metrics = evaluation.metrics
+            
+            # Parse parameters if available
+            parameters = None
+            if evaluation.parameters:
+                try:
+                    if isinstance(evaluation.parameters, str):
+                        parameters = json.loads(evaluation.parameters)
+                    else:
+                        parameters = evaluation.parameters
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse parameters: {e}")
+                    parameters = evaluation.parameters
+            
+            # Parse confusion matrix if available
+            confusion_matrix = None
+            if evaluation.confusionMatrix:
+                try:
+                    if isinstance(evaluation.confusionMatrix, str):
+                        confusion_matrix = json.loads(evaluation.confusionMatrix)
+                    else:
+                        confusion_matrix = evaluation.confusionMatrix
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse confusion matrix: {e}")
+                    confusion_matrix = evaluation.confusionMatrix
+            
+            # Parse class distributions if available
+            predicted_class_distribution = None
+            if evaluation.predictedClassDistribution:
+                try:
+                    if isinstance(evaluation.predictedClassDistribution, str):
+                        predicted_class_distribution = json.loads(evaluation.predictedClassDistribution)
+                    else:
+                        predicted_class_distribution = evaluation.predictedClassDistribution
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse predicted class distribution: {e}")
+                    predicted_class_distribution = evaluation.predictedClassDistribution
+            
+            dataset_class_distribution = None
+            if evaluation.datasetClassDistribution:
+                try:
+                    if isinstance(evaluation.datasetClassDistribution, str):
+                        dataset_class_distribution = json.loads(evaluation.datasetClassDistribution)
+                    else:
+                        dataset_class_distribution = evaluation.datasetClassDistribution
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Could not parse dataset class distribution: {e}")
+                    dataset_class_distribution = evaluation.datasetClassDistribution
+            
+            result = {
+                'id': evaluation.id,
+                'type': evaluation.type,
+                'status': evaluation.status,
+                'scorecard_name': scorecard_name,
+                'scorecard_id': evaluation.scorecardId,
+                'score_name': score_name,
+                'score_id': evaluation.scoreId,
+                'score_version_id': evaluation.scoreVersionId if hasattr(evaluation, 'scoreVersionId') else None,
+                'accuracy': evaluation.accuracy,
+                'metrics': metrics,
+                'parameters': parameters,
+                'confusion_matrix': confusion_matrix,
+                'predicted_class_distribution': predicted_class_distribution,
+                'dataset_class_distribution': dataset_class_distribution,
+                'total_items': evaluation.totalItems,
+                'processed_items': evaluation.processedItems,
+                'cost': evaluation.cost,
+                'elapsed_seconds': evaluation.elapsedSeconds,
+                'estimated_remaining_seconds': evaluation.estimatedRemainingSeconds,
+                'started_at': evaluation.startedAt.isoformat() if evaluation.startedAt else None,
+                'created_at': evaluation.createdAt.isoformat() if evaluation.createdAt else None,
+                'updated_at': evaluation.updatedAt.isoformat() if evaluation.updatedAt else None,
+                'error_message': evaluation.errorMessage,
+                'error_details': evaluation.errorDetails,
+                'task_id': evaluation.taskId
+            }
+            
+            if include_score_results:
+                # Score results would be available in the evaluation object if requested
+                # For now, we'll indicate that this feature could be added
+                result['score_results_available'] = True
+            
+            return result
+            
+        except Exception as e:
+            logging.error(f"Error getting evaluation info for ID {evaluation_id}: {str(e)}")
+            raise ValueError(f"Could not get evaluation info: {str(e)}")
+    
+    @staticmethod  
+    def get_latest_evaluation(account_key: str = None, evaluation_type: str = None) -> dict:
+        """
+        Get information about the most recent evaluation.
+        
+        Args:
+            account_key: Account key to filter by (default: from PLEXUS_ACCOUNT_KEY env var)
+            evaluation_type: Optional filter by evaluation type (e.g., 'accuracy')
+            
+        Returns:
+            dict: Latest evaluation information
+        """
+        import os
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        from plexus.dashboard.api.models.account import Account
+        
+        try:
+            # Use PLEXUS_ACCOUNT_KEY environment variable if no account_key provided
+            if account_key is None:
+                account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+                if account_key is None:
+                    raise ValueError("account_key must be provided or PLEXUS_ACCOUNT_KEY environment variable must be set")
+            
+            client = PlexusDashboardClient()
+            
+            # Get the account
+            account = Account.list_by_key(key=account_key, client=client)
+            if not account:
+                raise ValueError(f"No account found with key: {account_key}")
+            
+            # Use the proper GraphQL query with sorting by updatedAt
+            query = """
+            query ListEvaluationByAccountIdAndUpdatedAt($accountId: String!, $sortDirection: ModelSortDirection, $limit: Int) {
+                listEvaluationByAccountIdAndUpdatedAt(accountId: $accountId, sortDirection: $sortDirection, limit: $limit) {
+                    items {
+                        id
+                        type
+                        accountId
+                        status
+                        createdAt
+                        updatedAt
+                        parameters
+                        metrics
+                        inferences
+                        accuracy
+                        cost
+                        startedAt
+                        elapsedSeconds
+                        estimatedRemainingSeconds
+                        totalItems
+                        processedItems
+                        errorMessage
+                        errorDetails
+                        scorecardId
+                        scoreId
+                        scoreVersionId
+                        confusionMatrix
+                        scoreGoal
+                        datasetClassDistribution
+                        isDatasetClassDistributionBalanced
+                        predictedClassDistribution
+                        isPredictedClassDistributionBalanced
+                        taskId
+                    }
+                }
+            }
+            """
+            
+            variables = {
+                'accountId': account.id,
+                'sortDirection': 'DESC',
+                'limit': 1  # Get just the most recent
+            }
+            
+            # Add type filter if provided
+            if evaluation_type:
+                # If type filtering is needed, we'll need to get more results and filter client-side
+                # since the specialized query doesn't support type filtering
+                variables['limit'] = 10
+            
+            result = client.execute(query, variables)
+            
+            if not result or 'listEvaluationByAccountIdAndUpdatedAt' not in result or not result['listEvaluationByAccountIdAndUpdatedAt']['items']:
+                return None
+            
+            evaluations = result['listEvaluationByAccountIdAndUpdatedAt']['items']
+            
+            # Filter by type if specified
+            if evaluation_type:
+                evaluations = [e for e in evaluations if e.get('type') == evaluation_type]
+                if not evaluations:
+                    return None
+            
+            latest_evaluation_data = evaluations[0]
+            
+            # Use the existing get_evaluation_info method to get full details
+            return Evaluation.get_evaluation_info(latest_evaluation_data['id'])
+            
+        except Exception as e:
+            logging.error(f"Error getting latest evaluation: {str(e)}")
+            raise ValueError(f"Could not get latest evaluation: {str(e)}")
+
 class ConsistencyEvaluation(Evaluation):
     def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
         super().__init__(**kwargs)
@@ -1760,88 +2834,724 @@ class ConsistencyEvaluation(Evaluation):
     
     def log_parameters(self):
         super().log_parameters()
-        mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
+
+
+class FeedbackEvaluation(Evaluation):
+    """
+    Evaluation that analyzes feedback items to measure agreement between AI predictions
+    and human corrections over a time period.
+    
+    This evaluation type:
+    - Fetches feedback items for a scorecard/score over a specified time period
+    - Calculates Gwet's AC1 agreement coefficient (primary metric)
+    - Calculates accuracy, precision, recall
+    - Generates confusion matrix
+    - Creates an evaluation record with all metrics
+    
+    Unlike AccuracyEvaluation which runs predictions on a dataset, FeedbackEvaluation
+    analyzes existing feedback corrections to measure real-world performance.
+    """
+    
+    def __init__(
+        self,
+        *,
+        days: int = 7,
+        scorecard_id: Optional[str] = None,
+        score_id: Optional[str] = None,
+        evaluation_id: Optional[str] = None,
+        account_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        api_client=None,
+        max_samples: Optional[int] = None,
+        **kwargs
+    ):
+        """
+        Initialize a FeedbackEvaluation.
+        
+        Args:
+            days: Number of days to look back for feedback items (default: 7)
+            scorecard_id: ID of the scorecard to evaluate
+            score_id: Optional ID of specific score to evaluate (if None, evaluates all scores)
+            evaluation_id: ID of the evaluation record
+            account_id: Account ID
+            task_id: Optional task ID for progress tracking
+            api_client: Optional API client (if not provided, will be created from kwargs)
+            max_samples: Optional maximum number of feedback items to process (default: None = all)
+            **kwargs: Additional arguments passed to parent Evaluation class
+        """
+        # Store api_client before calling super().__init__
+        # Remove it from kwargs since parent Evaluation doesn't accept it
+        self.api_client = api_client
+        self.max_samples = max_samples
+        
+        # Call parent init (which expects scorecard_name and scorecard at minimum)
+        # For FeedbackEvaluation, we don't need a full scorecard object
+        super().__init__(**kwargs)
+        
+        # Set api_client after parent init
+        if api_client:
+            self.api_client = api_client
+        elif hasattr(self, 'dashboard_client'):
+            self.api_client = self.dashboard_client
+        
+        self.days = days
+        self.scorecard_id = scorecard_id
+        self.score_id = score_id
+        self.evaluation_id = evaluation_id
+        self.account_id = account_id
+        self.task_id = task_id
+        self.logger = logging.getLogger('plexus/evaluation')
+    
+    async def run(self, tracker=None):
+        """
+        Run the feedback evaluation.
+        
+        Args:
+            tracker: Optional TaskProgressTracker for progress updates
+            
+        Returns:
+            Dictionary with evaluation results
+        """
+        from datetime import datetime, timedelta, timezone
+        from plexus.dashboard.api.models.feedback_item import FeedbackItem
+        from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+        from plexus.dashboard.api.models.score import Score as DashboardScore
+        from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+        from plexus.analysis.feedback_analyzer import analyze_feedback_items
+        
+        self.logger.info(f"Starting feedback evaluation for scorecard {self.scorecard_id}, score {self.score_id}, days={self.days}")
+        
+        try:
+            # Get evaluation record
+            if not self.evaluation_id:
+                raise ValueError("evaluation_id is required for FeedbackEvaluation")
+            
+            evaluation_record = DashboardEvaluation.get_by_id(
+                self.evaluation_id,
+                client=self.api_client
+            )
+            
+            # Update status to RUNNING
+            evaluation_record.update(status="RUNNING")
+            
+            # Calculate date range
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=self.days)
+            
+            # Validate scorecard exists
+            scorecard = DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
+            if scorecard is None:
+                raise ValueError(f"Scorecard {self.scorecard_id} not found")
+            
+            # Feedback evaluation MUST have a score_id
+            if not self.score_id:
+                raise ValueError("score_id is required for FeedbackEvaluation. Feedback evaluations must be run on a single score, not an entire scorecard.")
+            
+            self.logger.info(f"Analyzing feedback for score {self.score_id}")
+            
+            # Fetch feedback items for this specific score
+            feedback_items = await self._fetch_feedback_items(
+                scorecard_id=self.scorecard_id,
+                score_id=self.score_id,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            self.logger.info(f"Fetched {len(feedback_items)} feedback items")
+            
+            # Apply max_samples limit if specified
+            if self.max_samples and len(feedback_items) > self.max_samples:
+                import random
+                self.logger.info(f"Sampling {self.max_samples} items from {len(feedback_items)} total feedback items")
+                feedback_items = random.sample(feedback_items, self.max_samples)
+            
+            # Perform analysis on the feedback items
+            overall_analysis = analyze_feedback_items(feedback_items, score_id=self.score_id)
+            
+            # Prepare metrics array for API (frontend expects array format)
+            # Alignment (Gwet's AC1) is listed first as the primary metric
+            metrics_for_api = []
+            
+            # Get AC1 from analysis and store as "Alignment" to match existing convention
+            ac1 = overall_analysis.get("ac1")
+            if ac1 is not None:
+                # Keep native AC1 in analysis payloads, but map evaluation metric payload
+                # to the legacy-compatible [0, 100] range for dashboard consistency.
+                metrics_for_api.append(
+                    {"name": "Alignment", "value": self._format_alignment_metric_value(ac1)}
+                )
+            
+            accuracy = overall_analysis.get("accuracy")
+            if accuracy is not None:
+                # Accuracy from feedback_analyzer is already a percentage (0-100)
+                # Store as-is to match the format from accuracy evaluation (which multiplies by 100)
+                metrics_for_api.append({"name": "Accuracy", "value": accuracy})
+            
+            precision = overall_analysis.get("precision")
+            if precision is not None:
+                # Precision from feedback_analyzer is already a percentage (0-100)
+                metrics_for_api.append({"name": "Precision", "value": precision})
+            
+            recall = overall_analysis.get("recall")
+            if recall is not None:
+                # Recall from feedback_analyzer is already a percentage (0-100)
+                metrics_for_api.append({"name": "Recall", "value": recall})
+            
+            # Also keep a dictionary version for the return value
+            metrics_dict = {
+                "ac1": ac1,
+                "accuracy": accuracy,
+                "precision": precision,
+                "recall": recall,
+                "total_items": overall_analysis.get("total_items"),
+                "agreements": overall_analysis.get("agreements"),
+                "disagreements": overall_analysis.get("disagreements"),
+            }
+            
+            # Create ScoreResult records for each FeedbackItem to link the evaluation to the original production data
+            self.logger.info(f"Creating ScoreResult records for {len(feedback_items)} feedback items")
+            await self._create_score_results_from_feedback(
+                feedback_items=feedback_items,
+                evaluation_id=self.evaluation_id,
+                scorecard_id=self.scorecard_id,
+                score_id=self.score_id,
+                account_id=self.account_id
+            )
+            
+            # Update evaluation record with results
+            # Ensure accuracy is never None (GraphQL schema requires Float!)
+            evaluation_record.update(
+                status="COMPLETED",
+                accuracy=accuracy if accuracy is not None else 0.0,
+                metrics=__import__('json').dumps(metrics_for_api),  # Store as array for frontend
+                confusionMatrix=__import__('json').dumps(overall_analysis.get("confusion_matrix")),
+                totalItems=overall_analysis.get("total_items"),
+                processedItems=overall_analysis.get("total_items"),
+                datasetClassDistribution=__import__('json').dumps(overall_analysis.get("class_distribution")),
+                predictedClassDistribution=__import__('json').dumps(overall_analysis.get("predicted_class_distribution")),
+            )
+            
+            # Format log message with safe handling of None values
+            ac1_str = f"{ac1:.3f}" if ac1 is not None else "N/A"
+            accuracy_str = f"{accuracy:.1f}%" if accuracy is not None else "N/A"
+            self.logger.info(f"Feedback evaluation completed. AC1={ac1_str}, Accuracy={accuracy_str}")
+            
+            return {
+                "status": "success",
+                "evaluation_id": self.evaluation_id,
+                "metrics": metrics_dict,
+                "analysis": overall_analysis
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error during feedback evaluation: {e}", exc_info=True)
+            
+            # Update evaluation record with error
+            if self.evaluation_id:
+                try:
+                    evaluation_record = DashboardEvaluation.get_by_id(
+                        self.evaluation_id,
+                        client=self.api_client
+                    )
+                    evaluation_record.update(
+                        status="FAILED",
+                        errorMessage=str(e)
+                    )
+                except Exception as update_error:
+                    self.logger.error(f"Failed to update evaluation record with error: {update_error}")
+            
+            raise
+    
+    async def _fetch_feedback_items(
+        self,
+        scorecard_id: str,
+        score_id: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> List:
+        """
+        Fetch feedback items for a specific score within a date range.
+        Uses the optimized GSI query for better performance.
+        
+        Args:
+            scorecard_id: Scorecard ID
+            score_id: Score ID
+            start_date: Start of date range
+            end_date: End of date range
+            
+        Returns:
+            List of FeedbackItem objects
+        """
+        from plexus.dashboard.api.models.feedback_item import FeedbackItem
+        
+        # Use the optimized GSI query (same as feedback_utils)
+        # This is MUCH faster than the old updatedAt filter
+        query = """
+        query ListFeedbackItemsByGSI(
+            $accountId: String!,
+            $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
+            $limit: Int,
+            $nextToken: String,
+            $sortDirection: ModelSortDirection
+        ) {
+            listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+                accountId: $accountId,
+                scorecardIdScoreIdEditedAt: $composite_sk_condition,
+                limit: $limit,
+                nextToken: $nextToken,
+                sortDirection: $sortDirection
+            ) {
+                items {
+                    id
+                    accountId
+                    scorecardId
+                    scoreId
+                    itemId
+                    cacheKey
+                    initialAnswerValue
+                    finalAnswerValue
+                    isAgreement
+                    editedAt
+                    createdAt
+                    updatedAt
+                }
+                nextToken
+            }
+        }
+        """
+        
+        # Format dates for the GSI query
+        start_date_str = start_date.isoformat().replace('+00:00', 'Z')
+        end_date_str = end_date.isoformat().replace('+00:00', 'Z')
+        
+        # Build composite key for GSI
+        composite_key = {
+            "between": [
+                {
+                    "scorecardId": scorecard_id,
+                    "scoreId": score_id,
+                    "editedAt": start_date_str
+                },
+                {
+                    "scorecardId": scorecard_id,
+                    "scoreId": score_id,
+                    "editedAt": end_date_str
+                }
+            ]
+        }
+        
+        all_items = []
+        next_token = None
+        
+        while True:
+            variables = {
+                "accountId": self.account_id,
+                "composite_sk_condition": composite_key,
+                "sortDirection": "DESC",
+                "limit": 1000,
+                "nextToken": next_token
+            }
+            
+            result = await asyncio.to_thread(self.api_client.execute, query, variables)
+            
+            if not result or 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt' not in result:
+                break
+            
+            items_data = result['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt'].get('items', [])
+            
+            for item_data in items_data:
+                # Convert to FeedbackItem object
+                from plexus.dashboard.api.models.feedback_item import FeedbackItem
+                item = FeedbackItem.from_dict(item_data, self.api_client)
+                all_items.append(item)
+            
+            next_token = result['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt'].get('nextToken')
+            if not next_token:
+                break
+            
+        return all_items
+    
+    async def _create_score_results_from_feedback(
+        self,
+        feedback_items: List,
+        evaluation_id: str,
+        scorecard_id: str,
+        score_id: str,
+        account_id: str
+    ):
+        """
+        Create ScoreResult records for each FeedbackItem to link the evaluation to the original production data.
+        
+        This creates ScoreResult records with:
+        - evaluationId: Links to this feedback evaluation
+        - feedbackItemId: Links back to the original FeedbackItem (which links to the production ScoreResult)
+        - itemId: The item that was scored
+        - metadata: Contains the initial and final values from the feedback, plus text from Item
+        - explanation: From the original production ScoreResult
+        - trace: From the original production ScoreResult
+        - correct: Whether the initial prediction matched the final (human-corrected) value
+        - type: 'evaluation' to distinguish from production score results
+        
+        Args:
+            feedback_items: List of FeedbackItem objects
+            evaluation_id: ID of the evaluation record
+            scorecard_id: ID of the scorecard
+            score_id: ID of the score
+            account_id: ID of the account
+        """
+        from plexus.dashboard.api.models.score_result import ScoreResult
+        from plexus.dashboard.api.models.item import Item
+        
+        self.logger.info(f"Creating {len(feedback_items)} ScoreResult records for feedback evaluation")
+        
+        created_count = 0
+        failed_count = 0
+        
+        # Create ScoreResults in parallel for better performance
+        def create_single_score_result(feedback_item):
+            """Helper to create a single ScoreResult."""
+            try:
+                # Determine if the prediction was correct (initial matches final)
+                is_correct = feedback_item.initialAnswerValue == feedback_item.finalAnswerValue
+                
+                # Fetch the Item to get the text field
+                item_text = None
+                try:
+                    item = Item.get_by_id(feedback_item.itemId, self.api_client)
+                    if item and item.text:
+                        item_text = item.text
+                except Exception as e:
+                    self.logger.warning(f"Could not fetch Item {feedback_item.itemId}: {e}")
+                
+                # Get the original production ScoreResult by querying for it
+                # The production ScoreResult is the one that was originally scored (without evaluationId)
+                # and matches this FeedbackItem's itemId and scoreId
+                explanation = None
+                trace = None
+                try:
+                    # Query for the production ScoreResult using itemId and scoreId
+                    query = """
+                    query ListScoreResults($filter: ModelScoreResultFilterInput, $limit: Int) {
+                        listScoreResults(filter: $filter, limit: $limit) {
+                            items {
+                                id
+                                evaluationId
+                                explanation
+                                trace
+                            }
+                        }
+                    }
+                    """
+                    variables = {
+                        "filter": {
+                            "itemId": {"eq": feedback_item.itemId},
+                            "scoreId": {"eq": feedback_item.scoreId}
+                        },
+                        "limit": 10
+                    }
+                    result = self.api_client.execute(query, variables)
+                    if result and 'listScoreResults' in result:
+                        items = result['listScoreResults'].get('items', [])
+                        # Filter for production results (those without evaluationId)
+                        production_results = [
+                            item for item in items 
+                            if not item.get('evaluationId')
+                        ]
+                        
+                        if production_results:
+                            production_result = production_results[0]
+                            explanation = production_result.get('explanation')
+                            trace_str = production_result.get('trace')
+                            self.logger.debug(f"Found production ScoreResult for FeedbackItem {feedback_item.id} with explanation: {explanation is not None}, trace: {trace_str is not None}")
+                            if trace_str:
+                                try:
+                                    trace = json.loads(trace_str) if isinstance(trace_str, str) else trace_str
+                                except (TypeError, ValueError, json.JSONDecodeError):
+                                    trace = None
+                        else:
+                            self.logger.debug(f"No production ScoreResult found for FeedbackItem {feedback_item.id} (found {len(items)} total, {len(production_results)} without evaluationId)")
+                except Exception as e:
+                    self.logger.warning(f"Error fetching production ScoreResult for FeedbackItem {feedback_item.id}: {e}")
+                
+                # Create metadata with feedback details
+                # IMPORTANT: Use 'human_label' for the actual/ground-truth value (finalAnswerValue)
+                # This is what the frontend expects for displaying actual vs predicted
+                metadata = {
+                    'feedback_item_id': feedback_item.id,
+                    'initial_value': feedback_item.initialAnswerValue,
+                    'final_value': feedback_item.finalAnswerValue,
+                    'human_label': feedback_item.finalAnswerValue,  # Frontend expects this field
+                    'is_agreement': feedback_item.isAgreement,
+                    'correct': is_correct,
+                    'evaluation_type': 'feedback',
+                    'edited_at': feedback_item.editedAt.isoformat() if feedback_item.editedAt else None,
+                    'editor_name': feedback_item.editorName
+                }
+                
+                # Add text to metadata if available
+                if item_text:
+                    metadata['text'] = item_text
+                
+                # Add comments if available
+                if feedback_item.editCommentValue:
+                    metadata['edit_comment'] = feedback_item.editCommentValue
+                if feedback_item.initialCommentValue:
+                    metadata['initial_comment'] = feedback_item.initialCommentValue
+                if feedback_item.finalCommentValue:
+                    metadata['final_comment'] = feedback_item.finalCommentValue
+                
+                # Create the ScoreResult record
+                ScoreResult.create(
+                    client=self.api_client,
+                    evaluationId=evaluation_id,
+                    itemId=feedback_item.itemId,
+                    accountId=account_id,
+                    scorecardId=scorecard_id,
+                    scoreId=score_id,
+                    feedbackItemId=feedback_item.id,
+                    value=feedback_item.initialAnswerValue or 'N/A',  # Use initial (predicted) value
+                    explanation=explanation,  # From production ScoreResult
+                    trace=trace,  # From production ScoreResult
+                    confidence=None,  # No confidence for feedback evaluations
+                    correct=is_correct,
+                    metadata=metadata,
+                    code='200',
+                    status='COMPLETED',
+                    type='evaluation'  # Mark as evaluation type
+                )
+                
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"Failed to create ScoreResult for FeedbackItem {feedback_item.id}: {e}")
+                return False
+        
+        # Process in parallel using ThreadPoolExecutor (max 20 concurrent)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {executor.submit(create_single_score_result, item): item for item in feedback_items}
+            for future in as_completed(futures):
+                if future.result():
+                    created_count += 1
+                else:
+                    failed_count += 1
+        
+        self.logger.info(f"Created {created_count} ScoreResult records, {failed_count} failed")
+        
+        if failed_count > 0:
+            self.logger.warning(f"{failed_count} ScoreResult records failed to create")
+
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, concurrency_limit: int = 50, **kwargs):
+    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, **kwargs):
+        # Store evaluation_id BEFORE calling super().__init__ so parent can use it
+        self.evaluation_id = evaluation_id
         # Store scorecard_id before calling super().__init__
         self.scorecard_id = scorecard_id
+        # Store account_id before calling super().__init__ (if provided)
+        if account_id:
+            self.account_id = account_id
+        
+        # If account_key is provided, pass it to parent; otherwise parent will use default
+        if account_key:
+            kwargs['account_key'] = account_key
+        
         super().__init__(**kwargs)
+        
         self.override_folder = override_folder
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
+        
+        self.score_version_id = score_version_id  # Store score version ID
         self.visualize = visualize
         self.task_id = task_id  # Store task ID
-        self.evaluation_id = evaluation_id  # Store evaluation ID
-        self.account_id = account_id  # Store account ID
-        self.concurrency_limit = concurrency_limit  # Store concurrency limit
+        # evaluation_id and account_id already set above
         # Don't overwrite scorecard_id here since it's already set
-        self.results_queue = Queue()
+        self.results_queue = asyncio.Queue()
         self.metrics_tasks = {}  # Dictionary to track metrics tasks per score
         self.should_stop = False
         self.completed_scores = set()  # Track which scores have completed all their results
         self.override_data = {}  # Initialize empty override data dictionary
         self.logger = logging.getLogger('plexus/evaluation')  # Add dedicated logger
+        
+        # Load override data from CSV files
+        self._load_override_data_from_csv()
 
-    async def run(self, tracker, progress_callback=None):
-        """Modified run method to accept tracker argument"""
+    def _load_override_data_from_csv(self):
+        """Load override data from CSV files using the scorecard's configuration."""
+        try:
+            # Look for scores that have column mappings defined in their data configuration
+            for score_config in self.scorecard.scores:
+                score_name = score_config.get('name')
+                if not score_name:
+                    continue
+                
+                # Check if this score has data configuration with column mappings
+                data_config = score_config.get('data', {})
+                if not data_config:
+                    continue
+                
+                # Look for searches with column mappings
+                searches = data_config.get('searches', [])
+                for search in searches:
+                    item_list_filename = search.get('item_list_filename')
+                    column_mappings = search.get('column_mappings', [])
+                    
+                    if not item_list_filename or not column_mappings:
+                        continue
+                    
+                    try:
+                        # Load the CSV file
+                        df = pd.read_csv(item_list_filename)
+                        
+                        # Find form_id column
+                        form_id_col = None
+                        for col in df.columns:
+                            if col.lower() in ['form_id', 'f_id']:
+                                form_id_col = col
+                                break
+                        
+                        if form_id_col is None:
+                            self.logging.warning(f"No form_id column found in {item_list_filename}")
+                            continue
+                        
+                        # Process each column mapping
+                        for mapping in column_mappings:
+                            dataframe_column = mapping.get('dataframe_column')
+                            csv_column = mapping.get('csv_column')
+                            
+                            if not dataframe_column or not csv_column:
+                                continue
+                            
+                            # Check if the dataframe_column matches our score name
+                            if dataframe_column == score_name:
+                                # Find the CSV column (case-insensitive)
+                                actual_csv_col = None
+                                for col in df.columns:
+                                    if col.lower() == csv_column.lower():
+                                        actual_csv_col = col
+                                        break
+                                
+                                if actual_csv_col:
+                                    # Load the override data
+                                    for _, row in df.iterrows():
+                                        form_id = row[form_id_col]
+                                        if pd.isna(form_id):
+                                            continue
+                                        
+                                        form_id = int(form_id)
+                                        answer_value = row[actual_csv_col]
+                                        
+                                        if pd.notna(answer_value):
+                                            if form_id not in self.override_data:
+                                                self.override_data[form_id] = {}
+                                            self.override_data[form_id][score_name] = str(answer_value).strip().lower()
+                                    
+                                    # Override data loaded for score
+                                else:
+                                    self.logging.warning(f"CSV column not found: {csv_column}")
+                    
+                    except Exception as e:
+                        self.logging.warning(f"Failed to load override data from {item_list_filename}: {e}")
+            
+            if self.override_data:
+                total_overrides = sum(len(scores) for scores in self.override_data.values())
+                self.logging.info(f"Loaded {total_overrides} override entries for {len(self.override_data)} form IDs")
+            else:
+                self.logging.info("No override data loaded from CSV files")
+                
+        except Exception as e:
+            self.logging.warning(f"Failed to load override data: {e}")
+
+    async def run(self, tracker=None, progress_callback=None, dry_run=False):
+        # Starting accuracy evaluation
+
+        """Run the accuracy evaluation.
+
+        tracker is optional to maintain backward compatibility with callers that
+        did not pass a tracker. When None, stage/progress updates are skipped.
+        """
         self.progress_callback = progress_callback
+        self.dry_run = dry_run  # Store dry_run flag for use in ScoreResult creation
         
         # Store the evaluation ID from the parent process
         self.experiment_id = self.evaluation_id
         
-        if not self.experiment_id:
+        # Only require evaluation_id if not in dry_run mode
+        if not self.experiment_id and not dry_run:
             self.logging.error("No evaluation_id provided to AccuracyEvaluation")
             raise ValueError("No evaluation_id provided to AccuracyEvaluation")
+        elif not self.experiment_id and dry_run:
+            self.logging.info("[DRY RUN] Using mock evaluation ID")
+            self.experiment_id = "mock-evaluation-id-for-dry-run"
         
         # Initialize started_at for elapsed time calculations
         self.started_at = datetime.now(timezone.utc)
         
-        self.logging.info(f"Using existing evaluation record with ID: {self.experiment_id}")
+        self.logging.info(f"Using evaluation record with ID: {self.experiment_id}")
         
-        # Update the evaluation record with scorecard and score IDs
-        if self.dashboard_client:
-            update_data = {}
-            if self.scorecard_id:
-                update_data['scorecardId'] = self.scorecard_id
-            if self.score_id:
-                update_data['scoreId'] = self.score_id
-            
-            if update_data:
-                try:
-                    self.logging.info(f"Updating evaluation record {self.experiment_id} with: {update_data}")
-                    mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                        updateEvaluation(input: $input) {
-                            id
-                            scorecardId
-                            scoreId
-                        }
-                    }"""
-                    self.dashboard_client.execute(mutation, {
-                        'input': {
-                            'id': self.experiment_id,
-                            **update_data
-                        }
-                    })
-                    self.logging.info("Successfully updated evaluation record with scorecard and score IDs")
-                except Exception as e:
-                    self.logging.error(f"Failed to update evaluation record with IDs: {str(e)}")
-                    # Continue execution even if update fails
-        
+        # Scorecard and Score IDs are now set during initialization and should already be updated in the evaluation record
+
         try:
-            return await self._run_evaluation(tracker)
+            returned_metrics = await self._run_evaluation(tracker)
+            return returned_metrics
+        except Exception as e:
+            self.logging.error(f"Error during AccuracyEvaluation.run: {e}", exc_info=True)
+            raise e # Re-raise after logging
         finally:
             self.should_stop = True
 
     async def _run_evaluation(self, tracker):
         try:
-            # Load the labeled samples
+            # Use labeled_samples that were provided during AccuracyEvaluation construction
             import pandas as pd
+            df = None
+
+            # Check if we have labeled_samples from the constructor
             if self.labeled_samples:
                 df = pd.DataFrame(self.labeled_samples)
-            else:
+                self.logging.info(f"Using {len(df)} labeled samples provided to AccuracyEvaluation")
+            elif self.labeled_samples_filename:
                 df = pd.read_csv(self.labeled_samples_filename)
+                self.logging.info(f"Loaded {len(df)} samples from file: {self.labeled_samples_filename}")
+            else:
+                # Fallback: try to load data from score YAML (for backwards compatibility)
+                try:
+                    from plexus.data.FeedbackItems import FeedbackItems
+                    # For AccuracyEvaluation, we don't have get_scores_to_process method
+                    # so we'll work with what we have in the scorecard
+                    if hasattr(self, 'subset_of_score_names') and self.subset_of_score_names:
+                        primary_score_name = self.subset_of_score_names[0]
+                    else:
+                        primary_score_name = self.scorecard.scores[0].get('name') if self.scorecard.scores else None
+
+                    score_config = None
+                    for sc in self.scorecard.scores:
+                        if sc.get('name') == primary_score_name:
+                            score_config = sc
+                            break
+                    if not score_config:
+                        score_config = self.scorecard.scores[0] if self.scorecard.scores else {}
+
+                    data_section = score_config.get('data') or {}
+                    if data_section:
+                        cls = data_section.get('class')
+                        params = data_section.get('parameters') or {}
+                        # Support shorthand where params are at root
+                        if not params:
+                            params = {k: v for k, v in data_section.items() if k != 'class'}
+
+                        # Map known aliases to fully-qualified class
+                        if cls in ['FeedbackItems', 'plexus.data.FeedbackItems']:
+                            data_cache = FeedbackItems(**params)
+                            df = data_cache.load_dataframe(data=params, fresh=True)
+                            self.logging.info(f"Loaded {len(df)} samples from FeedbackItems data source")
+                except Exception as e:
+                    self.logging.warning(f"Could not load data from score YAML: {e}")
+
+            if df is None or len(df) == 0:
+                raise ValueError("Dataset not found. No labeled samples were provided and score YAML data loading failed.")
 
             # Adjust the sample size if necessary
             self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
@@ -1852,12 +3562,18 @@ class AccuracyEvaluation(Evaluation):
                 selected_sample_rows = df.sample(n=self.number_of_texts_to_sample, random_state=self.random_seed)
             elif self.sampling_method == 'sequential':
                 selected_sample_rows = df.head(self.number_of_texts_to_sample)
+            elif self.sampling_method == 'provided':
+                # Samples are already provided and pre-processed, use them as-is
+                selected_sample_rows = df
+                self.logging.info(f"Using {len(df)} provided samples without additional sampling")
             else:
                 selected_sample_rows = df
 
             # Update tracker status without advancing stage
-            tracker.current_stage.status_message = "Generating predictions..."
-            tracker.update(current_items=0)
+            if tracker and tracker.current_stage:
+                tracker.current_stage.status_message = "Generating predictions..."
+            if tracker:
+                tracker.update(current_items=0)
 
             # Process all scores concurrently
             score_tasks = []
@@ -1868,16 +3584,262 @@ class AccuracyEvaluation(Evaluation):
             all_results = await asyncio.gather(*score_tasks)
             self.all_results = [result for score_results in all_results for result in score_results if not isinstance(result, Exception)]
 
+            # Advance to Finalizing stage after all processing is complete
+            if tracker:
+                tracker.advance_stage()
+                self.logging.info("==== STAGE: Finalizing ====")
+
+            # Calculate metrics from results
+            
+            # Reset counters and mismatches
+            self.total_correct = 0
+            self.total_questions = 0
+            self.total_skipped = 0
+            self.mismatches = []
+            
+            # Count the number correct out of all questions and collect mismatches
+            for result in self.all_results:
+                for question in self.score_names():
+                    score_result = next((r for r in result['results'].values() if r.parameters.name == question), None)
+                    
+                    # Skip counting if score was skipped due to unmet conditions
+                    if score_result and isinstance(score_result.value, str) and score_result.value.upper() == "SKIPPED":
+                        self.total_skipped += 1
+                        continue
+                    
+                    score_value = str(score_result.value).lower() if score_result else None
+                    human_label = str(score_result.metadata['human_label']).lower() if score_result and hasattr(score_result, 'metadata') and 'human_label' in score_result.metadata else None
+                    
+                    is_match = 1 if score_result and hasattr(score_result, 'metadata') and score_result.metadata.get('correct', False) else 0
+                    self.total_correct += is_match
+                    self.total_questions += 1
+
+                    if not is_match and len(self.mismatches) < self.max_mismatches_to_report:
+                        mismatch_data = {
+                            'form_id': result['form_id'],
+                            'question': question,
+                            'predicted': score_value,
+                            'ground_truth': human_label,
+                            'explanation': score_result.metadata['explanation'] if score_result and hasattr(score_result, 'metadata') and 'explanation' in score_result.metadata else None,
+                            'transcript': score_result.metadata['text'] if score_result and hasattr(score_result, 'metadata') and 'text' in score_result.metadata else None,
+                            'human_explanation': score_result.metadata['human_explanation'] if score_result and hasattr(score_result, 'metadata') and 'human_explanation' in score_result.metadata else None
+                        }
+                        # Only append if we have either a transcript or an explanation
+                        if mismatch_data['transcript'] is not None or mismatch_data['explanation'] is not None:
+                            self.mismatches.append(mismatch_data)
+
             # Calculate metrics from the results
             metrics = self.calculate_metrics(self.all_results)
 
+            # Metrics calculated
+            
+            # Log ScoreResult creation statistics
+            attempts = getattr(self, 'scoreresult_creation_attempts', 0)
+            successes = getattr(self, 'scoreresult_creation_successes', 0)
+            if attempts > 0:
+                success_rate = (successes / attempts) * 100
+                self.logging.info(f"ScoreResult creation: {successes}/{attempts} successful ({success_rate:.1f}%)")
+            else:
+                self.logging.warning("No ScoreResult creation attempts made")
+
             if hasattr(self, 'progress_callback') and self.progress_callback:
                 self.progress_callback(self.number_of_texts_to_sample)
+            
+            # Generate and print evaluation report
+            if self.all_results:
+                expenses = self.scorecard.get_accumulated_costs()
+                expenses['cost_per_text'] = expenses['total_cost'] / self.number_of_texts_to_sample
+                
+                # Get the primary score name if we're evaluating a specific score
+                primary_score_name = None
+                if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+                    primary_score_name = self.subset_of_score_names[0]
+                else:
+                    primary_score_name = self.score_names()[0]
+                
+                # Try to get score instance for report generation, but skip if not found in registry
+                # (This can happen with API-loaded scorecards that aren't registered)
+                try:
+                    score_instance = self.get_score_instance(primary_score_name)
+                    
+                    # Calculate overall_accuracy from the counters we just updated
+                    overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
+                    
+                    # Build confusion matrix metrics for the summary
+                    confusion_metrics = self._build_confusion_metrics_from_results()
+                    
+                    report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample, confusion_metrics)
+                    logging.info(f"\nEvaluation Report:\n{report}\n")
+                except ValueError as e:
+                    if "not found" in str(e):
+                        # Calculate overall_accuracy anyway for logging
+                        overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
+                        self.logging.info(f"Overall accuracy: {overall_accuracy}%")
+                    else:
+                        raise
+
+                # Generate reports - determine the correct report folder
+                if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+                    try:
+                        score_instance = self.get_score_instance(self.subset_of_score_names[0])
+                        report_folder_path = score_instance.report_directory_path()
+                        report_folder_path = report_folder_path.rstrip('/')
+                    except ValueError as e:
+                        if "not found" in str(e):
+                            # Use default report folder when scorecard not found in registry
+                            # Get scorecard name - it's a method for instances, class attribute for classes
+                            scorecard_name_raw = self.scorecard.name() if callable(self.scorecard.name) else self.scorecard.name
+                            scorecard_name = scorecard_name_raw.replace(' ', '_')
+                            score_name = self.subset_of_score_names[0].replace(' ', '_')
+                            report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
+                        else:
+                            raise
+                else:
+                    # Get scorecard name - it's a method for instances, class attribute for classes
+                    scorecard_name_raw = self.scorecard.name() if callable(self.scorecard.name) else self.scorecard.name
+                    scorecard_name = scorecard_name_raw.replace(' ', '_')
+                    report_folder_path = f"./score_results/{scorecard_name}/combined"
+
+                # Ensure the report folder exists
+                os.makedirs(report_folder_path, exist_ok=True)
+                self.logging.info(f"Report folder set to: {report_folder_path}")
+
+                # Generate Excel report
+                self.generate_excel_report(report_folder_path, self.all_results, selected_sample_rows)
+
+                # Generate CSV reports
+                analysis = ScorecardResultsAnalysis(scorecard_results=ScorecardResults(self.all_results))
+                
+                # Generate CSV report for incorrect results
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                csv_report_filename = f"scorecard_report_for_incorrect_results_{timestamp}.csv"
+                with open(f"{report_folder_path}/{csv_report_filename}", "w") as file:
+                    file.write(analysis.generate_csv_scorecard_report(results=self.all_results))
+                self.logging.info(f"CSV report generated at {report_folder_path}/{csv_report_filename}")
+
+                # Generate question accuracy CSV
+                question_accuracy_filename = f"question_accuracy_report_{timestamp}.csv"
+                analysis.generate_question_accuracy_csv(output_file=f"{report_folder_path}/{question_accuracy_filename}")
+                self.logging.info(f"Question accuracy CSV generated at {report_folder_path}/{question_accuracy_filename}")
+
+                # Generate confusion matrices and performance visualizations
+                self.generate_and_log_confusion_matrix(self.all_results, report_folder_path)
+                for question in self.score_names():
+                    self.create_performance_visualization(self.all_results, question, report_folder_path)
+
+                # Generate metrics JSON
+                self.generate_metrics_json(report_folder_path, self.number_of_texts_to_sample, expenses)
+
+                # Analyze confidence calibration if confidence features are detected (preserve raw values)
+                calibration_report = None
+                try:
+                    from plexus.confidence_calibration import (
+                        detect_confidence_feature_enabled,
+                        extract_confidence_accuracy_pairs,
+                        compute_two_stage_calibration,
+                        serialize_calibration_model,
+                        generate_calibration_report
+                    )
+
+                    logging.info(f"About to check confidence detection on {len(self.all_results)} results")
+                    print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+                    confidence_detected = detect_confidence_feature_enabled(self.all_results)
+                    logging.info(f"Confidence detection result: {confidence_detected}")
+                    print(f"DEBUG: Confidence detection result: {confidence_detected}")
+
+                    if confidence_detected:
+                        logging.info("Confidence feature detected - computing two-stage calibration (temperature scaling + isotonic regression)")
+
+                        # Extract confidence-accuracy pairs
+                        confidence_scores, accuracy_labels = extract_confidence_accuracy_pairs(self.all_results)
+
+                        if len(confidence_scores) >= 10:
+                            # Compute two-stage calibration model
+                            optimal_temperature, isotonic_model, temp_scaled_scores = compute_two_stage_calibration(
+                                confidence_scores, accuracy_labels
+                            )
+
+                            if isotonic_model is not None:
+                                # Generate calibration report with isotonic model data
+                                calibration_report = generate_calibration_report(
+                                    temp_scaled_scores, accuracy_labels, isotonic_model
+                                )
+
+                                # Add temperature scaling info and serialized calibration data
+                                calibration_report["temperature_scaling"] = {
+                                    "optimal_temperature": float(optimal_temperature),
+                                    "method": "two_stage_calibration"
+                                }
+                                calibration_report["calibration_model"] = serialize_calibration_model(isotonic_model)
+
+                                # Generate reliability diagram visualization with all three series
+                                try:
+                                    from plexus.confidence_calibration import plot_reliability_diagram
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    reliability_plot_path = f"{report_folder_path}/reliability_diagram_{timestamp}.png"
+
+                                    # Apply final calibration to get fully calibrated confidence scores
+                                    final_calibrated_scores = isotonic_model.predict(temp_scaled_scores)
+
+                                    plot_reliability_diagram(
+                                        confidence_scores=confidence_scores,
+                                        accuracy_labels=accuracy_labels,
+                                        save_path=reliability_plot_path,
+                                        title=f"Two-Stage Confidence Calibration (T={optimal_temperature:.3f})",
+                                        n_bins=20,  # 5% buckets
+                                        temperature_scaled_scores=temp_scaled_scores,
+                                        calibrated_confidence_scores=final_calibrated_scores.tolist()
+                                    )
+
+                                    logging.info(f"Two-stage reliability diagram saved to: {reliability_plot_path}")
+                                    logging.info(f"Temperature scaling: T={optimal_temperature:.4f}")
+                                    print(f"DEBUG: Two-stage reliability diagram saved to: {reliability_plot_path}")
+                                    print(f"DEBUG: Temperature scaling: T={optimal_temperature:.4f}")
+
+                                    # Save calibration metrics to JSON file
+                                    calibration_metrics_path = f"{report_folder_path}/calibration_metrics_{timestamp}.json"
+                                    with open(calibration_metrics_path, 'w') as f:
+                                        json.dump(calibration_report, f, indent=2)
+                                    logging.info(f"Calibration metrics saved to: {calibration_metrics_path}")
+
+                                except Exception as viz_error:
+                                    logging.error(f"Error generating two-stage reliability diagram: {viz_error}")
+                                    print(f"DEBUG: Error generating two-stage reliability diagram: {viz_error}")
+                            else:
+                                logging.warning("Could not compute two-stage calibration model (isotonic regression failed)")
+                        else:
+                            logging.info(f"Insufficient confidence data for calibration analysis: {len(confidence_scores)} samples (need >= 10)")
+                            print(f"DEBUG: Insufficient confidence data: {len(confidence_scores)} samples")
+                    else:
+                        logging.info("No confidence features detected - skipping calibration analysis")
+                        print(f"DEBUG: No confidence features detected")
+
+                except Exception as calib_error:
+                    logging.error(f"Error in confidence calibration analysis: {calib_error}")
+                    print(f"DEBUG: Error in calibration analysis: {calib_error}")
 
             return metrics
         except Exception as e:
             self.logging.error(f"Error in _run_evaluation: {e}", exc_info=True)
-            raise e
+            'raise e'
         finally:
             pass
 
+    def get_score_instance(self, score_name: str):
+        """
+        Get a Score instance using the standardized Score.load() method.
+        
+        This method now uses the DRY, tested Score.load() approach that handles:
+        - API loading with local caching
+        - YAML-only loading from local files
+        - Proper error handling and dependency resolution
+        """
+        # Use the standardized Score.load() method
+        # This handles both API-loaded and YAML-loaded scorecards automatically
+        # Use cache for evaluations to support --yaml mode
+        return Score.load(
+            scorecard_identifier=self.scorecard_name,
+            score_name=score_name,
+            use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
+            yaml_only=False  # Allow API calls if needed
+        )

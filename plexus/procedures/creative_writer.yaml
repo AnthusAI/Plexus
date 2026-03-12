@@ -1,0 +1,215 @@
+name: creative_writer
+version: 4.0.0
+class: LuaDSL
+description: "Multi-agent creative writing - demonstrates sequential agent collaboration"
+
+params:
+  topic:
+    type: string
+    default: "artificial intelligence"
+    description: "The topic to write about"
+  style:
+    type: string
+    default: "scientific"
+    description: "Writing style (scientific, casual, formal)"
+
+outputs:
+  ideas:
+    type: string
+    required: true
+    description: "Brainstormed ideas"
+  critique:
+    type: string
+    required: true
+    description: "Critical evaluation"
+  final_piece:
+    type: string
+    required: true
+    description: "Final written piece"
+  success:
+    type: boolean
+    required: true
+
+agents:
+  brainstormer:
+    system_prompt: |
+      You are a creative brainstormer specializing in generating interesting ideas.
+
+      Topic: {params.topic}
+
+      Your task:
+      1. Generate 3-5 creative angles or perspectives on this topic
+      2. Think about unexpected connections or novel viewpoints
+      3. Keep each idea brief (1-2 sentences)
+
+      When you've brainstormed ideas, call the done tool with your ideas in the reason field.
+
+    initial_message: |
+      Please brainstorm creative ideas about {params.topic}.
+      Focus on generating interesting angles that would make compelling content.
+
+    tools:
+      - done
+
+  critic:
+    system_prompt: |
+      You are a constructive critic who evaluates ideas for quality and impact.
+
+      Topic: {params.topic}
+
+      Your task:
+      1. Evaluate each idea for originality, clarity, and potential impact
+      2. Select the strongest 1-2 ideas
+      3. Explain why these ideas are most compelling
+      4. Suggest how to develop them further
+
+      When done, call the done tool with your critique in the reason field.
+
+    initial_message: |
+      You will receive brainstormed ideas to evaluate. Select the best ones and explain why they are compelling.
+
+    tools:
+      - done
+
+  writer:
+    system_prompt: |
+      You are a skilled writer who creates engaging content.
+
+      Topic: {params.topic}
+      Style: {params.style}
+
+      Your task:
+      1. Write a short piece (2-3 paragraphs) based on the selected ideas
+      2. Use the {params.style} style
+      3. Make it engaging and well-structured
+
+      When done, call the done tool with your written piece in the reason field.
+
+    initial_message: |
+      You will receive a critique with selected ideas. Write a {params.style} piece based on those ideas.
+
+    tools:
+      - done
+
+stages:
+  - brainstorming
+  - critiquing
+  - writing
+  - complete
+
+workflow: |
+  -- Get parameters
+  local topic = "artificial intelligence"
+  local style = "scientific"
+  State.set("topic", topic)
+  State.set("style", style)
+
+  -- Phase 1: Brainstorming
+  State.set("stage", "brainstorming")
+  Human.notify({
+    message = "Starting creative writing process",
+    content = "**Creative Writer** is now working\\n\\n**Topic**: " .. topic .. "\\n**Style**: " .. style .. "\\n\\n📝 Phase 1: Brainstorming ideas..."
+  })
+
+  repeat
+    Brainstormer.turn()
+  until Tool.called("done") or Iterations.exceeded(10)
+
+  local ideas = ""
+  if Tool.called("done") then
+    local done_call = Tool.last_call("done")
+    ideas = done_call.args.reason or "No ideas generated"
+    State.set("ideas", ideas)
+  else
+    Human.notify({
+      message = "Brainstorming failed",
+      content = "❌ Could not generate ideas after " .. tostring(Iterations.current()) .. " iterations",
+      level = "error"
+    })
+    return {
+      ideas = "",
+      critique = "",
+      final_piece = "",
+      success = false
+    }
+  end
+
+  -- Phase 2: Critiquing
+  State.set("stage", "critiquing")
+  Human.notify({
+    message = "Evaluating ideas",
+    content = "🔍 Phase 2: Critic is evaluating the brainstormed ideas..."
+  })
+
+  -- Inject the ideas into the critic's first turn
+  Critic.turn({inject = "Here are the brainstormed ideas to evaluate:\\n\\n" .. ideas})
+
+  repeat
+    Critic.turn()
+  until Tool.called("done") or Iterations.exceeded(10)
+
+  local critique = ""
+  if Tool.called("done") then
+    local done_call = Tool.last_call("done")
+    critique = done_call.args.reason or "No critique provided"
+    State.set("critique", critique)
+  else
+    Human.notify({
+      message = "Critique failed",
+      content = "❌ Could not evaluate ideas after " .. tostring(Iterations.current()) .. " iterations",
+      level = "error"
+    })
+    return {
+      ideas = ideas,
+      critique = "",
+      final_piece = "",
+      success = false
+    }
+  end
+
+  -- Phase 3: Writing
+  State.set("stage", "writing")
+  Human.notify({
+    message = "Writing final piece",
+    content = "✍️ Phase 3: Writer is crafting the final piece..."
+  })
+
+  -- Inject the critique into the writer's first turn
+  Writer.turn({inject = "Here is the critic's selected idea to write about:\\n\\n" .. critique})
+
+  repeat
+    Writer.turn()
+  until Tool.called("done") or Iterations.exceeded(10)
+
+  local final_piece = ""
+  if Tool.called("done") then
+    local done_call = Tool.last_call("done")
+    final_piece = done_call.args.reason or "No piece written"
+    State.set("final_piece", final_piece)
+  else
+    Human.notify({
+      message = "Writing failed",
+      content = "❌ Could not write piece after " .. tostring(Iterations.current()) .. " iterations",
+      level = "error"
+    })
+    return {
+      ideas = ideas,
+      critique = critique,
+      final_piece = "",
+      success = false
+    }
+  end
+
+  -- Success! Show the result
+  State.set("stage", "complete")
+  Human.notify({
+    message = "Creative writing complete!",
+    content = "**Creative Writer** has finished\\n\\n✅ Successfully created content about: **" .. topic .. "**\\n\\n---\\n\\n" .. final_piece
+  })
+
+  return {
+    ideas = ideas,
+    critique = critique,
+    final_piece = final_piece,
+    success = true
+  }

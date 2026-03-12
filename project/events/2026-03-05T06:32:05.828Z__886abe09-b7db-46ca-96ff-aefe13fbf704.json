@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "886abe09-b7db-46ca-96ff-aefe13fbf704",
+  "issue_id": "plx-2b053565-ed74-4fe1-996c-aa11eace2349",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-05T06:32:05.828Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Run 60-day Semantic Reinforcement Memory for Moore Holdings - Traditional"
+  }
+}

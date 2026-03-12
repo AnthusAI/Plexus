@@ -44,18 +44,20 @@ const createComplexCommand = <T>(generator: (options: T) => string): ComplexComm
 // Evaluation command helpers
 const createEvaluationCommand = (type: string) => {
   return createComplexCommand<EvaluationOptions>((options) => {
+    // Add debug logging to see what values are being used
+    console.log("Generating evaluation command with options:", options);
+    
+    // Make number-of-samples one of the first arguments to ensure it's processed correctly
     const args = [
-      `--scorecard-name ${options.scorecardName}`,
-      `--score-name "${options.scoreName}"`,
       `--number-of-samples ${options.numberOfSamples}`,
-      `--sampling-method ${options.samplingMethod}`,
-      options.loadFresh ? '--load-fresh' : '',
-      options.randomSeed ? `--random-seed ${options.randomSeed}` : '',
-      options.visualize ? '--visualize' : '',
-      options.logToLanggraph ? '--log-to-langgraph' : ''
+      `--scorecard "${options.scorecardName}"`,
+      `--score "${options.scoreName}"`,
+      options.loadFresh ? '--fresh' : ''
     ].filter(Boolean).join(' ')
     
-    return `evaluate ${type} ${args}`
+    const command = `evaluate ${type} ${args}`
+    console.log("Generated command:", command);
+    return command
   })
 }
 

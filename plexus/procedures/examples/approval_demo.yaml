@@ -1,0 +1,115 @@
+name: approval_demo
+version: 1.0.0
+description: |
+  Simple demonstration of Human-in-the-Loop approval with different outcomes
+  based on user's decision.
+
+class: LuaDSL
+
+params:
+  proposal_title:
+    type: string
+    required: false
+    default: "Deploy to Production"
+    description: "Title of the proposal to approve"
+
+  proposal_details:
+    type: string
+    required: false
+    default: "This will deploy version 2.0 to production environment"
+    description: "Details about what needs approval"
+
+outputs:
+  approved:
+    type: boolean
+    required: true
+    description: "Whether the proposal was approved"
+
+  decision_time:
+    type: string
+    required: true
+    description: "When the decision was made"
+
+  message:
+    type: string
+    required: true
+    description: "Outcome message"
+
+return_prompt: |
+  Summarize the approval decision:
+  - Was it approved or rejected?
+  - What was the outcome message?
+  - When was the decision made?
+
+error_prompt: |
+  Explain what went wrong during the approval process.
+
+agents:
+  dummy:
+    system_prompt: "This is a placeholder agent (not used in this workflow)"
+    initial_message: "Placeholder"
+    tools: []
+
+stages:
+  - notifying
+  - awaiting_approval
+  - processing
+  - complete
+
+workflow: |
+  -- Phase 1: Notify user about pending approval
+  Human.notify({
+    message = "📋 New approval request: " .. params.proposal_title,
+    level = "info"
+  })
+
+  -- Phase 2: Request approval (BLOCKS HERE)
+  Human.notify({
+    message = "⏳ Waiting for your decision...",
+    level = "info"
+  })
+
+  local approved = Human.approve({
+    message = "**" .. params.proposal_title .. "**\n\n" ..
+              params.proposal_details .. "\n\n" ..
+              "Do you approve this action?",
+    timeout = 3600,  -- 1 hour timeout
+    default = false,  -- Default to rejection if timeout
+    context = {
+      proposal_title = params.proposal_title,
+      requested_at = os.date("%Y-%m-%dT%H:%M:%SZ")
+    }
+  })
+
+  local decision_time = os.date("%Y-%m-%dT%H:%M:%SZ")
+
+  -- Phase 3: Take action based on decision
+  if approved then
+    Human.notify({
+      message = "✅ **APPROVED**\n\nProceeding with: " .. params.proposal_title,
+      level = "info"
+    })
+
+    -- Simulate some work being done
+    Human.notify({
+      message = "🔄 Executing approved action...",
+      level = "info"
+    })
+
+    return {
+      approved = true,
+      decision_time = decision_time,
+      message = "Successfully completed: " .. params.proposal_title
+    }
+  else
+    Human.notify({
+      message = "❌ **REJECTED**\n\nAction cancelled: " .. params.proposal_title,
+      level = "info"
+    })
+
+    return {
+      approved = false,
+      decision_time = decision_time,
+      message = "Action was rejected by user"
+    }
+  end

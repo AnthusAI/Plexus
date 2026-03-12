@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": [
+    "../stories/**/*",
+    "../components/**/*",
+    "../utils/**/*",
+    "../lib/**/*",
+    "../app/**/*"
+  ],
+  "exclude": ["../node_modules"]
+} 

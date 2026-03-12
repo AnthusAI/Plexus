@@ -1,7 +1,8 @@
 import pandas as pd
-from plexus.processors.DataframeProcessor import DataframeProcessor
+from plexus.processors.DataframeProcessor import DatasetProcessor
 
-class ColumnDatasetFilter(DataframeProcessor):
+
+class ColumnDatasetFilter(DatasetProcessor):
 
     def __init__(self, **parameters):
         super().__init__(**parameters)

@@ -1,6 +1,7 @@
 import React from "react"
 import { cn } from "@/lib/utils"
 import { Timer, AlarmClock, AlarmClockCheck } from "lucide-react"
+import { Timestamp } from "./timestamp"
 
 export interface ProgressBarTimingProps {
   elapsedTime?: string
@@ -8,6 +9,8 @@ export interface ProgressBarTimingProps {
   isInProgress?: boolean
   isFocused?: boolean
   className?: string
+  startedAt?: string
+  completedAt?: string
 }
 
 export function ProgressBarTiming({
@@ -15,7 +18,9 @@ export function ProgressBarTiming({
   estimatedTimeRemaining,
   isInProgress = true,
   isFocused = false,
-  className
+  className,
+  startedAt,
+  completedAt
 }: ProgressBarTimingProps) {
   return (
     <div className={cn("flex justify-between text-sm text-muted-foreground h-5", className)}>
@@ -27,7 +32,21 @@ export function ProgressBarTiming({
             isInProgress && "animate-pulse"
           )}
         />
-        <span>Elapsed: {elapsedTime || '0s'}</span>
+        {elapsedTime ? (
+          <span>Elapsed: {elapsedTime}</span>
+        ) : startedAt ? (
+          <div className="flex items-center gap-1">
+            <span>Elapsed:</span>
+            <Timestamp 
+              time={startedAt} 
+              completionTime={completedAt} 
+              variant="elapsed" 
+              showIcon={false}
+            />
+          </div>
+        ) : (
+          <span>Elapsed: 0s</span>
+        )}
       </div>
       {estimatedTimeRemaining && (
         <div className="flex items-center gap-1">

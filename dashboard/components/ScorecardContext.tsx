@@ -15,24 +15,64 @@ export interface ScorecardContextProps {
   availableFields?: Array<{ value: string; label: string }>;
   timeRangeOptions?: Array<{ value: string; label: string }>;
   useMockData?: boolean;
+  skeletonMode?: boolean;
 }
 
-async function listScorecards(): ModelListResult<Schema['Scorecard']['type']> {
-  return listFromModel<Schema['Scorecard']['type']>(client.models.Scorecard)
+async function listScorecards(): Promise<{ data: Schema['Scorecard']['type'][], nextToken: string | null }> {
+  // Handle pagination to get ALL scorecards
+  let allScorecards: Schema['Scorecard']['type'][] = []
+  let nextToken: string | null = null
+  
+  do {
+    const result: AmplifyListResult<Schema['Scorecard']['type']> = await listFromModel<Schema['Scorecard']['type']>(
+      client.models.Scorecard,
+      undefined,
+      nextToken || undefined,
+      1000 // Large limit to reduce pagination rounds
+    )
+    allScorecards = allScorecards.concat(result.data)
+    nextToken = result.nextToken
+  } while (nextToken)
+  
+  return { data: allScorecards, nextToken: null }
 }
 
-async function listSections(scorecardId: string): ModelListResult<Schema['ScorecardSection']['type']> {
-  return listFromModel<Schema['ScorecardSection']['type']>(
-    client.models.ScorecardSection,
-    { scorecardId: { eq: scorecardId } }
-  )
+async function listSections(scorecardId: string): Promise<{ data: Schema['ScorecardSection']['type'][], nextToken: string | null }> {
+  // Handle pagination to get ALL sections
+  let allSections: Schema['ScorecardSection']['type'][] = []
+  let nextToken: string | null = null
+  
+  do {
+    const result: AmplifyListResult<Schema['ScorecardSection']['type']> = await listFromModel<Schema['ScorecardSection']['type']>(
+      client.models.ScorecardSection,
+      { scorecardId: { eq: scorecardId } },
+      nextToken || undefined,
+      1000 // Large limit to reduce pagination rounds
+    )
+    allSections = allSections.concat(result.data)
+    nextToken = result.nextToken
+  } while (nextToken)
+  
+  return { data: allSections, nextToken: null }
 }
 
-async function listScores(sectionId: string): ModelListResult<Schema['Score']['type']> {
-  return listFromModel<Schema['Score']['type']>(
-    client.models.Score,
-    { sectionId: { eq: sectionId } }
-  )
+async function listScores(sectionId: string): Promise<{ data: Schema['Score']['type'][], nextToken: string | null }> {
+  // Handle pagination to get ALL scores
+  let allScores: Schema['Score']['type'][] = []
+  let nextToken: string | null = null
+  
+  do {
+    const result: AmplifyListResult<Schema['Score']['type']> = await listFromModel<Schema['Score']['type']>(
+      client.models.Score,
+      { sectionId: { eq: sectionId } },
+      nextToken || undefined,
+      1000 // Large limit to reduce pagination rounds
+    )
+    allScores = allScores.concat(result.data)
+    nextToken = result.nextToken
+  } while (nextToken)
+  
+  return { data: allScores, nextToken: null }
 }
 
 const ScorecardContext: React.FC<ScorecardContextProps> = ({ 
@@ -42,11 +82,13 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
   setSelectedScore,
   availableFields: mockFields,
   timeRangeOptions: mockScores,
-  useMockData = false
+  useMockData = false,
+  skeletonMode = false
 }) => {
   const [scorecards, setScorecards] = useState<Array<{ value: string; label: string }>>([])
   const [scores, setScores] = useState<Array<{ value: string; label: string }>>([])
   const [isLoading, setIsLoading] = useState(!useMockData)
+
 
   useEffect(() => {
     if (useMockData) return
@@ -70,6 +112,13 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
     fetchScorecards()
   }, [useMockData])
 
+  // Reset score selection when scorecard changes
+  useEffect(() => {
+    if (selectedScore) {
+      setSelectedScore(null);
+    }
+  }, [selectedScorecard]); // Removed setSelectedScore from dependencies to prevent infinite loop
+
   useEffect(() => {
     if (useMockData || !selectedScorecard) return
 
@@ -85,17 +134,12 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         })
 
         const scoreResults = await Promise.all(scorePromises)
-        const uniqueScores = new Set<string>()
+        const allScores = scoreResults.flat();
         
-        scoreResults.flat().forEach(score => {
-          if (score?.name) {
-            uniqueScores.add(score.name)
-          }
-        })
-
-        setScores(Array.from(uniqueScores).map(name => ({
-          value: name,
-          label: name
+        // Use score IDs instead of names for values
+        setScores(allScores.map(score => ({
+          value: score.id,
+          label: score.name
         })))
       } catch (error) {
         console.error('Error fetching scores:', error)
@@ -105,44 +149,58 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
     fetchScores()
   }, [selectedScorecard, useMockData])
 
-  if (isLoading) {
-    return <div>Loading scorecards...</div>
-  }
+  const handleScoreChange = (value: string) => {
+    const newValue = value === "all" ? null : value;
+    setSelectedScore(newValue);
+  };
+
+  const handleScorecardChange = (value: string) => {
+    const newValue = value === "all" ? null : value;
+    setSelectedScorecard(newValue);
+  };
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <Select onValueChange={value => {
-        setSelectedScorecard(value === "all" ? null : value)
-      }}>
-        <SelectTrigger className="w-[200px] h-8 bg-card border-none">
-          <SelectValue placeholder="Scorecard" />
-        </SelectTrigger>
-        <SelectContent className="bg-card border-none">
-          <SelectItem value="all">All Scorecards</SelectItem>
-          {scorecards?.sort((a, b) => a.label.localeCompare(b.label)).map(field => (
-            <SelectItem key={field.value} value={field.value}>
-              {field.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select 
-        onValueChange={value => setSelectedScore(value === "all" ? null : value)}
-        disabled={!selectedScorecard}
-        value={selectedScore || "all"}
-      >
-        <SelectTrigger className="w-[200px] h-8 bg-card border-none">
-          <SelectValue placeholder="Score" />
-        </SelectTrigger>
-        <SelectContent className="bg-card border-none">
-          <SelectItem value="all">All Scores</SelectItem>
-          {selectedScorecard && scores?.sort((a, b) => a.label.localeCompare(b.label)).map(option => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="@container">
+      <div className="flex @[450px]:flex-row flex-col @[450px]:flex-wrap gap-2">
+        <Select 
+          onValueChange={skeletonMode ? undefined : handleScorecardChange}
+          value={skeletonMode ? undefined : (selectedScorecard || "all")}
+          disabled={skeletonMode}
+        >
+          <SelectTrigger className={`@[450px]:w-[200px] w-full h-9 bg-card border-none ${skeletonMode ? 'animate-pulse' : ''}`}>
+            <SelectValue placeholder="Scorecard" />
+          </SelectTrigger>
+          {!skeletonMode && (
+            <SelectContent className="bg-card border-none">
+              <SelectItem value="all">All Scorecards</SelectItem>
+              {scorecards?.sort((a, b) => a.label.localeCompare(b.label)).map(field => (
+                <SelectItem key={field.value} value={field.value}>
+                  {field.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          )}
+        </Select>
+        <Select 
+          onValueChange={skeletonMode ? undefined : handleScoreChange}
+          disabled={skeletonMode || !selectedScorecard}
+          value={skeletonMode ? undefined : (selectedScore || "all")}
+        >
+          <SelectTrigger className={`@[450px]:w-[200px] w-full h-9 bg-card border-none ${skeletonMode ? 'opacity-50 animate-pulse' : ''}`}>
+            <SelectValue placeholder="Score" />
+          </SelectTrigger>
+          {!skeletonMode && (
+            <SelectContent className="bg-card border-none">
+              <SelectItem value="all">All Scores</SelectItem>
+              {selectedScorecard && scores?.sort((a, b) => a.label.localeCompare(b.label)).map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          )}
+        </Select>
+      </div>
     </div>
   )
 }

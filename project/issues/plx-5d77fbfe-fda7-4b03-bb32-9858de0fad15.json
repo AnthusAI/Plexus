@@ -1,0 +1,43 @@
+{
+  "id": "plx-5d77fbfe-fda7-4b03-bb32-9858de0fad15",
+  "title": "Refresh Kanbus configuration to current format",
+  "description": "",
+  "type": "chore",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "945a3765-7161-4c8b-9092-d600fa4afb44",
+      "author": "ryan.porter",
+      "text": "Started work: comparing /Users/ryan.porter/Projects/Plexus/.kanbus.yml against /Users/ryan.porter/Projects/Kanbus/.kanbus.yml and will update to current format.",
+      "created_at": "2026-03-06T17:05:55.962231Z"
+    },
+    {
+      "id": "8a91e0fa-e250-434f-8791-d1573afb1c38",
+      "author": "ryan.porter",
+      "text": "Updated .kanbus.yml to current format based on ../Kanbus/.kanbus.yml: removed deprecated null/legacy keys, switched to compact workflow lists, aligned statuses/categories/transition labels/type colors, enabled console_port 4242, and added ignore_paths entry for features/project while keeping project_key=plx and existing Snyk org settings.",
+      "created_at": "2026-03-06T17:07:00.595299Z"
+    },
+    {
+      "id": "4e028ce7-50c9-49b8-a375-eb12eb2adc15",
+      "author": "ryan.porter",
+      "text": "Validation checks: kbs validate exits 0. Initially mirrored beads_compatibility=true from example, but reverted to false because this repository has no .beads directory and CLI commands failed with 'no .beads directory'.",
+      "created_at": "2026-03-06T17:07:00.630723Z"
+    },
+    {
+      "id": "100672a1-256e-4795-bd27-8652c13eb0ed",
+      "author": "ryan.porter",
+      "text": "Completed: refreshed .kanbus.yml to current schema based on ../Kanbus/.kanbus.yml, retained Plexus-specific settings, and verified compatibility with kbs validate + kbs list.",
+      "created_at": "2026-03-06T17:07:14.588237Z"
+    }
+  ],
+  "created_at": "2026-03-06T17:05:51.361552Z",
+  "updated_at": "2026-03-06T17:07:14.602116Z",
+  "closed_at": "2026-03-06T17:07:14.602116Z",
+  "custom": {}
+}

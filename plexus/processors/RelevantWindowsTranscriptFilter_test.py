@@ -6,6 +6,22 @@ from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTra
 from plexus.scores.Score import Score
 from plexus.scores.KeywordClassifier import KeywordClassifier
 
+
+def _process_text(processor, text):
+    """
+    Helper function to process text through a processor.
+
+    Args:
+        processor: The processor instance
+        text: The text to process
+
+    Returns:
+        The processed text string
+    """
+    score_input = Score.Input(text=text, metadata={})
+    result = processor.process(score_input)
+    return result.text
+
 # Mock classifier for testing purposes
 class MockClassifier(Score):
     def predict_validation(self):
@@ -42,7 +58,7 @@ class TestTranscriptFilter(unittest.TestCase):
             prev_count=0,
             next_count=0
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         self.assertEqual(result, "...\nCustomer: This is a relevant sentence.\n...")
 
     def test_multiple_relevant_sentences(self):
@@ -51,7 +67,7 @@ class TestTranscriptFilter(unittest.TestCase):
             prev_count=0,
             next_count=0
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "...\nCustomer: Relevant sentence one.\nAgent: Still relevant.\n...\nAgent: Relevant sentence two.\n..."
         self.assertEqual(result, expected_output)
 
@@ -61,7 +77,7 @@ class TestTranscriptFilter(unittest.TestCase):
             prev_count=1,
             next_count=1
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "...\nCustomer: Irrelevant.\nAgent: Relevant sentence.\nCustomer: Irrelevant.\n..."
         self.assertEqual(result, expected_output)
 
@@ -71,7 +87,7 @@ class TestTranscriptFilter(unittest.TestCase):
             prev_count=0,
             next_count=0
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = ""
         self.assertEqual(result, expected_output)
 
@@ -81,7 +97,7 @@ class TestTranscriptFilter(unittest.TestCase):
             prev_count=0,
             next_count=0
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = transcript
         self.assertEqual(result, expected_output)
 
@@ -91,7 +107,7 @@ class TestTranscriptFilter(unittest.TestCase):
             prev_count=0,
             next_count=0
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "Agent: Relevant.\n...\nCustomer: Relevant.\n...\nCustomer: Relevant."
         self.assertEqual(result, expected_output)
 
@@ -101,7 +117,7 @@ class TestTranscriptFilter(unittest.TestCase):
             prev_count=1,
             next_count=1
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "...\nCustomer: Irrelevant.\n3: Relevant sentence one.\nAgent: Irrelevant.\nCustomer: Relevant sentence two.\n3: Irrelevant.\n..."
         self.assertEqual(result, expected_output)
 
@@ -120,7 +136,7 @@ Customer: Relevant end."""
             prev_count=1,
             next_count=1
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output =\
 """Agent: Relevant start.
 Customer: Irrelevant.
@@ -155,14 +171,14 @@ class TestKeywordTranscriptFilter(unittest.TestCase):
     def test_single_keyword_sentence(self):
         transcript = "I have no pets.\nMy child is in school.\nI am self-employed."
         transcript_filter = RelevantWindowsTranscriptFilter(classifier=self.classifier)
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "I have no pets.\nMy child is in school.\nI am self-employed."
         self.assertEqual(result, expected_output)
 
     def test_multiple_keywords(self):
         transcript = "My kids play football.\nI work from home.\nMy children are grown up."
         transcript_filter = RelevantWindowsTranscriptFilter(classifier=self.classifier)
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "My kids play football.\nI work from home.\nMy children are grown up."
         self.assertEqual(result, expected_output)
 
@@ -172,7 +188,7 @@ class TestKeywordTranscriptFilter(unittest.TestCase):
             prev_count=0,
             next_count=0
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = ""
         self.assertEqual(result, expected_output)
 
@@ -182,7 +198,7 @@ class TestKeywordTranscriptFilter(unittest.TestCase):
             prev_count=1,
             next_count=1
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "We have a dog.\nMy kid is a teenager.\nWe recently moved."
         self.assertEqual(result, expected_output)
 
@@ -192,14 +208,14 @@ class TestKeywordTranscriptFilter(unittest.TestCase):
             prev_count=0,
             next_count=0
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "...\nMy kid is a teenager.\n..."
         self.assertEqual(result, expected_output)
 
     def test_separated_keywords(self):
         transcript = "My daughter is at college.\nI am a teacher.\nMy son is in high school."
         transcript_filter = RelevantWindowsTranscriptFilter(classifier=self.classifier)
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "My daughter is at college.\nI am a teacher.\nMy son is in high school."
         self.assertEqual(result, expected_output)
 
@@ -209,7 +225,7 @@ class TestKeywordTranscriptFilter(unittest.TestCase):
             prev_count=0,
             next_count=0
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "Agent: Tell me about your kids?\nCustomer: My daughter is at college. I am a teacher. My son is in high school."
         self.assertEqual(result, expected_output)
 
@@ -219,7 +235,7 @@ class TestKeywordTranscriptFilter(unittest.TestCase):
             prev_count=0,
             next_count=0
         )
-        result = transcript_filter.process(pd.DataFrame({'text': [transcript]})).iloc[0, 0]
+        result = _process_text(transcript_filter, transcript)
         expected_output = "Agent: Tell me about your kids?\n..."
         self.assertEqual(result, expected_output)
 

@@ -13,7 +13,7 @@ export default function SolutionsPage() {
             Plexus features a sophisticated two-level dispatch system that seamlessly connects your applications to distributed worker nodes, enabling efficient execution of AI operations at any scale.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <div className="border rounded-lg p-6">
+            <div className="rounded-lg p-6 shadow-none border-none bg-card">
               <h3 className="text-xl font-medium mb-3">Flexible Architecture</h3>
               <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                 <li>Two-level dispatch system for optimal task distribution</li>
@@ -22,7 +22,7 @@ export default function SolutionsPage() {
                 <li>Configurable worker pools for specialized tasks</li>
               </ul>
             </div>
-            <div className="border rounded-lg p-6">
+            <div className="rounded-lg p-6 shadow-none border-none bg-card">
               <h3 className="text-xl font-medium mb-3">Enterprise-Ready</h3>
               <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                 <li>Built on proven AWS infrastructure</li>
@@ -61,19 +61,19 @@ export default function SolutionsPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">Integration Options</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="border rounded-lg p-6">
+            <div className="rounded-lg p-6 shadow-none border-none bg-card">
               <h3 className="text-xl font-medium mb-3">Dashboard UI</h3>
               <p className="text-muted-foreground">
                 Modern web interface for task management, monitoring, and control.
               </p>
             </div>
-            <div className="border rounded-lg p-6">
+            <div className="rounded-lg p-6 shadow-none border-none bg-card">
               <h3 className="text-xl font-medium mb-3">CLI Tools</h3>
               <p className="text-muted-foreground">
                 Powerful command-line tools for automation and scripting.
               </p>
             </div>
-            <div className="border rounded-lg p-6">
+            <div className="rounded-lg p-6 shadow-none border-none bg-card">
               <h3 className="text-xl font-medium mb-3">Python SDK</h3>
               <p className="text-muted-foreground">
                 Native Python integration for seamless development workflows.

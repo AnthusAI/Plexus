@@ -4,7 +4,7 @@ import { SimpleDialog } from '@/components/task-dispatch'
 import { Play } from 'lucide-react'
 
 const meta: Meta<typeof SimpleDialog> = {
-  title: 'Task Dispatch/SimpleDialog',
+  title: 'Tasks/Dispatch/SimpleDialog',
   component: SimpleDialog,
   parameters: {
     layout: 'centered',

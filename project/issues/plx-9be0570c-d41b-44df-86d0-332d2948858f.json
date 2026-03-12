@@ -1,0 +1,25 @@
+{
+  "id": "plx-9be0570c-d41b-44df-86d0-332d2948858f",
+  "title": "[Snyk] SNYK-PYTHON-DISKCACHE-15268422 in diskcache@5.6.3",
+  "description": "## Deserialization of Untrusted Data\n\n**Severity:** high\n**Package:** diskcache@5.6.3\n**File:** `requirements.txt`\n\n**CVSS Score:** 7.0  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 457/1000\n\n### CVEs\n- [CVE-2025-69872](https://nvd.nist.gov/vuln/detail/CVE-2025-69872)\n\n**Fix:** No automatic fix available. Review manually.\n\n### Details\n## Overview\n[diskcache](https://pypi.org/project/diskcache) is a Disk Cache -- Disk and file backed persistent cache.\n\nAffected versions of this package are vulnerable to Deserialization of Untrusted Data due to the unsafe use of the `pickle.load` function in the `Cache` class. An attacker can execute arbitrary code by writing malicious data to the cache directory and triggering deserialization when the application reads from the cache.\n\n**Note:**\nThis is only exploitable if the attacker has write access to the cache directory.\n\n## Details\n\nSerialization is a process of converting an object into a sequence of bytes which can be persisted to a disk or database or can be sent through streams. The reverse process of creating object from sequence of bytes is called deserialization. Serialization is commonly used for communication (sharing objects between multiple hosts) and persistence (store the object state in a file or a database). It is an integral part of popular protocols like _Remote Method Invocation (RMI)_, _Java Management Extension (JMX)_, _Java Messaging System (JMS)_, _Action Message Format (AMF)_, _Java Server Faces (JSF) ViewState_, etc.\n\n_Deserialization of untrusted data_ ([CWE-502](https://cwe.mitre.org/data/definitions/502.html)) is when the application deserializes untrusted data without sufficiently verifying that the resulting data will be valid, thus allowing the attacker to control the state or the flow of the execution.\n  \n## Remediation\nThere is no fixed version for `diskcache`.\n## References\n- [POC](https://github.com/EthanKim88/ethan-cve-disclosures/blob/main/CVE-2025-69872-DiskCache-Pickle-Deserialization.md)\n- [Vulnerable Code](https://github.com/grantjenks/python-diskcache/blob/master/diskcache/core.py#L177)\n- [Vulnerable Code](https://github.com/grantjenks/python-diskcache/blob/master/diskcache/core.py#L282)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-DISKCACHE-15268422)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7fe50b2e-f823-4b4e-acc2-a6a833603768",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T21:27:00.617577Z",
+  "updated_at": "2026-03-11T21:27:00.617577Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-DISKCACHE-15268422",
+    "snyk_severity": "high",
+    "snyk_type": "package_vulnerability"
+  }
+}

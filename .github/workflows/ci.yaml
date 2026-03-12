@@ -1,0 +1,263 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - "main"
+      - "staging"
+      - "dev"
+      - "feature/**"
+      - "fix/**"
+  pull_request:
+    branches:
+      - "**"
+
+permissions:
+  contents: write
+
+jobs:
+  python-tests:
+    name: Python Tests (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Free up disk space
+      run: |
+        echo "Disk space before cleanup:"
+        df -h
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        echo "Disk space after cleanup:"
+        df -h
+
+    - name: Set up Conda with Python ${{ matrix.python-version }}
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        miniforge-version: latest
+        activate-environment: plexus-ci
+        auto-activate-base: false
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential python3-dev
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip --no-cache-dir
+        pip install invoke --no-cache-dir
+        # Install build dependencies first to ensure they're available
+        pip install pybind11 cython setuptools wheel --no-cache-dir
+        pip install numpy --no-cache-dir
+
+        # Install semantic-release for version management
+        pip install python-semantic-release --no-cache-dir
+
+        # Install fasttext-wheel instead of fasttext
+        # pip install fasttext-wheel==0.9.2 --no-cache-dir
+
+        # Now install package dependencies with no cache to save space
+        pip install -e . --no-cache-dir
+
+        echo "Disk space after Python installation:"
+        df -h
+
+    - name: Run Python Tests
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Python version: $(python --version)"
+        echo "Conda environment: $CONDA_DEFAULT_ENV"
+        invoke ci
+
+    - name: Semantic Release Safety Check
+      if: matrix.python-version == '3.11' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        python - <<'PY'
+        import re
+        import subprocess
+        import sys
+
+        def read_version(*args: str) -> str:
+            proc = subprocess.run(
+                ["semantic-release", "version", *args],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            text = (proc.stdout + "\n" + proc.stderr).strip()
+            # semantic-release may emit explanatory lines; pick the last semver token
+            matches = re.findall(r"\b\d+\.\d+\.\d+\b", text)
+            if not matches:
+                print(f"Unable to parse version from output for args={args!r}\n{text}", file=sys.stderr)
+                sys.exit(1)
+            return matches[-1]
+
+        def semver_tuple(v: str) -> tuple[int, int, int]:
+            major, minor, patch = v.split(".")
+            return int(major), int(minor), int(patch)
+
+        last_released = read_version("--print-last-released")
+        next_version = read_version("--print")
+
+        if semver_tuple(next_version) < semver_tuple(last_released):
+            print(
+                "Semantic-release safety check failed: computed next version is lower than latest released tag.",
+                file=sys.stderr,
+            )
+            print(f"latest released: {last_released}", file=sys.stderr)
+            print(f"computed next:  {next_version}", file=sys.stderr)
+            print(
+                "Aborting release to protect published GitHub release history.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        print(f"Semantic-release safety check passed: latest={last_released}, next={next_version}")
+        PY
+
+    - name: Semantic Release
+      if: matrix.python-version == '3.11' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        semantic-release version
+        semantic-release publish
+
+  dashboard-unit-tests:
+    name: Dashboard Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        
+    - name: Install Node dependencies
+      working-directory: ./dashboard
+      run: npm ci
+        
+    - name: Run TypeScript Type Check
+      working-directory: ./dashboard
+      run: npm run ci:typecheck
+      
+    - name: Run Unit Tests
+      working-directory: ./dashboard
+      run: npm run ci:unit
+
+  dashboard-storybook-tests:
+    name: Dashboard Storybook Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+
+    - name: Install Node dependencies
+      working-directory: ./dashboard
+      run: npm ci
+
+    - name: Build Storybook
+      working-directory: ./dashboard
+      run: npm run build-storybook --quiet
+      
+    - name: Install Playwright Browsers
+      working-directory: ./dashboard
+      run: npx playwright install --with-deps chromium
+      
+    - name: Run Storybook Tests
+      working-directory: ./dashboard
+      run: |
+        echo "Starting Storybook test process..."
+        echo "Checking storybook-static directory..."
+        ls -la storybook-static
+        echo "Starting concurrent processes..."
+        npx concurrently \
+          --verbose \
+          -P \
+          -t \
+          -k \
+          -s first \
+          -n "SB,TEST" \
+          -c "magenta,blue" \
+          "npx http-server storybook-static --port 6006 --address 127.0.0.1" \
+          "npx wait-on --verbose --interval 1000 --timeout 30000 http-get://127.0.0.1:6006 && echo 'Server ready' && npm run test-storybook -- --url http://127.0.0.1:6006 --verbose"
+
+  trigger-deployment:
+    name: Trigger AWS CodePipeline
+    needs:
+      - python-tests
+      - dashboard-unit-tests
+      - dashboard-storybook-tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    # Required for OIDC authentication
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Trigger CodePipelines
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            INFRA_PIPELINE="plexus-infrastructure-production-pipeline"
+            APP_PIPELINE="plexus-app-deploy-production-pipeline"
+            ENVIRONMENT="production"
+          elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
+            INFRA_PIPELINE=""
+            APP_PIPELINE="plexus-app-deploy-staging-pipeline"
+            ENVIRONMENT="staging"
+          fi
+
+          echo "Triggering pipelines for environment: $ENVIRONMENT"
+          echo ""
+
+          if [ -n "$INFRA_PIPELINE" ]; then
+            echo "Triggering infrastructure pipeline: $INFRA_PIPELINE"
+            INFRA_EXEC_ID=$(aws codepipeline start-pipeline-execution \
+              --name "$INFRA_PIPELINE" \
+              --query 'pipelineExecutionId' \
+              --output text)
+            echo "Infrastructure pipeline execution: $INFRA_EXEC_ID"
+            echo "Monitor at: https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${INFRA_PIPELINE}/view?region=us-west-2"
+            echo ""
+          fi
+
+          echo "Triggering app deployment pipeline: $APP_PIPELINE"
+          APP_EXEC_ID=$(aws codepipeline start-pipeline-execution \
+            --name "$APP_PIPELINE" \
+            --query 'pipelineExecutionId' \
+            --output text)
+          echo "App deployment pipeline execution: $APP_EXEC_ID"
+          echo "Monitor at: https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${APP_PIPELINE}/view?region=us-west-2" 

@@ -1,46 +1,147 @@
-import pandas as pd
 import nltk.data
+import re
+from typing import TYPE_CHECKING
+from rapidfuzz import fuzz
 
-from .DataframeProcessor import DataframeProcessor
-from plexus.scores.Score import Score
+from .DataframeProcessor import Processor
 from plexus.CustomLogging import logging
 
-class RelevantWindowsTranscriptFilter(DataframeProcessor):
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
+
+
+class RelevantWindowsTranscriptFilter(Processor):
+    """
+    Filter transcript to extract relevant windows based on keywords or a classifier.
+
+    This processor can work in two modes:
+    1. Keyword mode: Provide a list of keywords with optional fuzzy matching
+    2. Classifier mode: Provide a Score classifier (legacy mode)
+
+    Parameters:
+        keywords (list): List of keywords/phrases to match (alternative to classifier)
+        fuzzy_match (bool): Enable fuzzy matching for keywords (default: False)
+        fuzzy_threshold (int): Minimum similarity score for fuzzy matching, 0-100 (default: 80)
+        case_sensitive (bool): Whether keyword matching is case sensitive (default: False)
+        classifier (Score): A Score classifier for determining relevance (legacy)
+        prev_count (int): Number of sentences to include before matched sentence (default: 1)
+        next_count (int): Number of sentences to include after matched sentence (default: 1)
+        window_unit (str): Unit for window size - 'sentences', 'words', or 'characters' (default: 'sentences')
+    """
     def __init__(self, **parameters):
         super().__init__(**parameters)
+
+        # Keyword-based matching parameters
+        self.keywords = parameters.get("keywords", [])
+        self.fuzzy_match = parameters.get("fuzzy_match", False)
+        self.fuzzy_threshold = parameters.get("fuzzy_threshold", 80)
+        self.case_sensitive = parameters.get("case_sensitive", False)
+
+        # Legacy classifier-based matching
         self.classifier = parameters.get("classifier")
+
+        # Window configuration
         self.prev_count = parameters.get("prev_count", 1)
         self.next_count = parameters.get("next_count", 1)
+        self.window_unit = parameters.get("window_unit", "sentences")
 
-    def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
-        def filter_text(text):
-            sentences = text.split('\n')
-            relevance_flags = [
-                self.classifier.predict(
-                    model_input = Score.Input(text=sentence)
-                ).value for sentence in sentences
-            ]
-            include_flags = self.compute_inclusion_flags(relevance_flags)
+        # Validate configuration
+        if not self.keywords and not self.classifier:
+            raise ValueError("RelevantWindowsTranscriptFilter requires either 'keywords' or 'classifier' parameter")
 
-            filtered_text = []
-            for i in range(len(sentences)):
-                if include_flags[i]:
-                    filtered_text.append(sentences[i])
-                elif self.should_insert_ellipsis(i, include_flags, sentences):
-                    filtered_text.append("...")
+        if self.keywords and self.classifier:
+            logging.warning("Both 'keywords' and 'classifier' provided. Using keywords.")
 
-            combined_text = self.combine_consecutive_ellipses(filtered_text)
-            result = '\n'.join(combined_text).strip()
+        if self.window_unit not in ['sentences', 'words', 'characters']:
+            raise ValueError(f"window_unit must be 'sentences', 'words', or 'characters', got: {self.window_unit}")
 
-            if result == "...":
-                return ""
+    def is_sentence_relevant(self, sentence: str) -> bool:
+        """
+        Check if a sentence is relevant based on keywords or classifier.
 
-            logging.debug(f"Filtered text: {result}")
-            return result
+        Args:
+            sentence: The sentence to check
 
-        dataframe['text'] = dataframe['text'].apply(filter_text)
-        self.display_summary()
-        return dataframe
+        Returns:
+            True if sentence matches keywords or classifier returns True
+        """
+        if self.keywords:
+            return self._matches_keywords(sentence)
+        elif self.classifier:
+            # Import at runtime to avoid circular dependency
+            from plexus.scores.Score import Score
+            return self.classifier.predict(model_input=Score.Input(text=sentence)).value
+        return False
+
+    def _matches_keywords(self, text: str) -> bool:
+        """
+        Check if text matches any of the configured keywords.
+
+        Args:
+            text: The text to check
+
+        Returns:
+            True if any keyword matches
+        """
+        compare_text = text if self.case_sensitive else text.lower()
+
+        for keyword in self.keywords:
+            compare_keyword = keyword if self.case_sensitive else keyword.lower()
+
+            if self.fuzzy_match:
+                # Use fuzzy matching with RapidFuzz
+                similarity = fuzz.partial_ratio(compare_keyword, compare_text)
+                if similarity >= self.fuzzy_threshold:
+                    logging.debug(f"Fuzzy match found: '{keyword}' in '{text[:50]}...' (score: {similarity})")
+                    return True
+            else:
+                # Exact substring matching
+                if compare_keyword in compare_text:
+                    logging.debug(f"Exact match found: '{keyword}' in '{text[:50]}...'")
+                    return True
+
+        return False
+
+    def process(self, score_input: 'Score.Input') -> 'Score.Input':
+        """
+        Process the Score.Input by filtering text to relevant windows.
+
+        Args:
+            score_input: Score.Input with text
+
+        Returns:
+            Score.Input with filtered text
+        """
+        from plexus.scores.Score import Score
+
+        text = score_input.text
+
+        # Split into sentences
+        sentences = text.split('\n')
+        relevance_flags = [self.is_sentence_relevant(sentence) for sentence in sentences]
+        include_flags = self.compute_inclusion_flags(relevance_flags)
+
+        filtered_text = []
+        for i in range(len(sentences)):
+            if include_flags[i]:
+                filtered_text.append(sentences[i])
+            elif self.should_insert_ellipsis(i, include_flags, sentences):
+                filtered_text.append("...")
+
+        combined_text = self.combine_consecutive_ellipses(filtered_text)
+        result = '\n'.join(combined_text).strip()
+
+        if result == "...":
+            result = ""
+
+        logging.debug(f"Filtered text: {result}")
+
+        # Return new Score.Input with filtered text
+        return Score.Input(
+            text=result,
+            metadata=score_input.metadata,
+            results=score_input.results
+        )
 
     def compute_inclusion_flags(self, relevance_flags):
         include_flags = [False] * len(relevance_flags)

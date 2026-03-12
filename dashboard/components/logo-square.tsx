@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { motion } from "framer-motion"
 
-enum LogoVariant {
+export enum LogoVariant {
   Square,
   Wide,
   Narrow
@@ -45,9 +45,18 @@ const interpolateColor = (color1: string, color2: string, factor: number): strin
 interface SquareLogoProps {
   variant: LogoVariant;
   className?: string;
+  shadowEnabled?: boolean;
+  shadowWidth?: string;
+  shadowIntensity?: number;
 }
 
-const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
+const SquareLogo = ({ 
+  variant, 
+  className = '', 
+  shadowEnabled = false, 
+  shadowWidth = '2em', 
+  shadowIntensity = 10 
+}: SquareLogoProps) => {
   const columns = variant === LogoVariant.Wide ? 6 : 
                  variant === LogoVariant.Square ? 6 : 
                  2;  // 2x2 grid for Narrow
@@ -116,6 +125,24 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
     return () => clearInterval(interval);
   }, [isClient, columns, startTime, cycleDuration, randomOffsets, jitterValues]);
 
+  const hexToRgba = (hex: string, alpha: number) => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
+  const [filterStyle, initialFilterStyle] = useMemo(() => {
+    if (!shadowEnabled || !isClient || colorStates.length === 0) {
+      return ['none', 'none'];
+    }
+    const initialColor = hexToRgba(colorStates[0].current, shadowIntensity);
+    const nextColor = hexToRgba(colorStates[0].next, shadowIntensity);
+    const initial = `drop-shadow(0 0 ${shadowWidth} ${initialColor})`;
+    const next = `drop-shadow(0 0 ${shadowWidth} ${nextColor})`;
+    return [next, initial];
+  }, [shadowEnabled, isClient, colorStates, shadowWidth, shadowIntensity]);
+
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
@@ -144,9 +171,15 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
   }, [variant]);
 
   return (
-    <div 
+    <motion.div 
       ref={containerRef}
       className={className}
+      initial={{ filter: initialFilterStyle }}
+      animate={{ filter: filterStyle }}
+      transition={{ 
+        duration: 0.25,
+        ease: "linear"
+      }}
       style={{
         display: 'grid',
         gridTemplateColumns: `repeat(${columns}, 1fr)`,
@@ -154,7 +187,7 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
         aspectRatio: `${columns} / ${rows}`,
         position: 'relative',
         minWidth: '100%',
-        minHeight: '100%',
+        willChange: 'filter',
       }}
     >
       {/* Background color grid */}
@@ -225,9 +258,8 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
           </span>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 
 export default SquareLogo;
-export { LogoVariant };

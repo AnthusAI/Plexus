@@ -5,8 +5,8 @@ import logging
 import datetime
 from dotenv import load_dotenv
 load_dotenv('.env', override=True)
-import mlflow
-import mlflow.keras
+# import mlflow
+# import mlflow.keras
 from tqdm import tqdm
 from transformers import BertTokenizer, TFBertModel
 from transformers import MobileBertTokenizer, TFMobileBertModel
@@ -81,17 +81,17 @@ class SVMClassifier(BERTClassifier):
         val_f1 = f1_score(self.val_labels, val_predictions)
 
         # Log metrics to MLflow
-        mlflow.log_metric("validation_accuracy", val_accuracy)
-        mlflow.log_metric("validation_precision", val_precision)
-        mlflow.log_metric("validation_recall", val_recall)
-        mlflow.log_metric("validation_f1", val_f1)
+        # mlflow.log_metric("validation_accuracy", val_accuracy)
+        # mlflow.log_metric("validation_precision", val_precision)
+        # mlflow.log_metric("validation_recall", val_recall)
+        # mlflow.log_metric("validation_f1", val_f1)
 
         # Print classification report
         print("Classification Report:")
         print(classification_report(self.val_labels, val_predictions))
 
         # Log the trained SVM model
-        mlflow.sklearn.log_model(svm_classifier, "svm_model")
+        # mlflow.sklearn.log_model(svm_classifier, "svm_model")
 
     def evaluate_model(self):
         """

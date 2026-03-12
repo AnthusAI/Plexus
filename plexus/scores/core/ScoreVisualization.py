@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc, precision_recall_curve, confusion_matrix
 from sklearn.preprocessing import LabelBinarizer, label_binarize
 from itertools import cycle
-import mlflow
+# import mlflow
 from plexus.CustomLogging import logging
 import matplotlib.ticker as ticker
 import seaborn as sns
@@ -115,11 +115,11 @@ class ScoreVisualization:
         plt.savefig(file_name)
         plt.close()
 
-        mlflow.log_artifact(file_name)
-        if len(classes) == 2:
-            mlflow.log_metric("roc_auc", roc_auc)
-        else:
-            mlflow.log_metric("micro_avg_roc_auc", roc_auc["micro"])
+        # mlflow.log_artifact(file_name)
+        # if len(classes) == 2:
+        #     mlflow.log_metric("roc_auc", roc_auc)
+        # else:
+        #     mlflow.log_metric("micro_avg_roc_auc", roc_auc["micro"])
 
         logging.info(f"Number of classes: {len(classes)}")
         logging.info(f"Shape of val_confidence_scores: {self.val_confidence_scores.shape}")
@@ -180,7 +180,7 @@ class ScoreVisualization:
         plt.legend(loc="lower left")
         plt.savefig(file_name)
         plt.close()
-        mlflow.log_artifact(file_name)
+        # mlflow.log_artifact(file_name)
     def _plot_training_history(self):
         """
         Plot and save the training history of the model.
@@ -246,7 +246,7 @@ class ScoreVisualization:
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.savefig(file_name)
         # plt.show()
-        mlflow.log_artifact(file_name)
+        # mlflow.log_artifact(file_name)
 
     def _plot_calibration_curve(self, *, target_accuracy=0.90):
         """
@@ -368,7 +368,7 @@ class ScoreVisualization:
         plt.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
         plt.savefig(file_name)
-        mlflow.log_artifact(file_name)
+        # mlflow.log_artifact(file_name)
 
         print("\nOverall statistics:")
         print(f"Total samples: {len(confidences)}")
@@ -393,7 +393,7 @@ class ScoreVisualization:
         plt.ylabel('Count')
         plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.0%}"))
         plt.savefig(self.report_file_name("confidence_distribution.png"))
-        mlflow.log_artifact(self.report_file_name("confidence_distribution.png"))
+        # mlflow.log_artifact(self.report_file_name("confidence_distribution.png"))
 
         print("\nBucket details:")
         for i, (conf, acc, count) in enumerate(buckets):

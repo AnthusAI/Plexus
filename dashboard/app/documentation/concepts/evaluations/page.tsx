@@ -64,7 +64,11 @@ export default function EvaluationsPage() {
         },
         itemId: "item-1",
         createdAt: "2024-03-20T12:00:00Z",
-        updatedAt: "2024-03-20T12:00:00Z"
+        updatedAt: "2024-03-20T12:00:00Z",
+        trace: null,
+        feedbackItem: {
+          editCommentValue: "agree"
+        }
       }]
     }
   };

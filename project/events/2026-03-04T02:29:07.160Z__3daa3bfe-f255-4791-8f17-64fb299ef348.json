@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3daa3bfe-f255-4791-8f17-64fb299ef348",
+  "issue_id": "plx-2f480702-d08b-4e2f-9bfb-548f88753b70",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T02:29:07.160Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the memory concept: clusters that appear repeatedly across runs get reinforced (higher weight), while clusters that stop appearing decay. This is the mechanism that distinguishes persistent trends from transient noise.\n\nEach cluster carries a `memory_weight` (float, 0.0 to 1.0) and a `memory_tier` (hot/warm/cold). On each run:\n- Clusters that received new documents are **reinforced** (weight moves toward 1.0)\n- Clusters with no new documents **decay** (weight moves toward 0.0)\n- Tiers are derived from weight thresholds (hot >= 0.7, warm >= 0.3, cold < 0.3)\n- Clusters below a prune threshold can be removed entirely\n\n## Definition of Done\n\n- Pure-logic weight computation functions (reinforce, decay, tier assignment, prune check)\n- Integration with OpenSearch cluster records: bulk update weights after each run\n- Pruned clusters removed from index, their items marked as unassigned\n- All scenarios in child stories pass\n\n## Depends On\n\nEpic plx-aaeca3 (Global Clustering Engine) — for cluster records\n\n## Key Files\n\n- Create: `plexus/analysis/memory_weights.py`\n- Create: `plexus/analysis/memory_weights_test.py`\n- Modify: `plexus/analysis/opensearch_client.py` (add bulk update method)",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 2,
+    "status": "open",
+    "title": "Memory Weights (Reinforcement and Decay)"
+  }
+}

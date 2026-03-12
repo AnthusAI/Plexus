@@ -1,0 +1,25 @@
+{
+  "id": "plx-7a2e1824-465c-4b1d-b3b7-0f41511d4149",
+  "title": "[Snyk] SNYK-PYTHON-NLTK-15460783 in nltk@3.8.1",
+  "description": "## Directory Traversal\n\n**Severity:** high\n**Package:** nltk@3.8.1\n**File:** `score-processor-lambda/requirements.txt`\n\n**CVSS Score:** 8.7  \n**Exploit Maturity:** proof-of-concept  \n**Snyk Priority Score:** 828/1000\n\n### CVEs\n- [CVE-2026-0846](https://nvd.nist.gov/vuln/detail/CVE-2026-0846)\n\n**Fix:** Pin `nltk` to version 3.9.3 or later.\n\n### Details\n## Overview\n[nltk](http://www.nltk.org) is a Natural Language Toolkit (NLTK) is a Python package for natural language processing.\n\nAffected versions of this package are vulnerable to Directory Traversal via the `filestring` function. An attacker can access sensitive files by supplying specially crafted input paths, such as absolute paths or directory traversal sequences, to bypass input validation and read arbitrary files on the system.\n\n**Note:**\n\nThis is only exploitable if the function processes untrusted user input, such as in web APIs or network-accessible services.\n## PoC\n```\nfrom nltk.util import filestring\n\n#Arbitrary file read\ncontent = filestring(\"/etc/passwd\")\nprint(content)\n\n#Windows Variant\n#print(filestring(\"C:/Windows/System32/drivers/etc/hosts\"))\n```\n\n## Details\n\nA Directory Traversal attack (also known as path traversal) aims to access files and directories that are stored outside the intended folder. By manipulating files with \"dot-dot-slash (../)\" sequences and its variations, or by using absolute file paths, it may be possible to access arbitrary files and directories stored on file system, including application source code, configuration, and other critical system files.\n\nDirectory Traversal vulnerabilities can be generally divided into two types:\n\n- **Information Disclosure**: Allows the attacker to gain information about the folder structure or read the contents of sensitive files on the system.\n\n`st` is a module for serving static files on web pages, and contains a [vulnerability of this type](https://snyk.io/vuln/npm:st:20140206). In our example, we will serve files from the `public` route.\n\nIf an attacker requests the following URL from our server, it will in turn leak the sensitive private key of the root user.\n\n```\ncurl http://localhost:8080/public/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/root/.ssh/id_rsa\n```\n**Note** `%2e` is the URL encoded version of `.` (dot).\n\n- **Writing arbitrary files**: Allows the attacker to create or replace existing files. This type of vulnerability is also known as `Zip-Slip`. \n\nOne way to achieve this is by using a malicious `zip` archive that holds path traversal filenames. When each filename in the zip archive gets concatenated to the target extraction folder, without validation, the final path ends up outside of the target folder. If an executable or a configuration file is overwritten with a file containing malicious code, the problem can turn into an arbitrary code execution issue quite easily.\n\nThe following is an example of a `zip` archive with one benign file and one malicious file. Extracting the malicious file will result in traversing out of the target folder, ending up in `/root/.ssh/` overwriting the `authorized_keys` file:\n\n```\n2018-04-15 22:04:29 .....           19           19  good.txt\n2018-04-15 22:04:42 .....           20           20  ../../../../../../root/.ssh/authorized_keys\n```\n\n## Remediation\nUpgrade `nltk` to version 3.9.3 or higher.\n## References\n- [GitHub Commit](https://github.com/nltk/nltk/commit/b2e1164bf89277f79b65406c829b99fb20ca1974)\n- [Red Hat Bugzilla Bug](https://bugzilla.redhat.com/show_bug.cgi?id=2445826)\n\n\n### Reference\n- [Snyk advisory](https://security.snyk.io/vuln/SNYK-PYTHON-NLTK-15460783)",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fdaf669a-1fab-4d7a-95d8-db635c717983",
+  "labels": [
+    "security",
+    "snyk"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-11T21:27:00.627862Z",
+  "updated_at": "2026-03-11T21:27:00.627862Z",
+  "closed_at": null,
+  "custom": {
+    "snyk_key": "SNYK-PYTHON-NLTK-15460783",
+    "snyk_severity": "high",
+    "snyk_type": "package_vulnerability"
+  }
+}

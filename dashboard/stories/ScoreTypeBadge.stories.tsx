@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 
 export default {
-  title: 'Components/ScoreTypeBadge',
+  title: 'General/Components/ScoreTypeBadge',
   component: ScoreTypeBadge,
   decorators: [(Story) => (
     <div className="bg-background p-4">

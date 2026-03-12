@@ -10,6 +10,7 @@ from plexus.CustomLogging import logging
 from plexus.utils.dict_utils import truncate_dict_strings
 from rapidfuzz import process, fuzz
 from time import sleep
+from jinja2 import Template
 
 class MultiClassClassifier(BaseNode):
     """
@@ -56,6 +57,10 @@ class MultiClassClassifier(BaseNode):
             )
 
         def parse(self, output: str) -> Dict[str, Any]:
+            # Handle empty valid_classes edge case
+            if not self.valid_classes:
+                raise RuntimeError("No valid classes provided")
+                
             # Clean the output (keep spaces for multi-word matching)
             cleaned_output = ' '.join(word.lower() for word in output.split())
             logging.debug(f"Cleaned output: {cleaned_output}")
@@ -88,10 +93,37 @@ class MultiClassClassifier(BaseNode):
 
             # Fuzzy matching (if enabled)
             if self.fuzzy_match:
-                best_match, score, _ = process.extractOne(cleaned_output, self.valid_classes, scorer=fuzz.token_set_ratio)
-                logging.debug(f"Best fuzzy match: {best_match}, score: {score}")
+                best_match = None
+                best_score = 0
                 
-                if score >= self.fuzzy_match_threshold * 100:
+                # For each valid class, find its best match within the cleaned output
+                for class_name in self.valid_classes:
+                    # Try multiple scoring functions and use the best score
+                    scores = []
+                    
+                    # partial_ratio: good for truncated words ("positiv" -> "positive")
+                    match_result = process.extractOne(class_name.lower(), [cleaned_output], scorer=fuzz.partial_ratio)
+                    if match_result:
+                        _, score, _ = match_result
+                        scores.append(score)
+                    
+                    # ratio: good for abbreviations ("rd" -> "red") 
+                    match_result = process.extractOne(class_name.lower(), [cleaned_output], scorer=fuzz.ratio)
+                    if match_result:
+                        _, score, _ = match_result
+                        scores.append(score)
+                    
+                    # Use the best score from both methods
+                    if scores:
+                        max_score = max(scores)
+                        logging.debug(f"Fuzzy match for '{class_name}': best score {max_score} from {scores}")
+                        
+                        if max_score > best_score:
+                            best_score = max_score
+                            best_match = class_name
+                
+                if best_match and best_score >= self.fuzzy_match_threshold * 100:
+                    logging.debug(f"Best fuzzy match: {best_match}, score: {best_score}")
                     return {"classification": best_match}
             
             return {"classification": None}
@@ -156,10 +188,17 @@ class MultiClassClassifier(BaseNode):
 
                 if result["classification"] is not None:
                     if self.parameters.explanation_message:
+                        # Create state dict with classification for template formatting
+                        template_state = {**state.dict(), **result}
+                        
+                        # Format the explanation message using Jinja2 template
+                        template = Template(self.parameters.explanation_message)
+                        formatted_explanation_message = template.render(**template_state)
+                        
                         explanation_prompt = ChatPromptTemplate.from_messages([
                             *chat_history,
                             AIMessage(content=current_completion),
-                            HumanMessage(content=self.parameters.explanation_message)
+                            HumanMessage(content=formatted_explanation_message)
                         ])
                         explanation_model = (
                             self._initialize_model(self.parameters.explanation_model)
@@ -169,7 +208,8 @@ class MultiClassClassifier(BaseNode):
                         explanation = explanation_model.invoke(explanation_prompt.format_prompt().to_messages())
                         result["explanation"] = explanation.content
                     else:
-                        result["explanation"] = current_completion
+                        # When no explanation_message is provided, the explanation is simply the classification.
+                        result["explanation"] = result["classification"]
 
                     final_state = {**state.dict(), **result, "retry_count": retry_count}
                     logging.debug(f"Classifier returning state: {truncate_dict_strings(final_state, max_length=80)}")

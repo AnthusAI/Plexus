@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Menu, ArrowRight, Loader2, AlertCircle } from 'lucide-react'
-import SquareLogo, { LogoVariant } from '../logo-square'
+import BrandableLogo from '../BrandableLogo'
+import { LogoVariant } from '../logo-square'
 import { Button } from '../ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -16,7 +17,6 @@ import {
 
 const landingPages = [
   { href: '/solutions/platform', label: 'Platform' },
-  { href: '/solutions/call-center-qa', label: 'Call Center QA' },
   { href: '/solutions/optimizer-agents', label: 'Optimizer Agents' },
   { href: '/solutions/enterprise', label: 'Enterprise' },
   { href: '/solutions/resources', label: 'Resources' }
@@ -79,7 +79,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <div className="relative">
                   <div className="absolute -inset-2 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-15"></div>
                   <div className="relative w-24 h-8">
-                    <SquareLogo variant={LogoVariant.Wide} />
+                    <BrandableLogo variant={LogoVariant.Wide} />
                   </div>
                 </div>
               </Link>

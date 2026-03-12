@@ -51,7 +51,7 @@ class ResizeObserver {
 
 window.ResizeObserver = ResizeObserver
 
-// Mock client.models
+// Mock client.models and graphql
 const mockClient = {
   models: {
     Account: {
@@ -60,12 +60,18 @@ const mockClient = {
         nextToken: null
       })
     }
-  }
+  },
+  graphql: jest.fn()
 } as any
 
 // Mock generateClient
 const { generateClient } = jest.requireActual("aws-amplify/api")
 jest.mock("aws-amplify/api", () => ({
+  generateClient: jest.fn().mockReturnValue(mockClient)
+}))
+
+// Mock aws-amplify/data
+jest.mock("aws-amplify/data", () => ({
   generateClient: jest.fn().mockReturnValue(mockClient)
 }))
 

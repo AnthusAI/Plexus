@@ -1,0 +1,193 @@
+{
+  "id": "plx-2e3c3501-0240-4b4f-a28c-e5c519e7c4a1",
+  "title": "Deploy and run real-world Semantic Reinforcement Memory reports",
+  "description": "Deploy updated prototype stack with dual vector stores (OpenSearch + S3 Vectors) and execute real-world report runs with runtime on S3 Vectors. Record report IDs and outcomes in kbs comments.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7367286f-c80c-443c-9790-3946cfe2f78f",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2fe27416-9f37-4a84-acdc-cae4e2659741",
+      "author": "unknown",
+      "text": "Starting Task 3. Deploy succeeded with new S3 vectors outputs and OpenSearch teardown in cleanup. Beginning full real-world report sweep with S3 vector env vars.",
+      "created_at": "2026-03-04T15:43:11.196026Z"
+    },
+    {
+      "id": "0a51a3e3-79e8-468d-be58-51fe6fc3d241",
+      "author": "unknown",
+      "text": "Full sweep started. Scorecard 1461 run launched with report_id=b13cf97d-eb99-4ec4-98d0-6cb7b862e2f3 and task_id=42fa05c2-48ab-48bd-8df8-d7f619f4c429 using S3 vector env vars.",
+      "created_at": "2026-03-04T15:43:59.362366Z"
+    },
+    {
+      "id": "72cb604b-5022-4e4a-9568-7f0bb25a4cb2",
+      "author": "unknown",
+      "text": "First live run surfaced S3 health-check validation error; patched client and preparing rerun of real-world reports with same S3 vector env vars.",
+      "created_at": "2026-03-04T15:49:43.052632Z"
+    },
+    {
+      "id": "7a16e3be-47cc-4ba3-854b-85082e987921",
+      "author": "unknown",
+      "text": "Rerunning full sweep after S3 client fix. Restarted at scorecard 1461 with S3 vector env vars to verify end-to-end indexing/clustering behavior.",
+      "created_at": "2026-03-04T15:50:10.906523Z"
+    },
+    {
+      "id": "02309285-5d7b-4225-b128-535e9416b8f3",
+      "author": "unknown",
+      "text": "Rerun passed prior failure point: first scorecard indexed 493 documents into S3 Vectors and advanced through clustering across scores (no S3 health-check validation error).",
+      "created_at": "2026-03-04T15:55:14.385912Z"
+    },
+    {
+      "id": "28dffe1c-9b06-4fe5-96c0-dcd36078559e",
+      "author": "unknown",
+      "text": "Post-fix validation success: scorecard 1461 completed end-to-end with status ok. report_id=d60f2f2f-076a-4477-888a-af438a44a75e task_id=3054fb47-66e5-4650-ad88-4d81253edfbc. Output includes indexed docs and clustered topics.",
+      "created_at": "2026-03-04T15:56:10.888100Z"
+    },
+    {
+      "id": "bd595255-cfc3-469c-b834-72e0f7b5c745",
+      "author": "unknown",
+      "text": "Stack status is now UPDATE_COMPLETE in us-west-2. Validation sweep has confirmed successful end-to-end runs for scorecards 1461 (report d60f2f2f-076a-4477-888a-af438a44a75e) and 1481 (report cccd9ddf-5231-4f21-91ca-4a1f7f7bcec2).",
+      "created_at": "2026-03-04T16:01:02.810130Z"
+    },
+    {
+      "id": "7567e9e8-b430-4074-83f2-c2c2058d97b2",
+      "author": "unknown",
+      "text": "Validation summary: deployed stack to UPDATE_COMPLETE and executed real-world reports successfully for scorecards 1461 (d60f2f2f-076a-4477-888a-af438a44a75e), 1481 (cccd9ddf-5231-4f21-91ca-4a1f7f7bcec2), and 1514 (f0ee6a94-bc18-49fe-b453-bc09a6c47731).",
+      "created_at": "2026-03-04T16:02:36.512809Z"
+    },
+    {
+      "id": "c846fc1e-764c-47ef-9a70-03127296233f",
+      "author": "unknown",
+      "text": "Realtime update: resuming remaining validation runs. Starting scorecard 1515 (days=180) with S3 vector env vars.",
+      "created_at": "2026-03-04T16:04:24.961148Z"
+    },
+    {
+      "id": "d7bb28d4-37b2-423e-a228-96fdf2952484",
+      "author": "unknown",
+      "text": "Scorecard 1515 run complete: report_id=947ee187-c0b2-4ed0-b108-c651b0e05487 task_id=aa61d1bd-4477-4928-9ae0-b870c9b2c0d9 status=ok (no scores/documents to process). Next: run scorecard 97.",
+      "created_at": "2026-03-04T16:05:46.227057Z"
+    },
+    {
+      "id": "cb367c04-638d-4690-8ff1-5b6f78f4f771",
+      "author": "unknown",
+      "text": "Realtime update: starting scorecard 97 (days=180) with same S3 vectors environment configuration.",
+      "created_at": "2026-03-04T16:05:55.053188Z"
+    },
+    {
+      "id": "da6da9bf-83c6-4b72-b9f0-b7fe9df970f6",
+      "author": "unknown",
+      "text": "Realtime update: scorecard 97 run completed successfully with report_id=44b42144-c34f-43b2-bd69-592f0447fce7 task_id=721e2841-e8e5-4d44-91cc-25eecda6bc38 status=ok. After infra dual-store patch, I will redeploy and run a targeted validation report.",
+      "created_at": "2026-03-04T16:09:53.109546Z"
+    },
+    {
+      "id": "38a38762-dde8-4eda-832e-662d74c9173e",
+      "author": "unknown",
+      "text": "Realtime deployment update: CloudFormation update started for plexus-opensearch-development; OpenSearch domain resource TopicMemoryDomain is currently CREATE_IN_PROGRESS while existing S3 vectors resources remain in stack.",
+      "created_at": "2026-03-04T16:13:04.712787Z"
+    },
+    {
+      "id": "c06471d9-379a-414a-9585-d065a99b8bbb",
+      "author": "unknown",
+      "text": "Realtime deployment watch: latest stack events show TopicMemoryDomain CREATE_IN_PROGRESS (OpenSearch provisioning). Waiting for terminal status before rerunning validation report.",
+      "created_at": "2026-03-04T16:16:30.860769Z"
+    },
+    {
+      "id": "aa672659-ad26-421a-ade8-a94e33af13ba",
+      "author": "unknown",
+      "text": "Realtime deployment watch: no failure events; stack remains UPDATE_IN_PROGRESS while OpenSearch domain continues provisioning (long-running AWS::OpenSearchService::Domain create).",
+      "created_at": "2026-03-04T16:19:09.224374Z"
+    },
+    {
+      "id": "c3d863f9-40a3-411c-b437-8a84dc34f6ac",
+      "author": "unknown",
+      "text": "Realtime deployment check: aws opensearch describe-domain reports DomainStatus Processing=True for plexus-vtm-development, consistent with ongoing stack UPDATE_IN_PROGRESS.",
+      "created_at": "2026-03-04T16:20:11.892188Z"
+    },
+    {
+      "id": "6f5d5130-7faa-4a57-a2ef-b0ec13f0b822",
+      "author": "unknown",
+      "text": "Realtime check: describe-domain currently returns Processing=True and Endpoint=None for plexus-vtm-development, so stack update is still waiting on domain creation.",
+      "created_at": "2026-03-04T16:22:23.838638Z"
+    },
+    {
+      "id": "36d9b575-3f61-4ed2-aa7d-e281c3874883",
+      "author": "unknown",
+      "text": "Realtime status: stack remains UPDATE_IN_PROGRESS and OpenSearchEndpoint output is not yet present; continuing to wait for OpenSearch domain completion before final validation run.",
+      "created_at": "2026-03-04T16:24:56.500809Z"
+    },
+    {
+      "id": "1562de43-a262-4efd-a299-3646ec7c0bf5",
+      "author": "unknown",
+      "text": "Realtime milestone: OpenSearch domain provisioning completed (Processing=False; endpoint assigned). Waiting for CloudFormation stack to reach terminal UPDATE_COMPLETE.",
+      "created_at": "2026-03-04T16:25:41.220786Z"
+    },
+    {
+      "id": "e70bc84f-43f1-45f5-99bb-0a661af681a6",
+      "author": "unknown",
+      "text": "Realtime resource status: describe-stack-resources shows all resources CREATE/UPDATE_COMPLETE except TopicMemoryDomain (AWS::OpenSearchService::Domain), which is still CREATE_IN_PROGRESS.",
+      "created_at": "2026-03-04T16:26:35.239893Z"
+    },
+    {
+      "id": "6f1e49b7-5145-45bf-a97f-ccaeacd9503b",
+      "author": "unknown",
+      "text": "Realtime update: dual-store stack deployment completed successfully (UPDATE_COMPLETE). Starting targeted post-deploy real-world report validation run now with runtime pointed at S3 vectors.",
+      "created_at": "2026-03-04T16:27:58.490787Z"
+    },
+    {
+      "id": "4b7fcfe9-ad99-4dd2-b327-78cb2122d095",
+      "author": "unknown",
+      "text": "Realtime validation run started: AWS_REGION=us-west-2 with S3_VECTOR_BUCKET_NAME=plexus-vectors-development and S3_VECTOR_INDEX_NAME=topic-memory-idx-development; running scripts/run_vector_topic_memory_report.py --scorecard 97 --days 180.",
+      "created_at": "2026-03-04T16:28:23.032902Z"
+    },
+    {
+      "id": "1e200896-2559-4416-90b4-0016de869da8",
+      "author": "unknown",
+      "text": "Realtime run details: post-deploy validation report launched for scorecard 97 with report_id=4a502e52-545b-4af1-8b4f-7a787cee2282 task_id=cd957138-a83d-4360-8c7a-f5aeec1cc72c.",
+      "created_at": "2026-03-04T16:28:38.310641Z"
+    },
+    {
+      "id": "15b69ff3-378c-4b79-8ee5-2c40fa60c8c0",
+      "author": "unknown",
+      "text": "Realtime run progress: report block instantiated and running against scorecard 97; VectorTopicMemory processing has started with S3 vectors config (region us-west-2).",
+      "created_at": "2026-03-04T16:28:53.854690Z"
+    },
+    {
+      "id": "03623934-5702-4e8a-a141-02533efcae14",
+      "author": "unknown",
+      "text": "Realtime run progress: indexing succeeded on post-deploy validation run (166 documents indexed to S3 vectors); clustering phase has started.",
+      "created_at": "2026-03-04T16:29:38.704412Z"
+    },
+    {
+      "id": "8da78383-163c-42aa-be07-ec07eb7b0129",
+      "author": "unknown",
+      "text": "Post-deploy validation success: scorecard 97 real-world run completed with status=ok. report_id=4a502e52-545b-4af1-8b4f-7a787cee2282 task_id=cd957138-a83d-4360-8c7a-f5aeec1cc72c; run indexed 166 docs and produced clustered topics.",
+      "created_at": "2026-03-04T16:30:41.430437Z"
+    },
+    {
+      "id": "7b6eaae6-ea85-4f9b-93c6-74716edf065f",
+      "author": "unknown",
+      "text": "Commit reference: c3d96997. Validation context in this task corresponds to deployed dual-store stack and successful report run 4a502e52-545b-4af1-8b4f-7a787cee2282.",
+      "created_at": "2026-03-04T16:33:28.214995Z"
+    },
+    {
+      "id": "b53f6548-28c4-4b83-ac67-4699f7c7a203",
+      "author": "unknown",
+      "text": "PR link for delivered work: https://github.com/AnthusAI/Plexus/pull/94",
+      "created_at": "2026-03-04T16:35:38.894273Z"
+    },
+    {
+      "id": "d0fc874b-a60b-47b5-8ae6-d88f80e23e50",
+      "author": "unknown",
+      "text": "Follow-up: PR #94 is now green after CI typecheck fix commit 22ba0295.",
+      "created_at": "2026-03-04T17:10:15.909589Z"
+    }
+  ],
+  "created_at": "2026-03-04T15:32:24.509452Z",
+  "updated_at": "2026-03-04T17:10:15.909589Z",
+  "closed_at": "2026-03-04T16:30:41.907469Z",
+  "custom": {}
+}

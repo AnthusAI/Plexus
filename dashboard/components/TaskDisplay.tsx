@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
-import { transformAmplifyTask, processTask, standardizeScoreResults } from '@/utils/data-operations'
+import { transformAmplifyTask, processTask } from '@/utils/data-operations'
 import type { EvaluationTaskProps } from '@/types/tasks/evaluation'
 import type { TaskStatus } from '@/types/shared'
 import EvaluationTask from '@/components/EvaluationTask'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
+import ReportTask from '@/components/ReportTask'
 
 interface ProcessedTaskStage {
   id: string;
@@ -51,6 +52,15 @@ interface TaskDisplayProps {
     predictedClassDistribution?: any
     isPredictedClassDistributionBalanced?: boolean | null
     scoreResults?: any // Accept any type for score results - we'll standardize it internally
+    scorecardId?: string | null | undefined
+    scoreId?: string | null | undefined
+    scoreVersionId?: string | null | undefined
+  }
+  reportData?: {
+    id: string
+    name: string
+    createdAt: string
+    updatedAt?: string
   }
   controlButtons?: React.ReactNode
   isFullWidth?: boolean
@@ -59,6 +69,8 @@ interface TaskDisplayProps {
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
   commandDisplay?: 'show' | 'hide'
+  onShare?: () => void
+  onDelete?: (evaluationId: string) => void
 }
 
 function calculateProgress(processedItems?: number | null, totalItems?: number | null): number {
@@ -66,10 +78,12 @@ function calculateProgress(processedItems?: number | null, totalItems?: number |
   return Math.round((processedItems / totalItems) * 100)
 }
 
-export function TaskDisplay({
+// Wrap the component with React.memo to prevent unnecessary re-renders
+export const TaskDisplay = React.memo(function TaskDisplayComponent({
   variant = 'grid',
   task,
   evaluationData,
+  reportData,
   onClick,
   controlButtons,
   isFullWidth,
@@ -79,36 +93,103 @@ export function TaskDisplay({
   onSelectScoreResult,
   extra,
   isSelected,
-  commandDisplay: initialCommandDisplay = 'show'
+  commandDisplay: initialCommandDisplay = 'show',
+  onShare,
+  onDelete
 }: TaskDisplayProps) {
+  const normalizeStatus = (value?: string | null): TaskStatus => {
+    if (!value) return 'pending';
+    const s = String(value).toLowerCase();
+    if (s === 'done') return 'completed';
+    if (s === 'error') return 'failed';
+    if (s === 'pending' || s === 'running' || s === 'completed' || s === 'failed') return s as TaskStatus;
+    return 'pending';
+  };
+
+  // Log for ALL evaluations to see what TaskDisplay is receiving
+  // Debug logging reduced
 
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
+  const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay)
+  const lastStageItemsRef = useRef<any[]>([])
+  const getStageItemsFromTask = (t: any): any[] => {
+    if (!t) return [];
+    const s: any = (t as any).stages;
+    if (!s) return [];
+    if (Array.isArray(s)) return s;
+    const fromData = (s as any)?.data?.items;
+    if (Array.isArray(fromData)) return fromData;
+    const fromItems = (s as any)?.items;
+    if (Array.isArray(fromItems)) return fromItems;
+    return [];
+  };
 
-  // Add detailed logging for evaluationData
-  console.log('TaskDisplay received evaluationData:', {
-    id: evaluationData.id,
-    hasScoreResults: !!evaluationData.scoreResults,
-    scoreResultsType: evaluationData.scoreResults ? typeof evaluationData.scoreResults : 'undefined',
-    scoreResultsItemsType: evaluationData.scoreResults?.items ? typeof evaluationData.scoreResults.items : 'undefined',
-    scoreResultsItemsLength: evaluationData.scoreResults?.items?.length ?? 0,
-    scoreResultsItemsIsArray: Array.isArray(evaluationData.scoreResults?.items),
-    firstScoreResult: evaluationData.scoreResults?.items?.[0],
-    variant
-  });
 
   useEffect(() => {
     async function processTaskData() {
       if (!task) {
-        console.debug('TaskDisplay: No task data provided', {
-          evaluationId: evaluationData.id,
-          evaluationStatus: evaluationData.status
-        });
         setProcessedTask(null);
         return;
       }
+      
+      // Removed excessive logging
+      
+      // Check if task already has well-structured stage data (from subscription)
+      const hasDirectStageData = (task as any)?.stages && 
+        typeof (task as any).stages === 'object' && 
+        (((task as any).stages.data?.items?.length ?? 0) > 0 || ((task as any).stages.items?.length ?? 0) > 0);
+      
+      if (hasDirectStageData) {
+        // Skip the transformAmplifyTask/processTask pipeline that strips stages
+        // Create a ProcessedTask directly from the good data we already have
+        // Using direct stage data - bypass transform pipeline
+        
+        const stageItems = ((task as any).stages?.data?.items || (task as any).stages?.items || []) as any[];
+        const processedTask: ProcessedTask = {
+          id: task.id,
+          command: task.command || '',
+          type: task.type || 'evaluation',
+          status: task.status || 'PENDING',
+          target: task.target || '',
+          stages: stageItems.map((stage: any) => ({
+            id: stage.id || '',
+            name: stage.name || '',
+            order: stage.order || 0,
+            status: (stage.status || 'PENDING') as any,
+            statusMessage: stage.statusMessage,
+            startedAt: stage.startedAt,
+            completedAt: stage.completedAt,
+            estimatedCompletionAt: stage.estimatedCompletionAt,
+            processedItems: stage.processedItems,
+            totalItems: stage.totalItems
+          })),
+          startedAt: task.startedAt || undefined,
+          completedAt: task.completedAt || undefined,
+          estimatedCompletionAt: task.estimatedCompletionAt || undefined,
+          errorMessage: task.errorMessage || undefined,
+          errorDetails: task.errorDetails || undefined,
+          currentStageId: task.currentStageId || undefined
+        };
+        if (stageItems.length > 0) {
+          lastStageItemsRef.current = stageItems;
+        }
+        
+        // Created ProcessedTask with stage data preserved
+        // Reduced logging
+        
+        // Reduced logging
+        
+        setProcessedTask(processedTask);
+        return;
+      }
+      
+      // Fallback to original processing for tasks without stage data
       try {
         const convertedTask = await transformAmplifyTask(task);
+        
         const result = await processTask(convertedTask);
+        // Reduced logging
+        
         setProcessedTask(result);
       } catch (error) {
         console.error('Error processing task:', error);
@@ -116,181 +197,358 @@ export function TaskDisplay({
       }
     }
     processTaskData();
-  }, [task]);
+  }, [task, evaluationData?.id]);
 
-  // Memoize score results transformation
   const transformedScoreResults = useMemo(() => {
-    console.log('TaskDisplay transforming score results:', {
-      hasResults: !!evaluationData.scoreResults,
-      scoreResultsType: evaluationData.scoreResults ? typeof evaluationData.scoreResults : 'undefined',
-      hasItems: evaluationData.scoreResults && 'items' in evaluationData.scoreResults
-    });
+    if (!('scoreResults' in (evaluationData || {}))) return [];
+    const sr = evaluationData?.scoreResults;
+    if (sr === null) return null as any; // preserve null to indicate loading state downstream
+    if (!sr) return [];
+    // All score results come pre-transformed with itemIdentifiers included
+    return Array.isArray(sr) ? sr : ((typeof sr === 'object' && 'items' in sr) ? (sr as any).items : []);
+  }, [evaluationData]);
 
-    // Standardize score results to ensure consistent format
-    const standardizedResults = standardizeScoreResults(evaluationData.scoreResults);
-    
-    console.log('TaskDisplay standardized score results:', {
-      count: standardizedResults.length,
-      firstResult: standardizedResults[0],
-      isArray: Array.isArray(standardizedResults)
-    });
+  // Define base properties, prefer reportData if available
+  const displayId = reportData?.id || evaluationData?.id || 'unknown-id';
+  const displayType = reportData ? 'Report' : (evaluationData ? `${evaluationData.type} Evaluation` : 'Unknown');
+  const displayTime = reportData?.createdAt || evaluationData?.createdAt || new Date().toISOString();
+  const displayTitle = reportData?.name || (evaluationData ? `${evaluationData.scorecard?.name || '-'} - ${evaluationData.score?.name || '-'}` : 'Report');
 
-    if (!standardizedResults.length) {
-      console.log('No score results to transform');
-      return [];
-    }
+  // Construct props common to both EvaluationTask and ReportTask
+  // Determine status with a fallback: if all stages completed, mark as COMPLETED
+  const rawStatus = normalizeStatus(evaluationData?.status || task?.status || processedTask?.status || 'PENDING');
+  const stageSourceRaw: any[] = processedTask?.stages?.length ? processedTask.stages : getStageItemsFromTask(task);
+  const stageSource: any[] = stageSourceRaw.length > 0 ? stageSourceRaw : lastStageItemsRef.current;
+  const allStagesCompleted = stageSource.length > 0 && stageSource.every((s: any) => (String(s?.status || '').toUpperCase()) === 'COMPLETED');
+  const effectiveStatus = (rawStatus === 'completed' || (rawStatus !== 'failed' && allStagesCompleted)) ? 'completed' : rawStatus;
+  const displayStatusUC = (effectiveStatus === 'pending') ? 'PENDING'
+    : (effectiveStatus === 'running') ? 'RUNNING'
+    : (effectiveStatus === 'completed') ? 'COMPLETED'
+    : (effectiveStatus === 'failed') ? 'FAILED'
+    : 'PENDING';
 
-    const transformed = standardizedResults.map((result: any) => {
-      // Parse metadata if it's a string
-      let parsedMetadata;
-      try {
-        if (typeof result.metadata === 'string') {
-          parsedMetadata = JSON.parse(result.metadata);
-          if (typeof parsedMetadata === 'string') {
-            parsedMetadata = JSON.parse(parsedMetadata);
-          }
-        } else {
-          parsedMetadata = result.metadata || {};
-        }
+  const rawStageItemsForDisplay: any[] = stageSourceRaw.length > 0 ? stageSourceRaw : lastStageItemsRef.current;
+  if (rawStageItemsForDisplay.length > 0) {
+    lastStageItemsRef.current = rawStageItemsForDisplay;
+  }
 
-        console.log('Score result metadata in TaskDisplay:', {
-          resultId: result.id,
-          rawMetadata: result.metadata,
-          parsedMetadata,
-          metadataType: typeof result.metadata,
-          hasResults: !!parsedMetadata?.results,
-          resultsKeys: parsedMetadata?.results ? Object.keys(parsedMetadata.results) : [],
-          humanLabel: parsedMetadata?.human_label,
-          nestedHumanLabel: parsedMetadata?.results?.[Object.keys(parsedMetadata.results)[0]]?.metadata?.human_label
-        });
+  const commonTaskProps = {
+    id: displayId,
+    type: displayType,
+    time: displayTime,
+    startedAt: (processedTask?.startedAt || task?.startedAt || evaluationData?.startedAt) ?? undefined,
+    completedAt: (processedTask?.completedAt || task?.completedAt) ?? undefined,
+    estimatedCompletionAt: (processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt) ?? undefined,
+    status: displayStatusUC as any,
+    stages: rawStageItemsForDisplay.map((stage: any) => {
+      const isCompleted = stage.status === 'COMPLETED';
+      const isRunning = stage.status === 'RUNNING';
+      const isFailed = stage.status === 'FAILED';
 
-      } catch (e) {
-        console.error('Error parsing metadata:', e);
-        parsedMetadata = {};
-      }
-
-      // Extract results from nested structure if present
-      const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
-      const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
-
-      const transformedResult = {
-        id: result.id,
-        value: result.value,
-        confidence: result.confidence ?? null,
-        explanation: result.explanation ?? scoreResult?.explanation ?? null,
-        metadata: {
-          human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? result.metadata?.human_label ?? null,
-          correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct ?? result.metadata?.correct),
-          human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? result.metadata?.human_explanation ?? null,
-          text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? result.metadata?.text ?? null
-        },
-        itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
-        createdAt: result.createdAt
+      return {
+        id: stage.id,
+        key: stage.name,
+        label: stage.name,
+        color: isCompleted ? 'bg-primary' :
+               isRunning ? 'bg-secondary' :
+               isFailed ? 'bg-false' :
+               'bg-neutral',
+        name: stage.name,
+        order: stage.order,
+        status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+        statusMessage: stage.statusMessage,
+        startedAt: stage.startedAt,
+        completedAt: stage.completedAt,
+        estimatedCompletionAt: stage.estimatedCompletionAt,
+        processedItems: stage.processedItems,
+        totalItems: stage.totalItems,
+        completed: isCompleted
       };
+    }),
+    title: displayTitle,
+    command: processedTask?.command,
+    description: processedTask?.description,
+    dispatchStatus: processedTask?.dispatchStatus,
+    metadata: processedTask?.metadata,
+    errorMessage: processedTask?.errorMessage || (task ? (task.errorMessage || evaluationData?.errorMessage) : evaluationData?.errorMessage) || undefined,
+    errorDetails: processedTask?.errorDetails || (task ? (task.errorDetails || evaluationData?.errorDetails) : evaluationData?.errorDetails) || undefined,
+    celeryTaskId: (processedTask?.celeryTaskId || task?.celeryTaskId) ?? undefined,
+    workerNodeId: (processedTask?.workerNodeId || task?.workerNodeId) ?? undefined,
+    output: processedTask?.output || task?.output || undefined, // Universal Code YAML output
+    attachedFiles: processedTask?.attachedFiles || task?.attachedFiles || undefined, // File attachments
+    stdout: processedTask?.stdout || task?.stdout || undefined, // Task stdout
+    stderr: processedTask?.stderr || task?.stderr || undefined, // Task stderr
+  };
 
-      console.log('Transformed score result in TaskDisplay:', {
-        id: transformedResult.id,
-        value: transformedResult.value,
-        humanLabel: transformedResult.metadata.human_label,
-        correct: transformedResult.metadata.correct,
-        explanation: transformedResult.explanation
-      });
-
-      return transformedResult;
-    });
-
-    console.log('TaskDisplay final transformed score results:', {
-      inputCount: standardizedResults.length,
-      transformedCount: transformed.length,
-      firstTransformed: transformed[0]
-    });
-
-    return transformed;
-  }, [evaluationData.scoreResults]);
-
-  const taskProps = {
-    task: {
-      id: evaluationData.id,
-      type: evaluationData.type,
-      scorecard: evaluationData.scorecard?.name || '-',
-      score: evaluationData.score?.name || '-',
-      time: evaluationData.createdAt || new Date().toISOString(),
-      startedAt: processedTask?.startedAt || task?.startedAt || evaluationData.startedAt,
-      completedAt: processedTask?.completedAt || task?.completedAt,
-      estimatedCompletionAt: processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt,
-      status: (processedTask?.status || task?.status || evaluationData.status || 'PENDING') as TaskStatus,
-      data: {
-        id: evaluationData.id,
-        title: `${evaluationData.scorecard?.name || '-'} - ${evaluationData.score?.name || '-'}`,
-        metrics: typeof evaluationData.metrics === 'string' ? 
-          JSON.parse(evaluationData.metrics).map((m: any) => ({
-            name: m.name || 'Unknown',
-            value: m.value || 0,
-            unit: m.unit,
-            maximum: m.maximum,
-            priority: m.priority || false
-          })) : (evaluationData.metrics || []).map((m: any) => ({
-            name: m.name || 'Unknown',
-            value: m.value || 0,
-            unit: m.unit,
-            maximum: m.maximum,
-            priority: m.priority || false
-          })),
-        accuracy: evaluationData.accuracy || null,
-        processedItems: Number(evaluationData.processedItems || 0),
-        totalItems: Number(evaluationData.totalItems || 0),
-        progress: calculateProgress(evaluationData.processedItems, evaluationData.totalItems),
-        inferences: Number(evaluationData.inferences || 0),
-        cost: evaluationData.cost ?? null,
-        status: (processedTask?.status || task?.status || evaluationData.status || 'PENDING') as TaskStatus,
-        elapsedSeconds: evaluationData.elapsedSeconds ?? null,
-        estimatedRemainingSeconds: evaluationData.estimatedRemainingSeconds ?? null,
-        startedAt: processedTask?.startedAt || task?.startedAt || evaluationData.startedAt,
-        completedAt: processedTask?.completedAt || task?.completedAt,
-        estimatedCompletionAt: processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt,
-        errorMessage: evaluationData.errorMessage || undefined,
-        errorDetails: evaluationData.errorDetails || undefined,
-        confusionMatrix: typeof evaluationData.confusionMatrix === 'string' ? 
-          JSON.parse(evaluationData.confusionMatrix) : evaluationData.confusionMatrix,
-        metricsExplanation: evaluationData.metricsExplanation || null,
-        scoreGoal: evaluationData.scoreGoal || null,
-        datasetClassDistribution: typeof evaluationData.datasetClassDistribution === 'string' ? 
-          JSON.parse(evaluationData.datasetClassDistribution) : evaluationData.datasetClassDistribution,
-        isDatasetClassDistributionBalanced: evaluationData.isDatasetClassDistributionBalanced ?? null,
-        predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ? 
-          JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
-        isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
-        scoreResults: transformedScoreResults,
-        task: processedTask ? {
-          ...processedTask,
-          accountId: evaluationData.id,
-          stages: {
-            items: processedTask.stages.map((stage: ProcessedTaskStage) => ({
-              id: stage.id,
-              name: stage.name,
-              order: stage.order,
-              status: stage.status,
-              statusMessage: stage.statusMessage,
-              startedAt: stage.startedAt,
-              completedAt: stage.completedAt,
-              estimatedCompletionAt: stage.estimatedCompletionAt,
-              processedItems: stage.processedItems,
-              totalItems: stage.totalItems
-            }))
+  // Conditionally render EvaluationTask or ReportTask
+  if (evaluationData) {
+    // Construct props specific to EvaluationTask
+    const evaluationTaskProps = {
+      task: {
+        ...commonTaskProps,
+        scorecard: evaluationData.scorecard?.name || '-',
+        score: evaluationData.score?.name || '-',
+        scorecardId: evaluationData.scorecardId,
+        scoreId: evaluationData.scoreId,
+        scoreVersionId: evaluationData.scoreVersionId,
+        data: {
+          id: displayId,
+          title: displayTitle,
+          metrics: (() => {
+            try {
+              let metricsData = evaluationData.metrics;
+              
+              // Parse if string
+              if (typeof metricsData === 'string') {
+                metricsData = JSON.parse(metricsData);
+              }
+              
+              // Ensure it's an array
+              if (!Array.isArray(metricsData)) {
+                // If it's an object (like {ac1: 0.87, accuracy: 89.5}), convert to array
+                if (metricsData && typeof metricsData === 'object') {
+                  metricsData = Object.entries(metricsData).map(([key, value]) => ({
+                    name: key,
+                    value: value as number
+                  }));
+                } else {
+                  metricsData = [];
+                }
+              }
+              
+              // Map to expected format
+              return metricsData.map((m: any) => ({
+                name: m.name || 'Unknown',
+                value: m.value || 0,
+                unit: m.unit,
+                maximum: m.maximum,
+                priority: m.priority || false
+              }));
+            } catch (e) {
+              console.error('Error parsing metrics:', e);
+              return [];
+            }
+          })(),
+          accuracy: evaluationData.accuracy || null,
+          processedItems: Number(evaluationData.processedItems || 0),
+          totalItems: Number(evaluationData.totalItems || 0),
+          progress: calculateProgress(evaluationData.processedItems, evaluationData.totalItems),
+          inferences: Number(evaluationData.inferences || 0),
+          cost: evaluationData.cost ?? null,
+          status: commonTaskProps.status,
+          elapsedSeconds: evaluationData.elapsedSeconds ?? null,
+          estimatedRemainingSeconds: evaluationData.estimatedRemainingSeconds ?? null,
+          startedAt: commonTaskProps.startedAt,
+          completedAt: commonTaskProps.completedAt,
+          estimatedCompletionAt: commonTaskProps.estimatedCompletionAt,
+          errorMessage: commonTaskProps.errorMessage,
+          errorDetails: commonTaskProps.errorDetails,
+          confusionMatrix: typeof evaluationData.confusionMatrix === 'string' ?
+            JSON.parse(evaluationData.confusionMatrix) : evaluationData.confusionMatrix,
+          metricsExplanation: evaluationData.metricsExplanation || null,
+          scoreGoal: evaluationData.scoreGoal || null,
+          datasetClassDistribution: typeof evaluationData.datasetClassDistribution === 'string' ?
+            JSON.parse(evaluationData.datasetClassDistribution) : evaluationData.datasetClassDistribution,
+          isDatasetClassDistributionBalanced: evaluationData.isDatasetClassDistributionBalanced ?? null,
+          predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ?
+            JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
+          isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
+           scoreResults: transformedScoreResults as any,
+          task: processedTask ? { 
+              id: processedTask.id,
+              accountId: '',
+              type: processedTask.type || displayType,
+              command: processedTask.command,
+              status: displayStatusUC as any,
+              target: processedTask.target,
+              description: processedTask.description,
+              dispatchStatus: processedTask.dispatchStatus,
+              startedAt: processedTask.startedAt,
+              completedAt: processedTask.completedAt,
+              estimatedCompletionAt: processedTask.estimatedCompletionAt,
+              celeryTaskId: processedTask.celeryTaskId,
+              workerNodeId: processedTask.workerNodeId,
+              stages: { items: (commonTaskProps.stages && commonTaskProps.stages.length > 0) ? commonTaskProps.stages : lastStageItemsRef.current.map((stage: any) => {
+                const isCompleted = (stage.status || '').toUpperCase() === 'COMPLETED';
+                const isRunning = (stage.status || '').toUpperCase() === 'RUNNING';
+                const isFailed = (stage.status || '').toUpperCase() === 'FAILED';
+                return {
+                  id: stage.id || stage.name,
+                  key: stage.name,
+                  label: stage.name,
+                  color: isCompleted ? 'bg-primary' : (
+                    isRunning ? 'bg-secondary' : (
+                      isFailed ? 'bg-false' : 'bg-neutral'
+                    )
+                  ),
+                  name: stage.name,
+                  order: stage.order || 0,
+                  status: (stage.status || 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                  processedItems: stage.processedItems,
+                  totalItems: stage.totalItems,
+                  statusMessage: stage.statusMessage,
+                  startedAt: stage.startedAt,
+                  completedAt: stage.completedAt,
+                  estimatedCompletionAt: stage.estimatedCompletionAt,
+                  completed: isCompleted
+                };
+              }) },
+              errorMessage: commonTaskProps.errorMessage,
+              errorDetails: commonTaskProps.errorDetails
+          } : {
+              id: displayId,
+              accountId: '',
+              type: displayType,
+              command: task?.command,
+              status: displayStatusUC as any,
+              target: task?.target,
+              description: task?.description,
+              dispatchStatus: task?.dispatchStatus,
+              startedAt: task?.startedAt || evaluationData?.startedAt,
+              completedAt: task?.completedAt,
+              estimatedCompletionAt: task?.estimatedCompletionAt,
+              celeryTaskId: task?.celeryTaskId,
+              workerNodeId: task?.workerNodeId,
+              stages: (() => {
+                // Try to extract stages from the original task data
+                
+                // Handle different possible structures for stages
+                const stageItems: any[] = getStageItemsFromTask(task);
+                
+                
+                const items = stageItems.map((stage: any) => ({
+                    id: stage.id || stage.name,
+                    key: stage.name,
+                    label: stage.name,
+                    color: stage.status === 'COMPLETED' ? 'bg-primary' :
+                           stage.status === 'RUNNING' ? 'bg-secondary' :
+                           stage.status === 'FAILED' ? 'bg-false' :
+                           'bg-neutral',
+                    name: stage.name,
+                    order: stage.order || 0,
+                    status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                    statusMessage: stage.statusMessage,
+                    startedAt: stage.startedAt,
+                    completedAt: stage.completedAt,
+                    estimatedCompletionAt: stage.estimatedCompletionAt,
+                    processedItems: stage.processedItems,
+                    totalItems: stage.totalItems,
+                    completed: stage.status === 'COMPLETED'
+                  }));
+                return { items: items.length > 0 ? items : (commonTaskProps.stages || []) };
+              })(),
+              errorMessage: task?.errorMessage || evaluationData?.errorMessage,
+              errorDetails: task?.errorDetails || evaluationData?.errorDetails,
           }
-        } : null
-      }
-    },
-    onClick,
-    controlButtons,
-    isFullWidth,
-    onToggleFullWidth,
-    onClose,
-    isSelected,
-    extra,
-    selectedScoreResultId,
-    onSelectScoreResult
-  } as EvaluationTaskProps
+        }
+      },
+      onClick: (e?: any) => {
+        try { e?.preventDefault?.() } catch {}
+        onClick?.()
+      },
+      controlButtons,
+      isFullWidth,
+      onToggleFullWidth,
+      onClose,
+      isSelected,
+      extra,
+      selectedScoreResultId,
+      onSelectScoreResult,
+      onShare,
+      onDelete
+    } as EvaluationTaskProps;
 
-  return <EvaluationTask {...taskProps} variant={variant} />
-} 
+    // Avoid full remounts; rely on isSelected visual state
+    return <EvaluationTask {...evaluationTaskProps} variant={variant} />;
+
+  } else if (reportData) {
+    // Construct props for ReportTask
+    const reportStatusRaw = commonTaskProps.status;
+    const reportStatusValue = reportStatusRaw ? reportStatusRaw.toUpperCase() : 'PENDING';
+    const reportStatusFinal = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'].includes(reportStatusValue)
+      ? reportStatusValue as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+      : undefined;
+      
+    const reportTaskProps = {
+      task: {
+        ...commonTaskProps,
+        status: reportStatusFinal, // Override status with the validated/refined one
+        scorecard: '-',
+        score: '-',
+        data: {
+            id: reportData.id,
+            title: displayTitle,
+            name: reportData.name,
+            createdAt: reportData.createdAt,
+            updatedAt: reportData.updatedAt
+        }
+      },
+      variant,
+      isSelected,
+      onClick,
+      controlButtons,
+      isFullWidth,
+      onToggleFullWidth,
+      onClose,
+      extra
+    };
+    return <ReportTask {...reportTaskProps} />;
+  }
+
+  // Fallback or loading state if neither data type is provided
+  return <div>Loading...</div>;
+}, (prevProps, nextProps) => {
+  // Custom comparison function to prevent unnecessary re-renders
+  // Only re-render if these specific props change
+  
+  // DEBUG: Log all memo calls for the evaluation that should be getting stage updates
+  if (nextProps.evaluationData.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
+  // Reduced logging
+  }
+  
+  // CRITICAL: Check if task stages have changed
+  const prevStages = (prevProps.task as any)?.stages?.data?.items || (prevProps.task as any)?.stages?.items || [];
+  const nextStages = (nextProps.task as any)?.stages?.data?.items || (nextProps.task as any)?.stages?.items || [];
+  const stagesChanged = prevStages.length !== nextStages.length || 
+    prevStages.some((stage: any, index: number) => {
+      const nextStage: any = nextStages[index];
+      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status;
+    });
+  
+  if (stagesChanged) {
+    // Reduced logging
+    return false; // Allow re-render
+  }
+  
+  // FORCE UPDATE for our problem evaluation to debug what's happening
+  if (nextProps.evaluationData.id === 'ff9cecfb-b568-4715-bc7a-8be6c763028c') {
+  // Reduced logging
+    return false; // Allow re-render
+  }
+  
+  const shouldRerender = !(
+    prevProps.variant === nextProps.variant &&
+    prevProps.task?.id === nextProps.task?.id &&
+    prevProps.evaluationData.status === nextProps.evaluationData.status &&
+    prevProps.evaluationData.id === nextProps.evaluationData.id &&
+    prevProps.evaluationData.processedItems === nextProps.evaluationData.processedItems &&
+    prevProps.evaluationData.totalItems === nextProps.evaluationData.totalItems &&
+    prevProps.evaluationData.accuracy === nextProps.evaluationData.accuracy &&
+    prevProps.evaluationData.elapsedSeconds === nextProps.evaluationData.elapsedSeconds &&
+    prevProps.evaluationData.estimatedRemainingSeconds === nextProps.evaluationData.estimatedRemainingSeconds &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.selectedScoreResultId === nextProps.selectedScoreResultId &&
+    prevProps.isFullWidth === nextProps.isFullWidth &&
+    // CHECK FOR SCORECARD/SCORE CHANGES - CRITICAL FOR REALTIME UPDATES
+    prevProps.evaluationData.scorecard?.name === nextProps.evaluationData.scorecard?.name &&
+    prevProps.evaluationData.score?.name === nextProps.evaluationData.score?.name &&
+    // CRITICAL: re-render when scoreResults reference changes (lazy-loaded updates)
+    prevProps.evaluationData.scoreResults === nextProps.evaluationData.scoreResults
+  );
+  
+  if (shouldRerender) {
+    // Reduced logging
+  }
+  
+  return !shouldRerender; // Return true to BLOCK re-render, false to ALLOW
+}); 

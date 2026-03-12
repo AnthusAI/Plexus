@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
-import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle, MessageSquareText, SquareChevronRight } from 'lucide-react'
+import { Radio, Hand, ConciergeBell, Square, Columns2, X, AlertTriangle, MessageSquareText, SquareChevronRight } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { StyleTag } from './style-tag'
 import { CardButton } from '@/components/CardButton'
@@ -77,7 +77,7 @@ export interface TaskStatusProps {
   showPreExecutionStages?: boolean
   completedAt?: string
   truncateMessages?: boolean
-  variant?: 'grid' | 'detail' | 'nested' | 'list'
+  variant?: 'grid' | 'detail' | 'nested' | 'list' | 'bare'
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
@@ -86,6 +86,8 @@ export interface TaskStatusProps {
   commandDisplay?: 'hide' | 'show' | 'full'
   statusMessageDisplay?: 'always' | 'never' | 'error-only'
   onCommandDisplayChange?: (display: 'show' | 'full') => void
+  elapsedSeconds?: number | null
+  estimatedRemainingSeconds?: number | null
 }
 
 function formatDuration(seconds: number): string {
@@ -131,8 +133,14 @@ export const TaskStatus = React.memo(({
   isSelected = false,
   commandDisplay = 'show',
   statusMessageDisplay = 'always',
-  onCommandDisplayChange
+  onCommandDisplayChange,
+  elapsedSeconds,
+  estimatedRemainingSeconds
 }: TaskStatusProps) => {
+
+  if (stages.length > 0) {
+  // Reduced logging
+  }
 
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
@@ -141,6 +149,22 @@ export const TaskStatus = React.memo(({
 
   // Memoize timing calculations
   const timingValues = useMemo(() => {
+    // If we have pre-calculated elapsed seconds, use that instead of calculating from timestamps
+    if (elapsedSeconds !== null && elapsedSeconds !== undefined) {
+      const formattedElapsedTime = formatDuration(elapsedSeconds);
+      
+      let formattedEstimatedTime = '';
+      if (estimatedRemainingSeconds !== null && estimatedRemainingSeconds !== undefined && estimatedRemainingSeconds > 0) {
+        formattedEstimatedTime = formatDuration(estimatedRemainingSeconds);
+      }
+
+      return {
+        elapsedTime: formattedElapsedTime,
+        estimatedTimeRemaining: formattedEstimatedTime
+      };
+    }
+
+    // Fall back to timestamp calculation if no pre-calculated values
     if (!startedAt) {
       return {
         elapsedTime: '0s',
@@ -150,8 +174,8 @@ export const TaskStatus = React.memo(({
 
     const taskStartTime = new Date(startedAt);
     const endTime = completedAt ? new Date(completedAt) : new Date();
-    const elapsedSeconds = Math.floor((endTime.getTime() - taskStartTime.getTime()) / 1000);
-    const formattedElapsedTime = formatDuration(elapsedSeconds);
+    const calculatedElapsedSeconds = Math.floor((endTime.getTime() - taskStartTime.getTime()) / 1000);
+    const formattedElapsedTime = formatDuration(calculatedElapsedSeconds);
 
     let formattedEstimatedTime = '';
     if (isInProgress && estimatedCompletionAt) {
@@ -166,7 +190,7 @@ export const TaskStatus = React.memo(({
       elapsedTime: formattedElapsedTime,
       estimatedTimeRemaining: formattedEstimatedTime
     };
-  }, [startedAt, completedAt, isInProgress, estimatedCompletionAt]);
+  }, [elapsedSeconds, estimatedRemainingSeconds, startedAt, completedAt, isInProgress, estimatedCompletionAt]);
 
   // State for timing values
   const [elapsedTime, setElapsedTime] = useState(timingValues.elapsedTime);
@@ -208,7 +232,8 @@ export const TaskStatus = React.memo(({
   }, [currentStageName, status, stageConfigs]);
 
   // Convert TaskStageConfig to SegmentConfig for the progress bar
-  const segments = useMemo(() => {
+  // Not memoized to ensure updates when callers mutate the same array instance in place
+  const segments = (() => {
     const orderedStages = stageConfigs
       .sort((a, b) => a.order - b.order)  // Ensure stages are ordered
       .map(stage => {
@@ -229,77 +254,64 @@ export const TaskStatus = React.memo(({
         };
       });
 
-    // Always add completion segment with appropriate color based on status
+    // Completion segment should only become active after last stage completes
+    const hasStages = orderedStages.length > 0;
+    const lastStageCompleted = hasStages && orderedStages[orderedStages.length - 1].status === 'COMPLETED';
+    const completionActive = status === 'COMPLETED' && lastStageCompleted;
     orderedStages.push({
       key: 'completion',
       label: 'Complete',
-      color: status === 'COMPLETED' ? 'bg-true' :
-             status === 'FAILED' ? 'bg-false' :
-             'bg-neutral',
-      status: status === 'COMPLETED' ? 'COMPLETED' :
-              status === 'FAILED' ? 'FAILED' :
-              'PENDING',
-      completed: status === 'COMPLETED'
+      color: completionActive ? 'bg-true' : (status === 'FAILED' ? 'bg-false' : 'bg-neutral'),
+      status: completionActive ? 'COMPLETED' : (status === 'FAILED' ? 'FAILED' : 'PENDING'),
+      completed: completionActive
     });
 
     return orderedStages;
-  }, [stageConfigs, status]);
+  })();
 
   // Update the progress calculation logic
   const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = useMemo(() => {
-    // First try to get progress from stages
-    if (stages?.length > 0) {
-      // First try to find a RUNNING stage with progress info
-      const runningStage = stages.find(stage => {
-        return stage.status === 'RUNNING';
-      });
+    // 1) Prefer direct processed/total counts (they tend to update most frequently)
+    const directProcessed = Number(processedItems);
+    const directTotal = Number(totalItems);
+    if (!isNaN(directProcessed) && !isNaN(directTotal) && directTotal > 0) {
+      return { processedItems: directProcessed, totalItems: directTotal };
+    }
 
+    // 2) Try a RUNNING stage that provides processed/total
+    if (stages?.length > 0) {
+      const runningStage = stages.find(stage => stage.status === 'RUNNING');
       if (runningStage) {
         const proc = Number(runningStage.processedItems);
         const tot = Number(runningStage.totalItems);
-        // Only use the stage's progress if it has valid numbers
         if (!isNaN(proc) && !isNaN(tot) && tot > 0) {
-          return {
-            processedItems: proc,
-            totalItems: tot
-          };
+          return { processedItems: proc, totalItems: tot };
         }
       }
 
-      // If no running stage found with progress, fall back to the last stage with progress
-      const sortedStages = [...stages].sort((a, b) => (b.order || 0) - (a.order || 0));
-      const stageWithProgress = sortedStages.find(stage => {
+      // 3) Any stage with processed/total
+      const stageWithProgress = stages.find(stage => {
         const proc = Number(stage.processedItems);
         const tot = Number(stage.totalItems);
         return !isNaN(proc) && !isNaN(tot) && tot > 0;
       });
-
       if (stageWithProgress) {
         const proc = Number(stageWithProgress.processedItems);
         const tot = Number(stageWithProgress.totalItems);
-        return {
-          processedItems: proc,
-          totalItems: tot
-        };
+        return { processedItems: proc, totalItems: tot };
       }
     }
-    
-    // If no stages have progress info, fall back to direct processedItems/totalItems
-    const directProcessed = Number(processedItems);
-    const directTotal = Number(totalItems);
-    
-    if (!isNaN(directProcessed) && !isNaN(directTotal) && directTotal > 0) {
-      return {
-        processedItems: directProcessed,
-        totalItems: directTotal
-      };
+
+    // 4) Fallback: derive from stage completion count
+    if (stages?.length > 0) {
+      const total = stages.length;
+      const completed = stages.filter(s => s.status === 'COMPLETED').length;
+      if (total > 0 && completed > 0) {
+        return { processedItems: completed, totalItems: total };
+      }
     }
-    
-    // If no valid progress info found anywhere, return zeros
-    return {
-      processedItems: 0,
-      totalItems: 0
-    };
+
+    return { processedItems: 0, totalItems: 0 };
   }, [stages, processedItems, totalItems]);
 
   // Calculate progress percentage
@@ -440,6 +452,8 @@ export const TaskStatus = React.memo(({
             estimatedTimeRemaining={estimatedTimeRemaining}
             isInProgress={isInProgress}
             className="text-muted-foreground"
+            startedAt={startedAt}
+            completedAt={completedAt}
           />
         )}
         {showStages && (
@@ -460,7 +474,7 @@ export const TaskStatus = React.memo(({
     <div className="[&>*+*]:mt-2">
       <StyleTag />
       <div className={cn(
-        "rounded-lg px-1 py-1 space-y-1 -mx-1",
+        "rounded-lg px-1 py-1 space-y-1 -mx-1 px-2",
         variant === 'detail' ? "bg-gauge-background" : "bg-background"
       )}>
         {command && commandDisplay !== 'hide' && (
@@ -533,11 +547,13 @@ export const TaskStatus = React.memo(({
         </div>
       ) : (
         startedAt && (
-          <Timestamp 
-            time={startedAt} 
-            completionTime={completedAt} 
-            variant="elapsed" 
+          <ProgressBarTiming
+            elapsedTime={elapsedTime}
+            estimatedTimeRemaining={estimatedTimeRemaining}
+            isInProgress={isInProgress}
             className="text-muted-foreground"
+            startedAt={startedAt}
+            completedAt={completedAt}
           />
         )
       )}
@@ -588,6 +604,8 @@ export const TaskStatus = React.memo(({
     prevProps.extra === nextProps.extra &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.commandDisplay === nextProps.commandDisplay &&
-    prevProps.statusMessageDisplay === nextProps.statusMessageDisplay
+    prevProps.statusMessageDisplay === nextProps.statusMessageDisplay &&
+    prevProps.elapsedSeconds === nextProps.elapsedSeconds &&
+    prevProps.estimatedRemainingSeconds === nextProps.estimatedRemainingSeconds
   );
 }); 

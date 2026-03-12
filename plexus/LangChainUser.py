@@ -5,15 +5,23 @@ from typing import Literal, Optional
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
-from langchain_aws import ChatBedrock
-from langchain_community.chat_models import ChatOpenAI, AzureChatOpenAI
-from langchain_community.chat_models import ChatOpenAI
+from langchain_aws import ChatBedrock, ChatBedrockConverse
+
+from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import OpenAICallbackHandler
 
-from plexus.CustomLogging import logging
-from plexus.scores.Score import Score
+# Optional import for ChatOllama
+try:
+    from langchain_ollama import ChatOllama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    ChatOllama = None
+    OLLAMA_AVAILABLE = False
 
-from langchain_community.chat_models import BedrockChat, ChatVertexAI
+from plexus.CustomLogging import logging
+
+from langchain_community.chat_models import ChatVertexAI
 
 import threading
 from azure.identity import ChainedTokenCredential, AzureCliCredential, DefaultAzureCredential
@@ -25,13 +33,17 @@ class LangChainUser:
         Parameters for this node.  Based on the LangGraphScore.Parameters class.
         """
         model_config = ConfigDict(protected_namespaces=())
-        model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
+        model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI", "ChatOllama"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
         base_model_name: Optional[str] = None
+        reasoning_effort: Optional[str] = "low"
+        verbosity: Optional[str] = "medium"
         model_region: Optional[str] = None
         temperature: Optional[float] = 0
         top_p: Optional[float] = 0.03
         max_tokens: Optional[int] = 500
+        logprobs: Optional[bool] = False
+        top_logprobs: Optional[int] = None
 
     MAX_RETRY_ATTEMPTS = 20
 
@@ -59,24 +71,61 @@ class LangChainUser:
             def on_llm_end(self, response: LLMResult, **kwargs):
                 usage = {}
                 if isinstance(response, LLMResult):
+                    # Method 1: Check response.llm_output (works for most models)
                     if response.llm_output:
-                        logging.info(f"LLM output: {response.llm_output}")
                         usage = response.llm_output.get("token_usage", response.llm_output.get("usage", {}))
-                        logging.debug(f"Token usage: {usage}")
+                    
+                    # Method 2: Check usage_metadata (gpt-oss models)
+                    if not usage and hasattr(response, 'generations') and response.generations:
+                        for gen_list in response.generations:
+                            if gen_list:
+                                for gen in gen_list:
+                                    # Check if usage_metadata is in the message object (gpt-oss models)
+                                    if hasattr(gen, 'message') and gen.message and hasattr(gen.message, '__dict__'):
+                                        if 'usage_metadata' in gen.message.__dict__:
+                                            usage = gen.message.__dict__['usage_metadata']
+                                            if usage:
+                                                break
+                                if usage:
+                                    break
+                    
+                    # Method 3: Check message.response_metadata (gpt-4.1-mini-2025-04-14)
+                    if not usage and hasattr(response, 'generations') and response.generations:
+                        for gen_list in response.generations:
+                            if gen_list:
+                                for gen in gen_list:
+                                    if hasattr(gen, 'message') and hasattr(gen.message, 'response_metadata'):
+                                        response_metadata = gen.message.response_metadata
+                                        if 'token_usage' in response_metadata:
+                                            usage = response_metadata['token_usage']
+                                            break
+                            if usage:
+                                break
 
                     # Handle the nested structure
                     if "token_usage" in usage:
                         usage = usage["token_usage"]
 
-                    self.prompt_tokens += usage.get("prompt_tokens", 0)
-                    self.completion_tokens += usage.get("completion_tokens", 0)
-                    self.total_tokens += usage.get("total_tokens", 0)
+                    # Handle different token field names (gpt-oss vs standard)
+                    prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens", 0)
+                    completion_tokens = usage.get("completion_tokens") or usage.get("output_tokens", 0)
+                    total_tokens = usage.get("total_tokens", 0)
+                    
+                    self.prompt_tokens += prompt_tokens
+                    self.completion_tokens += completion_tokens
+                    self.total_tokens += total_tokens
                     
                     # Track cached tokens if available
                     prompt_tokens_details = usage.get("prompt_tokens_details", {})
                     self.cached_tokens += prompt_tokens_details.get("cached_tokens", 0)
 
-                    logging.info(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}, Cached: {self.cached_tokens}")
+            def on_llm_error(self, error, **kwargs):
+                try:
+                    logging.error(
+                        f"❌ LLM error: {type(error).__name__}: {error} | context_keys={list(kwargs.keys())}"
+                    )
+                except Exception:
+                    pass
 
             def on_chain_end(self, outputs, **kwargs):
                 logging.info(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}, Cached: {self.cached_tokens}")
@@ -107,33 +156,112 @@ class LangChainUser:
             self.openai_callback = OpenAICallbackHandler()
             callbacks = [self.openai_callback, self.token_counter]
             
+            # Models starting with or containing "gpt-5" do not support temperature/top_p
+            model_lc = (params.model_name or "").lower()
+            is_gpt5 = model_lc.find("gpt-5") != -1
+            # Reasoning/Responses API support for OpenAI models (o*/gpt-5*)
+            supports_reasoning = model_lc.startswith("gpt-5") or model_lc.startswith("o")
+
             if params.model_provider == "AzureChatOpenAI":
-                base_model = AzureChatOpenAI(
-                    azure_endpoint=os.getenv("AZURE_API_BASE"),
-                    api_version=os.getenv("AZURE_API_VERSION"),
-                    api_key=os.getenv("AZURE_API_KEY"),
-                    model=params.model_name,
-                    temperature=params.temperature,
-                    max_tokens=max_tokens
-                )
+                azure_kwargs = {
+                    "azure_endpoint": os.getenv("AZURE_API_BASE"),
+                    "api_version": os.getenv("AZURE_API_VERSION"),
+                    "api_key": os.getenv("AZURE_API_KEY"),
+                    "model": params.model_name,
+                    "max_tokens": max_tokens,
+                }
+                if not is_gpt5 and params.temperature is not None:
+                    azure_kwargs["temperature"] = params.temperature
+                try:
+                    base_model = AzureChatOpenAI(**azure_kwargs)
+                except TypeError as e:
+                    logging.error(f"AzureChatOpenAI init TypeError: {e}.")
+                    raise
+                except Exception as e:
+                    logging.error(f"AzureChatOpenAI init unexpected error: {type(e).__name__}: {e}")
+                    raise
             else:  # ChatOpenAI
-                base_model = ChatOpenAI(
-                    model=params.model_name,
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    max_tokens=max_tokens,
-                    model_kwargs={"top_p": params.top_p},
-                    temperature=params.temperature
-                )
+                chat_kwargs = {
+                    "model": params.model_name,
+                    "api_key": os.getenv("OPENAI_API_KEY"),
+                    "max_tokens": max_tokens,
+                }
+                if supports_reasoning:
+                    # Use the Responses API for models that support reasoning
+                    chat_kwargs["use_responses_api"] = True
+                    # Resolve reasoning effort (guard invalid values)
+                    allowed_efforts = {"low", "medium", "high", "auto"}
+                    effort = (params.reasoning_effort or "low").lower()
+                    if effort not in allowed_efforts:
+                        logging.info(f"Invalid reasoning_effort '{params.reasoning_effort}', defaulting to 'low'")
+                        effort = "low"
+                    # reasoning_effort is a top-level parameter, not in model_kwargs
+                    chat_kwargs["reasoning_effort"] = effort
+
+                    # Resolve verbosity (guard invalid values)
+                    allowed_verbosity = {"low", "medium", "high"}
+                    verbosity_val = (params.verbosity or "medium").lower()
+                    if verbosity_val not in allowed_verbosity:
+                        logging.info(f"Invalid verbosity '{params.verbosity}', defaulting to 'medium'")
+                        verbosity_val = "medium"
+                    # verbosity is a top-level parameter, not in model_kwargs
+                    chat_kwargs["verbosity"] = verbosity_val
+                else:
+                    pass
+                if not is_gpt5 and params.top_p is not None:
+                    # chat_kwargs.setdefault("model_kwargs", {})
+                    chat_kwargs["top_p"] = params.top_p
+                if not is_gpt5 and params.temperature is not None:
+                    chat_kwargs["temperature"] = params.temperature
+                # Add logprobs parameters for confidence calculation
+                if params.logprobs:
+                    chat_kwargs["logprobs"] = True
+                    if params.top_logprobs is not None:
+                        chat_kwargs["top_logprobs"] = params.top_logprobs
+                try:
+                    base_model = ChatOpenAI(**chat_kwargs)
+                except TypeError as e:
+                    logging.error(f"ChatOpenAI init TypeError: {e}.")
+                    raise
+                except Exception as e:
+                    logging.error(f"ChatOpenAI init unexpected error: {type(e).__name__}: {e}")
+                    raise
         elif params.model_provider == "BedrockChat":
-            base_model = ChatBedrock(
-                model_id=params.model_name or "anthropic.claude-3-haiku-20240307-v1:0",
-                model_kwargs={
+            model_name = params.model_name or "anthropic.claude-3-haiku-20240307-v1:0"
+            
+            if "gpt-oss" in model_name.lower():
+                bedrock_kwargs = {
+                    "model": model_name,
                     "temperature": params.temperature,
-                    "max_tokens": max_tokens
-                },
-                region_name=params.model_region or "us-east-1",
-                provider="anthropic"
-            )
+                    "max_tokens": max_tokens,
+                    "region_name": params.model_region or "us-west-2"
+                }
+                
+                # Add reasoning effort for gpt-oss models
+                if params.reasoning_effort:
+                    allowed_efforts = {"low", "medium", "high", "auto"}
+                    effort = (params.reasoning_effort or "low").lower()
+                    if effort not in allowed_efforts:
+                        logging.info(f"Invalid reasoning_effort '{params.reasoning_effort}', defaulting to 'low'")
+                        effort = "low"
+                                            # ChatBedrockConverse accepts reasoning_effort as a direct parameter
+                        bedrock_kwargs["reasoning_effort"] = effort
+                
+                try:
+                    base_model = ChatBedrockConverse(**bedrock_kwargs)
+                except Exception as e:
+                    raise ValueError(f"Failed to initialize gpt-oss model '{model_name}' with ChatBedrockConverse. Error: {e}. Ensure the model is available in your AWS region.")
+            else:
+                # Use standard ChatBedrock for non-gpt-oss models
+                base_model = ChatBedrock(
+                    model_id=model_name,
+                    model_kwargs={
+                        "temperature": params.temperature,
+                        "max_tokens": max_tokens
+                    },
+                    region_name=params.model_region or "us-east-1"
+                )
+            
             callbacks = [self.token_counter]
         elif params.model_provider == "ChatVertexAI":
             base_model = ChatVertexAI(
@@ -142,56 +270,110 @@ class LangChainUser:
                 max_output_tokens=max_tokens
             )
             callbacks = [self.token_counter]
+        elif params.model_provider == "ChatOllama":
+            if not OLLAMA_AVAILABLE:
+                raise ImportError(
+                    "ChatOllama provider requires the 'langchain_ollama' package. "
+                    "Install it with: pip install langchain-ollama"
+                )
+            
+            model_name = params.model_name or "gpt-oss:20b"
+            
+            # For gpt-oss models with ChatOllama, add reasoning support
+            ollama_kwargs = {
+                "model": model_name,
+                "temperature": params.temperature,
+                "max_tokens": max_tokens
+            }
+            
+            # Add reasoning effort for gpt-oss models
+            if "gpt-oss" in model_name.lower() and params.reasoning_effort:
+                allowed_efforts = {"low", "medium", "high", "auto"}
+                effort = (params.reasoning_effort or "low").lower()
+                if effort not in allowed_efforts:
+                    logging.info(f"Invalid reasoning_effort '{params.reasoning_effort}', defaulting to 'low'")
+                    effort = "low"
+                # Add reasoning to model_kwargs for Ollama
+                ollama_kwargs.setdefault("model_kwargs", {})
+                ollama_kwargs["model_kwargs"]["reasoning_effort"] = effort
+            
+            base_model = ChatOllama(**ollama_kwargs)
+            callbacks = [self.token_counter]
         else:
             raise ValueError(f"Unsupported model provider: {params.model_provider}")
-
-        return base_model.with_retry(
+        
+        # Configure retry logic
+        model_with_retry = base_model.with_retry(
             retry_if_exception_type=(Exception,),
             wait_exponential_jitter=True,
             stop_after_attempt=self.MAX_RETRY_ATTEMPTS
-        ).with_config(
+        )
+        
+        # Configure callbacks and max_tokens
+        configured_model = model_with_retry.with_config(
             callbacks=callbacks,
             max_tokens=max_tokens
         )
+        
+        return configured_model
 
     async def _ainitialize_model(self):
         """
         Asynchronously initialize the language model.
         """
         if self.parameters.model_provider == "ChatOpenAI":
-            model = ChatOpenAI(
-                model_name=self.parameters.model_name,
-                temperature=self.parameters.temperature,
-                max_tokens=self.parameters.max_tokens
-            )
+            is_gpt5 = (self.parameters.model_name or "").lower().find("gpt-5") != -1
+            kwargs = {
+                "model": self.parameters.model_name,
+                "max_tokens": self.parameters.max_tokens,
+            }
+            if not is_gpt5 and self.parameters.temperature is not None:
+                kwargs["temperature"] = self.parameters.temperature
+            # Add logprobs parameters for confidence calculation
+            if self.parameters.logprobs:
+                kwargs["logprobs"] = True
+                if self.parameters.top_logprobs is not None:
+                    kwargs["top_logprobs"] = self.parameters.top_logprobs
+            model = ChatOpenAI(**kwargs)
             await model.agenerate([])  # Initialize the async client
             return model
         elif self.parameters.model_provider == "AzureChatOpenAI":
-            model = AzureChatOpenAI(
-                deployment_name=self.parameters.model_name,
-                temperature=self.parameters.temperature,
-                max_tokens=self.parameters.max_tokens
-            )
+            is_gpt5 = (self.parameters.model_name or "").lower().find("gpt-5") != -1
+            kwargs = {
+                "deployment_name": self.parameters.model_name,
+                "max_tokens": self.parameters.max_tokens,
+            }
+            if not is_gpt5 and self.parameters.temperature is not None:
+                kwargs["temperature"] = self.parameters.temperature
+            model = AzureChatOpenAI(**kwargs)
             await model.agenerate([])  # Initialize the async client
             return model
         # ... other model providers ...
 
     def get_token_usage(self):
-        # if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
-        #     return {
-        #         "prompt_tokens": self.openai_callback.prompt_tokens,
-        #         "completion_tokens": self.openai_callback.completion_tokens,
-        #         "total_tokens": self.openai_callback.total_tokens,
-        #         "successful_requests": self.openai_callback.successful_requests
-        #     }
-        # else:
-            return {
-                "prompt_tokens": self.token_counter.prompt_tokens,
-                "completion_tokens": self.token_counter.completion_tokens,
-                "total_tokens": self.token_counter.total_tokens,
-                "successful_requests": self.token_counter.llm_calls,
-                "cached_tokens": self.token_counter.cached_tokens
-            }
+        # For OpenAI providers, try OpenAI callback first, fallback to token counter
+        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
+            if hasattr(self, 'openai_callback') and self.openai_callback:
+                # Check if OpenAI callback has valid token data
+                if (self.openai_callback.prompt_tokens > 0 or 
+                    self.openai_callback.completion_tokens > 0 or
+                    self.openai_callback.successful_requests > 0):
+                    return {
+                        "prompt_tokens": self.openai_callback.prompt_tokens,
+                        "completion_tokens": self.openai_callback.completion_tokens,
+                        "total_tokens": self.openai_callback.total_tokens,
+                        "successful_requests": self.openai_callback.successful_requests,
+                        "cached_tokens": getattr(self.openai_callback, 'cached_tokens', 0)
+                    }
+        
+        # Fallback to token counter (used for non-OpenAI providers or when OpenAI callback fails)
+        return {
+            "prompt_tokens": self.token_counter.prompt_tokens,
+            "completion_tokens": self.token_counter.completion_tokens,
+            "total_tokens": self.token_counter.total_tokens,
+            "successful_requests": self.token_counter.llm_calls,
+            "cached_tokens": self.token_counter.cached_tokens
+        }
 
     def get_azure_credential(self):
         """Get Azure credential for authentication."""
@@ -206,6 +388,83 @@ class LangChainUser:
                     if 'azure' in str(thread._target).lower():
                         thread.name = f"AzureCredential-{thread.ident}"
         return self._credential
+
+    # === Normalization helpers for Responses API outputs ===
+    def _normalize_content_to_text(self, content) -> str:
+        """
+        Normalize AIMessage.content which can be a string or a list of content blocks
+        (as returned by gpt-oss reasoning models) into a plain string.
+        For gpt-oss models, extracts only the final answer text, excluding reasoning content.
+        """
+        try:
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                collected_parts = []
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get('type') == 'reasoning_content':
+                            continue  # Skip reasoning content - only want final answer
+                        elif block.get('type') == 'text':
+                            text_val = block.get('text', '')
+                            if text_val:
+                                collected_parts.append(text_val)
+                        else:
+                            # Handle standard formats - prefer 'text', fall back to 'content'
+                            text_val = block.get('text') or block.get('content') or ''
+                            if isinstance(text_val, str) and text_val:
+                                collected_parts.append(text_val)
+                    else:
+                        try:
+                            collected_parts.append(str(block))
+                        except Exception:
+                            pass
+                
+                # If we have text content, use it
+                if collected_parts:
+                    return "\n".join(collected_parts)
+                return ""
+        except Exception:
+            return str(content)
+
+    def normalize_response_text(self, response) -> str:
+        """
+        Extract a plain text string from a LangChain AIMessage-like response.
+        """
+        try:
+            content = getattr(response, 'content', response)
+            return self._normalize_content_to_text(content)
+        except Exception:
+            return str(getattr(response, 'content', ''))
+
+    def extract_reasoning_content(self, response) -> str:
+        """
+        Extract reasoning content from thinking models responses for logging/debugging.
+        Returns empty string for non-thinking models or if no reasoning content found.
+        """
+        try:
+            content = getattr(response, 'content', response)
+            
+            if isinstance(content, list):
+                reasoning_parts = []
+                for block in content:
+                    if isinstance(block, dict) and block.get('type') == 'reasoning_content':
+                        reasoning_text = block.get('reasoning_content', {}).get('text', '')
+                        if reasoning_text:
+                            reasoning_parts.append(reasoning_text)
+                
+                if reasoning_parts:
+                    return "\n".join(reasoning_parts)
+            
+            return ""
+        except Exception:
+            return ""
+
+    def is_gpt_oss_model(self) -> bool:
+        """
+        Check if the current model is a gpt-oss model.
+        """
+        return "gpt-oss" in (getattr(self.parameters, 'model_name', '') or '').lower()
 
     async def cleanup(self):
         """Clean up Azure credentials and any associated threads."""

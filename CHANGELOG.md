@@ -1,15 +1,418 @@
 # CHANGELOG
 
 
-## v0.9.0 (2025-02-26)
+## v0.18.0 (2025-03-20)
+
+### Bug Fixes
+
+- **generator**: Remove explanation from result state in Generator class
+  ([`08d83b5`](https://github.com/AnthusAI/Plexus/commit/08d83b528f4965e083d9053f04b96c3cb108d1fd))
+
+- Updated the result state creation in the `Generator` class to exclude the `explanation` field,
+  ensuring only the `completion` is included in the state. This change simplifies the state
+  management and aligns with the intended functionality.
 
 ### Features
 
-- **dashboard**: Add Monaco Editor
-  ([`eefbb98`](https://github.com/AnthusAI/Plexus/commit/eefbb98c13606d192e341593f18fc41f9f0b7d5a))
+- **generator**: Add Generator node for LLM completions
+  ([`4a00a52`](https://github.com/AnthusAI/Plexus/commit/4a00a52d0d8ff61f73b7d3be50a8bab344ebf46c))
+
+- Introduced a new `Generator` class in `Generator.py` that generates completions from LLM calls
+  using a LangGraph subgraph. - Updated `__init__.py` to include the new `Generator` class. -
+  Implemented methods for handling LLM requests, retries, and state management within the
+  `Generator` class.
+
+### Refactoring
+
+- **documentation**: Add LogicalClassifier usage example to YAML configuration guide
+  ([`64eec40`](https://github.com/AnthusAI/Plexus/commit/64eec408402d673282682db57024a3e9740de9b2))
 
 
-## v0.8.0 (2025-02-22)
+## v0.17.0 (2025-03-19)
+
+### Bug Fixes
+
+- **scorecard**: Move io to top of file to solve linter error
+  ([`ce41887`](https://github.com/AnthusAI/Plexus/commit/ce41887aafba48a2954b2cf20ec365a472d46275))
+
+
+## v0.16.0 (2025-03-17)
+
+### Bug Fixes
+
+- **extractor**: Update test assertions and state handling in Extractor
+  ([`d5d0cdf`](https://github.com/AnthusAI/Plexus/commit/d5d0cdf2f8d782fbb8ca04e330974445a83741b5))
+
+- Modified test assertions to check for attributes instead of dictionary keys for better
+  compatibility with object-oriented design. - Enhanced the Extractor class to include extracted
+  text in the state dictionary, improving the result handling.
+
+- **score-commands**: Update FileEditor to handle Claude's tool call parameters
+  ([`b76c10f`](https://github.com/AnthusAI/Plexus/commit/b76c10f2a105d4d87079b0190537d5b7a716092b))
+
+- Add file_text parameter to create method to match Claude's format - Allow empty strings in
+  str_replace for text deletion - Improve newline handling in insert method - Update
+  ScoreCommands.py to use file_text instead of content - Update tests to expect consistent newline
+  behavior
+
+This ensures compatibility with Claude's tool call format and fixes issues with empty files being
+  created.
+
+### Chores
+
+- **dependencies**: Add langchain-anthropic to project dependencies
+  ([`feb3639`](https://github.com/AnthusAI/Plexus/commit/feb36399e8c74678afa0dee91d4ff7a599f6c6b2))
+
+- **dependencies**: Add ruamel.yaml to project dependencies for YAML handling
+  ([`660cee4`](https://github.com/AnthusAI/Plexus/commit/660cee461ad47f6494e171ab3e49639d43b9c7a3))
+
+### Features
+
+- **chat**: `plexus score chat` - Edit Score configurations with natural language, like Cursor or
+  GitHub Copilot.
+  ([`d76661f`](https://github.com/AnthusAI/Plexus/commit/d76661fc1ecbcab77c44cf69646896fcaef7226c))
+
+- **score**: Add command to list all versions for a specific score
+  ([`315a808`](https://github.com/AnthusAI/Plexus/commit/315a808136e48b233b3389a69eff0530f202de0d))
+
+- **score-commands**: Add optimize command for score prompts using AWS Bedrock
+  ([`af35f45`](https://github.com/AnthusAI/Plexus/commit/af35f4555a15704a351bf230f5b7940aca005928))
+
+- **scorecards**: Add duplicate scorecard detection and management
+  ([`7b55d89`](https://github.com/AnthusAI/Plexus/commit/7b55d89a24e1a16db4b6386cbe268b7c12f21c22))
+
+- Implement functionality to detect and clean duplicate scorecards by key - Enhance user interaction
+  with prompts for deletion of duplicates - Introduce a new command to find and manage duplicate
+  scorecards across the system - Improve console output for better user experience during duplicate
+  checks
+
+- **scorecards**: Enhance scorecard resolution and push functionality
+  ([`068011b`](https://github.com/AnthusAI/Plexus/commit/068011b68f07158e4d3039610fb4b7b1645874d1))
+
+- Add detailed logging and error handling to scorecard identifier resolution - Implement flexible
+  scorecard lookup with multiple matching strategies - Add --create-if-missing flag to automatically
+  create scorecards - Improve YAML file matching and loading for scorecard push - Enhance error
+  messages and provide more informative console output
+
+### Refactoring
+
+- **classifier**: Enhance find_matches_in_text method to handle overlapping matches and maintain
+  original index
+  ([`6790a12`](https://github.com/AnthusAI/Plexus/commit/6790a12680439e183b9c2e72ea5b3eecef4a76c5))
+
+- Updated the method to return an additional original_index in the match tuples. - Improved logic to
+  prioritize longer matches when parsing from the end. - Clarified sorting strategy based on parsing
+  direction to handle conflicts effectively.
+
+- **extractor**: Enhance Extractor class: Added logging and state management for extraction results
+  ([`f7c17b5`](https://github.com/AnthusAI/Plexus/commit/f7c17b5e7281da25190816eb08cddba723983313))
+
+- **resolvers**: Add trace field to getResourceByShareToken response
+  ([`72ee20a`](https://github.com/AnthusAI/Plexus/commit/72ee20af89e9b2c8222a98a0b854b74cd0b45e7e))
+
+- **score**: Implement secondary index query for fetching all score versions
+  ([`931ae55`](https://github.com/AnthusAI/Plexus/commit/931ae552bbd20fcfe1aad82406623cffd9922866))
+
+- **score-commands**: Clean up imports and streamline dependencies in ScoreCommands.py
+  ([`18498b3`](https://github.com/AnthusAI/Plexus/commit/18498b3b782ffabfba0c7b42f11e96c121983a10))
+
+- Removed unused imports to improve code clarity and maintainability. - Organized import statements
+  for better readability. - Ensured all necessary dependencies are included for functionality.
+
+- **score-commands**: Enhance optimize function with new text editor tool and command handling
+  ([`ad8ce9b`](https://github.com/AnthusAI/Plexus/commit/ad8ce9b0996dec950ac14b9cca5a305a97926adf))
+
+- Replaced the previous tool definitions with a single official Anthropic text editor tool. -
+  Updated command handling to include 'view', 'str_replace', 'create', and 'insert' commands. -
+  Improved conversation tracking and error handling for tool interactions. - Added validation for
+  edited YAML files and enhanced user feedback for optimization results.
+
+- **score-commands**: Implement retry logic and enhance debug capabilities in optimize function
+  ([`f0b44a3`](https://github.com/AnthusAI/Plexus/commit/f0b44a3d7ad1e41190dab30a7d92ddbd7eccb5ba))
+
+- Added retry decorator for API calls to handle timeouts and connection errors. - Introduced a debug
+  flag for more verbose output during optimization. - Improved error handling and user feedback for
+  file editing processes. - Updated the initialization of the ChatAnthropic model with new
+  parameters for better response control.
+
+- **score-commands**: Update model reference and documentation in optimize function
+  ([`1fb500e`](https://github.com/AnthusAI/Plexus/commit/1fb500eb1ee0de7438aa1a4ef78c5d365fc00b36))
+
+- Changed the help text for the model option to specify it as an Anthropic model ID. - Updated the
+  function docstring to clarify that optimization uses Claude AI via ChatAnthropic.
+
+- **scorecards**: Improve YAML handling with ruamel.yaml
+  ([`356c6d6`](https://github.com/AnthusAI/Plexus/commit/356c6d64f4516b64108d909e7c9a5285d6b9038c))
+
+- Replace PyYAML with ruamel.yaml for better multi-line string preservation - Add custom YAML
+  handler to maintain formatting and prevent line wrapping - Refactor YAML loading and dumping
+  across pull and push methods - Enhance configuration file processing with improved YAML parsing
+
+
+## v0.15.0 (2025-03-11)
+
+### Chores
+
+- Remove unused LangGraph ToolExecutor import
+  ([`739df25`](https://github.com/AnthusAI/Plexus/commit/739df253542c246d6a672ae47c53cf41ae5184a6))
+
+### Features
+
+- **items**: Realtime subscription for new Items.
+  ([`75d9d5f`](https://github.com/AnthusAI/Plexus/commit/75d9d5f8b31b2b13f3ff9f7e084007c4f08cb4f0))
+
+
+## v0.14.0 (2025-03-10)
+
+### Features
+
+- **items**: Implemented items dashboard using real data.
+  ([`9a29577`](https://github.com/AnthusAI/Plexus/commit/9a29577ba7703e94cadae406251e35c3ab3739e6))
+
+
+## v0.13.0 (2025-03-09)
+
+### Features
+
+- **evaluations**: Filter evaluations by scorecard or score, using a server-side index.
+  ([`03463c4`](https://github.com/AnthusAI/Plexus/commit/03463c435cda9e953a8d4aefe70b0bd126261432))
+
+
+## v0.12.0 (2025-03-09)
+
+### Bug Fixes
+
+- **core**: Enhance dynamic class loading with plexus_extensions fallback
+  ([`f93e274`](https://github.com/AnthusAI/Plexus/commit/f93e2748febe3597269be52ff841594758216af4))
+
+- Add fallback mechanism to load classes from plexus_extensions namespace - Improve logging for
+  class loading attempts - Provide more informative error messages when class resolution fails
+
+### Features
+
+- **langgraph**: Add node results tracking
+  ([`8474e71`](https://github.com/AnthusAI/Plexus/commit/8474e71ec3dd704fa88056a3094263bff4ebf0e6))
+
+- Introduce `node_results` field in LangGraphScore to track node execution details - Implement
+  `log_state` method in BaseNode for comprehensive state logging - Update Classifier node to use new
+  state logging mechanism
+
+- **trace**: Enhance trace data handling and logging
+  ([`a4ed51f`](https://github.com/AnthusAI/Plexus/commit/a4ed51f2fee06a0f38fe7101eef910c8420cf714))
+
+- Update Evaluation.py to add trace data to score results - Modify LangGraphScore to support trace
+  metadata merging - Implement comprehensive BaseNode_test.py with trace logging tests - Refactor
+  BaseNode.py to improve trace metadata management
+
+
+## v0.11.0 (2025-03-09)
+
+### Features
+
+- **CLI**: Added `plexus results list` and `info` CLI commands for examining recent score results.
+  ([`1b2d786`](https://github.com/AnthusAI/Plexus/commit/1b2d7869ea44ecf21faf2b8190ea26338544797b))
+
+
+## v0.10.1 (2025-03-08)
+
+### Bug Fixes
+
+- **share-links**: Restore evaluation share functionality
+  ([`71b1189`](https://github.com/AnthusAI/Plexus/commit/71b11892d8fdb11b5bb9d8db27918c0382e6a762))
+
+The recent URL restructuring broke the share evaluation functionality due to: 1. Authentication
+  issues when fetching share links 2. Resource type case sensitivity mismatch ('Evaluation' vs
+  'EVALUATION')
+
+This fix: - Reverts to using the custom GraphQL resolver for share links with proper auth - Makes
+  resource type checking case-insensitive - Adds detailed logging for better debugging
+
+Resolves the "NoValidAuthTokens" and "Invalid resource type" errors when accessing shared
+  evaluations.
+
+
+## v0.10.0 (2025-03-06)
+
+### Bug Fixes
+
+- **evaluations**: Improve error handling for expired and revoked share links
+  ([`a599dc7`](https://github.com/AnthusAI/Plexus/commit/a599dc7231995028574454c82f64b46e61c9367a))
+
+- Add detailed error messages for expired and revoked share links - Safely handle null score results
+  when standardizing evaluation data - Enhance user guidance for share link issues
+
+- **share-links**: Remove temporary clipboard failure testing code
+  ([`4cee14d`](https://github.com/AnthusAI/Plexus/commit/4cee14d39412135d6dff4a1673c1c5e46ba060fc))
+
+- Remove hardcoded error throwing for clipboard testing - Restore standard clipboard write
+  functionality
+
+### Chores
+
+- **backend**: Add AppSync permissions to share token resolver function
+  ([`928090a`](https://github.com/AnthusAI/Plexus/commit/928090a9a3188051a53dafa0428386244c106dcc))
+
+Configure IAM permissions for the getResourceByShareToken function to enable GraphQL access,
+  supporting secure share link functionality
+
+- **dependencies**: Update AWS SDK dependencies for request signing
+  ([`eb0f6b3`](https://github.com/AnthusAI/Plexus/commit/eb0f6b36e486a81f968224e391b5ebbdcd87c536))
+
+Synchronize package dependencies for AWS SDK libraries used in manual GraphQL request signing. This
+  update: - Adds @aws-sdk/protocol-http and @aws-sdk/signature-v4 to dashboard package - Removes
+  redundant package-lock and package.json from resolvers directory - Ensures consistent AWS SDK
+  library versions across project
+
+### Features
+
+- **share-links**: Add configurable share evaluation modal
+  ([`66f29dc`](https://github.com/AnthusAI/Plexus/commit/66f29dcb1f42c30af6f99b26e4e7b78d5d7ab343))
+
+- Implement ShareEvaluationModal component for customizable evaluation sharing - Add support for
+  configuring share link expiration and view options - Enhance share link creation with granular
+  display and metric controls - Integrate modal into EvaluationsDashboard with improved link sharing
+  workflow
+
+### Refactoring
+
+- **auth**: Enable unauthenticated access for share links
+  ([`bcf0571`](https://github.com/AnthusAI/Plexus/commit/bcf057198b9dff628d0d11c623afff98abbb34b1))
+
+Configure Amplify to support guest access and identity pool authentication for public evaluation
+  sharing. Includes: - Updated Amplify configuration in evaluation page to allow guest access -
+  Modified GraphQL query authentication mode to use identity pool
+
+- **evaluations**: Add score results parsing for shared evaluation page
+  ([`e606594`](https://github.com/AnthusAI/Plexus/commit/e606594302834c78e38647055a8d67591cfb1cc7))
+
+- Enhance PublicEvaluation component to parse and display score results - Map score result items
+  with key metadata like id, value, confidence, and itemId - Ensure backward compatibility with
+  existing evaluation data structure
+
+- **evaluations**: Enhance score result selection and logging in shared evaluation page
+  ([`71847cf`](https://github.com/AnthusAI/Plexus/commit/71847cf9d101f3d306a50c35aa13371757cf9b77))
+
+- Add state management for selected score result ID - Implement debug logging for score result
+  selection - Standardize score results parsing with new utility function - Expand EvaluationTask
+  component with full-width option and score result selection callback
+
+- **evaluations**: Enhance score result selection and logging in shared evaluation page
+  ([`1b9b220`](https://github.com/AnthusAI/Plexus/commit/1b9b220fcd4340c1e9d7812525520a9f93730cae))
+
+- Add state management for selected score result ID - Implement debug logging for score result
+  selection - Standardize score results parsing with new utility function - Expand EvaluationTask
+  component with full-width option and score result selection callback
+
+- **evaluations**: Remove Amplify configuration from evaluation page
+  ([`52c2f0f`](https://github.com/AnthusAI/Plexus/commit/52c2f0fc7eda2222b9f7321138f6d61670e33790))
+
+- Remove explicit Amplify configuration with guest access - Simplify imports by removing unnecessary
+  Amplify setup - Maintain existing authentication and session handling
+
+- **share-links**: Add "Never Expire" option for shared resource links
+  ([`8fa7519`](https://github.com/AnthusAI/Plexus/commit/8fa751969b8b91bf6f75f8c32e2fb39602420cfb))
+
+- Introduce "never" expiration option in share resource modal - Update state management to handle
+  null expiration dates - Add conditional rendering for never-expiring link messages - Modify
+  onShare callback to pass undefined for never-expiring links
+
+- **share-links**: Add summary display mode for shared evaluations
+  ([`d4edced`](https://github.com/AnthusAI/Plexus/commit/d4edced69e1e5432af2e359f8c4959c1dbc392a5))
+
+- Implement 'summary' display mode option in getResourceByShareToken resolver - Conditionally remove
+  score results when summary mode is selected - Enhance view options flexibility for shared
+  evaluation resources
+
+- **share-links**: Configure IAM authentication for share token resolver
+  ([`658b8b7`](https://github.com/AnthusAI/Plexus/commit/658b8b7c265250f0bcc7472fe66e415266cd1910))
+
+Update the share token resolver to use IAM authentication mode when generating the Amplify client,
+  ensuring secure and consistent access for retrieving shared resources
+
+- **share-links**: Enhance AppSync permissions and add request logging
+  ([`9685326`](https://github.com/AnthusAI/Plexus/commit/968532624477ff4473f14fc77567092c6d3e3e54))
+
+Expand AppSync permissions for the share token resolver function and add debug logging for GraphQL
+  request details. Changes include: - Broaden IAM policy to allow all AppSync actions - Add console
+  logging for request headers to aid in troubleshooting request signing
+
+- **share-links**: Enhance share link expiration with flexible period selection
+  ([`f21f07c`](https://github.com/AnthusAI/Plexus/commit/f21f07c77b5b67534332cc5f08e9f6012129bdcf))
+
+- Add configurable expiration periods (7 days to 1 year) - Implement custom date selection for share
+  link expiration - Improve UX with dropdown and calendar popover for expiration settings - Use
+  date-fns for more robust date handling
+
+- **share-links**: Generalize share modal for multiple resource types
+  ([`6e96a50`](https://github.com/AnthusAI/Plexus/commit/6e96a501e9c934c883b2aa8d2cf162eccb3f6589))
+
+- Replace ShareEvaluationModal with generic ShareResourceModal - Add support for dynamic resource
+  type and name configuration - Enhance modal flexibility to handle evaluations, scorecards, and
+  reports - Update EvaluationsDashboard to use new generalized sharing component
+
+- **share-links**: Improve error handling for shared evaluation page
+  ([`b53ceb6`](https://github.com/AnthusAI/Plexus/commit/b53ceb6a56378a5cc058aff57d17c6be7ee28ab4))
+
+- Add comprehensive error handling for GraphQL and fetch errors - Enhance error display with
+  context-specific messages for expired or revoked share links - Implement detailed error logging
+  and user-friendly error UI - Add specific error handling for share link expiration and revocation
+  scenarios
+
+- **share-links**: Improve share link generation and clipboard handling
+  ([`22b5ef3`](https://github.com/AnthusAI/Plexus/commit/22b5ef3bc60e014b138003465ed1121b71a9a00e))
+
+- Add robust clipboard permission and error handling for share links - Introduce shareUrl state to
+  manage generated share link - Update ShareResourceModal to display and copy share link - Enhance
+  user feedback for share link creation and copying
+
+- **share-links**: Improve share token resolver and evaluation fetching
+  ([`baec7cf`](https://github.com/AnthusAI/Plexus/commit/baec7cfda9d4d5be8f54aeee3329131ff478178e))
+
+Update GraphQL resolver authorization and enhance evaluation fetching logic: - Add public API key
+  and authenticated access to share token resolver - Implement robust JSON parsing for share token
+  evaluation data - Add comprehensive error logging and debugging for share link retrieval
+
+- **share-links**: Migrate to manual AWS Signature v4 request signing
+  ([`9ead588`](https://github.com/AnthusAI/Plexus/commit/9ead58807b62ae62e3cb17fd4e95f5591305ac2d))
+
+Replace Amplify client with manual GraphQL request signing using AWS SDK libraries. This change: -
+  Removes dependency on generateClient() - Implements direct request signing with SignatureV4 - Uses
+  node-fetch for GraphQL API calls - Adds necessary AWS SDK dependencies for authentication
+
+- **share-links**: Remove deprecated IAM client utility
+  ([`c99a89a`](https://github.com/AnthusAI/Plexus/commit/c99a89a08fd368917c0cca418002b4368178e04e))
+
+- **share-links**: Simplify evaluation fetching for shared resources
+  ([`6aeb805`](https://github.com/AnthusAI/Plexus/commit/6aeb805effaefc2c8a4e0b3539737d8792cd2bc8))
+
+Streamline the evaluation page for shared links by: - Removing redundant GraphQL query and type
+  imports - Consolidating evaluation fetching logic to use share token method - Improving token
+  validation and authentication mode detection - Removing unnecessary state tracking for shared
+  resources
+
+- **share-links**: Update resolver path for share token handler
+  ([`d8faffd`](https://github.com/AnthusAI/Plexus/commit/d8faffdbf5a592638d75514994ece0430c6598f3))
+
+Adjust the entry point for the share token resolver to use the correct relative path, ensuring
+  proper module resolution for the share link functionality
+
+- **ui**: Update share link icon and dropdown menu interaction
+  ([`2435519`](https://github.com/AnthusAI/Plexus/commit/24355198820c7815bf4ad61acfb1159739a15e2d))
+
+- Replace 'Eye' icon with 'Share' icon in evaluation dropdown menu - Change dropdown menu item
+  cursor style from 'default' to 'pointer'
+
+### Testing
+
+- **evaluations**: Update PublicEvaluation component tests for share link handling
+  ([`cfc0895`](https://github.com/AnthusAI/Plexus/commit/cfc0895d29ec22aaf444ef54e10274d23356fd34))
+
+- Refactor test suite to use fetchEvaluationByShareToken method - Add comprehensive tests for share
+  link error scenarios - Implement tests for expired and revoked share link handling - Remove
+  redundant isShareToken test - Improve error state and loading state test coverage
+
+
+## v0.9.0 (2025-02-26)
 
 ### Bug Fixes
 
@@ -29,12 +432,8 @@ Create CLAUDE.md with detailed documentation covering build commands, test comma
 
 ### Features
 
-- Add foreground-selected color for enhanced UI contrast
-  ([`0dfa243`](https://github.com/AnthusAI/Plexus/commit/0dfa24325f94cc835245f286eec6f393924dc768))
-
-- Introduce new `--foreground-selected` CSS variable in global styles - Update Tailwind config to
-  support the new color token - Modify confusion matrix cell text color to use foreground-selected
-  for high-value cells - Adjust text color threshold from 70% to 90% of max value
+- **dashboard**: Add Monaco Editor
+  ([`eefbb98`](https://github.com/AnthusAI/Plexus/commit/eefbb98c13606d192e341593f18fc41f9f0b7d5a))
 
 - **share-evaluation**: Implement public evaluation route with comprehensive testing
   ([`73e8c15`](https://github.com/AnthusAI/Plexus/commit/73e8c15bc38cde6a64f0698264a0266bd957a9eb))
@@ -42,6 +441,14 @@ Create CLAUDE.md with detailed documentation covering build commands, test comma
 - Add route files for public evaluation page and layout - Implement data fetching, transformation,
   and rendering - Create unit and end-to-end tests for route functionality - Add public link copy
   feature to evaluations dashboard - Enhance error handling and responsive design
+
+- **share-links**: Implement share link functionality for evaluations
+  ([`089b113`](https://github.com/AnthusAI/Plexus/commit/089b113d1490c2c1a576c3142d8e1397be30e74f))
+
+Add comprehensive share link support for evaluations, including: - GraphQL custom resolver for
+  fetching shared resources - Client-side share link generation and management - Enhanced public
+  evaluation page to support share token access - IAM-based client for secure share link operations
+  - View options and access tracking for shared evaluations
 
 ### Refactoring
 
@@ -79,6 +486,18 @@ Implement ShareLink model with comprehensive indexing and authorization, support
 - Create test utilities for responsive design testing - Add comprehensive responsive screen size
   tests for PublicEvaluation component - Remove redundant Cypress end-to-end responsiveness test -
   Implement mockMatchMedia and resizeWindow utility functions
+
+
+## v0.8.0 (2025-02-22)
+
+### Features
+
+- Add foreground-selected color for enhanced UI contrast
+  ([`0dfa243`](https://github.com/AnthusAI/Plexus/commit/0dfa24325f94cc835245f286eec6f393924dc768))
+
+- Introduce new `--foreground-selected` CSS variable in global styles - Update Tailwind config to
+  support the new color token - Modify confusion matrix cell text color to use foreground-selected
+  for high-value cells - Adjust text color threshold from 70% to 90% of max value
 
 
 ## v0.7.0 (2025-02-21)

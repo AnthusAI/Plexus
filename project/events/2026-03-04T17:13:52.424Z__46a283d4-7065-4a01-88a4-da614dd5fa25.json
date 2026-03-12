@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "46a283d4-7065-4a01-88a4-da614dd5fa25",
+  "issue_id": "plx-1f3c5520-6e0f-44ef-8a99-648d06b29823",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-04T17:13:52.424Z",
+  "actor_id": "unknown",
+  "payload": {
+    "assignee": null,
+    "description": "Define explicit pass/fail criteria to authorize OpenSearch removal.\n\nInclude:\n- Required validation duration and run frequency\n- Minimum successful run threshold across representative scorecards\n- Error budget / incident threshold\n- Required evidence links to reports and CI",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-1f795cbc-d292-48bf-9c3f-4a21734f2052",
+    "priority": 1,
+    "status": "open",
+    "title": "Define readiness gate for OpenSearch decommission"
+  }
+}

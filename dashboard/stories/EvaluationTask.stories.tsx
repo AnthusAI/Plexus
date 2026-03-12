@@ -4,7 +4,7 @@ import EvaluationTask from '@/components/EvaluationTask';
 import type { EvaluationTaskProps } from '@/components/EvaluationTask';
 
 const meta = {
-  title: 'Tasks/Types/EvaluationTask',
+  title: 'Evaluations/EvaluationTask',
   component: EvaluationTask,
   parameters: {
     layout: 'centered',
@@ -62,7 +62,8 @@ const createSampleData = () => {
         human_label: null,
         correct: true
       },
-      itemId: `item-${i}`
+      itemId: `item-${i}`,
+      trace: null
     }))
   }
 }

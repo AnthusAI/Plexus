@@ -7,11 +7,13 @@ Provides lookup methods to find accounts by:
 - Name (using filter)
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime
 from .base import BaseModel
-from ..client import _BaseAPIClient
+
+if TYPE_CHECKING:
+    from ..client import _BaseAPIClient
 
 @dataclass
 class Account(BaseModel):
@@ -28,7 +30,7 @@ class Account(BaseModel):
         key: str,
         description: Optional[str] = None,
         settings: Optional[Dict] = None,
-        client: Optional[_BaseAPIClient] = None
+        client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
         self.name = name
@@ -49,7 +51,7 @@ class Account(BaseModel):
         """
 
     @classmethod
-    def get_by_key(cls, key: str, client: _BaseAPIClient) -> Optional['Account']:
+    def get_by_key(cls, key: str, client: '_BaseAPIClient') -> Optional['Account']:
         """Get an account by its key.
         
         Args:
@@ -78,7 +80,7 @@ class Account(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
-    def list_by_key(cls, client: _BaseAPIClient, key: str) -> Optional['Account']:
+    def list_by_key(cls, client: '_BaseAPIClient', key: str) -> Optional['Account']:
         """Get an account by its key.
         
         Args:
@@ -91,7 +93,7 @@ class Account(BaseModel):
         return cls.get_by_key(key, client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Account':
+    def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Account':
         """Create an Account instance from a dictionary."""
         # Convert datetime fields if present
         for date_field in ['createdAt', 'updatedAt']:
@@ -110,7 +112,7 @@ class Account(BaseModel):
         )
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Account':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'Account':
         """Get an account by its ID."""
         query = """
         query GetAccount($id: ID!) {

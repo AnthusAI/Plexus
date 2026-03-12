@@ -5,7 +5,7 @@ import { ClipboardCheck, Play, Zap } from 'lucide-react'
 import { AccountProvider } from '@/app/contexts/AccountContext'
 
 const meta: Meta<typeof TaskDispatchButton> = {
-  title: 'Task Dispatch/TaskDispatchButton',
+  title: 'Tasks/Dispatch/TaskDispatchButton',
   component: TaskDispatchButton,
   parameters: {
     layout: 'centered',
