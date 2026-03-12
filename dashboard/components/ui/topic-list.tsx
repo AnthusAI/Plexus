@@ -40,7 +40,8 @@ function TopicItem({ topic }: TopicItemProps) {
   const hasDetails =
     (topic.keywords?.length ?? 0) > 0 ||
     (topic.exemplars?.length ?? 0) > 0 ||
-    topic.days_inactive !== undefined;
+    topic.days_inactive !== undefined ||
+    !!topic.cause;
 
   return (
     <li className="pb-3">
