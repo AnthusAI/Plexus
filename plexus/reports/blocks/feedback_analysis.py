@@ -787,19 +787,21 @@ class FeedbackAnalysis(BaseReportBlock):
 
             keyword_str = ", ".join(keywords[:8]) if keywords else ""
             causes_str = "\n".join(f"{i+1}. {c}" for i, c in enumerate(exemplar_causes))
+            system_msg = (
+                "You write extremely concise root cause statements — one short sentence, under 20 words. "
+                "No preamble, no qualifications, no restating the cluster name."
+            )
             prompt = (
-                f"You are synthesizing root cause analyses for a cluster of similar AI classifier misalignment cases.\n"
-                f"The cluster is labeled \"{topic_label}\".\n"
-                f"Keywords: {keyword_str}\n\n"
-                f"Root causes inferred from individual examples in this cluster:\n{causes_str}\n\n"
-                f"Based on these, summarize the single most likely shared root cause for this cluster "
-                f"in 1-2 concise sentences. Be specific and actionable."
+                f"Cluster: \"{topic_label}\" (keywords: {keyword_str})\n\n"
+                f"Inferred causes from examples:\n{causes_str}\n\n"
+                f"One-sentence root cause (under 20 words):"
             )
 
             client = boto3.client("bedrock-runtime", region_name="us-east-1")
             body = _json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 100,
+                "max_tokens": 60,
+                "system": system_msg,
                 "messages": [{"role": "user", "content": prompt}],
             })
             response = client.invoke_model(
@@ -964,28 +966,19 @@ class FeedbackAnalysis(BaseReportBlock):
             context_block = "\n\n".join(sections)
 
             system_msg = (
-                "You are an expert in root cause analysis for AI classifier misalignment. "
-                "You are given information about a scorecard score that required a human correction, "
-                "along with a human edit comment describing what was wrong. "
-                "Your task is to infer the most likely root cause of why the classifier made an incorrect prediction. "
-                "Be specific and concise. Focus on the underlying reason, not just restating the symptom."
+                "You identify root causes concisely. Write one short phrase or sentence — "
+                "no preamble, no mention of AI/classifiers/misalignment, just the specific reason."
             )
 
-            user_msg = (
-                f"Human edit comment (observation about what was incorrect):\n{edit_comment}\n\n"
-            )
+            user_msg = f"Edit comment: {edit_comment}\n"
             if context_block:
-                user_msg += f"Additional context:\n{context_block}\n\n"
-            user_msg += (
-                "Based on the edit comment and available context, what is the most likely root cause "
-                "of why the classifier required correction? "
-                "Respond in 1-3 concise sentences."
-            )
+                user_msg += f"\n{context_block}\n"
+            user_msg += "\nRoot cause (one short phrase):"
 
             client = boto3.client("bedrock-runtime", region_name="us-east-1")
             body = _json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 150,
+                "max_tokens": 60,
                 "system": system_msg,
                 "messages": [{"role": "user", "content": user_msg}],
             })
