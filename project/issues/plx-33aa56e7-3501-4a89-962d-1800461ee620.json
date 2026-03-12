@@ -40,10 +40,22 @@
       "author": "derek.norrbom",
       "text": "Diagnosed PR #105 deadlock: semantic-release on dev push created a new bot commit (03aa60f) after CI, and because push used GITHUB_TOKEN, GitHub did not trigger a fresh CI suite for the new SHA. Updated ci.yaml so release safety check + semantic-release run only on push to main. This prevents bot-mutated dev head commits from leaving required PR checks permanently pending.",
       "created_at": "2026-03-11T19:08:30.000141Z"
+    },
+    {
+      "id": "e5244acb-b0da-4a32-82f6-82764c20c031",
+      "author": "derek.norrbom",
+      "text": "Investigating requirements-sync run 22978450860 blocked by ruleset despite release-bot bypass. Collecting run logs + ruleset actor/bypass details to identify mismatch.",
+      "created_at": "2026-03-12T15:50:06.484980Z"
+    },
+    {
+      "id": "f23a5367-da4d-44ed-aecf-50cf82082ea9",
+      "author": "derek.norrbom",
+      "text": "Root cause confirmed for run 22978450860: failure is from CI semantic-release push on main using GH_TOKEN=secrets.GITHUB_TOKEN (github-actions bot), not from requirements-sync. Patched ci.yaml so semantic-release push config uses ANTHUSBOT_GH_TOKEN, sets bot git identity, rewrites origin remote with bot token, and uses GH_TOKEN/GITHUB_TOKEN from ANTHUSBOT_GH_TOKEN only for release step.",
+      "created_at": "2026-03-12T15:50:32.202440Z"
     }
   ],
   "created_at": "2026-03-11T17:17:47.271266Z",
-  "updated_at": "2026-03-11T19:08:30.000141Z",
+  "updated_at": "2026-03-12T15:50:32.202440Z",
   "closed_at": null,
   "custom": {}
 }
