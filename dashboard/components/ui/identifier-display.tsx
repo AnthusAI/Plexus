@@ -232,13 +232,29 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
     );
   }
 
-  // Compact mode - keep existing flex layout
+  // Compact mode - show all identifiers without copy buttons or expand/collapse
   return (
-    <div className={cn("flex items-start gap-1 text-muted-foreground", finalTextClasses)}>
-      <IdCard className={iconClasses} />
-      <div className="flex-1 min-w-0">
+    <div className={cn("grid grid-cols-[auto_auto_1fr] gap-x-1 gap-y-0 items-start text-muted-foreground", finalTextClasses)}>
+      <div className="flex items-center">
+        <IdCard className={iconClasses} />
+      </div>
+      <div className={labelTextClasses}>
+        {firstIdentifier!.name}:
+      </div>
+      <div>
         {renderIdentifierValue(firstIdentifier!)}
       </div>
+      {parsedIdentifiers.slice(1).map((identifier, index) => (
+        <React.Fragment key={`${identifier.name}-${index + 1}`}>
+          <div></div>
+          <div className={labelTextClasses}>
+            {identifier.name}:
+          </div>
+          <div>
+            {renderIdentifierValue(identifier)}
+          </div>
+        </React.Fragment>
+      ))}
     </div>
   );
 };

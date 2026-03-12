@@ -11,7 +11,7 @@ import uuid
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timezone
 
-from plexus.Evaluation import AccuracyEvaluation
+from plexus.Evaluation import AccuracyEvaluation, Evaluation
 
 
 class TestScoreVersionAssociationLogic:
@@ -217,6 +217,17 @@ class TestVersionResolutionScenarios:
                 score_version_id_for_eval = score_config.get('championVersionId')
         
         assert score_version_id_for_eval == score_config['championVersionId']
+
+
+class TestAlignmentFormatting:
+    def test_alignment_mapping_to_legacy_percentage_range(self):
+        assert Evaluation._format_alignment_metric_value(-1.0) == 0.0
+        assert Evaluation._format_alignment_metric_value(0.0) == 50.0
+        assert Evaluation._format_alignment_metric_value(1.0) == 100.0
+
+    def test_alignment_mapping_clamps_out_of_range_inputs(self):
+        assert Evaluation._format_alignment_metric_value(-2.0) == 0.0
+        assert Evaluation._format_alignment_metric_value(2.0) == 100.0
 
     def test_specific_version_overrides_champion(self):
         """Test that specific version overrides champion version."""

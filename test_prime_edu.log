@@ -1,0 +1,567 @@
+2026-03-04 09:24:19,233  [WARNING] AWS region not set, CloudWatch metrics       
+disabled                                                                        
+Creating client...
+2026-03-04 09:24:23,565  [INFO] Loaded Plexus configuration from 2 file(s):     
+/Users/ryan.porter/.plexus/config.yaml,                                         
+/Users/ryan.porter/Projects/Plexus/.plexus/config.yaml - Set 37 environment     
+variables                                                                       
+Account ID: 9c929f25-a91f-4db7-8943-5aa93498b8e9
+Resolved config by name: 'Vector Topic Memory' to ID 
+2e6dcc26-ff55-4c7d-a906-def69a5ee528
+Syncing config from /Users/ryan.porter/Projects/Plexus/vector_topic_memory_report.md...
+Using config: 2e6dcc26-ff55-4c7d-a906-def69a5ee528 (Vector Topic Memory)
+Running report for all scores in scorecard 97 (Vector Topic Memory only)...
+2026-03-04 09:24:27,728  [INFO] [RunScript] Loading configuration               
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:24:27,728  [INFO] Loading report configuration from API:          
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:24:29,028  [INFO] Successfully loaded configuration:              
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:24:29,029  [INFO] [RunScript] Loaded configuration: Vector Topic  
+Memory                                                                          
+2026-03-04 09:24:29,030  [INFO] [RunScript] Configuration requires 3 parameters 
+2026-03-04 09:24:29,030  [INFO] [RunScript] Parameters validated: {'scorecard': 
+'97', 'days': 180}                                                              
+2026-03-04 09:24:31,582  [INFO] [RunScript] Parameters enriched with names:     
+{'scorecard': '97', 'days': 180, 'scorecard_name': 'Prime - EDU 3rd Party'}     
+2026-03-04 09:24:31,584  [INFO] [RunScript] Configuration rendered with         
+parameters                                                                      
+2026-03-04 09:24:32,697  [INFO] [RunScript] Created task:                       
+c4daf4e7-e1a5-4eb8-90be-f85ab3860374                                            
+2026-03-04 09:24:32,699  [INFO] [RunScript] Progress tracker initialized        
+2026-03-04 09:24:32,699  [INFO] [RunScript] Executing report generation core    
+logic                                                                           
+2026-03-04 09:24:32,700  [INFO] [RunScript] Starting core report generation     
+logic.                                                                          
+2026-03-04 09:24:32,700  [INFO] Loading report configuration from API:          
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:24:33,634  [INFO] Successfully loaded configuration:              
+2e6dcc26-ff55-4c7d-a906-def69a5ee528                                            
+2026-03-04 09:24:33,634  [INFO] [RunScript] Using provided configuration content
+override (e.g., rendered with parameters)                                       
+2026-03-04 09:24:33,635  [INFO] [RunScript] Loaded ReportConfiguration: Vector  
+Topic Memory (2e6dcc26-ff55-4c7d-a906-def69a5ee528)                             
+2026-03-04 09:24:33,636  [INFO] Creating 5 stages in batch for task             
+c4daf4e7-e1a5-4eb8-90be-f85ab3860374                                            
+2026-03-04 09:24:33,636  [INFO] [RunScript] Added account_id to run_parameters: 
+9c929f25-a91f-4db7-8943-5aa93498b8e9                                            
+2026-03-04 09:24:33,636  [INFO] Executing batch TaskStage creation for 5 stages 
+2026-03-04 09:24:36,538  [INFO] ==== STAGE: Loading Configuration ====          
+2026-03-04 09:24:36,538  [INFO] Successfully created 5 stages in batch          
+2026-03-04 09:24:38,100  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:24:38,101  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:24:39,975  [INFO] [RunScript] Creating Report DB record: 'Vector  
+Topic Memory - March 04, 2026 14:24 UTC'                                        
+2026-03-04 09:24:39,976  [INFO] [RunScript] repr(config_markdown) before        
+Report.create:                                                                  
+'# Vector Topic Memory Report\n## Scorecard: Prime - EDU 3rd Party\n## Last 180 
+days\n\nRebuilds topic memory from **edit comments** (reviewer feedback) in this
+scorecard and date range. Clusters what reviewers are saying when they correct  
+scores. Re-indexes into OpenSearch with S3 embedding cache, global clustering,  
+and memory weights.\n\n```block name="Vector Topic Memory"\nclass:              
+VectorTopicMemory\nscorecard: 97\ndays: 180\ndata:\n  content_source:           
+edit_comment\nopensearch:\n  region: us-west-2\nclustering:\n  min_topic_size:  
+2\n  min_samples: 2\n  cluster_selection_method: eom\n                          
+cluster_selection_epsilon: 0.5\nlabel:\n  use_llm: true\n  model: gpt-4o-mini\n 
+api_key_env_var: OPENAI_API_KEY\n```'                                           
+2026-03-04 09:24:39,976  [INFO] [RunScript] Actual content (first 100 chars): # 
+Vector Topic Memory Report                                                      
+## Scorecard: Prime - EDU 3rd Party                                             
+## Last 180 days                                                                
+                                                                                
+Rebuilds topic me                                                               
+2026-03-04 09:24:39,977  [INFO] [RunScript] Content contains literal newlines:  
+False                                                                           
+2026-03-04 09:24:39,977  [INFO] [RunScript] Content contains actual newlines:   
+True                                                                            
+2026-03-04 09:24:40,952  [INFO] [RunScript] Report content after creation (first
+100 chars): # Vector Topic Memory Report                                        
+## Scorecard: Prime - EDU 3rd Party                                             
+## Last 180 days                                                                
+                                                                                
+Rebuilds topic me                                                               
+2026-03-04 09:24:40,953  [INFO] [RunScript] Report content contains literal     
+newlines: False                                                                 
+2026-03-04 09:24:40,953  [INFO] [RunScript] Report content contains actual      
+newlines: True                                                                  
+2026-03-04 09:24:40,953  [INFO] [RunScript] Successfully created Report record  
+with ID: 53a67aa9-184e-406b-bc58-be2885d68c17                                   
+2026-03-04 09:24:45,343  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:24:45,343  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:24:47,438  [INFO] [RunScript] Parsing configuration markdown to   
+extract blocks.                                                                 
+2026-03-04 09:24:47,440  [INFO] [RunScript] Found 1 blocks to process.          
+2026-03-04 09:24:51,615  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:24:51,615  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:24:53,553  [INFO] [RunScript] Starting processing of 1 report     
+blocks.                                                                         
+2026-03-04 09:24:54,477  [INFO] [RunScript] Preparing block 1/1: block_0 (Class:
+VectorTopicMemory, Pos: 0)                                                      
+2026-03-04 09:24:54,477  [INFO] [RunScript] Creating initial ReportBlock record 
+for block_0                                                                     
+2026-03-04 09:24:54,478  [INFO] ReportBlock create sizes - Total input: 178     
+bytes                                                                           
+2026-03-04 09:24:54,478  [INFO] ReportBlock create sizes - Output field: 21     
+bytes                                                                           
+2026-03-04 09:24:54,479  [INFO] ReportBlock create sizes - Other fields: 157    
+bytes                                                                           
+2026-03-04 09:24:55,540  [INFO] [RunScript] Created ReportBlock ID              
+037c6efd-2169-4372-a2d7-a5beaa999ce6 for block_0                                
+2026-03-04 09:24:55,540  [INFO] Instantiating block: VectorTopicMemory with     
+config: {'scorecard': 97, 'days': 180, 'data': {'content_source':               
+'edit_comment'}, 'opensearch': {'region': 'us-west-2'}, 'clustering':           
+{'min_topic_size': 2, 'min_samples': 2, 'cluster_selection_method': 'eom',      
+'cluster_selection_epsilon': 0.5}, 'label': {'use_llm': True, 'model':          
+'gpt-4o-mini', 'api_key_env_var': 'OPENAI_API_KEY'}}                            
+2026-03-04 09:24:55,541  [INFO] Set report_block_id                             
+'037c6efd-2169-4372-a2d7-a5beaa999ce6' on block instance 'VectorTopicMemory'    
+2026-03-04 09:24:55,541  [INFO] No running event loop. Creating new loop for    
+block 'VectorTopicMemory' generation.                                           
+2026-03-04 09:24:55,542  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Resolving scorecard: 97, days: 180        
+2026-03-04 09:24:55,543  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Date range: 2025-09-05 to 2026-03-04      
+2026-03-04 09:24:55,544  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Content source: edit_comment              
+2026-03-04 09:24:56,397  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Found scorecard: Prime - EDU 3rd Party    
+2026-03-04 09:24:56,398  [INFO] Fetching scores for scorecard                   
+f08e6d18-4e05-45d1-a2ec-dafa21116bc8                                            
+2026-03-04 09:24:57,329  [INFO] Found 5 scores with externalIds for scorecard   
+f08e6d18-4e05-45d1-a2ec-dafa21116bc8                                            
+2026-03-04 09:25:13,208  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Resolved 40 items for score PS Mismatch - 
+Program.                                                                        
+2026-03-04 09:25:14,127  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Resolved 4 items for score PS Mismatch -  
+Program Level.                                                                  
+2026-03-04 09:25:16,639  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Resolved 113 items for score Agent        
+Branding.                                                                       
+2026-03-04 09:25:18,701  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Resolved 9 items for score PS Mismatch -  
+Modality.                                                                       
+2026-03-04 09:25:40,922  [INFO] Use pytorch device_name: mps                    
+2026-03-04 09:25:40,923  [INFO] Load pretrained SentenceTransformer:            
+all-MiniLM-L6-v2                                                                
+Batches:   0%|          | 0/6 [00:00<?, ?it/s]Batches:  17%|█▋        | 1/6 [00:00<00:01,  4.53it/s]Batches: 100%|██████████| 6/6 [00:00<00:00, 13.35it/s]Batches: 100%|██████████| 6/6 [00:00<00:00, 12.16it/s]
+2026-03-04 09:26:25,272  [INFO] GET                                             
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_cluster/health                                                 
+2026-03-04 09:26:25,814  [INFO] PUT                                             
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625                                    
+2026-03-04 09:26:27,163  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:26:27,286  [WARNING] GET                                          
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_alias/topic-memory-live                                        
+2026-03-04 09:26:27,287  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Indexed 166 documents.                    
+2026-03-04 09:26:27,289  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Clustering 40 items for score PS Mismatch 
+- Program...                                                                    
+OMP: Info #276: omp_set_nested routine deprecated, please use omp_set_max_active_levels instead.
+2026-03-04 09:26:36,315  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:26:40,057  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-0                  
+2026-03-04 09:26:40,186  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-1                  
+2026-03-04 09:26:40,314  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-2                  
+2026-03-04 09:26:40,434  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-3                  
+2026-03-04 09:26:40,560  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-4                  
+2026-03-04 09:26:40,689  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-5                  
+2026-03-04 09:26:40,818  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-6                  
+2026-03-04 09:26:40,818  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Clustering 4 items for score PS Mismatch -
+Program Level...                                                                
+2026-03-04 09:26:40,948  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:26:41,531  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-0                  
+2026-03-04 09:26:41,531  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Clustering 113 items for score Agent      
+Branding...                                                                     
+2026-03-04 09:26:41,913  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:26:45,097  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-0                  
+2026-03-04 09:26:45,226  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-1                  
+2026-03-04 09:26:45,354  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-2                  
+2026-03-04 09:26:45,477  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-3                  
+2026-03-04 09:26:45,609  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-4                  
+2026-03-04 09:26:45,738  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-5                  
+2026-03-04 09:26:45,865  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-6                  
+2026-03-04 09:26:45,866  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Clustering 9 items for score PS Mismatch -
+Modality...                                                                     
+2026-03-04 09:26:46,363  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/_bulk?refresh=true                                              
+2026-03-04 09:26:47,757  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-0                  
+2026-03-04 09:26:47,890  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-1                  
+2026-03-04 09:26:48,017  [INFO] POST                                            
+https://search-plexus-vtm-development-knueawjjl2cbebl5zxeqab7zua.us-west-2.es.am
+azonaws.com:443/topic-memory-20260304-142625/_update/cluster-2                  
+2026-03-04 09:26:48,020  [INFO] [ReportBlock                                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6] Processed 166 items across 4 scores, 18   
+clusters total.                                                                 
+2026-03-04 09:26:48,024  [INFO] Block 'block_0' executed. Log output length:    
+1200                                                                            
+2026-03-04 09:26:48,024  [INFO] [RunScript] Re-fetching ReportBlock ID          
+037c6efd-2169-4372-a2d7-a5beaa999ce6 after block execution.                     
+2026-03-04 09:26:49,606  [INFO] [RunScript] Fetched DB state. Current           
+attachedFiles: None                                                             
+2026-03-04 09:26:49,607  [INFO] [RunScript] Uploading log.txt for ReportBlock   
+037c6efd-2169-4372-a2d7-a5beaa999ce6                                            
+2026-03-04 09:26:49,607  [INFO] Starting S3 upload for block                    
+037c6efd-2169-4372-a2d7-a5beaa999ce6, file log.txt                              
+2026-03-04 09:26:49,608  [INFO] Using S3 bucket:                                
+amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l                 
+2026-03-04 09:26:49,652  [INFO] Creating temporary file for content (content    
+length: 1200)                                                                   
+2026-03-04 09:26:49,653  [INFO] Created temp file at                            
+/var/folders/gb/d2rz0yr907x6sl234fhp7mbm0000gn/T/tmpr2sdkzav_log.txt            
+2026-03-04 09:26:49,654  [INFO] Starting S3 upload to                           
+s3://amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l/reportblock
+s/037c6efd-2169-4372-a2d7-a5beaa999ce6/log.txt with args: {'ContentType':       
+'text/plain'}                                                                   
+2026-03-04 09:26:50,549  [INFO] Successfully uploaded log.txt to                
+s3://amplify-d1cegb1ft4iove-ma-reportblockdetailsbucket-hycnoh4edu1l/reportblock
+s/037c6efd-2169-4372-a2d7-a5beaa999ce6/log.txt                                  
+2026-03-04 09:26:50,549  [INFO] Removing temp file                              
+/var/folders/gb/d2rz0yr907x6sl234fhp7mbm0000gn/T/tmpr2sdkzav_log.txt            
+2026-03-04 09:26:50,550  [INFO] [RunScript] Appended log.txt info. New          
+attachedFiles list:                                                             
+['reportblocks/037c6efd-2169-4372-a2d7-a5beaa999ce6/log.txt']                   
+2026-03-04 09:26:50,551  [INFO] [RunScript] Performing final update for         
+ReportBlock 037c6efd-2169-4372-a2d7-a5beaa999ce6                                
+2026-03-04 09:26:50,551  [INFO] ReportBlock update: Converted 'output' dict to  
+JSON string (18376 bytes)                                                       
+2026-03-04 09:26:50,552  [INFO] ReportBlock update: attachedFiles before        
+processing - Type: <class 'list'>, Value:                                       
+['reportblocks/037c6efd-2169-4372-a2d7-a5beaa999ce6/log.txt']                   
+2026-03-04 09:26:52,068  [INFO] Update result for ReportBlock                   
+037c6efd-2169-4372-a2d7-a5beaa999ce6: {'id':                                    
+'037c6efd-2169-4372-a2d7-a5beaa999ce6', 'reportId':                             
+'53a67aa9-184e-406b-bc58-be2885d68c17', 'name': 'block_0', 'position': 0,       
+'type': 'VectorTopicMemory', 'output': '{"type": "VectorTopicMemory", "status": 
+"ok", "cluster_version": null, "topics": [], "scores": [{"score_id": "44245",   
+"score_name": "PS Mismatch - Program", "items_processed": 40, "topics":         
+[{"cluster_id": 0, "label": "AOI Psychology Program Clarifications", "keywords":
+["aoi", "programs", "general", "general studies", "studies", "program", "aoi    
+psychology", "psychology"], "exemplars": ["Both programs mentiones are under the
+AOI Psychology", "disagree- \\"general\\" studies includes all AOI\'s- PS is    
+interested in anything.", "PS first AOI is Psychology and Addiction Counselling 
+is also under Pyschology.", "\\"general studies\\" means open to ANY AOI that   
+fits.", "Disagree= The program matched falls under the Pscyhology AOI..."],     
+"memory_weight": 0.0, "memory_tier": "cold", "p95_distance":                    
+0.34826974272727956, "member_count": 7, "days_inactive": 109}, {"cluster_id": 1,
+"label": "Audio Production in Computers", "keywords": ["computers", "audio",    
+"audio production", "production", "technology", "program", "disagree", "disagree
+audio"], "exemplars": ["Audio production ALSO falls under Computers and         
+Technology", "Audio Production is a specific program in Computers.", "audio     
+technology is a computers program", "disagree- Audio Tech is also under         
+Computers same as IT.", "disagree- audio prod is both COMPUTERS  and Arts and   
+Desgign- IT falls under Computers AOI and so does audio production"],           
+"memory_weight": 0.0, "memory_tier": "cold", "p95_distance":                    
+0.30232658982276917, "member_count": 6, "days_inactive": 86}, {"cluster_id": 2, 
+"label": "Healthcare Administration as Business Program", "keywords":           
+["healthcare", "business", "program", "healthcare business", "healthcare        
+administration", "administration", "management", "healthcare management"],      
+"exemplars": ["Healthcare Administration is also a program under Business",     
+"Healthcare Managemnt is also a business program", "Healthcare administration is
+both under Healthcare and Business", "Healthcare Management is a specific       
+program in HEalthcare and Business.", "disagre healthcare management is both    
+healthcare and business aois"], "memory_weight": 0.0, "memory_tier": "cold",    
+"p95_distance": 0.15075260400772095, "member_count": 5, "days_inactive": 92},   
+{"cluster_id": 3, "label": "Trade Areas of Interest", "keywords": ["trade",     
+"aoi", "hvac", "trades", "aoi trade", "carpentry", "program", "trade hvac"],    
+"exemplars": ["First AOI is Trade - HVAC and Carpentry are both under Trade",   
+"First AOI is Trade and Welding, Carpentry etc is also undr the TRADE AOI",     
+"Program of interest is under TRADES. Aviation Maintenance Technology\\"  and   
+\\"Construction. are both under Trades.", "CDL Driving is a Trade program like  
+HVAC- this is acceptable"], "memory_weight": 0.0, "memory_tier": "cold",        
+"p95_distance": 0.3455623626708984, "member_count": 4, "days_inactive": 107},   
+{"cluster_id": 4, "label": "Healthcare Areas of Interest", "keywords": ["aoi",  
+"healthcare", "tech", "aoi healthcare", "dental", "healthcare aoi", "hc",       
+"healthcare radiology"], "exemplars": ["The first AOI is Healthcare. Medical    
+Office Administration\\"  and Dental both fall under the Healthcare AOI.",      
+"First AOI is Healthcare (Radiology) same as Denatal Assisting which is also in 
+HC.", "First AOI is Pharmacy Tech which falls under Healthcare, so does Surgical
+Tech", "Disagree Clinical Admin and Dental Assistant , both under the Healthcare
+AOI"], "memory_weight": 0.0, "memory_tier": "cold", "p95_distance":             
+0.16215162277221679, "member_count": 4, "days_inactive": 107}, {"cluster_id": 5,
+"label": "Healthcare AOI Program Classification", "keywords": ["healthcare aoi",
+"programs", "aoi", "healthcare", "programs healthcare", "fall", "programs fall",
+"disagree"], "exemplars": ["Both programs are under the same Healthcare AOI.",  
+"disagree noth programs fall under HEALTHCARE AOI", "\\"Health Administration   
+Services\\"  and \\"Physical Therapy both fall under the same category in       
+Healthcare- PS\'s first AOI"], "memory_weight": 0.0, "memory_tier": "cold",     
+"p95_distance": 0.14997941255569458, "member_count": 3, "days_inactive": 130},  
+{"cluster_id": 6, "label": "Information Technology and Cybersecurity AOI",      
+"keywords": ["aoi", "technology", "tech", "information technology",             
+"information", "tech aoi", "computer", "technology cybersecurity"], "exemplars":
+["\\"Information Technology\\" \\"Graphic and Art Designing.\\" both under the  
+PS first AOI \'Computers and Tech", "Information Technology\\" and              
+\\"Cybersecurity,\\"  both under the Computer and Tech AOI."], "memory_weight": 
+0.0, "memory_tier": "cold", "p95_distance": 0.08288389444351196, "member_count":
+2, "days_inactive": 134}], "cluster_version": "20260304-142635"}, {"score_id":  
+"44246", "score_name": "PS Mismatch - Program Level", "items_processed": 4,     
+"topics": [{"cluster_id": 0, "label": "Qualifications for Doctorate and         
+Masters", "keywords": ["qualifies", "degree", "ps", "qualifies doctorate",      
+"masters qualifies", "masters", "doctorate", "college qualifies"], "exemplars": 
+["PS highest level of education is a MASTERS, which qualifies him for a         
+Doctorate degree", "AI comment is incorrect. If the PS has a Masters then he    
+qualifies for a Doctorate.", "PS has some college which qualifies an Associates 
+degree", "disagree- a HS diploma qualifies for a Bachelors degree"],            
+"memory_weight": 0.0, "memory_tier": "cold", "p95_distance": 0.2238661527633667,
+"member_count": 4, "days_inactive": 134}], "cluster_version":                   
+"20260304-142640"}, {"score_id": "44241", "score_name": "Agent Branding",       
+"items_processed": 113, "topics": [{"cluster_id": 0, "label": "Incorrect        
+Transcription Issues", "keywords": ["transcription", "transcription incorrect", 
+"incorrect", "agent", "disagree", "campus", "incorrect agent", "states"],       
+"exemplars": ["Disagree- transcription is incorrect. Agent states \\"campus     
+distance is unknown\\"", "Transcription is incorrect. Agent says BACHELORS not  
+\\"that says\\"", "Transcription is incorrect- the agent mentions, \\"associates
+in\\"  Transcription \\"so it\'s just\\"", "disagree- transcription incorrect.  
+agent states campus ground.", "Transcription is incorrect. The agent states     
+CAMPUS not Kansas"], "memory_weight": 0.0, "memory_tier": "cold",               
+"p95_distance": 0.5727441236376761, "member_count": 50, "days_inactive": 86},   
+{"cluster_id": 1, "label": "Program Level Clarification", "keywords":           
+["program", "program level", "level", "associates", "level associates", "bs",   
+"bachelors", "bs program"], "exemplars": ["BS is the program level for          
+Bachelors", "BS is the program level for Bachelors", "AS is the program level   
+for Associates.", "AS is the program level for Associates.", "Agent states BS   
+Bachelor for program level."], "memory_weight": 0.0, "memory_tier": "cold",     
+"p95_distance": 0.4641019970178604, "member_count": 22, "days_inactive": 92},   
+{"cluster_id": 2, "label": "BBA Program Level Clarification", "keywords":       
+["program level", "program", "bba program", "level", "bba", "level bachelors",  
+"bachelors", "administration"], "exemplars": ["BBA is the program level.", "BBA 
+is the program level", "BBA is the program level", "BBA is the program level",  
+"BBA is the program level"], "memory_weight": 0.0, "memory_tier": "cold",       
+"p95_distance": 0.25721538066864014, "member_count": 14, "days_inactive": 86},  
+{"cluster_id": 3, "label": "Program Level Clarification", "keywords": ["program 
+level", "program", "level", "bit program", "bit", "bs", "bspy", "bspy program"],
+"exemplars": ["BS is the program level", "BIT is the program level", "BIT is the
+program level", "BIT is the program level.", "BS was stated as program level"], 
+"memory_weight": 0.0, "memory_tier": "cold", "p95_distance":                    
+0.33240991830825806, "member_count": 11, "days_inactive": 92}, {"cluster_id": 4,
+"label": "Agent Requirements Clarification", "keywords": ["agent",              
+"requirements", "stated", "agent stated", "stated requirements", "states",      
+"agent states", "states requirements"], "exemplars": ["Agent stated full        
+requirements", "Agent states full requirements.", "agent stated all             
+requirements", "Agent stated Bachelors in Information Technology", "Agent       
+corrects himself and states AS as the program level, which is accurate"],       
+"memory_weight": 0.0, "memory_tier": "cold", "p95_distance": 0.2796550989151001,
+"member_count": 6, "days_inactive": 95}, {"cluster_id": 5, "label": "BHM Program
+Level Clarification", "keywords": ["bhm program", "program level", "program",   
+"level", "bhm", "bachelors", "health", "level bachelors"], "exemplars": ["BHM is
+the program level for Bachelors.", "BHM  is the program level", "BHM is the     
+program level", "BHM is the Level stands for Bachelors in Health Management.",  
+"Disagree with AI- BHM is Bachelors in Health  Management, major in Health      
+Informatics.  Degree is a Bachelors"], "memory_weight": 0.0, "memory_tier":     
+"cold", "p95_distance": 0.17553125619888305, "member_count": 5, "days_inactive":
+106}, {"cluster_id": 6, "label": "American InterContinental University          
+Overview", "keywords": ["aiu", "bba", "university", "intercontinental           
+university", "american intercontinental", "american", "member aiu",             
+"intercontinental"], "exemplars": ["American InterContinental University, a     
+member of the AIU system, AIU online, with a BBA in health care management.  BBA
+IS THE PROGRAM LEVEL THAT STANDS FOR BACHELORS", "\\"American InterContinental  
+University. It\'s a member of AIU system. It\'s online as well, offering a BBA  
+health care management,\\" Agent states the branding, completely.", "fully      
+staed:  American InterContinental University, a member of the AIU system online,
+BIT software and analysis and development. I", "Agent states- > ECPI University,
+Northern Virginia, miss Sass, in Virginia. This will be on campus. This will be 
+a BS in cloud commuting. the requirements were fully met."], "memory_weight":   
+0.0, "memory_tier": "cold", "p95_distance": 0.2681673437356949, "member_count": 
+4, "days_inactive": 113}], "cluster_version": "20260304-142641"}, {"score_id":  
+"44247", "score_name": "PS Mismatch - Modality", "items_processed": 9, "topics":
+[{"cluster_id": 0, "label": "Lack of Computer and Internet Access", "keywords": 
+["does computer", "internet", "computer", "computer internet", "does", "access",
+"internet access", "ps"], "exemplars": ["PS does not have computer | internet   
+access", "PS does not have computer | internet access", "PS does NOT have       
+computer | internet access - response was \\"I do not\\"", "PS does not have    
+computer | internet access - this should be an auto fail for modality", "PS does
+not have computer | internet access at the time of the call"], "memory_weight": 
+0.29000000000000004, "memory_tier": "cold", "p95_distance": 0.09816172122955322,
+"member_count": 5, "days_inactive": 51}, {"cluster_id": 1, "label": "Inadequate 
+Internet Access for Classes", "keywords": ["access", "internet", "phone", "ps", 
+"internet access", "comptuer internet", "mobile", "access comptuer"],           
+"exemplars": ["PS has internet access on phone - not acceptable for online      
+classes", "PS stated they do not have computer | internet access at the time of 
+the call - matched with South", "Mobile phone is not adequate access to comptuer
+| internet"], "memory_weight": 0.8, "memory_tier": "hot", "p95_distance":       
+0.20151809453964234, "member_count": 3, "days_inactive": 5}, {"cluster_id": 2,  
+"label": "Access Definition Clarification", "keywords": [], "exemplars": ["Going
+to the library does not count as having computer | internet access"],           
+"memory_weight": 0.0, "memory_tier": "cold", "p95_distance": 0.0,               
+"member_count": 1, "days_inactive": 110}], "cluster_version":                   
+"20260304-142646"}], "summary": "Processed 166 items across 4 scores, 18        
+clusters total.", "items_processed": 166, "cache_hit_rate": null, "index_name": 
+"topic-memory-20260304-142625", "indexed_doc_ids":                              
+["9b839413-6ecb-4a1d-9856-79b933094a23", "bddb1505-f14b-40c6-8b95-4d1b0820ddbf",
+"cfc024aa-1e85-4c3f-a9d3-a5dc27ae8398", "af6fe07f-66e5-4a58-9b1c-5e18587ae04d", 
+"5729924b-200a-4c28-8f1a-aca6a5a6dfa0", "69f1963c-8fd9-4cb9-ab90-fefac9f64a73", 
+"261005de-02fb-4916-9064-be2fd84fda7e", "10263757-b69d-4b46-848e-d32cb5f5ed8b", 
+"ea7ab198-307b-4fd0-a420-b34c332cfd5c", "cd5ad2b3-5df0-4894-9217-2425385a538a", 
+"d6d96aa4-2948-47d1-b4fc-741eaa7cc699", "457c31b2-6d70-4d3c-9225-b37a79ff3925", 
+"4735e3e5-a49b-401c-a26b-44508aa058f7", "5820112a-4f02-4875-9150-349bca6a1102", 
+"a78f810a-903a-47e1-827b-006729f0e50f", "d3293f7c-6b3b-4131-a8b2-bb58f33954e4", 
+"b580cc93-5ba9-4af1-b64b-b80b1128da74", "22101ce9-fc79-4145-ab33-5c43d7c27fb4", 
+"7a8e2b53-fa34-43c3-a30b-770d1b35b2fb", "9aea799d-5cb3-4d57-b1dc-0bc7649da333", 
+"986e52ba-ada2-485a-a958-149cfdebea3d", "b5d64091-1aab-4d08-8255-477c39068dc1", 
+"b236e1fa-a660-4c50-83d9-d3fae18395fa", "b3020ab0-2f47-4095-87dd-e649625ea2b1", 
+"9040b8ff-cbbf-4349-99ca-e48f59b458a7", "9354ad65-7edf-4266-8e2d-28e994c38878", 
+"e735e01c-753a-4a6b-9e62-ce1cd54edf22", "13150b7d-5f86-4677-a086-f411b0da3cf3", 
+"d638ba12-9d54-40ae-89d8-3fcf5b6982de", "879bccc0-dfe6-491d-8038-6181f25bfd49", 
+"423adc42-8b10-4702-a49f-02c94cf358f7", "f7c2a29c-0961-48b0-a464-e0c00b5772ad", 
+"cd8cfaf2-7a49-4cac-905c-3f412fc91c97", "797db23f-1256-4728-a03d-e83f32d5970e", 
+"269fd2e2-70f3-4c9b-9706-484491d13531", "5f0b41f3-cfb3-4802-a4e8-2ba58ab19a1d", 
+"843c7250-af26-4c0a-ad8e-f43659f9f743", "601bd844-16f0-45bd-9d3b-8054eb515ab7", 
+"f8e27d9f-a1b2-4663-9f84-7c65d5868358", "253cfdb9-8369-42b8-819f-71c5277ac971", 
+"222767f4-55bb-4733-a6f6-de8adbbb7c1b", "f0003b74-975a-4bcd-905e-2c3f7abf758c", 
+"c736d241-bbab-4c0a-b583-485dc6375f47", "864924b7-b22d-494a-9ae8-9123edf69357", 
+"efca0452-aff2-4210-84f0-ac905d94b067", "794c6928-6889-4750-b9cf-e3a1e0326674", 
+"c549545f-5c60-44e7-82ef-683b95ac953b", "89595f83-205a-476e-a6d9-0e9fbec866ad", 
+"1a269226-2e61-4bdf-a7d8-2a196c8f7393", "12c0093d-93ef-438f-ae4a-33a924297cd3", 
+"12749f81-2c85-46bb-a743-6fe5f143dc14", "915c5d52-c7e7-49d9-80e9-b6c156c39cbf", 
+"515f5254-ec6c-41d3-85eb-454d91e91fc7", "8abdddf7-62d7-49f4-b7ac-c198af0bae1d", 
+"a3ba29e2-580a-4ebf-864b-2bfbf66eba5f", "e18ce1e8-3eb6-43ca-a3e0-138f289292dc", 
+"d55d5cf4-da8b-4c35-a01b-dc1572c45d84", "84652f1e-a37c-4a4f-89f2-76d1dae67e34", 
+"5e897e87-3243-4cfc-b02d-439904ac02d8", "0f953f24-c732-414e-9cfb-b532554ac716", 
+"b991df20-b9f2-4400-b56f-8cd0f74dda52", "aafb7e24-4077-4a3f-a774-1f9ff342591b", 
+"d5573f30-3430-49dc-b7f2-26a1084de6f2", "a6fd1793-8967-4eb5-be41-332e46c7cbb5", 
+"26cae34f-b23a-4018-ad3e-3f89f73faa11", "0ebeddba-7b87-4a4a-96aa-22c83a9f1d4c", 
+"53209813-41bb-41ab-b73b-0b3fc6a4b7f0", "4da768c7-2a26-400d-ba2b-14700cf5a6e4", 
+"fe8c1afd-aa3a-43f0-8420-2124d2e82c72", "b8790319-1e66-4eec-819c-abfec52c4240", 
+"7a674c17-d1e7-49d6-b8ed-21b26de28e41", "334777eb-5bcf-4c57-aeb9-18a833ea8b56", 
+"5716e7fc-e044-4968-8606-f5a59ea7e955", "95283c3c-d4e2-4260-b2cd-a8f990f16298", 
+"0b6d45f5-9522-42f8-b35d-2459b85268c8", "6573e9db-3752-4c55-b768-bb189f10f212", 
+"4637dfa0-0a61-47b8-9aa1-2a025d39a784", "ee99ad39-419c-4164-b3ab-685c5814b6f3", 
+"1eedb956-a48a-4089-80c2-a884d589d092", "0ce2fb02-594b-466d-8c30-85f4ea86380c", 
+"b117f31d-afc9-420d-a7c8-d143b562f6dc", "37821531-89c0-4d1c-8b26-99726d731da1", 
+"1b3150fc-6b09-412c-a429-82a9d60f65b4", "81cc6391-0a1c-4d10-9274-d3a0bdce7522", 
+"23eb9da0-be9d-4482-b124-8a8a8dff55f3", "d498ab50-5aaf-46e3-b14f-753d7421b865", 
+"dfee522d-306e-4007-a4b5-0e4e6ebdea39", "e7b578fe-c2af-4cf4-b0ef-7f20a72f2772", 
+"a82483e9-5c65-42fd-bd64-d7019fc49987", "f76132bf-8dee-416e-8f05-9a64876e9528", 
+"c1d7db98-feef-48da-b7e3-0f3fe7898d59", "8bf35be2-4403-42fd-9698-9bf12271b70f", 
+"b5e1e4e2-5958-447e-a771-35d5ec39d212", "e5db9f2f-e5de-4aee-b1c6-013a8a30c8f1", 
+"4e0a6422-c133-4c77-8bd7-78e7f813f285", "5dbe0026-2eea-469c-b3af-b707b431bea2", 
+"573a304d-b728-4a3f-8dca-7ee33d8f13a2", "60e1c281-47de-4336-8022-6c61105a189c", 
+"9d98f963-04e0-4ddf-bc5d-303d11bfb27f", "5f754df9-aae7-4727-b967-e4dd8f23521c", 
+"8483b923-3b75-4b6d-b752-6c40c2301586", "97b9d2d1-bf85-4127-9239-bd4fc7908420", 
+"d26b45e3-00a2-457d-a104-4d189f53d9e9", "d435d829-e9b4-4b44-a13c-59b34c6916d9", 
+"ec16bec7-3020-42a6-951f-932d61b24235", "c490cbff-24ca-4526-a97a-167ca001ff65", 
+"6ca77f6d-22a9-4b70-bd07-84a73398f15d", "7d6acd7c-4cca-4890-bfc2-cd165e990bcd", 
+"5c6c7359-1bfa-492d-8578-e46f82867662", "927ea7d1-e09a-4b23-b73a-6f350bbc7e9d", 
+"17a14c3b-94dc-4240-b43a-010353bde742", "becf5e8f-c3db-474f-8e8d-c0ddd6de617d", 
+"1b70e1ec-7f1a-4045-86b0-6fccfd91f9f3", "84ae7781-1c30-4c58-a449-690328f9f334", 
+"063f4e08-76b8-41c8-82cb-eb7bf7b58a08", "13540d6d-3ee6-40cd-a366-4545c7e130d7", 
+"2d8ed257-2608-4ec3-8a32-049a2315aa36", "9e96370b-35b2-4715-9873-eb7361111f30", 
+"fb13ef81-6e05-4dff-9504-88f308c93b8b", "4434cb05-57d5-418d-b4e5-aeeef6108f12", 
+"c877a828-bf37-4242-aed6-76866fb7d664", "393866c6-7b0d-4222-aaf2-4184085b85f6", 
+"522c0dee-469c-4f68-b07c-19b1ef8a5425", "488d1ee3-4a13-4de3-afbb-9bbcf3534bc9", 
+"bdf623e0-df6d-4422-838d-039a3888f20a", "bd11b407-dd4e-42f4-990c-ec83f2f64555", 
+"ddb091df-9315-488e-a16d-108b511acbe6", "bf15bc26-4174-4201-9669-2247c3297b35", 
+"1634b991-e27e-4c51-aa1d-044ce2586fc2", "dc8dd20e-af32-4f2a-bde6-1898f14d794f", 
+"02d5c012-062b-44a1-9de8-1e19a023ad7c", "651551ac-47ea-4884-a435-6f76a96ee149", 
+"2817ef94-7e9a-490b-9bb0-5d998a21ce40", "366e79b2-45b5-420c-94a3-a5818659334d", 
+"b81f2c32-9391-4218-9750-cf9aea32cfae", "2f5f4847-d0ae-4489-8c99-f251e549e456", 
+"5b03547b-38dd-4873-960b-58037b834b9e", "6d912b45-364f-4356-b35c-fb1a6752aa36", 
+"b5dfad5b-7134-4bab-bd8f-ada711c0b708", "3d9c032e-8526-437e-9625-d8b47e6c740f", 
+"f8224b2e-be28-4189-b116-a71708ee9a56", "1b8c6515-fbee-468f-975b-f6d46e50b616", 
+"7387b7c6-d2c2-4500-aaa5-6f8c137aea58", "a384e658-31ba-4e3a-9709-80aabd3b4c24", 
+"6aea2c63-a348-4149-88f1-c50289923716", "cd222eaf-ebe8-42ec-9330-5adc3f277edb", 
+"b5a8d38e-2f44-44e7-824d-7b380ee92526", "be784149-9101-4a90-8c0a-af2757ac880a", 
+"ebd98943-99b3-4bb7-b4e1-7342d18dfa5c", "1d4e8808-9d10-4c80-a711-4e53e389523f", 
+"51e645b2-19dd-469f-9433-ad39166a2dbd", "b7b217fe-7003-4176-92bf-e04538fc24cc", 
+"253c083e-610d-49c6-b826-3afc3be095f0", "5f557b60-1dd4-433f-a403-68a7322ce21a", 
+"ccf9f741-4bce-4fef-941d-621c52110628", "7a6420ff-1adc-48a6-8509-dd87a35fdb0c", 
+"12c71f44-8d5e-4bc1-8d1f-c7b1f296c021", "fd6cec31-a7d6-4541-83e6-a1ed77859401", 
+"970b8387-adaf-4d4a-9239-63cb7d62b61c", "bea1a439-d46a-4aaf-80a2-5c5a46806400", 
+"864e97ca-86a1-44c6-afd6-926c38d01f1d", "034bdce6-c309-4a6b-9ce6-34986b09658d", 
+"8ae6d9dc-89a5-4e49-ab7d-111625f6d1d0", "94f4c401-bd2c-4ca7-907a-d97565a034d0", 
+"70b8b244-a442-4fc9-8e0b-c8984bf85491",                                         
+"9b5e257a-417f-4914-aeda-27718b93db74"]}', 'log': 'See log.txt in               
+attachedFiles.', 'attachedFiles':                                               
+['reportblocks/037c6efd-2169-4372-a2d7-a5beaa999ce6/log.txt'], 'dataSetId':     
+None, 'createdAt': '2026-03-04T14:24:55.465Z', 'updatedAt':                     
+'2026-03-04T14:26:51.983Z'}                                                     
+2026-03-04 09:26:52,075  [INFO] attachedFiles after update:                     
+['reportblocks/037c6efd-2169-4372-a2d7-a5beaa999ce6/log.txt']                   
+2026-03-04 09:26:52,076  [INFO] Set attachedFiles attribute on instance:        
+['reportblocks/037c6efd-2169-4372-a2d7-a5beaa999ce6/log.txt']                   
+2026-03-04 09:26:52,076  [INFO] Successfully updated ReportBlock                
+037c6efd-2169-4372-a2d7-a5beaa999ce6                                            
+2026-03-04 09:26:52,076  [INFO] [RunScript] Successfully finalized ReportBlock  
+037c6efd-2169-4372-a2d7-a5beaa999ce6. attachedFiles:                            
+['reportblocks/037c6efd-2169-4372-a2d7-a5beaa999ce6/log.txt']                   
+2026-03-04 09:26:52,077  [INFO] [RunScript] Completed processing for block      
+block_0 (ID: 037c6efd-2169-4372-a2d7-a5beaa999ce6)                              
+2026-03-04 09:26:52,077  [INFO] Updated stage Processing Report Blocks processed
+count to 1                                                                      
+2026-03-04 09:26:52,077  [INFO] Set stage Processing Report Blocks processed    
+count to 1                                                                      
+2026-03-04 09:26:53,603  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:26:53,604  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:26:55,486  [INFO] [RunScript] All block processing and ReportBlock
+record finalization completed in the main loop.                                 
+2026-03-04 09:26:58,975  [INFO] {"type": "critical_update", "message":          
+"Processing critical update with new stage configs"}                            
+2026-03-04 09:26:58,975  [INFO] {"type": "sync_update", "message": "Performing  
+critical update synchronously"}                                                 
+2026-03-04 09:27:00,803  [INFO] [RunScript] Report generation core logic        
+finished.                                                                       
+2026-03-04 09:27:00,803  [INFO] [RunScript] All report blocks completed and     
+results saved successfully.                                                     
+2026-03-04 09:27:22,156  [INFO] [RunScript] Report generation completed         
+successfully: 53a67aa9-184e-406b-bc58-be2885d68c17                              
+Report completed successfully!
+Report ID: 53a67aa9-184e-406b-bc58-be2885d68c17
+Task ID: c4daf4e7-e1a5-4eb8-90be-f85ab3860374
+
+View at: /lab/reports or /reports/53a67aa9-184e-406b-bc58-be2885d68c17
