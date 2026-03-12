@@ -2,7 +2,7 @@
 S3-backed embedding cache and embedding service.
 
 Maps hash(normalized_text + model_id + preprocessing_version) to embedding
-vectors stored in S3. Re-indexing OpenSearch does not require re-embedding.
+vectors stored in S3. Re-indexing the vector store does not require re-embedding.
 """
 
 import hashlib
@@ -164,7 +164,12 @@ class EmbeddingService:
                     f"expected {len(miss_indices)}, got {len(embeddings)}"
                 )
             for idx, emb in zip(miss_indices, embeddings):
-                result[idx] = np.asarray(emb, dtype=np.float32)
+                if emb is None:
+                    continue
+                emb_arr = np.asarray(emb, dtype=np.float32)
+                if emb_arr.ndim == 0:
+                    continue
+                result[idx] = emb_arr
                 key = keys[idx]
                 self.cache.put(mid, key, result[idx])
 

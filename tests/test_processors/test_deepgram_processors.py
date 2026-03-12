@@ -249,6 +249,49 @@ class TestDeepgramFormatProcessor(unittest.TestCase):
         self.assertIn('[0.00s]', result.text)
         self.assertIn('[3.00s]', result.text)
 
+    def test_sentences_preserve_global_sentence_chronology(self):
+        data = {
+            'results': {
+                'channels': [
+                    {
+                        'alternatives': [{
+                            'paragraphs': {
+                                'paragraphs': [{
+                                    'speaker': 0,
+                                    'start': 0.0,
+                                    'sentences': [
+                                        {'text': 'Agent hello.', 'start': 0.0},
+                                        {'text': 'Agent follow up.', 'start': 8.0},
+                                    ],
+                                }]
+                            }
+                        }]
+                    },
+                    {
+                        'alternatives': [{
+                            'paragraphs': {
+                                'paragraphs': [{
+                                    'speaker': 0,
+                                    'start': 2.0,
+                                    'sentences': [
+                                        {'text': 'Customer question.', 'start': 2.0},
+                                    ],
+                                }]
+                            }
+                        }]
+                    },
+                ]
+            }
+        }
+
+        proc = self._make_processor(format='sentences', speaker_labels=True)
+        result = proc.process(make_input(data))
+        lines = result.text.split('\n')
+
+        self.assertEqual(lines[0], 'Speaker 0: Agent hello.')
+        self.assertEqual(lines[1], 'Speaker 1: Customer question.')
+        self.assertEqual(lines[2], 'Speaker 0: Agent follow up.')
+
     # --- words format ---
 
     def test_words_format(self):

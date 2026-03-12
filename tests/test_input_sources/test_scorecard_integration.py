@@ -78,8 +78,9 @@ class TestInputSourceFactoryIntegration:
         text = input_source.extract(item)
 
         # Assert
-        assert "Hello, thank you for calling customer support" in text.text
-        assert "\n\n" in text.text  # Paragraphs format
+        expected = deepgram_data["results"]["channels"][0]["alternatives"][0]["transcript"]
+        assert text.text == expected
+        assert text.metadata["deepgram"] == deepgram_data
         mock_download.assert_called_once_with("s3://bucket/path/deepgram_transcript.json")
 
     def test_factory_creates_source_without_item(self):
@@ -99,7 +100,7 @@ class TestInputSourceFactoryIntegration:
 
     @patch.object(sys.modules['plexus.input_sources.DeepgramInputSource'], 'download_score_result_trace_file')
     def test_factory_handles_different_deepgram_formats(self, mock_download):
-        """Test that factory can create DeepgramInputSource with different format options"""
+        """Formatting options are ignored by the input source (loader-only)."""
         from plexus.input_sources.DeepgramInputSource import DeepgramInputSource
         from plexus.input_sources.InputSourceFactory import InputSourceFactory
 
@@ -110,7 +111,7 @@ class TestInputSourceFactoryIntegration:
         item.metadata = {}
         item.attachedFiles = ["s3://bucket/deepgram.json"]
 
-        # Test different format configurations
+        expected = deepgram_data["results"]["channels"][0]["alternatives"][0]["transcript"]
         formats = ["paragraphs", "utterances", "words", "raw"]
 
         for format_type in formats:
@@ -128,9 +129,8 @@ class TestInputSourceFactoryIntegration:
             )
             result = source.extract(item)
 
-            # All formats should return a non-empty ScoreInput with text
-            assert hasattr(result, 'text')
-            assert len(result.text) > 0
+            assert result.text == expected
+            assert result.metadata["deepgram"] == deepgram_data
 
     def test_factory_error_handling_for_unknown_source(self):
         """Test that factory raises clear error for unknown input source class"""
