@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "59cccad7-d9ab-4a69-8e73-accc2e4e6e2b",
+  "issue_id": "plx-ae2cc53a-ec4d-4c4b-94d6-62e857009bef",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T15:27:51.894Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "fetchReportBlocks sets config:{} unconditionally, diverging from transformBlocks"
+  }
+}
