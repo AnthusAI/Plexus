@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7f9607cb-232b-4e21-a237-14ca521c7997",
+  "issue_id": "plx-a0c00173-e553-4cf2-9fb9-bcb96ea9ad69",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-11T00:00:01.195Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "Topic titles in the FeedbackAnalysis report are currently keyword lists (e.g., 'keyword1, keyword2, keyword3'). They need to be LLM-generated human-readable names like the original semantic reinforcement memory design intended. In _run_memory_analysis in plexus/reports/blocks/feedback_analysis.py, after clustering, call the LLM (using the existing LangChain/Bedrock patterns in the codebase) to generate a descriptive topic label for each cluster based on its top keywords and exemplar texts. The generated label should replace the raw keyword list as the topic's label field.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 1,
+    "status": "open",
+    "title": "LLM-generated topic labels in memory analysis"
+  }
+}
