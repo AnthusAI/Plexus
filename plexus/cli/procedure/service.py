@@ -16,6 +16,10 @@ The service handles:
 import logging
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
+from contextlib import nullcontext
+from pathlib import Path
+import tempfile
+import time
 import yaml
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.procedure import Procedure
@@ -544,7 +548,172 @@ class ProcedureService:
         except Exception as e:
             logger.error(f"Error getting procedure YAML: {str(e)}")
             return None
-    
+
+    def test_procedure_specs(
+        self,
+        procedure_id: Optional[str] = None,
+        yaml_config: Optional[str] = None,
+        mode: str = 'mock',
+        scenario: Optional[str] = None,
+        parallel: bool = True,
+        workers: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Run embedded Tactus Specification blocks for a procedure.
+
+        Exactly one of procedure_id or yaml_config must be provided.
+        """
+        if bool(procedure_id) == bool(yaml_config):
+            raise ValueError("Provide exactly one of procedure_id or yaml_config.")
+
+        if mode not in {'mock', 'integration'}:
+            raise ValueError("Invalid mode. Expected one of: mock, integration.")
+
+        yaml_text = yaml_config
+        if procedure_id:
+            yaml_text = self.get_procedure_yaml(procedure_id)
+            if not yaml_text:
+                raise ValueError(f"Could not load YAML for procedure {procedure_id}.")
+
+        try:
+            config = yaml.safe_load(yaml_text)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid YAML configuration: {exc}") from exc
+
+        if not isinstance(config, dict):
+            raise ValueError("Invalid YAML configuration: root must be a mapping.")
+
+        procedure_class = config.get('class')
+        if procedure_class != 'Tactus':
+            raise ValueError(
+                f"Procedure class must be 'Tactus' for spec testing (found: {procedure_class!r})."
+            )
+
+        tactus_code = config.get('code')
+        if not isinstance(tactus_code, str) or not tactus_code.strip():
+            raise ValueError("Tactus procedure YAML must contain a non-empty 'code' field.")
+
+        from tactus.validation.validator import TactusValidator, ValidationMode
+
+        validator = TactusValidator()
+        validation_result = validator.validate(tactus_code, mode=ValidationMode.FULL)
+        if not validation_result.valid:
+            formatted_errors = []
+            for err in validation_result.errors:
+                location = f" @ {err.location}" if getattr(err, 'location', None) else ''
+                formatted_errors.append(f"- {err.message}{location}")
+            details = "\n".join(formatted_errors) if formatted_errors else "- Unknown validation error"
+            raise ValueError(f"Tactus validation failed:\n{details}")
+
+        registry = validation_result.registry
+        gherkin_spec = getattr(registry, 'gherkin_specifications', None) if registry else None
+        if not gherkin_spec or not str(gherkin_spec).strip():
+            raise ValueError("No embedded Specification([[ ... ]]) block found in Tactus code.")
+
+        from tactus.testing.test_runner import TactusTestRunner
+        from unittest.mock import patch as patch_object
+
+        temp_file_path: Optional[Path] = None
+        runner = None
+        start = time.time()
+
+        try:
+            with tempfile.NamedTemporaryFile('w', suffix='.tac', delete=False) as handle:
+                handle.write(tactus_code)
+                temp_file_path = Path(handle.name)
+
+            runner = TactusTestRunner(
+                procedure_file=temp_file_path,
+                mocked=(mode == 'mock'),
+            )
+            runner.setup(gherkin_spec)
+
+            cpu_context = nullcontext()
+            if workers is not None and workers > 0 and parallel:
+                cpu_context = patch_object(
+                    'tactus.testing.test_runner.os.cpu_count',
+                    return_value=max(1, workers),
+                )
+
+            with cpu_context:
+                raw_result = runner.run_tests(
+                    parallel=parallel,
+                    scenario_filter=scenario,
+                )
+        except ValueError:
+            raise
+        except Exception as exc:
+            if mode == 'integration':
+                raise RuntimeError(
+                    f"Integration spec run failed. Check LLM/tool credentials and MCP connectivity: {exc}"
+                ) from exc
+            raise RuntimeError(f"Spec run failed: {exc}") from exc
+        finally:
+            if runner is not None:
+                try:
+                    runner.cleanup()
+                except Exception:
+                    logger.debug("Failed to cleanup Tactus test runner", exc_info=True)
+            if temp_file_path and temp_file_path.exists():
+                try:
+                    temp_file_path.unlink()
+                except Exception:
+                    logger.debug("Failed to delete temporary Tactus file", exc_info=True)
+
+        features: List[Dict[str, Any]] = []
+        for feature in raw_result.features:
+            scenarios: List[Dict[str, Any]] = []
+            for scenario_result in feature.scenarios:
+                steps: List[Dict[str, Any]] = []
+                failed_step_messages: List[str] = []
+                for step in scenario_result.steps:
+                    step_payload = {
+                        'keyword': step.keyword,
+                        'message': step.message,
+                        'status': step.status,
+                        'duration': step.duration,
+                    }
+                    if step.error_message:
+                        step_payload['error_message'] = step.error_message
+                        failed_step_messages.append(
+                            f"{step.keyword} {step.message}: {step.error_message}"
+                        )
+                    steps.append(step_payload)
+
+                scenarios.append({
+                    'name': scenario_result.name,
+                    'status': scenario_result.status,
+                    'duration': scenario_result.duration,
+                    'steps': steps,
+                    'failed_step_messages': failed_step_messages,
+                })
+
+            features.append({
+                'name': feature.name,
+                'description': feature.description,
+                'status': feature.status,
+                'duration': feature.duration,
+                'scenarios': scenarios,
+            })
+
+        return {
+            'success': raw_result.failed_scenarios == 0,
+            'mode': mode,
+            'summary': {
+                'total_scenarios': raw_result.total_scenarios,
+                'passed_scenarios': raw_result.passed_scenarios,
+                'failed_scenarios': raw_result.failed_scenarios,
+                'duration_seconds': raw_result.total_duration,
+            },
+            'features': features,
+            'metadata': {
+                'procedure_id': procedure_id,
+                'scenario_filter': scenario,
+                'parallel': parallel,
+                'workers': workers,
+                'wall_time_seconds': round(time.time() - start, 3),
+            },
+        }
+
     def _resolve_score_identifier(self, scorecard_id: str, score_identifier: str) -> Optional[str]:
         """Resolve a score identifier within a specific scorecard.
         
